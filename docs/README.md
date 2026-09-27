@@ -11,7 +11,7 @@
 | [Vita build update](BUILDING_UPDATE.md) | Current Vita build configuration and one detailed reconstructed subsystem |
 | [Training action](TRAIN_ACTION.md) | Evidence and implementation notes for the training action lifecycle |
 | [Wonder status art](../status/README.md) | Reproducible configuration and rendering of the progress illustration |
-| [License](../LICENSE) | GPL-3.0-or-later terms for project-authored code and documentation, with explicit third-party exclusions |
+| [License](../LICENSE) and [scope notice](../LICENSE-NOTICE.md) | GPL-3.0-or-later terms for project-authored code and documentation, with explicit third-party exclusions |
 
 ## Evidence conventions
 

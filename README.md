@@ -86,7 +86,8 @@ When distributing a work covered by the GPL, you must preserve the same
 freedoms and provide corresponding source under its terms. This copyleft
 choice is not legal advice. The license does not grant rights to Age of Empires
 code or assets; generated Ghidra references and status-art images are
-explicitly outside the project-authored license grant.
+explicitly outside the project-authored license grant; see
+[LICENSE-NOTICE.md](LICENSE-NOTICE.md) for the scope statement.
 
 This repository does not include original game executables, disc images,
 music, archives, or raw extracted assets. You must obtain and supply any

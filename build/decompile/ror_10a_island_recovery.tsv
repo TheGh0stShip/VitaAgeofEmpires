@@ -7,5 +7,13 @@ address	status	instruction	references	function	end
 00436e10	already_function	MOV ECX,dword ptr [ESP + 0x4]	00436de9:DATA	FUN_00436e10	00436f68
 0043af60	already_function	MOV EAX,[0x00582ed4]	0043adc8:DATA	FUN_0043af60	0043b477
 00483bc0	already_function	MOV EAX,dword ptr [ESP + 0x8]	00483e2f:DATA	FUN_00483bc0	00483c38
+00521e68	already_function	MOV AL,byte ptr [ESI + -0x1]	00521ce4:DATA	FUN_00521e68	00521e6e
+00521e6f	already_function	MOV AL,byte ptr [ESI + -0x2]	00521ce8:DATA	FUN_00521e6f	00521e7b
+00521e7c	already_function	MOV AL,byte ptr [ESI + -0x3]	00521cec:DATA	FUN_00521e7c	00521e8e
 00521e8f	already_function	MOV CL,byte ptr [EDI + -0x50]	00521e60:DATA	FUN_00521e8f	00521f2e
+00521f2f	already_function	MOV CL,byte ptr [EDI + -0x50]	00521e5c:DATA	FUN_00521f2f	00521fce
+00521fcf	already_function	MOV CL,byte ptr [EDI + -0x50]	00521e58:DATA	FUN_00521fcf	00522071
+00522072	already_function	MOV CL,byte ptr [EDI + -0x50]	00521e54:DATA	FUN_00522072	00522111
+00522112	already_function	MOV CL,byte ptr [EDI + -0x50]	00521e50:DATA	FUN_00522112	005221ab
+005256df	already_function	CALL 0x0052549d	0052529c:DATA	FUN_005256df	005256e5
 0052d780	already_function	PUSH EBP	0052d862:DATA,00527879:DATA,00529831:DATA,005278f9:DATA,0052996c:DATA,00529916:DATA,0052d2fd:DATA,00529408:DATA,00529537:DATA,0052966d:DATA,005277f7:DATA,00530cbc:DATA,00528f82:DATA	__except_handler3	0052d83c

@@ -1,3 +1,3 @@
 block	start	end	executable_bytes	instruction_bytes	function_bytes	instructions	defined_data_bytes	undefined_bytes	undefined_spans	decoded_outside_function_spans
-.text	00401000	00536fff	1269760	1211110	1203713	390399	58650	0	0	553
+.text	00401000	00536fff	1269760	1211110	1203720	390399	58650	0	0	553
 THIS_COD	00537000	00541fff	45056	33733	33598	10660	11323	0	0	2

@@ -39,7 +39,7 @@ The current patched reference exports (full Ghidra auto-analysis, refreshed
 | Revision | Discovered/decompiled functions | Call sites | Unresolved call sites |
 |---|---:|---:|---:|
 | AoE 1.0c | 5,870 / 5,870 | 31,055 | 4,435 |
-| Rise of Rome 1.0a | 5,849 / 5,849 | 31,651 | 4,537 |
+| Rise of Rome 1.0a | 5,850 / 5,850 | 31,652 | 4,537 |
 
 The earlier pointer-run recovery added 950 base and 736 expansion starts.
 After full automatic analysis, the broader pointer scan recovered three more
@@ -65,10 +65,10 @@ the corresponding `ror_10a_` files. Both patched images have zero undefined
 bytes in initialized executable blocks. Base: 1,286,144 executable bytes
 (1,215,443 instruction, 70,701 defined data), with 6,185 decoded instruction
 bytes outside Ghidra function bodies. RoR: 1,314,816 executable bytes
-(1,244,843 instruction, 69,973 defined data), with 7,535 instruction bytes
+(1,244,843 instruction, 69,973 defined data), with 7,528 instruction bytes
 outside function bodies. Merging adjacent
 unowned instructions yields 548 base and 555 RoR islands after recovering
-fifteen and seventeen manually verified function starts, respectively. The TSV
+fifteen and eighteen manually verified function starts, respectively. The TSV
 preserves each island's incoming-reference and control-flow-exit evidence.
 These islands require semantic/boundary triage; full byte classification is
 not proof that every instruction is a function or every indirect edge is
@@ -87,6 +87,14 @@ found RoR copy-kernel tables inside `.text`; those seven return-
 bounded exact targets were recovered as function entries. The scan exposes
 jump-table labels that are case blocks, not function starts, reinforcing that
 pointer targets require control-flow triage.
+
+A focused follow-up validated the RoR indirect-dispatch target
+`0x005256df` from table slot `0x0052529c`. It is a seven-byte call/jump thunk
+to `0x0052549d` and the shared body at `0x005256b7`, not a 737-byte standalone
+routine. The function boundary accounts for seven decoded bytes; the residual 730-byte region
+from `0x005256e6` through `0x005259bf` remains outside function bodies and
+contains internal control-flow labels that still require triage. The refreshed
+exports include this entry; do not describe the remaining region as recovered.
 
 Revision addresses must never be substituted by proximity. For example,
 disc RoR live root vtable `0x0054ce80` corresponds to patched 1.0a

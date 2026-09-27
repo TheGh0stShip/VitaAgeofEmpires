@@ -1,4 +1,4 @@
-# Resume notes (2026-09-24)
+# Resume notes (2026-09-26)
 
 The objective is a faithful native PS Vita port of PC *Age of Empires I*,
 with the original *Rise of Rome* expansion as primary target and the base
@@ -14,8 +14,8 @@ Ghidra were incorrectly treated as a sufficient sweep. The refreshed pipeline
 now runs full automatic analysis on patched 1.0c and Rise of Rome 1.0a, then
 audits pointer runs, every aligned executable pointer in initialized data,
 table-supported missing starts, and call sites before exporting all
-discovered functions. Current reference exports contain 5,870 base and 5,849
-RoR functions, all successfully decompiled. Call graphs contain 31,055/31,651
+discovered functions. Current reference exports contain 5,870 base and 5,850
+RoR functions, all successfully decompiled. Call graphs contain 31,055/31,652
 sites, with 4,435/4,537 indirect or unresolved. The earlier aligned-pointer
 audit recovered three additional expansion entries; its residual targets were
 raw-byte checked. There are still 42/39 interior pointers into known functions.
@@ -35,13 +35,13 @@ blindly. Reports are
 bases as a triage hint only. The listing-backed audit
 is implemented as `tools/AuditAoEExecutableCoverage.java` and integrated into
 `tools/import_patch_revisions.sh`. Both patched images have zero undefined
-executable bytes. Current exports contain 5,870 base and 5,849 RoR
-functions, all decompiled; their call graphs have 31,055/31,651 sites, with
+executable bytes. Current exports contain 5,870 base and 5,850 RoR
+functions, all decompiled; their call graphs have 31,055/31,652 sites, with
 4,435/4,537 unresolved. Base accounts for 1,286,144 executable bytes
 (1,215,443 instruction, 70,701 defined data), of which 6,185 instruction
 bytes remain outside function bodies in 548 contiguous islands. RoR accounts
-for 1,314,816 bytes (1,244,843 instruction, 69,973 defined data), with 7,535
-outside-function instruction bytes in 555 islands. Fifteen base and seventeen
+for 1,314,816 bytes (1,244,843 instruction, 69,973 defined data), with 7,528
+outside-function instruction bytes in 555 islands. Fifteen base and eighteen
 RoR entries supported by raw disassembly and exact references have been
 recovered and are in the pipeline. The remaining islands are not automatically
 missing functions; classify each against data/code references, flow boundaries,
@@ -52,10 +52,12 @@ Next sweep targets: base `0x0051c950` (221 bytes) and the remaining subregions
 of the `0x0051f31f` copy/decoder island and `0x0051f61c` initialization region;
 these contain multiple internal function candidates and shared tails, so
 reconcile exact entries against current Ghidra function bodies before recovery.
-RoR `0x005256df` (737 bytes) has an exact embedded-table reference at
-`0x0052529c` and a call/jump helper sequence; validate its recovery boundary.
-The RoR `0x00521f2f` island follows recovered copy-kernel `0x00521e8f`; inspect
-its remaining internal labels rather than promoting the whole region.
+RoR `0x005256df` is now a verified seven-byte call/jump thunk from table slot
+`0x0052529c`, reaching shared code at `0x005256b7`. The residual
+`0x005256e6..0x005259bf` region (730 bytes) remains outside functions and needs
+boundary/control-flow triage. The `0x00521f2f` island follows recovered
+copy-kernel `0x00521e8f`; inspect its internal labels without promoting them
+blindly.
 
 Revision-mixing guard (2026-09-26): `docs/ror_revision_map.tsv` is the
 durable verified map between disc RoR and patched 1.0a addresses. Do not use

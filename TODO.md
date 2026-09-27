@@ -13,8 +13,11 @@ complete based on Ghidra export counts, host tests, or a scene-only alpha.
 - [ ] Triage the base stream-decoder region around `0x0051f31f` and the
   initialization region around `0x0051f61c`; recover only independently
   evidenced entries and shared-tail functions.
-- [ ] Validate the RoR entry at `0x005256df` and inspect residual labels in the
-  copy-kernel area beginning at `0x00521f2f`.
+- [x] Validate the RoR target at `0x005256df`: it is a seven-byte call/jump
+  thunk to shared code at `0x005256b7`, not a 737-byte function body.
+- [ ] Triage the residual RoR instruction region `0x005256e6..0x005259bf`
+  (730 bytes) and internal labels in the copy-kernel area beginning at
+  `0x00521f2f` without promoting switch cases blindly.
 - [ ] Classify unresolved direct/indirect call sites and computed jumps using
   static evidence; add Windows live-debug traces for representative gameplay
   paths when available.
@@ -55,8 +58,8 @@ complete based on Ghidra export counts, host tests, or a scene-only alpha.
 - Patched AoE 1.0c: 5,870 Ghidra-discovered functions exported, zero
   decompilation failures; 31,055 call sites, 4,435 unresolved; 6,185 decoded
   instruction bytes outside function bodies in 548 islands.
-- Patched Rise of Rome 1.0a: 5,849 functions exported, zero failures; 31,651
-  call sites, 4,537 unresolved; 7,535 decoded instruction bytes outside
+- Patched Rise of Rome 1.0a: 5,850 functions exported, zero failures; 31,652
+  call sites, 4,537 unresolved; 7,528 decoded instruction bytes outside
   function bodies in 555 islands.
 - Both images have zero undefined bytes in initialized executable sections.
   This does not prove complete function discovery or resolved dynamic control

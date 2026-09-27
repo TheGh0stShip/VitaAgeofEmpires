@@ -9,6 +9,15 @@ AOEPATCH.exe
 *.scx
 *.dat
 *.wav
+*.mp3
+*.ogg
+*.flac
+*.mid
+*.midi
+*.dll
+*.cab
+*.zip
+*.7z
 *.vpk
 *.elf
 *.self

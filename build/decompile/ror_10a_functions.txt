@@ -228711,6 +228711,40 @@ undefined8 __fastcall FUN_0052566d(undefined4 param_1,undefined4 param_2)
 
 
 
+/* FUNCTION 005256df FUN_005256df */
+
+undefined8 FUN_005256df(undefined4 param_1,undefined4 param_2,undefined4 param_3)
+
+{
+  undefined4 uVar1;
+  uint uVar2;
+  int unaff_ESI;
+  undefined8 uVar3;
+  undefined4 unaff_retaddr;
+  
+  uVar2 = FUN_0052549d();
+  do {
+    if (uVar2 == 0) {
+      *(int *)(unaff_ESI + 0x8200) = unaff_ESI;
+      return CONCAT44(unaff_retaddr,param_3);
+    }
+    if (*(uint *)(unaff_ESI + 0x8210) < uVar2) {
+      uVar2 = *(uint *)(unaff_ESI + 0x8210);
+    }
+    *(int *)(unaff_ESI + 0x8210) = *(int *)(unaff_ESI + 0x8210) - uVar2;
+    uVar1 = *(undefined4 *)(unaff_ESI + 0x820c);
+    uVar2 = FUN_005254e1();
+    *(undefined4 *)(unaff_ESI + 0x820c) = uVar1;
+  } while (*(int *)(unaff_ESI + 0x8210) != 0);
+  *(undefined4 *)(unaff_ESI + 0xa958) = 2;
+  FUN_0052541e();
+  FUN_0052544d();
+  uVar3 = FUN_00525baf();
+  return uVar3;
+}
+
+
+
 /* FUNCTION 005259c0 FUN_005259c0 */
 
 void FUN_005259c0(void)

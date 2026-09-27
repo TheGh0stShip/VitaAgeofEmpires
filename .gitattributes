@@ -3,3 +3,5 @@
 *.jpg binary
 *.jpeg binary
 *.wav binary
+*.tsv text eol=lf
+*.java text eol=lf

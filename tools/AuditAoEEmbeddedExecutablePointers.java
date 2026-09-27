@@ -6,8 +6,8 @@ import ghidra.program.model.listing.CodeUnit;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.Instruction;
 import ghidra.program.model.listing.InstructionIterator;
-import ghidra.program.model.lang.OperandType;
 import ghidra.program.model.mem.MemoryBlock;
+import ghidra.program.model.scalar.Scalar;
 import ghidra.program.model.symbol.Reference;
 import java.io.BufferedWriter;
 import java.nio.charset.StandardCharsets;
@@ -45,18 +45,21 @@ public class AuditAoEEmbeddedExecutablePointers extends GhidraScript {
         if (output.getParent() != null) Files.createDirectories(output.getParent());
 
         TreeMap<Long, Candidate> candidates = new TreeMap<>();
-        TreeSet<Long> indirectJumpTableBases = new TreeSet<>();
+        TreeSet<Long> computedJumpOperands = new TreeSet<>();
         InstructionIterator instructions = currentProgram.getListing().getInstructions(true);
         while (instructions.hasNext() && !monitor.isCancelled()) {
             Instruction instruction = instructions.next();
             if (!instruction.getFlowType().isJump() ||
                 !instruction.getFlowType().isComputed()) continue;
             for (int operand = 0; operand < instruction.getNumOperands(); operand++) {
-                if (!OperandType.isAddress(instruction.getOperandType(operand))) continue;
                 Object[] values = instruction.getOpObjects(operand);
                 for (Object value : values) {
                     if (value instanceof Address) {
-                        indirectJumpTableBases.add(((Address)value).getOffset());
+                        computedJumpOperands.add(((Address)value).getOffset());
+                    }
+                    else if (value instanceof Scalar) {
+                        long base = ((Scalar)value).getUnsignedValue();
+                        if (executable(base)) computedJumpOperands.add(base);
                     }
                 }
             }
@@ -72,6 +75,10 @@ public class AuditAoEEmbeddedExecutablePointers extends GhidraScript {
                 if (!executable(target)) continue;
                 candidates.put(source, new Candidate(source, target, block.getName()));
             }
+        }
+        TreeSet<Long> indirectJumpTableBases = new TreeSet<>();
+        for (long base : computedJumpOperands) {
+            if (candidates.containsKey(base)) indirectJumpTableBases.add(base);
         }
 
         int emitted = 0, withExactReference = 0, inRuns = 0;

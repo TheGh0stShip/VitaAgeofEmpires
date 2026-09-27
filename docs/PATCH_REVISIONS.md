@@ -75,8 +75,10 @@ blocks, plus base's six-entry stream-decoder/initialization table at
 the base image. The RoR scan found and recovered seven copy-kernel entries.
 Neither executable-pointer report should be interpreted as a list of
 functions: computed-jump cases and intra-function labels are retained as
-triage evidence. An embedded-executable-pointer
-pass also found RoR copy-kernel tables inside `.text`; those seven return-
+triage evidence. The report now marks entries within 256 bytes of a statically
+identified computed-jump table base for focused review; this is an adjacency
+hint, not a function classification. An embedded-executable-pointer pass also
+found RoR copy-kernel tables inside `.text`; those seven return-
 bounded exact targets were recovered as function entries. The scan exposes
 jump-table labels that are case blocks, not function starts, reinforcing that
 pointer targets require control-flow triage.

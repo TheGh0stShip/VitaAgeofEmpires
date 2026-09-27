@@ -30,7 +30,9 @@ recovered). It also reports switch-table case labels and computed-jump
 candidates, so those require control-flow analysis and must not be promoted
 blindly. Reports are
 `build/decompile/base_10c_embedded_exec_pointers.tsv` and
-`build/decompile/ror_10a_embedded_exec_pointers.tsv`. The listing-backed audit
+`build/decompile/ror_10a_embedded_exec_pointers.tsv`. Their
+`jump_table_base` column flags entries within 256 bytes of computed-jump table
+bases as a triage hint only. The listing-backed audit
 is implemented as `tools/AuditAoEExecutableCoverage.java` and integrated into
 `tools/import_patch_revisions.sh`. Both patched images have zero undefined
 executable bytes. Current exports contain 5,870 base and 5,849 RoR

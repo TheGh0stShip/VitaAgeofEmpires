@@ -1,0 +1,138 @@
+#include "sprite_list.h"
+
+#include <stdlib.h>
+
+struct AoeSpriteNode {
+    void *sprite;
+    uint8_t priority;
+    uint8_t extra_references;
+    struct AoeSpriteNode *next;
+};
+
+static int valid(const AoeSpriteList *list) {
+    return list && list->ops.create && list->ops.graphic_of &&
+           list->ops.is_animated && list->ops.destroy;
+}
+
+static void invalidate_if_needed(AoeSpriteList *list, int animated) {
+    if (animated && list->has_redraw_target && list->ops.invalidate)
+        list->ops.invalidate(list->ops.context);
+}
+
+int aoe_sprite_list_add(AoeSpriteList *list, const void *graphic,
+                        uint8_t priority, int32_t arg1, int32_t arg2) {
+    if (!valid(list))
+        return 0;
+    if (!graphic)
+        return 1;
+    /* The original does this before duplicate lookup. */
+    invalidate_if_needed(list,
+                         list->ops.is_animated(list->ops.context, graphic));
+    for (AoeSpriteNode *node = list->head; node; node = node->next) {
+        if (list->ops.graphic_of(list->ops.context, node->sprite) == graphic) {
+            node->extra_references = (uint8_t)(node->extra_references + 1);
+            return 1;
+        }
+    }
+    AoeSpriteNode *node = calloc(1, sizeof(*node));
+    if (!node)
+        return 0;
+    node->sprite = list->ops.create(list->ops.context, graphic, arg1, arg2);
+    if (!node->sprite) {
+        free(node);
+        return 0;
+    }
+    node->priority = priority;
+    AoeSpriteNode **slot = &list->head;
+    while (*slot && (*slot)->priority <= priority)
+        slot = &(*slot)->next;
+    node->next = *slot;
+    *slot = node;
+    return 1;
+}
+
+int aoe_sprite_list_remove(AoeSpriteList *list, const void *graphic) {
+    if (!valid(list))
+        return 0;
+    AoeSpriteNode **slot = &list->head;
+    while (*slot && list->ops.graphic_of(list->ops.context,
+                                         (*slot)->sprite) != graphic)
+        slot = &(*slot)->next;
+    if (!*slot)
+        return 1;
+    AoeSpriteNode *node = *slot;
+    if (node->extra_references) {
+        --node->extra_references;
+        return 1;
+    }
+    *slot = node->next;
+    invalidate_if_needed(list, list->ops.is_animated(
+                                  list->ops.context,
+                                  list->ops.graphic_of(list->ops.context,
+                                                       node->sprite)));
+    list->ops.destroy(list->ops.context, node->sprite);
+    free(node);
+    return 1;
+}
+
+void aoe_sprite_list_clear(AoeSpriteList *list) {
+    if (!valid(list))
+        return;
+    AoeSpriteNode *node = list->head;
+    while (node) {
+        AoeSpriteNode *next = node->next;
+        invalidate_if_needed(list, list->ops.is_animated(
+                                      list->ops.context,
+                                      list->ops.graphic_of(list->ops.context,
+                                                           node->sprite)));
+        list->ops.destroy(list->ops.context, node->sprite);
+        free(node);
+        node = next;
+    }
+    list->head = NULL;
+}
+
+int aoe_sprite_list_tick(AoeSpriteList *list, float time_delta, float speed) {
+    if (!valid(list) || !list->ops.tick)
+        return 0;
+    for (AoeSpriteNode *node = list->head; node; node = node->next)
+        if (!list->ops.tick(list->ops.context, node->sprite,
+                            time_delta, speed))
+            return 0;
+    return 1;
+}
+
+size_t aoe_sprite_list_count(const AoeSpriteList *list) {
+    size_t count = 0;
+    if (list)
+        for (const AoeSpriteNode *node = list->head; node; node = node->next)
+            ++count;
+    return count;
+}
+
+const void *aoe_sprite_list_graphic_at(const AoeSpriteList *list, size_t index) {
+    if (!valid(list))
+        return NULL;
+    const AoeSpriteNode *node = list->head;
+    while (node && index--)
+        node = node->next;
+    return node ? list->ops.graphic_of(list->ops.context, node->sprite) : NULL;
+}
+
+const void *aoe_sprite_list_sprite_at(const AoeSpriteList *list, size_t index) {
+    if (!list)
+        return NULL;
+    const AoeSpriteNode *node = list->head;
+    while (node && index--)
+        node = node->next;
+    return node ? node->sprite : NULL;
+}
+
+uint8_t aoe_sprite_list_priority_at(const AoeSpriteList *list, size_t index) {
+    if (!list)
+        return 0;
+    const AoeSpriteNode *node = list->head;
+    while (node && index--)
+        node = node->next;
+    return node ? node->priority : 0;
+}

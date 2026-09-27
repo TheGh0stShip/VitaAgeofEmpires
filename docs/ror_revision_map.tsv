@@ -1,0 +1,7 @@
+subsystem	role	disc_ror_address	patched_ror_1_0a_address	match_evidence	status
+live_unit	common_constructor	004a8200	004a6a40	field/order semantic comparison	verified
+live_unit	vtable_plus_08_cleanup	004a80e0	004a6920	mnemonic trigram 0.9140 plus decompile semantic comparison	verified
+live_unit	vtable_plus_24_update_predicate	004aa790	004a8f40	mnemonic trigram 0.8881 plus decompile semantic comparison	verified
+live_unit	root_vtable	0054ce80	00547da8	constructor assignment and slot inspection	verified
+live_unit	type_90_vtable	0054d608	00548474	constructor assignment and slot inspection	verified
+scenario_editor	map_click	unmapped	0051a2e0	patched vtable/call-path recovery	patched_only

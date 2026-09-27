@@ -1,0 +1,284 @@
+#include "slp.h"
+
+#include <stdlib.h>
+#include <string.h>
+
+static uint16_t u16(const uint8_t *p) {
+    return (uint16_t)p[0] | ((uint16_t)p[1] << 8);
+}
+
+static uint32_t u32(const uint8_t *p) {
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
+           ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+
+static int available(size_t size, size_t offset, size_t amount) {
+    return offset <= size && amount <= size - offset;
+}
+
+int slp_frame_count(const uint8_t *data, size_t size, uint32_t *count) {
+    uint32_t n;
+    if (!data || !count || !available(size, 0, 32) ||
+        memcmp(data, "2.0N", 4) != 0) return 0;
+    n = u32(data + 4);
+    if (!n || n > (size - 32) / 32) return 0;
+    *count = n;
+    return 1;
+}
+
+void slp_free_frame(SlpFrame *frame) {
+    if (!frame) return;
+    free(frame->pixels);
+    memset(frame, 0, sizeof(*frame));
+}
+
+int slp_blit_terrain_rgba(const SlpFrame *frame, const Palette *palette,
+                          uint8_t *rgba, size_t rgba_size,
+                          uint32_t width, uint32_t height, size_t stride,
+                          int32_t x, int32_t y) {
+    size_t pixels;
+    if (!frame || !frame->pixels || !palette || !rgba || !frame->width ||
+        !frame->height || !width || !height || !stride ||
+        frame->width > SIZE_MAX / frame->height ||
+        (size_t)width > stride / 4 ||
+        (size_t)width * 4 > rgba_size ||
+        (size_t)(height - 1) >
+            (rgba_size - (size_t)width * 4) / stride) return 0;
+    pixels = (size_t)frame->width * frame->height;
+    for (size_t i = 0; i < pixels; ++i)
+        if (frame->pixels[i].kind != SLP_TRANSPARENT &&
+            frame->pixels[i].kind != SLP_COLOR) return 0;
+    for (uint32_t sy = 0; sy < frame->height; ++sy) {
+        int64_t dy = (int64_t)y + sy;
+        if (dy < 0 || dy >= height) continue;
+        for (uint32_t sx = 0; sx < frame->width; ++sx) {
+            int64_t dx = (int64_t)x + sx;
+            const SlpPixel *pixel;
+            PaletteColor color;
+            uint8_t *out;
+            if (dx < 0 || dx >= width) continue;
+            pixel = &frame->pixels[(size_t)sy * frame->width + sx];
+            if (pixel->kind == SLP_TRANSPARENT) continue;
+            color = palette->colors[pixel->index];
+            out = rgba + (size_t)dy * stride + (size_t)dx * 4;
+            out[0] = color.r;
+            out[1] = color.g;
+            out[2] = color.b;
+            out[3] = 255;
+        }
+    }
+    return 1;
+}
+
+int slp_blit_graphic_rgba(const SlpFrame *frame, const Palette *palette,
+                          uint8_t *rgba, size_t rgba_size,
+                          uint32_t width, uint32_t height, size_t stride,
+                          int32_t anchor_x, int32_t anchor_y,
+                          int mirror_horizontal,
+                          void (*apply_special)(void *context,
+                                                const SlpPixel *pixel,
+                                                uint8_t rgba[4]),
+                          void *context) {
+    if (!frame || !frame->pixels || !palette || !rgba ||
+        !frame->width || !frame->height || !width || !height || !stride ||
+        frame->width > SIZE_MAX / frame->height ||
+        (size_t)width > stride / 4 ||
+        (size_t)width * 4 > rgba_size ||
+        (size_t)(height - 1) >
+            (rgba_size - (size_t)width * 4) / stride)
+        return 0;
+    size_t count = (size_t)frame->width * frame->height;
+    for (size_t i = 0; i < count; ++i) {
+        uint8_t kind = frame->pixels[i].kind;
+        if (kind > SLP_OUTLINE2 ||
+            (kind >= SLP_PLAYER && !apply_special))
+            return 0;
+    }
+    int64_t left = mirror_horizontal ?
+        (int64_t)anchor_x + frame->hotspot_x - frame->width :
+        (int64_t)anchor_x - frame->hotspot_x;
+    int64_t top = (int64_t)anchor_y - frame->hotspot_y;
+    for (uint32_t y = 0; y < frame->height; ++y) {
+        int64_t dy = top + y;
+        if (dy < 0 || dy >= height) continue;
+        for (uint32_t x = 0; x < frame->width; ++x) {
+            int64_t dx = left + x;
+            if (dx < 0 || dx >= width) continue;
+            uint32_t sx = mirror_horizontal ? frame->width - 1 - x : x;
+            const SlpPixel *pixel =
+                &frame->pixels[(size_t)y * frame->width + sx];
+            if (pixel->kind == SLP_TRANSPARENT) continue;
+            uint8_t *out = rgba + (size_t)dy * stride + (size_t)dx * 4;
+            if (pixel->kind == SLP_COLOR) {
+                PaletteColor color = palette->colors[pixel->index];
+                out[0] = color.r;
+                out[1] = color.g;
+                out[2] = color.b;
+                out[3] = 255;
+            } else {
+                apply_special(context, pixel, out);
+            }
+        }
+    }
+    return 1;
+}
+
+int slp_blit_graphic_indexed(const SlpFrame *frame,
+                             uint8_t *indices, size_t indices_size,
+                             uint32_t width, uint32_t height, size_t stride,
+                             int32_t anchor_x, int32_t anchor_y,
+                             int mirror_horizontal, uint8_t player_color,
+                             const uint8_t shadow_table[256]) {
+    if (!frame || !frame->pixels || !indices || !frame->width ||
+        !frame->height || !width || !height || !stride ||
+        frame->width > SIZE_MAX / frame->height ||
+        (size_t)width > stride || (size_t)width > indices_size ||
+        (size_t)(height - 1) >
+            (indices_size - (size_t)width) / stride)
+        return 0;
+    size_t count = (size_t)frame->width * frame->height;
+    for (size_t i = 0; i < count; ++i) {
+        uint8_t kind = frame->pixels[i].kind;
+        if (kind > SLP_SHADOW ||
+            (kind == SLP_SHADOW && !shadow_table))
+            return 0;
+    }
+    int64_t left = mirror_horizontal ?
+        (int64_t)anchor_x + frame->hotspot_x - frame->width :
+        (int64_t)anchor_x - frame->hotspot_x;
+    int64_t top = (int64_t)anchor_y - frame->hotspot_y;
+    uint8_t bank = (uint8_t)(((unsigned)player_color + 1u) * 16u);
+    for (uint32_t y = 0; y < frame->height; ++y) {
+        int64_t dy = top + y;
+        if (dy < 0 || dy >= height) continue;
+        for (uint32_t x = 0; x < frame->width; ++x) {
+            int64_t dx = left + x;
+            if (dx < 0 || dx >= width) continue;
+            uint32_t sx = mirror_horizontal ? frame->width - 1 - x : x;
+            const SlpPixel *pixel =
+                &frame->pixels[(size_t)y * frame->width + sx];
+            uint8_t *dest = indices + (size_t)dy * stride + (size_t)dx;
+            if (pixel->kind == SLP_COLOR) *dest = pixel->index;
+            else if (pixel->kind == SLP_PLAYER)
+                *dest = (uint8_t)(pixel->index | bank);
+            else if (pixel->kind == SLP_SHADOW)
+                *dest = shadow_table[*dest];
+        }
+    }
+    return 1;
+}
+
+static int emit(SlpFrame *frame, uint32_t y, uint32_t *x, uint32_t end,
+                uint32_t count, uint8_t kind, const uint8_t *colors) {
+    if (count > end - *x) return 0;
+    for (uint32_t i = 0; i < count; ++i) {
+        SlpPixel *p = &frame->pixels[(size_t)y * frame->width + *x + i];
+        p->kind = kind;
+        p->index = colors ? colors[i] : 0;
+    }
+    *x += count;
+    return 1;
+}
+
+static int decode_row(const uint8_t *data, size_t size, size_t pos,
+                      SlpFrame *frame, uint32_t y, uint32_t left,
+                      uint32_t right) {
+    uint32_t x = left, end = frame->width - right;
+    /* Every command consumes bytes or finishes a row; the limit also prevents
+       malformed data from spending unbounded time in this loop. */
+    for (size_t commands = 0; commands < size && pos < size; ++commands) {
+        uint8_t op = data[pos++];
+        uint32_t n = 0;
+        uint8_t kind = SLP_COLOR;
+        int fill = 0;
+
+        if (op == 0x0f) return x == end;
+        if ((op & 3) == 0 || (op & 3) == 1) {
+            n = op >> 2;
+            kind = (op & 3) == 1 ? SLP_TRANSPARENT : SLP_COLOR;
+            if (kind == SLP_TRANSPARENT && !n) {
+                if (!available(size, pos, 1)) return 0;
+                n = data[pos++];
+            }
+        } else if ((op & 15) == 2 || (op & 15) == 3) {
+            if (!available(size, pos, 1)) return 0;
+            n = ((uint32_t)(op & 0xf0) << 4) | data[pos++];
+            kind = (op & 15) == 3 ? SLP_TRANSPARENT : SLP_COLOR;
+        } else if ((op & 15) == 6 || (op & 15) == 7 ||
+                   (op & 15) == 10 || (op & 15) == 11) {
+            n = op >> 4;
+            if (!n) {
+                if (!available(size, pos, 1)) return 0;
+                n = data[pos++];
+            }
+            kind = (op & 15) == 6 || (op & 15) == 10 ? SLP_PLAYER :
+                   (op & 15) == 11 ? SLP_SHADOW : SLP_COLOR;
+            fill = (op & 15) == 7 || (op & 15) == 10;
+        } else if ((op & 15) == 14) {
+            if (op == 0x0e || op == 0x1e || op == 0x2e || op == 0x3e)
+                continue; /* Direction / palette transform metadata. */
+            if (op == 0x4e || op == 0x6e) n = 1;
+            else if (op == 0x5e || op == 0x7e) {
+                if (!available(size, pos, 1)) return 0;
+                n = data[pos++];
+            } else return 0;
+            kind = op == 0x4e || op == 0x5e ? SLP_OUTLINE1 : SLP_OUTLINE2;
+        } else return 0;
+
+        if (n > end - x) return 0;
+        if (kind == SLP_COLOR || kind == SLP_PLAYER) {
+            if (fill) {
+                if (!available(size, pos, 1)) return 0;
+                uint8_t value = data[pos++];
+                for (uint32_t i = 0; i < n; ++i) {
+                    SlpPixel *p = &frame->pixels[(size_t)y * frame->width + x + i];
+                    p->kind = kind;
+                    p->index = value;
+                }
+                x += n;
+            } else {
+                if (!available(size, pos, n) ||
+                    !emit(frame, y, &x, end, n, kind, data + pos)) return 0;
+                pos += n;
+            }
+        } else if (!emit(frame, y, &x, end, n, kind, NULL)) return 0;
+    }
+    return 0;
+}
+
+int slp_decode_frame(const uint8_t *data, size_t size, uint32_t frame_index,
+                     SlpFrame *frame) {
+    uint32_t count, width, height, outline, commands;
+    size_t off;
+    if (!frame) return 0;
+    memset(frame, 0, sizeof(*frame));
+    if (!slp_frame_count(data, size, &count) || frame_index >= count) return 0;
+    off = 32 + (size_t)frame_index * 32;
+    commands = u32(data + off);
+    outline = u32(data + off + 4);
+    width = u32(data + off + 16);
+    height = u32(data + off + 20);
+    if (!width || !height || width > 4096 || height > 4096 ||
+        (uint64_t)width * height > 4000000 ||
+        !available(size, outline, (size_t)height * 4) ||
+        !available(size, commands, (size_t)height * 4)) return 0;
+    frame->pixels = calloc((size_t)width * height, sizeof(SlpPixel));
+    if (!frame->pixels) return 0;
+    frame->width = width;
+    frame->height = height;
+    frame->hotspot_x = (int32_t)u32(data + off + 24);
+    frame->hotspot_y = (int32_t)u32(data + off + 28);
+
+    for (uint32_t y = 0; y < height; ++y) {
+        uint16_t left = u16(data + outline + (size_t)y * 4);
+        uint16_t right = u16(data + outline + (size_t)y * 4 + 2);
+        uint32_t pos = u32(data + commands + (size_t)y * 4);
+        if (left == 0x8000 || right == 0x8000) continue;
+        if (left > width || right > width - left || pos >= size ||
+            !decode_row(data, size, pos, frame, y, left, right)) {
+            slp_free_frame(frame);
+            return 0;
+        }
+    }
+    return 1;
+}

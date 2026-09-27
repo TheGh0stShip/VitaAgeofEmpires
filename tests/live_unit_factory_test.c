@@ -1,0 +1,394 @@
+#include "live_unit_factory.h"
+
+#include <assert.h>
+#include <stdlib.h>
+#include <string.h>
+
+static void record_cell(void *context, int32_t x, int32_t y) {
+    (void)context;
+    (void)x;
+    (void)y;
+}
+
+static int lookup_kind_68(void *context, int16_t *kind) {
+    int *called = context;
+    *called += 1;
+    *kind = 0x68;
+    return 1;
+}
+
+static void derived_kind_68(void *context, AoeLiveUnit *unit) {
+    int *called = context;
+    assert(unit->core.state == 2);
+    *called += 10;
+}
+
+typedef struct {
+    AoeLiveUnit *expected;
+    uint8_t state;
+    unsigned calls;
+} TargetStateTrace;
+
+static int set_target_state(void *context, AoeLiveUnit *unit, uint8_t state) {
+    TargetStateTrace *trace = context;
+    assert(unit == trace->expected);
+    trace->state = state;
+    trace->calls++;
+    unit->core.state = state;
+    return 1;
+}
+
+typedef struct {
+    char events[16];
+    unsigned count;
+    int16_t graphic_id;
+    int16_t sound_id;
+} UpdateStateTrace;
+
+static void update_event(UpdateStateTrace *trace, char event) {
+    assert(trace->count < sizeof(trace->events));
+    trace->events[trace->count++] = event;
+}
+
+static int update_active(void *context, AoeLiveUnit *unit) {
+    assert(unit);
+    update_event(context, 'A');
+    return 1;
+}
+
+static int update_set_state(void *context, AoeLiveUnit *unit, uint8_t state) {
+    update_event(context, 'S');
+    unit->core.state = state;
+    return 1;
+}
+
+static int update_select_graphic(void *context, AoeLiveUnit *unit,
+                                 int16_t graphic_id) {
+    UpdateStateTrace *trace = context;
+    assert(unit);
+    update_event(trace, 'G');
+    trace->graphic_id = graphic_id;
+    return 1;
+}
+
+static void update_dying_sound(void *context, AoeLiveUnit *unit,
+                               int16_t sound_id) {
+    UpdateStateTrace *trace = context;
+    assert(unit);
+    update_event(trace, 'D');
+    trace->sound_id = sound_id;
+}
+
+static int update_terminal(void *context, AoeLiveUnit *unit) {
+    assert(unit);
+    update_event(context, 'T');
+    return 1;
+}
+
+int main(void) {
+    ScnTile terrain[16] = {0};
+    AoeObjectUpdateList tiles[16] = {0};
+    int8_t counts[16];
+    uint32_t masks[16] = {0};
+    uint8_t view[16] = {0};
+    int32_t relations[1] = {1};
+    float resources[1] = {0};
+    AoePlayerResources resource_state = {1, resources};
+    AoeOwnedVisibilityRegistry world;
+    AoePlayerUpdateState owner = {0};
+    AoeRng rng = {.state = 1};
+    DatUnit unit = {.present = 1, .type = 10, .hit_points = 25,
+                    .standing_graphic = 0, .walking_graphic = -1,
+                    .line_of_sight = 1.0f};
+    DatGraphic graphic = {.present = 1, .frame_count = 1, .angle_count = 1,
+                          .frame_duration = 1.0f};
+    DatGraphics graphics = {.count = 1, .present_count = 1, .graphics = &graphic};
+    DatMapGeometry geometry = {.tile_half_width = 32,
+                               .tile_half_height = 16};
+    AoeVisibilityFootprintGrid grid = {
+        .width = 4, .height = 4, .counts = counts, .tile_masks = masks,
+        .view_codes = view, .visible_mask = 1u, .clear_visible_mask = ~1u,
+        .explored_mask = 0x10000u
+    };
+    AoeLiveUnitVisionBinding vision = {
+        .owner_grid = &grid, .owner_index = 0, .active_index = 0,
+        .active_relations = relations, .relation_count = 1,
+        .explored_ops = {.record_owner = record_cell,
+                         .record_active = record_cell}
+    };
+    AoeLiveUnit live = {0};
+    AoeLiveUnit other = {0};
+    int32_t assigned_id;
+    for (unsigned i = 0; i < 16; ++i) counts[i] = -1;
+    assert(aoe_owned_visibility_registry_init(&world));
+
+    assert(aoe_live_unit_construct_ror(&live, &unit, &graphics,
+                                        &resource_state, &world, &owner,
+                                        terrain, tiles, &geometry,
+                                        4, 4, &vision, &rng,
+                                        1.25f, 2.25f, 0.0f));
+    assert(live.constructed && live.core.state == 2 &&
+           live.core.unit_template == &unit);
+    assert(live.core.draw_left == 16 && live.core.draw_top == 16 &&
+           live.core.draw_right == 16 && live.core.draw_bottom == 16);
+    assert(live.graphic.current_graphic == &graphic &&
+           aoe_sprite_list_count(&live.sprites.list) == 1);
+    assert(live.placement.tile == &tiles[9] && tiles[9].count == 1);
+    assert(live.select_2c == 1 && live.select_30 == 0 &&
+           live.owner_node == owner.object_list2c.head &&
+           owner.object_list2c.count == 1);
+    assert(aoe_visibility_registry_resolve(&world.view, live.core.unit_id) ==
+           &live.core.position);
+    /* The actual 0..2 player-spawn branch reaches the type-10 no-op. */
+    assert(aoe_live_unit_scenario_dispatch_ror(
+        &live, 2, 3.0f, &(AoeLiveUnitScenarioDispatchOps){0}));
+    assigned_id = live.core.unit_id;
+
+    /* Patched 0x004a8f40 stably prunes missing and state>2 dependencies. */
+    assert(aoe_live_unit_construct_ror(&other, &unit, &graphics,
+                                        &resource_state, &world, &owner,
+                                        terrain, tiles, &geometry,
+                                        4, 4, &vision, &rng,
+                                        3.25f, 2.25f, 0.0f));
+    live.dependent_unit_ids = malloc(3 * sizeof(*live.dependent_unit_ids));
+    assert(live.dependent_unit_ids);
+    live.dependent_unit_capacity = live.dependent_unit_count = 3;
+    live.dependent_unit_ids[0] = other.core.unit_id;
+    live.dependent_unit_ids[1] = live.core.unit_id;
+    live.dependent_unit_ids[2] = 999999;
+    other.core.state = 3;
+    int handled = -1;
+    assert(aoe_live_unit_update_prelude_ror(
+        &live, &owner, &world, &handled));
+    assert(!handled && live.dependent_unit_count == 1 &&
+           live.dependent_unit_ids[0] == live.core.unit_id);
+    other.core.state = 2;
+    aoe_live_unit_destroy_ror(&other, &owner, &world, &vision);
+
+    /* Original +0x20 suppresses the normal switch; states above 2 propagate
+       through the current object's class-specific virtual +0x5c setter. */
+    TargetStateTrace target_trace = {.expected = &live};
+    AoeLiveUnitCore target = {.state = 2};
+    AoeLiveUnitUpdateTargetOps target_ops = {
+        .context = &target_trace, .set_state = set_target_state
+    };
+    handled = -1;
+    assert(aoe_live_unit_update_attached_target_ror(
+        &live, &target_ops, &handled));
+    assert(!handled && target_trace.calls == 0);
+    live.placement.attached_unit = &target;
+    assert(aoe_live_unit_update_attached_target_ror(
+        &live, &target_ops, &handled));
+    assert(handled && target_trace.calls == 0 && live.core.state == 2);
+    target.state = 7;
+    assert(!aoe_live_unit_update_attached_target_ror(&live, 0, &handled));
+    assert(handled && live.core.state == 2);
+    assert(aoe_live_unit_update_attached_target_ror(
+        &live, &target_ops, &handled));
+    assert(handled && target_trace.calls == 1 && target_trace.state == 7 &&
+           live.core.state == 7);
+    live.core.state = 2;
+    live.placement.attached_unit = 0;
+
+    /* Complete no-target state switch in patched 0x004a8f40. */
+    UpdateStateTrace update_trace = {0};
+    AoeLiveUnitUpdateStateOps update_ops = {
+        .context = &update_trace,
+        .active_update = update_active,
+        .set_state = update_set_state,
+        .select_graphic = update_select_graphic,
+        .play_dying_sound = update_dying_sound,
+        .terminal_cleanup = update_terminal,
+        .world_delta = 1.5f
+    };
+    uint8_t predicate_result = 99;
+    live.core.hit_points = 1.0f;
+    assert(aoe_live_unit_update_normal_state_ror(
+        &live, &update_ops, &predicate_result));
+    assert(predicate_result == 0 && update_trace.count == 1 &&
+           update_trace.events[0] == 'A' && live.core.state == 2);
+
+    memset(&update_trace, 0, sizeof(update_trace));
+    unit.dying_graphic = 7;
+    unit.dying_sound = 5;
+    live.core.hit_points = -1.0f;
+    assert(aoe_live_unit_update_normal_state_ror(
+        &live, &update_ops, &predicate_result));
+    assert(live.core.state == 3 && update_trace.count == 4 &&
+           memcmp(update_trace.events, "ASGD", 4) == 0 &&
+           update_trace.graphic_id == 7 && update_trace.sound_id == 5);
+
+    memset(&update_trace, 0, sizeof(update_trace));
+    unit.decay_rate = 2.0f;
+    live.core.storage.carried_resource_type = 0;
+    live.core.storage.carried_amount = 10.0f;
+    assert(aoe_live_unit_update_normal_state_ror(
+        &live, &update_ops, &predicate_result));
+    assert(live.core.storage.carried_amount == 7.0f &&
+           update_trace.count == 0);
+
+    unit.undead_mode = 1;
+    unit.undead_graphic = 9;
+    live.core.state = 5;
+    live.core.storage.carried_amount = 0.0f;
+    assert(aoe_live_unit_update_normal_state_ror(
+        &live, &update_ops, &predicate_result));
+    assert(live.core.state == 6 && update_trace.count == 2 &&
+           memcmp(update_trace.events, "SG", 2) == 0 &&
+           update_trace.graphic_id == 9);
+
+    memset(&update_trace, 0, sizeof(update_trace));
+    unit.undead_mode = 0;
+    live.core.state = 3;
+    live.core.storage.carried_resource_type = -1;
+    assert(aoe_live_unit_update_normal_state_ror(
+        &live, &update_ops, &predicate_result));
+    assert(live.core.state == 7 && update_trace.count == 2 &&
+           memcmp(update_trace.events, "ST", 2) == 0);
+    assert(aoe_live_unit_update_normal_state_ror(
+        &live, &update_ops, &predicate_result));
+    assert(live.core.state == 8 && update_trace.count == 3 &&
+           update_trace.events[2] == 'S');
+    unit.negative_id_mode = 0;
+    assert(aoe_live_unit_update_normal_state_ror(
+        &live, &update_ops, &predicate_result) && predicate_result == 1);
+    unit.negative_id_mode = 1;
+    assert(aoe_live_unit_update_normal_state_ror(
+        &live, &update_ops, &predicate_result) && predicate_result == 2);
+    live.core.state = 2;
+    live.core.hit_points = 25.0f;
+
+    aoe_live_unit_destroy_ror(&live, &owner, &world, &vision);
+    assert(!live.constructed && owner.object_list2c.count == 0 &&
+           tiles[9].count == 0 &&
+           !aoe_visibility_registry_resolve(&world.view, assigned_id));
+    for (unsigned i = 0; i < 16; ++i) assert(counts[i] <= 0);
+
+    /* 0x004a8200 passes +0x49 then +0x4a to player +0xdc: a zero-HP
+       type-25 unit therefore selects list +0x30, not +0x2c or +0x28. */
+    unit.type = 25;
+    unit.hit_points = 0;
+    assert(aoe_live_unit_construct_ror(&live, &unit, &graphics,
+                                        &resource_state, &world, &owner,
+                                        terrain, tiles, &geometry,
+                                        4, 4, &vision, &rng,
+                                        2.25f, 2.25f, 0.0f));
+    assert(live.select_2c == 0 && live.select_30 == 1 &&
+           live.owner_node == owner.object_list30.head &&
+           owner.object_list30.count == 1);
+    /* Type-20 base constructors zero +0x88. Its update predicate passes that
+       field and world delta to sprite-manager +0x08. */
+    assert(live.animation_rate == 0.0f);
+    assert(aoe_live_unit_tick_sprites_ror(&live, 0.5f));
+    assert(aoe_sprite_runtime_at(&live.sprites, 0)->animation.frame == 0);
+    aoe_live_unit_destroy_ror(&live, &owner, &world, &vision);
+    assert(owner.object_list30.count == 0);
+
+    /* Zero-to-positive health defers list reclassification until +0x24. */
+    unit.type = 10;
+    unit.hit_points = 0;
+    assert(aoe_live_unit_construct_ror(&live, &unit, &graphics,
+                                        &resource_state, &world, &owner,
+                                        terrain, tiles, &geometry,
+                                        4, 4, &vision, &rng,
+                                        2.25f, 2.25f, 0.0f));
+    assert(live.owner_node == owner.object_list28.head &&
+           aoe_live_unit_health_flag_set(
+               &live.core, 1, (void **)&live.owner_node,
+               &(AoeLiveUnitRegistrationHooks){0}) &&
+           live.core.registration_pending && owner.object_list28.count == 1);
+    handled = 0;
+    assert(aoe_live_unit_update_prelude_ror(
+        &live, &owner, &world, &handled));
+    assert(handled && !live.core.registration_pending &&
+           live.owner_node == owner.object_list2c.head &&
+           owner.object_list28.count == 0 && owner.object_list2c.count == 1);
+    aoe_live_unit_destroy_ror(&live, &owner, &world, &vision);
+    assert(owner.object_list2c.count == 0);
+
+    /* Effect-free root high state uses real owner and vision adapters. */
+    unit.type = 10;
+    unit.hit_points = 25;
+    unit.state_notify_mode = 0;
+    unit.state_effect_mode = 0;
+    assert(aoe_live_unit_construct_ror(&live, &unit, &graphics,
+                                        &resource_state, &world, &owner,
+                                        terrain, tiles, &geometry,
+                                        4, 4, &vision, &rng,
+                                        2.25f, 2.25f, 0.0f));
+    assert(owner.object_list2c.count == 1);
+    assert(aoe_live_unit_scenario_high_root_ror(
+        &live, &resource_state, &owner, &world, &vision));
+    assert(live.core.state == 7 && !live.core.positive_hit_points &&
+           owner.object_list2c.count == 0 && owner.object_list28.count == 1 &&
+           live.select_2c == 0 && live.select_30 == 0);
+    aoe_live_unit_destroy_ror(&live, &owner, &world, &vision);
+    assert(owner.object_list28.count == 0);
+
+    unit.state_notify_mode = 1;
+    assert(aoe_live_unit_construct_ror(&live, &unit, &graphics,
+                                        &resource_state, &world, &owner,
+                                        terrain, tiles, &geometry,
+                                        4, 4, &vision, &rng,
+                                        2.25f, 2.25f, 0.0f));
+    assert(!aoe_live_unit_scenario_high_root_ror(
+        &live, &resource_state, &owner, &world, &vision));
+    assert(live.core.state == 2 && owner.object_list2c.count == 1);
+    aoe_live_unit_destroy_ror(&live, &owner, &world, &vision);
+
+    unit.state_effect_mode = 2;
+    assert(aoe_live_unit_construct_ror(&live, &unit, &graphics,
+                                        &resource_state, &world, &owner,
+                                        terrain, tiles, &geometry,
+                                        4, 4, &vision, &rng,
+                                        2.25f, 2.25f, 0.0f));
+    masks[10] = 0; /* Exercise the campaign tree's zero-high-mask branch. */
+    assert(aoe_live_unit_scenario_high_root_ror(
+        &live, &resource_state, &owner, &world, &vision));
+    assert(live.core.state == 7 && owner.visibility_watch40.count == 0 &&
+           owner.visibility_watch40.capacity == 32);
+    aoe_live_unit_destroy_ror(&live, &owner, &world, &vision);
+    aoe_visibility_watch_destroy(&owner.visibility_watch40);
+
+    /* A type-30 scenario record uses 0x0044ca40 then 0x0044c7b0. */
+    unit.type = 30;
+    unit.hit_points = 25;
+    unit.state_notify_mode = 0;
+    unit.state_effect_mode = 0;
+    graphic.sequence_type = 3; /* angle-sequenced and animated */
+    graphic.frame_count = 4;
+    assert(aoe_live_unit_construct_ror(&live, &unit, &graphics,
+                                        &resource_state, &world, &owner,
+                                        terrain, tiles, &geometry,
+                                        4, 4, &vision, &rng,
+                                        2.25f, 2.25f, 0.0f));
+    assert(aoe_live_unit_scenario_dispatch_ror(
+        &live, 0, 258.75f, &(AoeLiveUnitScenarioDispatchOps){0}));
+    assert(live.core.scenario_rotation == 258.75f &&
+           live.core.scenario_frame == 2);
+    live.animation_rate = 1.0f;
+    assert(aoe_live_unit_tick_sprites_ror(&live, 1.0f));
+    assert(aoe_sprite_runtime_at(&live.sprites, 0)->animation.frame == 1);
+    aoe_live_unit_destroy_ror(&live, &owner, &world, &vision);
+
+    /* Type-70 0x004b02a0 probes the current object then runs root middle. */
+    unit.type = 70;
+    int derived_calls = 0;
+    assert(aoe_live_unit_construct_ror(&live, &unit, &graphics,
+                                        &resource_state, &world, &owner,
+                                        terrain, tiles, &geometry,
+                                        4, 4, &vision, &rng,
+                                        2.25f, 2.25f, 0.0f));
+    live.core.registration_pending = 1;
+    assert(aoe_live_unit_scenario_dispatch_ror(&live, 3, 0.0f,
+        &(AoeLiveUnitScenarioDispatchOps){
+            .context = &derived_calls, .derived_middle_time = 1.0f,
+            .derived_middle_threshold = 1.0f,
+            .derived_middle_lookup = lookup_kind_68,
+            .derived_middle_kind_68 = derived_kind_68}));
+    assert(derived_calls == 11 && !live.core.positive_hit_points &&
+           !live.core.registration_pending);
+    aoe_live_unit_destroy_ror(&live, &owner, &world, &vision);
+    aoe_owned_visibility_registry_destroy(&world);
+    return 0;
+}

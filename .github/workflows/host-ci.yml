@@ -1,0 +1,22 @@
+name: Host build and tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build/host -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build/host --parallel 2
+      - name: Test
+        run: ctest --test-dir build/host --output-on-failure

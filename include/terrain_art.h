@@ -1,0 +1,38 @@
+#ifndef VITA_AOE_TERRAIN_ART_H
+#define VITA_AOE_TERRAIN_ART_H
+
+#include "dat.h"
+#include "drs.h"
+#include "slp.h"
+
+typedef struct {
+    int32_t slp_id;
+    uint32_t frame_count;
+    SlpFrame *frames;
+} TerrainArtEntry;
+
+typedef struct {
+    uint16_t count;
+    TerrainArtEntry *entries; /* Indexed by DAT terrain slot. */
+} TerrainArtCache;
+
+typedef TerrainArtEntry BorderArtEntry;
+typedef TerrainArtCache BorderArtCache;
+
+/* Loads only enabled terrains with a direct SLP ID. Archive order follows
+   the original DRS lookup precedence. Every DAT-declared shape span must
+   fit the decoded sprite. Pass an empty cache; free it before reloading.
+   Replacement art is not resolved here. */
+int terrain_art_load_direct(TerrainArtCache *cache, const DatTerrains *terrains,
+                            DrsArchive *const *archives, size_t archive_count);
+void terrain_art_free(TerrainArtCache *cache);
+
+/* Empiresx.exe 0x00447cd0: load direct border art for enabled slots. A
+   missing resource leaves that slot without frames, matching the original
+   loader's disabling of unavailable art (notably border ID 1 / SLP 20005).
+   Malformed present resources fail the load. No SHP or loose-file fallback. */
+int border_art_load_direct(BorderArtCache *cache, const DatBorders *borders,
+                           DrsArchive *const *archives, size_t archive_count);
+void border_art_free(BorderArtCache *cache);
+
+#endif

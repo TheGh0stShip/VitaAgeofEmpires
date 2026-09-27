@@ -1,0 +1,145 @@
+# Rise of Rome building update: 004ae880
+
+`src/building_update.c` translates the complete field/control-flow body at
+004ae880–004ae970 in `build/ror/disc/GAME/EMPIRESX.EXE` (SHA-256
+8e0e6d047b2f90d0769fb5a1b16c1b1973582efdbe73a5d11395a43557215845).
+It is not connected to live runtime buildings yet. The parent update and
+derived state setter remain mandatory integration dependencies; tests use
+spies, not substitutes for gameplay implementations. Both the terminal and
+active-production branches now call translated implementations directly.
+
+Evidence can be reproduced with:
+
+```sh
+objdump -d -Mintel --start-address=0x004ae880 --stop-address=0x004ae971 build/ror/disc/GAME/EMPIRESX.EXE
+objdump -d -Mintel --start-address=0x005283e0 --stop-address=0x00528407 build/ror/disc/GAME/EMPIRESX.EXE
+```
+
+Order and details:
+
+1. State zero alone computes graphic angle count times accumulated build
+   time divided by signed template build time. Helper 005283e0 truncates to
+   int64. Importantly, only its low **byte** is then compared with the signed
+   angle count. This is not a saturating frame-selection function.
+2. Write a changed in-range angle. At accumulated time >= template time,
+   invoke virtual +0x5c with state 2, before shifting histories.
+3. Copy +1e8 to +1ec, +1e4 to +1e8, +1f4 to +1f8, +1f0 to +1f4,
+   and global 007d74d0 to +1f0. These are raw 32-bit copies; field semantics
+   have not yet been established.
+4. Call 004b0100 and retain AL. Examine the state after that call; state >2
+   calls 004af890, otherwise 004af900.
+5. Copy +1b0 to +1e4 after that final call, then return the retained AL.
+
+The update does not itself advance the construction accumulator. Inputs
+with corrupt/nonfinite/negative accumulation or nonpositive construction
+times/counts are explicitly unsupported, rather than silently assigned a
+made-up game result. The numeric calculation uses long double; this does
+not emulate every x87 precision-control setting on ARM. Standard real-game
+stage boundaries and low-byte wrapping are tested, but instruction-level
+differential floating-point validation remains outstanding.
+
+## Terminal branch and action ownership
+
+`aoe_building_terminal_cleanup_ror` translates 004af890–004af8f0:
+if +1d2 is 4, decrement the global per-owner counter at
+`[00585e88]+0xa34+4*owner_id`. Reset nonnegative/other status values except
+the -1 sentinel to -1, zero +1c6, clear the action list at +1cc, then
+increment byte +1d0 with wraparound. The unsigned counter also wraps exactly
+like x86 DEC. Repeated calls still increment the revision, even with an
+empty list. No queue-array release or explicit refund occurs in this body.
+The selected counter is passed as a pointer by the caller; its broader UI
+meaning has not been established.
+
+`src/action_list.c` implements the actual list ownership methods used here:
+
+| RoR address | Portable method | Original behavior |
+| --- | --- | --- |
+| 00404410 | push | link at head, then action +1c(1) |
+| 00404460 | append | link at tail, then action +1c(1) |
+| 004044e0 | pop | unlink, action destructor(1), free node, reread head/owner state, optionally action +1c(0) |
+| 00403e70 | clear | repeatedly pop until the live head is null |
+
+Insertion at owner state >2 destroys the offered action instead. Pop only
+activates a surviving head at owner state <3, inspecting state after the
+destructor. Clear therefore includes intermediate activations for an active
+owner; it is not equivalent to simply freeing a chain. Destructors may alter
+the owner state or insert a new action, and these live changes are observed.
+Tests cover both, plus terminal cleanup ordering and byte/counter wrapping.
+
+Class-specific action destructors and state methods remain explicit required
+operations, not no-ops. Lists own allocated nodes and successfully inserted
+actions; allocation failure leaves the action with the caller. The portable
+API rejects invalid dependencies/null active actions instead of reproducing
+the original access violations. It requires valid acyclic list storage and
+callbacks that preserve the owner and operation bindings.
+
+## Active production and queue consumption
+
+`src/building_production.c` translates 004af900–004afb3a and
+004af7f0–004af884, verified using objdump on the same executable above.
+The constant at 0054d344 is float zero. The production branch operates on
+original owner resource indices 11 (`+2c`), 32 (`+80`), and 4 (`+10`).
+For an empty action list, production can start only when resource 11 < 32
+and resource 4 > 0. This gate is bypassed when the action list has a head.
+
+Before the resource gate, 004af1a0 is queried with final arguments 0,0.
+A true result and first output 102 or 103 cancels all queued entries through
+004af680(head unit ID,-1), then returns without updating the action list.
+Those query/cancellation bodies are still required dependencies. A portable
+guard rejects a cancellation callback that fails to reduce the queue count.
+
+If gated, set queue status 4 once, emit event 125 (reason 32 if resource 11
+>=32, otherwise reason 4), then increment the per-owner counter. Repeated
+gated updates do not repeat the notification. Disabled/empty queues clear
+only status 4 and decrement its counter; other statuses are left unchanged.
+When the gate clears, decrement a prior status-4 counter, set status -1,
+allocate/construct the production action via 004b6820(building,head ID,-1,1),
+and insert it through the translated action list. A null allocation still
+reaches the list update, matching the original caller.
+
+List virtual +0xc result 1, 2 or 3 pops the current action and consumes one
+queued item. Other result bytes leave the queue unchanged. Consumption
+decrements the head quantity with 16-bit wrapping and increments revision
+with byte wrapping. At quantity <=0 it removes the head queue entry by
+shifting subsequent ID/quantity pairs, leaving the unused trailing slot
+unchanged. It then emits event 124(owner,0,0,0). Empty consumption does
+nothing, including no notification.
+
+Tests exercise all result classes 0–4, both resource gates, existing-action
+bypass, notification/counter order, both cancellation codes, null action
+creation, queue shifts, empty queues and revision/quantity wrapping.
+The portable API bounds-checks queue storage and rejects nonfinite resource
+inputs; x87 unordered behavior for corrupt resource data is not emulated.
+Allocation and callback failures after earlier effects do not roll back the
+simulation. Production still depends on the real query, cancellation,
+action factory, individual action-update and global-notification implementations.
+
+## Verified production list dispatch
+
+Building vtable 0054d0c8 +218 points to 004b0020. That factory invokes
+004b5ac0, which installs list vtable 0054dac8. Its +0xc slot is 004043c0,
+the same as root list vtable 00547240. This establishes the actual production
+list update rather than assuming that a base-class method is inherited.
+
+`aoe_action_list_update_ror` now translates 004043c0–00404408 and is called
+directly by production. Empty lists return byte 1. Otherwise the method
+calls the head action's +0x28 update and saves AL, rereads the live head,
+calls each successor's +0x24 method, then pops the live head if the saved
+result is 1. If head update emptied the list, it skips traversal and pop.
+The saved result is returned unchanged, including values 2,3 and 255.
+Waiting callbacks must preserve their current node's lifetime, as the
+original loop reads its next pointer after the callback.
+
+Consequently production's own pop for result 1 is an additional pop, not
+an alternative to the list's pop. Preserve this even for multiple actions.
+Also, if action allocation fails and the list stays empty, list result 1
+causes the caller to consume a queued item. This potentially surprising
+failure behavior follows the original instructions; it is not a retry.
+Tests now cover waiting-action order, two successive pops, head replacement
+or removal during update, result preservation and this null-allocation path.
+Individual action +0x28/+0x24 bodies remain explicit dependencies.
+
+Next: inspect 004b0100, 004af1a0, 004af680, 004b6820, the production action
+virtual methods, and the type-80 setter 004ae500;
+translate their bodies and bind semantic building fields to runtime objects.
+Do not wire no-op callbacks to claim a working building simulation.

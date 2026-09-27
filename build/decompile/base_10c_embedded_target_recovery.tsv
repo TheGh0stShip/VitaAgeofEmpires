@@ -1,0 +1,7 @@
+address	status	instruction	references	function	end
+0051f182	recovered	CALL 0x0051f0dd	0051eed8:DATA	FUN_0051f182	0051f188
+0051f31f	recovered	CALL 0x0051f0dd	0051eedc:DATA	FUN_0051f31f	0051f325
+0051f409	recovered	PUSH ECX	0051eee8:DATA	FUN_0051f409	0051f543
+0051f544	recovered	PUSH ECX	0051eee4:DATA	FUN_0051f544	0051f592
+0051f593	recovered	CMP CH,0x8	0051eee0:DATA	FUN_0051f593	0051f5ff
+0051f61e	recovered	MOV dword ptr [ESI + 0xa8e0],0x120	0051eed4:DATA	FUN_0051f61e	0051f744

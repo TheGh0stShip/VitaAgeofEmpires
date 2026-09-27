@@ -36,7 +36,11 @@ Rise of Rome Rev 1 mixed-mode disc. No game files are included here.
 
 For whole-program reference, `tools/ExportAoEDecompilation.java` exports
 every Ghidra-discovered function from both executables in one pass. The
-searchable dumps and address indexes are under ignored `build/decompile/`.
+current patched 1.0c and 1.0a pseudocode dumps, indexes, call graphs, and final
+coverage/pointer reports are checked in under `build/decompile/`; the local
+Ghidra databases and intermediate build products remain ignored. See
+[`docs/DECOMPILATION_EXPORTS.md`](docs/DECOMPILATION_EXPORTS.md) for provenance
+and regeneration instructions.
 This does not guarantee that Ghidra discovered every function: a vtable audit
 found 25 valid expansion-world methods missing from the initial export, and a
 later pointer scan recovered hundreds more starts. Full Ghidra automatic

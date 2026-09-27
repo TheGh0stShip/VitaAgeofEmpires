@@ -1,0 +1,8 @@
+address	status	instruction	references	function	end
+00521e68	recovered	MOV AL,byte ptr [ESI + -0x1]	00521ce4:DATA	FUN_00521e68	00521e6e
+00521e6f	recovered	MOV AL,byte ptr [ESI + -0x2]	00521ce8:DATA	FUN_00521e6f	00521e7b
+00521e7c	recovered	MOV AL,byte ptr [ESI + -0x3]	00521cec:DATA	FUN_00521e7c	00521e8e
+00521f2f	recovered	MOV CL,byte ptr [EDI + -0x50]	00521e5c:DATA	FUN_00521f2f	00521fce
+00521fcf	recovered	MOV CL,byte ptr [EDI + -0x50]	00521e58:DATA	FUN_00521fcf	00522071
+00522072	recovered	MOV CL,byte ptr [EDI + -0x50]	00521e54:DATA	FUN_00522072	00522111
+00522112	recovered	MOV CL,byte ptr [EDI + -0x50]	00521e50:DATA	FUN_00522112	005221ab

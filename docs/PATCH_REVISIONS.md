@@ -23,6 +23,11 @@ function starts only when table/instruction evidence supports them, repeat the
 audits, and regenerate revision-specific call graphs plus whole-program
 decompiler reference exports under `build/decompile`.
 
+The authoritative patched dumps and selected final audit TSVs are checked in
+at the `base_10c_` and `ror_10a_` paths; Ghidra project databases and original
+executables are not. See [`DECOMPILATION_EXPORTS.md`](DECOMPILATION_EXPORTS.md)
+for the precise artifact list and regeneration instructions.
+
 This recovery step is mandatory. The initial patched RoR analysis omitted,
 among other methods, the scenario-editor vtable's large input handler at
 `0x00493580`; a zero-failure export only proved that every function Ghidra had

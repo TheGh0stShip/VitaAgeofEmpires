@@ -58,6 +58,8 @@ int main(int argc, char **argv) {
                 runtime.projected_y[i] != projected_y ||
                 runtime.objects[i].count != 0 ||
                 runtime.view_codes[i] != 0 ||
+                runtime.cache_flags[i] != 0 ||
+                runtime.draw_flags[i] != 0 ||
                 runtime.masks.masks[i] != 0 ||
                 vision.grid.view_codes != runtime.view_codes ||
                 vision.grid.tile_masks != runtime.masks.masks) {

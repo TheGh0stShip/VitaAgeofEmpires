@@ -8,8 +8,10 @@ int main(void) {
     uint8_t shapes[9] = {0};
     uint8_t view[9] = {0};
     AoeObjectUpdateList objects[9] = {0};
-    AoeRuntimeMap map = {3, 3, tiles, shapes, NULL, NULL, NULL,
-                         view, NULL, objects, {0}};
+    AoeRuntimeMap map = {
+        .width = 3, .height = 3, .tiles = tiles, .shapes = shapes,
+        .view_codes = view, .objects = objects
+    };
     float restriction[4] = {1, 1, 1, 1};
     DatUnit candidate = {.present = 1, .size = {0.4f, 0.4f, 1.0f},
                          .placement_clearance = {0.5f, 0.5f},

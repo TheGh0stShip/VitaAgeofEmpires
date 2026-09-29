@@ -380,3 +380,13 @@ lifetime as the existing template `+0x18` path. It deliberately ignores a
 failed/null creation result, as `004ae500` does. The real-scenario test pins
 the spawned unit's owner, cloned template, constructed count, sprite tick,
 and eventual teardown.
+
+Foundation invalidation is now concrete in the owned map. The translated
+`aoe_runtime_map_invalidate_ror` implements all of `00445760`: normalize
+reversed inclusive bounds, reject wholly disjoint rectangles, clamp partial
+overlap, write cache byte `+7 = 0xcc`, and write draw byte `+10`. The scenario
+binding supplies completion's zero draw value. Cache byte `+7` is retained in
+its own byte array rather than pretending the host has the original packed
+24-byte x86 tile layout. Painting itself remains explicit: `00449110` calls
+`004481b0`, whose terrain-dependent object removal/spawn records are not yet
+parsed, so a direct terrain-ID fill would be incomplete.

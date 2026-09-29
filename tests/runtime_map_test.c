@@ -2,6 +2,7 @@
 #include "live_unit_vision.h"
 
 #include <assert.h>
+#include <string.h>
 
 int main(void) {
     ScnTile scenario_tiles[9] = {0};
@@ -28,7 +29,19 @@ int main(void) {
     assert(map.shapes[4] == 6 && map.borders[4] == 0);
     assert(map.projected_x[4] == 64 && map.projected_y[4] == -16);
     assert(map.objects[0].count == 0 && map.view_codes[0] == 0 &&
+           map.cache_flags[0] == 0 && map.draw_flags[0] == 0 &&
            map.masks.masks[0] == 0);
+    memset(map.draw_flags, 0x7e, 9);
+    assert(aoe_runtime_map_invalidate_ror(&map, 2, 1, -1, 4, 3));
+    for (size_t i = 0; i < 9; ++i) {
+        if (i < 3)
+            assert(map.cache_flags[i] == 0 && map.draw_flags[i] == 0x7e);
+        else
+            assert(map.cache_flags[i] == 0xcc && map.draw_flags[i] == 3);
+    }
+    memset(map.cache_flags, 0, 9);
+    assert(aoe_runtime_map_invalidate_ror(&map, -4, -3, -2, 8, 0));
+    for (size_t i = 0; i < 9; ++i) assert(map.cache_flags[i] == 0);
     assert(aoe_player_vision_state_init(&player, &map.masks, 0));
     assert(aoe_runtime_map_bind_player_vision(&map, &player, 1));
     binding.owner_grid = &player.grid;

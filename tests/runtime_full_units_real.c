@@ -117,6 +117,18 @@ int main(int argc, char **argv) {
         runtime.editor_units[1]->core.position.x38 != place_x ||
         runtime.editor_units[1]->core.position.y3c != place_y)
         goto done;
+    {
+        int32_t tile_x = (int32_t)place_x;
+        int32_t tile_y = (int32_t)place_y;
+        size_t tile_index = (size_t)tile_y * runtime.map.width +
+                            (uint32_t)tile_x;
+        runtime.map.draw_flags[tile_index] = 0x7e;
+        aoe_scenario_runtime_building_invalidate_foundation_ror(
+            &runtime, editor_unit, tile_x, tile_y, tile_x, tile_y);
+        if (runtime.map.cache_flags[tile_index] != 0xcc ||
+            runtime.map.draw_flags[tile_index] != 0)
+            goto done;
+    }
 
     /* Editor submode 1 is the original move-selected-unit path, not a
        second factory call. The outer mouse-up handler restores state 2. */

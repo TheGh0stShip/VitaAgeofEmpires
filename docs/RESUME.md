@@ -280,6 +280,12 @@ The optional stack-unit factory also has a concrete owned-scenario binding:
 semantic owner, cloned player template, and the recovered live constructor,
 while preserving `004ae500`'s ignored factory return. The generic completion
 layer retains its injection point to avoid a library dependency cycle.
+Map invalidation after foundation paint is also translated and bound:
+`aoe_runtime_map_invalidate_ror` implements `00445760`'s reversed-bound
+normalization, clipping, cache byte `+7 = 0xcc`, and draw byte `+10` update.
+The bytes use distinct host arrays, not the packed x86 tile ABI. Do not reduce
+the remaining `00449110` paint path to tile-ID writes: its `004481b0` calls
+remove/spawn live objects from terrain records that are not parsed yet.
 Completion visibility and graphic selection are no longer callback-only.
 Vtable resolution proves type-80 `+0xdc` is leave handler `004ac380` in
 alternate rectangle mode 1, while `+0xd8` is wrapper `004ae980`; after

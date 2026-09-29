@@ -1928,3 +1928,13 @@ already-recovered live constructor. Dynamically created storage participates
 in sprite ticks and symmetric runtime teardown. The generic completion layer
 keeps the injection point so it does not acquire a dependency cycle on the
 scenario owner.
+
+The post-paint invalidator `00445760` is independently complete. It swaps
+reversed signed bounds, clips them to the map, then writes `0xcc` to tile byte
+`+7` and its argument to tile byte `+10` over the inclusive rectangle.
+`aoe_runtime_map_invalidate_ror` preserves those bytes in separate semantic
+arrays and the scenario completion adapter supplies draw value zero. This is
+not yet terrain painting: `00449110` invokes `004481b0` for eligible cells,
+including terrain-record-driven live-object removal and spawning, before
+border recomputation and invalidation. Those unparsed records remain the
+painting boundary.

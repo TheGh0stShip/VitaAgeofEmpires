@@ -232,6 +232,16 @@ void aoe_scenario_runtime_building_spawn_stack_ror(
         x, y, z, NULL);
 }
 
+void aoe_scenario_runtime_building_invalidate_foundation_ror(
+    void *context, AoeLiveUnit *building,
+    int32_t x0, int32_t y0, int32_t x1, int32_t y1) {
+    AoeScenarioRuntimeRor *runtime = context;
+    (void)building;
+    if (!runtime) return;
+    (void)aoe_runtime_map_invalidate_ror(
+        &runtime->map, x0, y0, x1, y1, 0);
+}
+
 int aoe_scenario_runtime_tick_sprites_ror(
     AoeScenarioRuntimeRor *runtime, float world_delta,
     AoeScenarioRuntimeSpriteTickResult *result) {

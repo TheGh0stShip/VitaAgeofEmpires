@@ -84,6 +84,11 @@ void aoe_scenario_runtime_building_spawn_stack_ror(
     void *context, AoeLiveUnit *building, int16_t unit_id,
     float x, float y, float z);
 
+/* Concrete building-completion binding for map method 00445760. */
+void aoe_scenario_runtime_building_invalidate_foundation_ror(
+    void *context, AoeLiveUnit *building,
+    int32_t x0, int32_t y0, int32_t x1, int32_t y1);
+
 /* Runs only the recovered sprite-manager tail shared by RoR live types
    20..80, in scenario player/record order. It does not stand in for the
    still-incomplete action, movement, combat, or player update chain. */

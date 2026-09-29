@@ -16,6 +16,7 @@ typedef struct {
     uint8_t *borders;               /* tile +6 */
     int32_t *projected_x, *projected_y; /* tile +0/+2, widened */
     uint8_t *view_codes;            /* tile +9 */
+    uint8_t *cache_flags;           /* tile +7 invalidation byte */
     uint8_t *draw_flags;            /* tile +10 */
     AoeObjectUpdateList *objects;   /* tile +0x0c list */
     AoeVisibilityMaskMap masks;     /* map +0x8dc8 */
@@ -37,5 +38,14 @@ void aoe_runtime_map_destroy(AoeRuntimeMap *map);
 int aoe_runtime_map_bind_player_vision(AoeRuntimeMap *map,
                                        AoePlayerVisionState *player,
                                        int is_active_player);
+
+/* RoR 00445760: normalize and clamp an inclusive rectangle, mark tile +7
+   with 0xcc, and write the requested tile +10 draw flag. Coordinates are
+   signed runtime values; this semantic map does not expose the packed PC
+   tile layout. A wholly out-of-map rectangle succeeds with no effect. */
+int aoe_runtime_map_invalidate_ror(AoeRuntimeMap *map,
+                                   int32_t x0, int32_t y0,
+                                   int32_t x1, int32_t y1,
+                                   uint8_t draw_flag);
 
 #endif

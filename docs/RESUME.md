@@ -228,10 +228,12 @@ Head cleanup preserves the original action `+0x2c` cancellation call before
 the translated list clear.
 Disc 004af900 and patched 004adfc0 both pass `-1` in their 102/103 drain loop
 even though the callee subtracts the signed argument; this grows a positive
-quantity forever. The portable loop deliberately passes `1` and keeps its
-progress guard. Action construction/update, refund and global notification
-bodies remain required dependencies; this is not yet a working production
-simulation. See `tests/building_production_test.c`.
+quantity forever. The portable loop deliberately passes `1` and now invokes
+the translated cancellation routine directly for every queued unit. Only its
+per-item refund and action-specific cancellation effects remain callbacks;
+queue mutation is no longer delegated. Action construction/update and global
+notification bodies remain required dependencies; this is not yet a working
+production simulation. See `tests/building_production_test.c`.
 The production-list virtual update is now verified through its factory and
 vtable and translated as `aoe_action_list_update_ror` (004043c0). Production
 calls it directly. Preserve its automatic result-1 pop followed by the

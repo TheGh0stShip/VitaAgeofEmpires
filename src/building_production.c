@@ -5,7 +5,7 @@
 #include <limits.h>
 
 int aoe_building_production_ops_valid(const AoeBuildingProductionOps *ops) {
-    return ops && ops->cancel && ops->create_action &&
+    return ops && ops->refund_one && ops->cancel_action && ops->create_action &&
            ops->action_tick && ops->action_tick->update_head &&
            ops->action_tick->update_waiting && ops->notify;
 }
@@ -107,12 +107,19 @@ int aoe_building_production_ror(AoeBuildingUpdate *b, uint32_t *count,
     if (!b->live_actions) return 0;
     if (aoe_building_active_action_query_ror(b,&code,&item_id,&progress) &&
         (code==102 || code==103)) {
+        const AoeBuildingQueueCancelOps cancel_ops={
+            ops->context,ops->refund_one,ops->cancel_action,ops->notify
+        };
         while (b->queue_count>0) {
-            int16_t previous=b->queue_count;
+            int16_t previous_count=b->queue_count;
+            int16_t previous_id=b->queue_entries[0].unit_id;
+            int16_t previous_quantity=b->queue_entries[0].quantity;
             if (!entries_valid(b)) return 0;
-            ops->cancel(ops->context,b,b->queue_entries[0].unit_id,1);
-            /* A failed/misbound callee must not hang the portable runtime. */
-            if (b->queue_count>=previous) return 0;
+            if (!aoe_building_queue_cancel_ror(
+                    b,b->queue_entries[0].unit_id,1,count,&cancel_ops)) return 0;
+            if (b->queue_count==previous_count &&
+                b->queue_entries[0].unit_id==previous_id &&
+                b->queue_entries[0].quantity==previous_quantity) return 0;
         }
         return 1;
     }

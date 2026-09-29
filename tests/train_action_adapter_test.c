@@ -78,13 +78,11 @@ static void train_signal(void *context, AoeTrainAction *action, uint32_t code) {
     assert(action->state == 1 && code == 506);
 }
 
-static void cancel(void *context, AoeBuildingUpdate *building, int16_t unit,
-                   int16_t quantity) {
-    (void)context;
-    (void)building;
-    (void)unit;
-    (void)quantity;
-    assert(quantity==1); assert(!"cancellation is not expected");
+static void refund(void *context,int16_t unit) {
+    (void)context;(void)unit;assert(!"refund is not expected");
+}
+static void cancel_action(void *context,void *action) {
+    (void)context;(void)action;assert(!"cancellation is not expected");
 }
 
 static void *bridge_create(void *context, AoeBuildingUpdate *building, int16_t unit_id) {
@@ -139,8 +137,9 @@ int main(void) {
         .owner_resources = {33, trace.resources}, .owner_id = 2,
     };
     actions = (AoeActionList){&building.state, NULL, list_ops};
-    production = (AoeBuildingProductionOps){&adapter, cancel, bridge_create,
-                                             &tick_ops, production_notify};
+    production = (AoeBuildingProductionOps){&adapter, refund, cancel_action,
+                                             bridge_create, &tick_ops,
+                                             production_notify};
 
     assert(aoe_building_production_ror(&building, &blocked_count, &production));
     assert(aoe_train_action_adapter_ok(&adapter));

@@ -127,8 +127,9 @@ creation, queue shifts, empty queues and revision/quantity wrapping.
 The portable API bounds-checks queue storage and rejects nonfinite resource
 inputs; x87 unordered behavior for corrupt resource data is not emulated.
 Allocation and callback failures after earlier effects do not roll back the
-simulation. Production still depends on the real query, cancellation,
-action factory, individual action-update and global-notification implementations.
+simulation. Production now composes the translated query and queue
+cancellation directly. Per-item refund, action-specific cancellation, action
+factory/update and global notification effects remain explicit bindings.
 
 ## Verified production list dispatch
 
@@ -193,7 +194,6 @@ existing DAT parser supplies the exact research-time field. Building semantic
 state now retains both `+0x184` live actions and `+0x1cc` production actions;
 tests verify empty, unknown, training and research heads remain distinct.
 
-Next: inspect 004af680, 004b6820, the production action
-virtual methods, and the type-80 setter 004ae500;
-translate their bodies and bind semantic building fields to runtime objects.
+Next: translate the type-80 setter 004ae500 and bind the existing queue,
+training-action and building semantic fields to runtime objects.
 Do not wire no-op callbacks to claim a working building simulation.

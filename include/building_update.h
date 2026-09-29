@@ -40,9 +40,9 @@ typedef struct AoeBuildingUpdate {
 
 typedef struct {
     void *context;
-    /* Queue cancellation integration. Portable callers pass a positive
-       removal count; see aoe_building_queue_cancel_ror. */
-    void (*cancel)(void *, AoeBuildingUpdate *, int16_t unit_id, int16_t quantity);
+    /* External effects used by translated 004af680 queue cancellation. */
+    void (*refund_one)(void *, int16_t unit_id);
+    void (*cancel_action)(void *, void *action);
     /* Allocation plus 004b6820(building,unit_id,-1,1). NULL is an original
        allocation failure; the original still updates the action list. */
     void *(*create_action)(void *, AoeBuildingUpdate *, int16_t unit_id);
@@ -139,8 +139,8 @@ int aoe_building_queue_cancel_ror(AoeBuildingUpdate *building,
    Valid finite owner resources are required on the empty-action gate.
    The original disc and 1.0a code pass -1 to their signed-subtract cancel
    routine in the 102/103 drain loop, which grows the queue forever. This
-   portable path deliberately passes positive one and retains a progress
-   guard.
+   portable path deliberately passes positive one through the translated
+   queue routine.
    Failure after a callback/allocation may leave preceding effects applied. */
 int aoe_building_production_ror(AoeBuildingUpdate *building, uint32_t *count,
                                 const AoeBuildingProductionOps *ops);

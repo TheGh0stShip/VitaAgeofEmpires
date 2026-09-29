@@ -17,15 +17,11 @@ typedef struct {
     AoeActionTickOps tick;
     float resources[33];
     uint32_t count;
-    int events[40], n, null_create, stuck_cancel;
+    int events[40], n, null_create;
     uint8_t action_result;
     int action;
 } Fixture;
 static void event(Fixture *f,int e) { assert(f->n<40); f->events[f->n++]=e; }
-static void cancel(void *p,AoeBuildingUpdate *b,int16_t id,int16_t quantity) {
-    Fixture *f=p;assert(id==b->queue_entries[0].unit_id && quantity==1);
-    event(f,2); if (!f->stuck_cancel) --b->queue_count;
-}
 static void *create(void *p,AoeBuildingUpdate *b,int16_t id) {
     Fixture *f=p;assert(b->queue_status==-1 && id==10);event(f,3);
     return f->null_create?NULL:&f->action;
@@ -42,7 +38,7 @@ static void notify(void *p,uint32_t e,int16_t id,uint32_t reason) {
     } else { assert(e==124 && reason==0);event(f,7); }
 }
 static void refund_one(void *p,int16_t id) {
-    Fixture *f=p;assert(id==10 || id==20 || id==99);event(f,8);
+    Fixture *f=p;assert(id==10 || id==20 || id==30 || id==99);event(f,8);
 }
 static void cancel_action(void *p,void *action) {
     Fixture *f=p;assert(action==&f->action && f->list.head);event(f,9);
@@ -56,7 +52,8 @@ static void action_state(void *p,void *a,uint8_t state) {
 static void init(Fixture *f) {
     memset(f,0,sizeof(*f));
     f->tick=(AoeActionTickOps){f,update,waiting};
-    f->ops=(AoeBuildingProductionOps){f,cancel,create,&f->tick,notify};
+    f->ops=(AoeBuildingProductionOps){f,refund_one,cancel_action,create,
+                                      &f->tick,notify};
     f->list=(AoeActionList){&f->b.state,NULL,{f,destroy,action_state}};
     f->entries[0]=(AoeBuildingQueueEntry){10,1};
     f->entries[1]=(AoeBuildingQueueEntry){20,2};
@@ -120,12 +117,10 @@ int main(void) {
             f.live_node=(AoeActionNode){&research,NULL};
         }
         f.live_list.head=&f.live_node;assert(run(&f));
-        const int cancelled[]={2,2,2};expect(&f,cancelled,3);
+        const int cancelled[]={8,7,8,7,8,7,8,7,8,7,8,7};
+        expect(&f,cancelled,12);
         assert(f.b.queue_count==0 && !f.list.head);
     }
-    init(&f);f.live_action=(AoeTrainAction){.action_type=102,.state=1};
-    f.live_node=(AoeActionNode){&f.live_action,NULL};
-    f.live_list.head=&f.live_node;f.stuck_cancel=1;assert(!run(&f));
     for(int room=0;room<2;++room) {
         init(&f);if(room)f.resources[4]=0;else f.resources[11]=50;
         assert(run(&f) && f.count==1 && f.b.queue_status==4);

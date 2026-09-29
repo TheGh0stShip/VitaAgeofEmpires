@@ -148,6 +148,22 @@ sets carried-resource type `+0x4c` to 34. It then tail-calls root update
 known prelude is no longer hidden inside it. Portable inputs require finite
 arithmetic and a present owner resource slot 35.
 
+The adjacent construction query 004af240 is now translated as
+`aoe_building_construction_percent_ror`. It returns 100 when live state
+`+0x48` is nonzero or signed template build time `+0x15a` is zero. Otherwise
+it computes `elapsed_build_time * 100 / build_time`, truncates toward zero as
+the executable's x87 helper does, and exposes the low signed 16-bit result
+consumed by all three known callers. It does not clamp ordinary over/under
+construction values. Portable arithmetic rejects nonfinite/out-of-int64 input.
+
+Static analysis of 004af1a0 also establishes that its first action comes from
+the distinct live action list at building `+0x184`, not production list
+`+0x1cc`. It writes action type `+0x04`, dispatches type 102 to training query
+004b6e00 and type 103 to research query 004b7d60, or writes ID -1/progress 0
+and returns false for any other type. The production caller ignores the ID and
+progress but the original still invokes those query bodies. Preserve the two
+lists and recover the research action binding before replacing this callback.
+
 Next: inspect 004af1a0, 004af680, 004b6820, the production action
 virtual methods, and the type-80 setter 004ae500;
 translate their bodies and bind semantic building fields to runtime objects.

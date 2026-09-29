@@ -39,6 +39,24 @@ int aoe_building_parent_update_ror(AoeBuildingUpdate *b, float world_delta,
     return 1;
 }
 
+int aoe_building_construction_percent_ror(const AoeBuildingUpdate *b,
+                                           int16_t *percent) {
+    long double value;
+    int64_t truncated;
+    if (!b || !percent) return 0;
+    if (b->state != 0 || b->build_time == 0) {
+        *percent = 100;
+        return 1;
+    }
+    if (!isfinite(b->elapsed_build_time)) return 0;
+    value = (long double)b->elapsed_build_time * 100.0L / b->build_time;
+    if (!isfinite(value) || value >= 9223372036854775808.0L ||
+        value < -9223372036854775808.0L) return 0;
+    truncated = (int64_t)value;
+    *percent = (int16_t)(uint16_t)truncated;
+    return 1;
+}
+
 int aoe_building_terminal_cleanup_ror(AoeBuildingUpdate *b, uint32_t *count) {
     if (!b || !aoe_action_list_valid(b->queue_actions) ||
         (b->queue_status == 4 && !count)) return 0;

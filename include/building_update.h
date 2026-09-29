@@ -76,6 +76,12 @@ int aoe_building_parent_update_ror(AoeBuildingUpdate *building,
                                                            AoeBuildingUpdate *),
                                     uint8_t *result);
 
+/* RoR 004af240. Nonzero state or zero signed build time reports 100;
+   otherwise truncate elapsed/build-time percent toward zero and retain the
+   original low 16 bits. This is a query and does not mutate the building. */
+int aoe_building_construction_percent_ror(const AoeBuildingUpdate *building,
+                                           int16_t *percent);
+
 /* Complete control/field flow of RoR 004ae880, with untranslated callees
    required explicitly. Callbacks may change state and fields, but must keep
    queue_actions, its owner-state binding and method dependencies valid. Returns 0

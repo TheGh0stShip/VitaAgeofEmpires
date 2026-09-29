@@ -203,6 +203,12 @@ Its direct parent call 004b0100 now has a translated derived prelude: class-18
 state-2 buildings accumulate carried amount from owner resource 35 times world
 delta, clamp at 100, set carried type 34, and then delegate to the still-
 required root update 004272e0 callback.
+Construction-percent query 004af240 is also translated with its state/build-
+time 100 shortcuts and x87-style truncation to the low signed 16-bit result.
+The next production query 004af1a0 is now classified as a dispatcher over the
+separate building `+0x184` live action list (types 102 training and 103
+research), not the `+0x1cc` production list; research query 004b7d60 remains
+an explicit dependency before that callback can be replaced faithfully.
 The terminal branch now directly uses translated 004af890 cleanup and the
 new `aoe_action_list` push/append/pop/clear methods (00404410, 00404460,
 004044e0, 00403e70). Class-specific action destruction/state methods remain

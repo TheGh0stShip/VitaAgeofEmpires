@@ -135,5 +135,28 @@ int main(void) {
         assert(aoe_building_update_ror(&b,99,&ops,&result));
         assert(isnan(b.carried_amount) && b.carried_resource_type == 0);
     }
+    {
+        AoeBuildingUpdate b = initial();
+        int16_t percent = -1;
+        b.build_time = 8000;
+        b.elapsed_build_time = 2666.9f;
+        assert(aoe_building_construction_percent_ror(&b,&percent));
+        assert(percent == 33);
+        b.elapsed_build_time = 8000.0f;
+        assert(aoe_building_construction_percent_ror(&b,&percent));
+        assert(percent == 100);
+        b.elapsed_build_time = 2621440.0f; /* 32768%, low signed word */
+        assert(aoe_building_construction_percent_ror(&b,&percent));
+        assert(percent == INT16_MIN);
+        b.state = 2; b.elapsed_build_time = NAN;
+        assert(aoe_building_construction_percent_ror(&b,&percent));
+        assert(percent == 100);
+        b.state = 0; b.build_time = 0;
+        assert(aoe_building_construction_percent_ror(&b,&percent));
+        assert(percent == 100);
+        b.build_time = 8000; b.elapsed_build_time = NAN; percent = 77;
+        assert(!aoe_building_construction_percent_ror(&b,&percent));
+        assert(percent == 77);
+    }
     return 0;
 }

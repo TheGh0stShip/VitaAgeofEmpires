@@ -817,9 +817,18 @@ static void completion_world_runtime_research(
 static void completion_world_runtime_notify(
     void *opaque,uint32_t event,int16_t owner_id,int16_t unit_id,
     int32_t x,int32_t y) {
-    BuildingCompletionWorldRuntimeContext *context=opaque;
-    context->ops->notify_completion(
-        context->ops->context,event,owner_id,unit_id,x,y);
+    (void)opaque;
+    aoe_live_unit_building_completion_event_ror(
+        event,owner_id,unit_id,x,y);
+}
+
+void aoe_live_unit_building_completion_event_ror(
+    uint32_t event,int16_t owner_id,int16_t unit_id,int32_t x,int32_t y) {
+    (void)event;
+    (void)owner_id;
+    (void)unit_id;
+    (void)x;
+    (void)y;
 }
 
 static void completion_world_runtime_owner(
@@ -834,8 +843,7 @@ int aoe_live_unit_building_completion_world_runtime_ror(
     BuildingCompletionWorldRuntimeContext context;
     AoeBuildingCompletionWorldOps world;
     const DatUnit *unit_template;
-    if (!unit || !unit->core.unit_template || !ops ||
-        !ops->notify_completion)
+    if (!unit || !unit->core.unit_template || !ops)
         return 0;
     unit_template=unit->core.unit_template;
     if ((unit_template->stack_unit_id >= 0 && !ops->spawn_stack_unit) ||

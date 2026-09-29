@@ -349,7 +349,7 @@ matching, nonmatching, refresh, object-ID, name, and headless behavior.
 
 The state-two owned-runtime adapter now invokes that translation directly.
 `AoeBuildingCompletionWorldRuntimeOps` retains only the still-untranslated
-stack-unit, terrain, and event boundaries; it takes an optional
+stack-unit and terrain boundaries; it takes an optional
 semantic owner UI instead of an arbitrary owner-finalization callback. The
 full runtime composition test now reaches the recovered first-match UI update
 and refresh after its concrete vision and sprite transitions.
@@ -364,3 +364,10 @@ manager dependencies. Focused tests pin invalid-state rejection, ordinary
 completion, Wonder mapping, and callback order; the building runtime test
 also proves automatic research reaches state 3 before event 105 and owner UI
 finalization.
+
+The apparent event-105 boundary is now resolved too. `DAT_00585e88` is the
+application singleton constructed at `00416950` with vtable `00547de8`; its
+`+0x40` entry is `00417910`, an unconditional return. The owned runtime binds
+this verified no-op directly, so completion no longer requires an invented
+event callback. The generic callback composition remains available for
+source-level tests and alternate integrations.

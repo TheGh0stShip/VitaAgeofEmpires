@@ -1911,3 +1911,11 @@ units under ASan/UBSan, then sends that same editor unit through the move
 branch without changing the constructed-unit count. This completes the
 known branches inside patched editor click `0x0051a2e0`. Host 75/75 and Vita
 static-library builds pass.
+
+The RoR building-completion event boundary is resolved. Global
+`DAT_00585e88` is assigned by application constructor `00416950`, which
+installs vtable `00547de8`; its `+0x40` slot is `00417910`, an unconditional
+return. The completion call carrying event `0x69`, owner, template ID, and
+truncated coordinates therefore has no observable effect in this executable.
+The owned runtime binds that no-op directly; only the generic composition
+retains an event callback for alternate integrations.

@@ -730,7 +730,6 @@ int main(void) {
         .paint_foundation=completion_paint,
         .invalidate_foundation=completion_invalidate,
         .research=&completion_research_manager,
-        .notify_completion=completion_notify,
         .owner_ui=&completion_ui
     };
     AoeBuildingStateTwoRuntimeOps state_two_runtime={
@@ -740,8 +739,8 @@ int main(void) {
     };
     assert(aoe_live_unit_building_state_two_runtime_ror(
         &live,&state_two_runtime));
-    assert(completion.count==10 &&
-           !memcmp(completion.events,"LPASFIRBNO",10));
+    assert(completion.count==9 &&
+           !memcmp(completion.events,"LPASFIRBO",9));
     assert(live.core.state==2 && building.state==2 &&
            live.building_completed && rng.state==41 &&
            completion_research_entries[105].state==3);

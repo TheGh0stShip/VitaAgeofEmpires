@@ -363,14 +363,16 @@ typedef struct {
                                   int32_t x0, int32_t y0,
                                   int32_t x1, int32_t y1);
     AoeResearchCompletionManagerRor *research;
-    void (*notify_completion)(void *context, uint32_t event,
-                              int16_t owner_id, int16_t unit_id,
-                              int32_t x, int32_t y);
     AoeBuildingCompletionUiRor *owner_ui; /* derived player +0x23c; optional */
 } AoeBuildingCompletionWorldRuntimeOps;
 
-/* Binds derived player +0x104 to the translated owner UI routine. A null
-   owner_ui is the original headless branch, not an invented callback. */
+/* Disc global application vtable 00547de8 +0x40 -> 00417910. The apparent
+   event-105 dispatch is an unconditional no-op in Rise of Rome. */
+void aoe_live_unit_building_completion_event_ror(
+    uint32_t event, int16_t owner_id, int16_t unit_id, int32_t x, int32_t y);
+
+/* Binds the inert event slot and derived player +0x104 to their translated
+   routines. A null owner_ui is the original headless branch. */
 int aoe_live_unit_building_completion_world_runtime_ror(
     AoeLiveUnit *unit, const AoeBuildingCompletionWorldRuntimeOps *ops);
 

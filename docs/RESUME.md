@@ -252,6 +252,16 @@ root state setter in original order. Its final probe is disc `004522e0`
 (patched `00451370`) with template ID and `-1.0, -1.0, 1, 2, 0`; a zero result
 removes optional template research `+0x178` and IDs `0x4a` through `0x4c`.
 The manager, probe, and research bodies remain explicit effect boundaries.
+The requested-state-2 completion prefix is now translated separately through
+the disappear/visual branch. It sets elapsed construction from signed DAT
+train time, preserves the executable's RNG advance/conditional-local-signal/
+reseed sequence, sets semantic live completion byte `+0x1dd`, and invokes the
+class completion hook. The ordinary path calls visibility virtuals `+0xdc`
+then `+0xd8`, selects standing art, narrows completed angle `+0x16e` to the
+live byte, and conditionally applies adjacency; the disappear path instead
+calls virtual `+0x6c`. Tests cover both and pin seed 1 becoming 41. Stack,
+foundation, research, notification, owner-finalization, and common setter
+effects remain unported.
 Type-80 high state is no longer an opaque scenario callback. Disc 004ae450
 (patched 004acb40) now composes its required building prelude, translated
 derived action-list clear and root high transition, building-manager removal,

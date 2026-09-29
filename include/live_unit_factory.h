@@ -26,6 +26,8 @@ typedef struct {
     /* Type-80 live +0x1e0 building-manager association. Semantic pointer;
        never serialized or truncated to the original x86 token width. */
     void *building_manager_link;
+    /* Type-80 live +0x1dd. Set before completion visual/world effects. */
+    uint8_t building_completed;
     /* Original live +0x64 pointer, +0x68 active count, +0x70 capacity.
        Entries are world unit IDs pruned by the common +0x24 update. */
     int32_t *dependent_unit_ids;
@@ -216,6 +218,30 @@ typedef struct {
    object at state 2. This excludes the large state-2 completion branch. */
 int aoe_live_unit_building_state_three_ror(
     AoeLiveUnit *unit, const AoeBuildingStateThreeOps *ops);
+
+typedef struct {
+    void *context;
+    AoeRng *rng;
+    /* Caller-resolved original template +0x164 non-null and owner-is-local
+       condition. That unrecovered pointer is not fabricated in DatUnit. */
+    uint8_t signal_local_completion;
+    void (*local_completion)(void *context, AoeLiveUnit *unit, int value);
+    void (*building_pre_complete)(void *context, AoeLiveUnit *unit);
+    /* Original type-80 vtable +0xdc(owner,1,-1), then +0xd8(owner,0,-1). */
+    int (*visibility_dc)(void *context, AoeLiveUnit *unit);
+    int (*visibility_d8)(void *context, AoeLiveUnit *unit);
+    int (*select_graphic)(void *context, AoeLiveUnit *unit,
+                          int16_t graphic_id);
+    void (*complete_adjacent)(void *context, AoeLiveUnit *unit);
+    void (*disappear)(void *context, AoeLiveUnit *unit);
+} AoeBuildingCompletionVisualOps;
+
+/* Source-backed prefix of requested-state 2 in disc 004ae500 / patched
+   004acbf0, ending after the disappear or completed visual/adjacency branch.
+   It does not perform stack spawning, foundation painting, research, event
+   105, owner finalization, queue handling, or the inherited state setter. */
+int aoe_live_unit_building_completion_visual_ror(
+    AoeLiveUnit *unit, const AoeBuildingCompletionVisualOps *ops);
 
 /* Player scenario-spawn dispatch after construction (RoR player +0x60,
    0x0045d1c0). It selects the recovered class vtable family for the record

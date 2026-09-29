@@ -460,6 +460,47 @@ int aoe_live_unit_building_state_three_ror(
     return 1;
 }
 
+int aoe_live_unit_building_completion_visual_ror(
+    AoeLiveUnit *unit, const AoeBuildingCompletionVisualOps *ops) {
+    const DatUnit *unit_template;
+    uint16_t random_value;
+    if (!unit || !unit->constructed || !unit->core.unit_template ||
+        unit->core.unit_template->type != 80 || !unit->building_update ||
+        !ops || !ops->rng || !ops->building_pre_complete)
+        return 0;
+    unit_template=unit->core.unit_template;
+    if (unit->building_update->unit_template != unit_template ||
+        (ops->signal_local_completion && !ops->local_completion) ||
+        (unit_template->disappears_when_built && !ops->disappear) ||
+        (!unit_template->disappears_when_built &&
+         (!ops->visibility_dc || !ops->visibility_d8 ||
+          !ops->select_graphic ||
+          (unit_template->building_adjacent_mode &&
+           !ops->complete_adjacent))))
+        return 0;
+
+    unit->building_update->elapsed_build_time=(float)unit_template->train_time;
+    random_value=aoe_rng_next(ops->rng);
+    if (ops->signal_local_completion)
+        ops->local_completion(ops->context,unit,1);
+    aoe_rng_seed(ops->rng,random_value);
+    unit->building_completed=1;
+    ops->building_pre_complete(ops->context,unit);
+    if (unit_template->disappears_when_built) {
+        ops->disappear(ops->context,unit);
+        return 1;
+    }
+    if (!ops->visibility_dc(ops->context,unit) ||
+        !ops->visibility_d8(ops->context,unit) ||
+        !ops->select_graphic(ops->context,unit,
+                             unit_template->standing_graphic))
+        return 0;
+    unit->building_update->angle=(uint8_t)unit_template->building_angle;
+    if (unit_template->building_adjacent_mode)
+        ops->complete_adjacent(ops->context,unit);
+    return 1;
+}
+
 typedef struct {
     AoeLiveUnit *live;
     AoePlayerUpdateState *owner;

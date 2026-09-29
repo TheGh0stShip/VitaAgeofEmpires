@@ -249,3 +249,21 @@ optional template research `+0x178`, followed by IDs `0x4a`, `0x4b`, and
 `0x4c`. The host test pins that callback order and the two semantic state
 views. This does not implement the setter's much larger requested-state-2
 completion branch.
+
+The requested-state-2 completion prefix is now translated through its first
+class-specific branch as `aoe_live_unit_building_completion_visual_ror`.
+It copies signed DAT train time `+0x15a` to elapsed construction `+0x1d4`,
+advances the translated 32-bit RNG, conditionally emits the local-player
+completion signal, and then reseeds with the returned 15-bit value exactly as
+the executable does. It sets semantic completion byte `+0x1dd` before virtual
+`+0x25c` (patched `+0x260`). A disappearing building takes only virtual
+`+0x6c`; otherwise the function calls virtuals `+0xdc` then `+0xd8`, selects
+standing graphic `+0x18`, stores the low byte of completed angle `+0x16e`,
+and conditionally invokes adjacency completion for `+0x16c`. Tests pin both
+branches, callback order, and the unusual RNG state transition from seed 1 to
+41. The template `+0x164` pointer behind the local-player condition remains an
+explicit caller-resolved boundary rather than a fabricated DAT field.
+
+Stack-unit creation, foundation terrain painting/invalidation, automatic
+research, event 105, owner finalization, and the common state-setter tail are
+still outside this prefix and remain to be composed.

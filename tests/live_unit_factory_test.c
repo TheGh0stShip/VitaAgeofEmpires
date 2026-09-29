@@ -82,6 +82,45 @@ static void queue_notify_unexpected(void *context,uint32_t event,
                                     int16_t owner,uint32_t reason) {
     (void)context;(void)event;(void)owner;(void)reason;assert(0);
 }
+typedef struct {
+    char events[16];
+    unsigned count;
+    AoeRng *rng;
+} BuildingCompletionTrace;
+static void completion_event(BuildingCompletionTrace *t,char event) {
+    assert(t->count < sizeof(t->events)); t->events[t->count++]=event;
+}
+static void completion_local(void *context,AoeLiveUnit *unit,int value) {
+    BuildingCompletionTrace *t=context;
+    assert(value==1 && !unit->building_completed && t->rng->state!=41);
+    completion_event(t,'L');
+}
+static void completion_pre(void *context,AoeLiveUnit *unit) {
+    BuildingCompletionTrace *t=context;
+    assert(unit->building_completed && t->rng->state==41);
+    completion_event(t,'P');
+}
+static int completion_dc(void *context,AoeLiveUnit *unit) {
+    assert(unit->building_update->angle==0);
+    completion_event(context,'C'); return 1;
+}
+static int completion_d8(void *context,AoeLiveUnit *unit) {
+    assert(unit->building_update->angle==0);
+    completion_event(context,'D'); return 1;
+}
+static int completion_graphic(void *context,AoeLiveUnit *unit,
+                              int16_t graphic_id) {
+    assert(unit->building_update->angle==0 && graphic_id==0);
+    completion_event(context,'G'); return 1;
+}
+static void completion_adjacent(void *context,AoeLiveUnit *unit) {
+    assert(unit->building_update->angle==7);
+    completion_event(context,'A');
+}
+static void completion_disappear(void *context,AoeLiveUnit *unit) {
+    assert(unit->building_completed);
+    completion_event(context,'X');
+}
 static void building_action_destroy(void *context,void *action) {
     assert(action==(void *)0x5678); building_high_event(context,'D');
 }
@@ -494,6 +533,45 @@ int main(void) {
     assert(high.count==7 && !memcmp(high.events,"PRQCCCC",7));
     assert(live.core.state==3 && building.state==3 &&
            !live.building_manager_link);
+    live.building_update=NULL;
+    aoe_live_unit_destroy_ror(&live,&owner,&world,&vision);
+
+    /* Setter state 2 completion prefix preserves RNG and visual ordering. */
+    unit.train_time=50; unit.building_angle=7;
+    unit.building_adjacent_mode=1; unit.disappears_when_built=0;
+    assert(aoe_live_unit_construct_ror(&live, &unit, &graphics,
+                                        &resource_state, &world, &owner,
+                                        terrain, tiles, &geometry,
+                                        4, 4, &vision, &rng,
+                                        2.25f, 2.25f, 0.0f));
+    building=(AoeBuildingUpdate){.unit_template=&unit,.state=2};
+    live.building_update=&building;
+    rng.state=1;
+    BuildingCompletionTrace completion={.rng=&rng};
+    AoeBuildingCompletionVisualOps completion_ops={
+        .context=&completion,.rng=&rng,.signal_local_completion=1,
+        .local_completion=completion_local,
+        .building_pre_complete=completion_pre,
+        .visibility_dc=completion_dc,.visibility_d8=completion_d8,
+        .select_graphic=completion_graphic,
+        .complete_adjacent=completion_adjacent,
+        .disappear=completion_disappear
+    };
+    assert(aoe_live_unit_building_completion_visual_ror(
+        &live,&completion_ops));
+    assert(completion.count==6 && !memcmp(completion.events,"LPCDGA",6));
+    assert(building.elapsed_build_time==50.0f && building.angle==7 &&
+           live.building_completed && rng.state==41);
+
+    unit.disappears_when_built=1; rng.state=1;
+    completion=(BuildingCompletionTrace){.rng=&rng};
+    completion_ops.context=&completion;
+    completion_ops.signal_local_completion=0;
+    live.building_completed=0;
+    assert(aoe_live_unit_building_completion_visual_ror(
+        &live,&completion_ops));
+    assert(completion.count==2 && !memcmp(completion.events,"PX",2));
+    assert(rng.state==41 && live.building_completed);
     live.building_update=NULL;
     aoe_live_unit_destroy_ror(&live,&owner,&world,&vision);
     aoe_owned_visibility_registry_destroy(&world);

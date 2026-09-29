@@ -121,6 +121,41 @@ static void completion_disappear(void *context,AoeLiveUnit *unit) {
     assert(unit->building_completed);
     completion_event(context,'X');
 }
+static void completion_spawn(void *context,AoeLiveUnit *unit,int16_t unit_id,
+                             float x,float y,float z) {
+    assert(unit_id==42 && x==2.25f && y==2.25f && z==0.0f &&
+           unit->building_completed);
+    completion_event(context,'S');
+}
+static void completion_paint(void *context,AoeLiveUnit *unit,
+                             const AoeBuildingFoundationBounds *bounds,
+                             uint8_t terrain_id) {
+    assert(unit->building_completed && terrain_id==9 &&
+           bounds->x0==0 && bounds->y0==1 &&
+           bounds->x1==3 && bounds->y1==2);
+    completion_event(context,'F');
+}
+static void completion_invalidate(void *context,AoeLiveUnit *unit,
+                                  int32_t x0,int32_t y0,
+                                  int32_t x1,int32_t y1) {
+    assert(unit->building_completed && x0==-1 && y0==0 && x1==4 && y1==3);
+    completion_event(context,'I');
+}
+static void completion_research(void *context,AoeLiveUnit *unit,
+                                int16_t research_id) {
+    assert(unit->building_completed && research_id==105);
+    completion_event(context,'R');
+}
+static void completion_notify(void *context,uint32_t event,int16_t owner_id,
+                              int16_t unit_id,int32_t x,int32_t y) {
+    assert(event==0x69 && owner_id==3 && unit_id==109 && x==2 && y==2);
+    completion_event(context,'N');
+}
+static void completion_owner(void *context,AoeLiveUnit *unit,
+                             uint32_t completion_value) {
+    assert(unit->building_completed && completion_value==0x12345678u);
+    completion_event(context,'O');
+}
 static void building_action_destroy(void *context,void *action) {
     assert(action==(void *)0x5678); building_high_event(context,'D');
 }
@@ -572,6 +607,45 @@ int main(void) {
         &live,&completion_ops));
     assert(completion.count==2 && !memcmp(completion.events,"PX",2));
     assert(rng.state==41 && live.building_completed);
+
+    unit.size[0]=1.5f; unit.size[1]=0.75f;
+    unit.stack_unit_id=42; unit.foundation_terrain=9;
+    unit.building_research_id=105;
+    building.owner_id=3;
+    live.building_completion_value=0x12345678u;
+    AoeBuildingFoundationBounds foundation;
+    assert(aoe_live_unit_building_foundation_bounds_ror(&live,&foundation));
+    assert(foundation.x0==0 && foundation.y0==1 &&
+           foundation.x1==3 && foundation.y1==2);
+    completion=(BuildingCompletionTrace){0};
+    AoeBuildingCompletionWorldOps world_completion={
+        .context=&completion,.spawn_stack_unit=completion_spawn,
+        .paint_foundation=completion_paint,
+        .invalidate_foundation=completion_invalidate,
+        .apply_research=completion_research,
+        .notify_completion=completion_notify,
+        .owner_complete=completion_owner
+    };
+    assert(aoe_live_unit_building_completion_world_ror(
+        &live,&world_completion));
+    assert(completion.count==6 && !memcmp(completion.events,"SFIRNO",6));
+
+    unit.disappears_when_built=0; rng.state=1;
+    live.building_completed=0; building.angle=0;
+    completion=(BuildingCompletionTrace){.rng=&rng};
+    completion_ops.context=&completion;
+    completion_ops.signal_local_completion=1;
+    world_completion.context=&completion;
+    AoeBuildingStateTwoOps state_two={
+        .visual=completion_ops,.world=world_completion,
+        .root_state={.owner_resources=&resource_state,
+                     .edition=AOE_PLAYER_RISE_OF_ROME}
+    };
+    assert(aoe_live_unit_building_state_two_ror(&live,&state_two));
+    assert(completion.count==12 &&
+           !memcmp(completion.events,"LPCDGASFIRNO",12));
+    assert(live.core.state==2 && building.state==2 &&
+           live.building_completed && rng.state==41);
     live.building_update=NULL;
     aoe_live_unit_destroy_ror(&live,&owner,&world,&vision);
     aoe_owned_visibility_registry_destroy(&world);

@@ -28,6 +28,8 @@ typedef struct {
     void *building_manager_link;
     /* Type-80 live +0x1dd. Set before completion visual/world effects. */
     uint8_t building_completed;
+    /* Type-80 live +0x1d8 value passed to owner completion virtual +0x104. */
+    uint32_t building_completion_value;
     /* Original live +0x64 pointer, +0x68 active count, +0x70 capacity.
        Entries are world unit IDs pruned by the common +0x24 update. */
     int32_t *dependent_unit_ids;
@@ -242,6 +244,54 @@ typedef struct {
    105, owner finalization, queue handling, or the inherited state setter. */
 int aoe_live_unit_building_completion_visual_ror(
     AoeLiveUnit *unit, const AoeBuildingCompletionVisualOps *ops);
+
+typedef struct {
+    int16_t x0, y0, x1, y1;
+} AoeBuildingFoundationBounds;
+
+/* Exact finite/in-range rectangle calculation around disc 004ae60d..004ae6c3.
+   Upper edges subtract the executable's double 0.001 constant before x87
+   truncation; each edge is narrowed to the signed 16-bit value consumed by
+   the terrain routines. */
+int aoe_live_unit_building_foundation_bounds_ror(
+    const AoeLiveUnit *unit, AoeBuildingFoundationBounds *bounds);
+
+typedef struct {
+    void *context;
+    void (*spawn_stack_unit)(void *context, AoeLiveUnit *unit,
+                             int16_t unit_id, float x, float y, float z);
+    void (*paint_foundation)(void *context, AoeLiveUnit *unit,
+                             const AoeBuildingFoundationBounds *bounds,
+                             uint8_t terrain_id);
+    void (*invalidate_foundation)(void *context, AoeLiveUnit *unit,
+                                  int32_t x0, int32_t y0,
+                                  int32_t x1, int32_t y1);
+    void (*apply_research)(void *context, AoeLiveUnit *unit,
+                           int16_t research_id);
+    void (*notify_completion)(void *context, uint32_t event,
+                              int16_t owner_id, int16_t unit_id,
+                              int32_t x, int32_t y);
+    void (*owner_complete)(void *context, AoeLiveUnit *unit,
+                           uint32_t completion_value);
+} AoeBuildingCompletionWorldOps;
+
+/* Continuation of requested-state 2 in disc 004ae500 / patched 004acbf0,
+   from optional stack-unit creation through owner virtual +0x104. Requires
+   the visual prefix to have set semantic +0x1dd first. */
+int aoe_live_unit_building_completion_world_ror(
+    AoeLiveUnit *unit, const AoeBuildingCompletionWorldOps *ops);
+
+typedef struct {
+    AoeBuildingCompletionVisualOps visual;
+    AoeBuildingCompletionWorldOps world;
+    AoeLiveUnitRootStateOps root_state;
+} AoeBuildingStateTwoOps;
+
+/* Complete requested-state-2 branch and common inherited setter tail of disc
+   004ae500 / patched 004acbf0. The class/world method bodies exposed by the
+   two completion operation sets remain explicit integration boundaries. */
+int aoe_live_unit_building_state_two_ror(
+    AoeLiveUnit *unit, const AoeBuildingStateTwoOps *ops);
 
 /* Player scenario-spawn dispatch after construction (RoR player +0x60,
    0x0045d1c0). It selects the recovered class vtable family for the record

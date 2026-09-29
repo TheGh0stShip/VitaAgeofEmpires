@@ -244,9 +244,8 @@ offset assertions and real disc RoR Town Center/Wonder values validate the
 for new state above 2 and old state above 1 it cancels the whole head under
 status 4 (after clearing/decrementing that status), otherwise quantity minus
 one so a single item remains. The zero-amount case still increments revision
-and emits event 124, matching both executables. Completion/world effects and
-the setter's large requested-state-2 branch still remain unported. The exact
-state-2 to state-3 branch now composes virtual `+0x258`, manager removal and
+and emits event 124, matching both executables. The exact state-2 to state-3
+branch now composes virtual `+0x258`, manager removal and
 semantic `+0x1e0` clear, the translated queue transition, and the translated
 root state setter in original order. Its final probe is disc `004522e0`
 (patched `00451370`) with template ID and `-1.0, -1.0, 1, 2, 0`; a zero result
@@ -260,8 +259,18 @@ class completion hook. The ordinary path calls visibility virtuals `+0xdc`
 then `+0xd8`, selects standing art, narrows completed angle `+0x16e` to the
 live byte, and conditionally applies adjacency; the disappear path instead
 calls virtual `+0x6c`. Tests cover both and pin seed 1 becoming 41. Stack,
-foundation, research, notification, owner-finalization, and common setter
-effects remain unported.
+foundation, research, notification, and owner-finalization now form the
+separate translated world continuation. It preserves optional stack spawn at
+the live XYZ; foundation bounds using signed-16 truncation and the original
+double `0.001` upper-edge bias; one-tile-expanded invalidation; optional
+research; event `0x69` with truncated XY; and owner virtual `+0x104` with
+semantic live `+0x1d8`, in that order. The common queue/state-setter tail has
+now been composed with both pieces as
+`aoe_live_unit_building_state_two_ror`. Requested state 2 cannot enter the
+setter's `new_state > 2` queue branch, so the composition proceeds directly
+to the translated root setter and synchronizes both semantic state views.
+The full test pins all 12 observable effects; untranslated class/world bodies
+remain mandatory callbacks, not no-ops.
 Type-80 high state is no longer an opaque scenario callback. Disc 004ae450
 (patched 004acb40) now composes its required building prelude, translated
 derived action-list clear and root high transition, building-manager removal,

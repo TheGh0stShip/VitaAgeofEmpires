@@ -194,9 +194,9 @@ existing DAT parser supplies the exact research-time field. Building semantic
 state now retains both `+0x184` live actions and `+0x1cc` production actions;
 tests verify empty, unknown, training and research heads remain distinct.
 
-Next: translate the type-80 setter's large state-2 completion branch and bind
-the existing queue, training-action and building semantic fields to runtime
-objects.
+Next: replace the setter's remaining class/world effect boundaries with
+concrete runtime bindings, then bind the existing queue, training-action and
+building semantic fields to runtime objects.
 Do not wire no-op callbacks to claim a working building simulation.
 
 ## Type-80 completion inputs
@@ -247,8 +247,7 @@ root state setter, and calls disc `004522e0` / patched `00451370` with the
 template ID and constants `-1.0, -1.0, 1, 2, 0`. A zero result removes the
 optional template research `+0x178`, followed by IDs `0x4a`, `0x4b`, and
 `0x4c`. The host test pins that callback order and the two semantic state
-views. This does not implement the setter's much larger requested-state-2
-completion branch.
+views. The separate requested-state-2 composition follows below.
 
 The requested-state-2 completion prefix is now translated through its first
 class-specific branch as `aoe_live_unit_building_completion_visual_ror`.
@@ -265,5 +264,25 @@ branches, callback order, and the unusual RNG state transition from seed 1 to
 explicit caller-resolved boundary rather than a fabricated DAT field.
 
 Stack-unit creation, foundation terrain painting/invalidation, automatic
-research, event 105, owner finalization, and the common state-setter tail are
-still outside this prefix and remain to be composed.
+research, event 105, and owner finalization are now translated as the adjacent
+`aoe_live_unit_building_completion_world_ror` continuation. Optional stack
+unit `+0x172` is spawned at the building's exact XYZ first. For nonnegative
+foundation terrain `+0x174`, the four paint edges are x87-style truncations of
+`x-size_x`, `y-size_y`, `x+size_x-0.001`, and `y+size_y-0.001`, narrowed to
+the signed 16-bit values consumed by the original terrain routine. The map
+invalidation rectangle expands each edge by one. Portable inputs must be
+finite and fit `int16_t`; malformed coordinates fail before callbacks instead
+of invoking C narrowing behavior that could differ between x86-64 and ARMv7.
+The continuation then applies optional research `+0x178`, emits event `0x69`
+with owner ID, unit ID, and truncated XY, and calls owner virtual `+0x104`
+with semantic live value `+0x1d8`. Tests pin all six effects and their order.
+
+`aoe_live_unit_building_state_two_ror` now composes those two completion
+pieces and the translated root state setter as the complete requested-state-2
+control flow. The intervening queue condition is false for requested state 2,
+exactly as in both executables, so it has no queue effect. A focused test pins
+the full 12-effect order through owner finalization and confirms the live and
+building semantic state views finish synchronized. Class virtuals, stack
+construction, terrain mutation, research-manager mutation, notification, and
+owner-finalization bodies remain explicit integration boundaries rather than
+invented no-ops.

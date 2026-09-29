@@ -1,5 +1,6 @@
 #include "live_unit_factory.h"
 
+#include <limits.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -498,6 +499,97 @@ int aoe_live_unit_building_completion_visual_ror(
     unit->building_update->angle=(uint8_t)unit_template->building_angle;
     if (unit_template->building_adjacent_mode)
         ops->complete_adjacent(ops->context,unit);
+    return 1;
+}
+
+static int completion_edge(double value, int16_t *out) {
+    if (!isfinite(value) || value < (double)INT16_MIN ||
+        value > (double)INT16_MAX)
+        return 0;
+    *out=(int16_t)value;
+    return 1;
+}
+
+int aoe_live_unit_building_foundation_bounds_ror(
+    const AoeLiveUnit *unit, AoeBuildingFoundationBounds *bounds) {
+    const DatUnit *unit_template;
+    double x, y, size_x, size_y;
+    if (!unit || !unit->constructed || !unit->core.unit_template ||
+        unit->core.unit_template->type != 80 || !bounds)
+        return 0;
+    unit_template=unit->core.unit_template;
+    x=(double)unit->core.position.x38;
+    y=(double)unit->core.position.y3c;
+    size_x=(double)unit_template->size[0];
+    size_y=(double)unit_template->size[1];
+    return completion_edge(x-size_x,&bounds->x0) &&
+           completion_edge(y-size_y,&bounds->y0) &&
+           completion_edge(x+size_x-0.001,&bounds->x1) &&
+           completion_edge(y+size_y-0.001,&bounds->y1);
+}
+
+int aoe_live_unit_building_completion_world_ror(
+    AoeLiveUnit *unit, const AoeBuildingCompletionWorldOps *ops) {
+    const DatUnit *unit_template;
+    AoeBuildingFoundationBounds bounds;
+    double event_x, event_y;
+    if (!unit || !unit->constructed || !unit->building_completed ||
+        !unit->core.unit_template || unit->core.unit_template->type != 80 ||
+        !unit->building_update || !ops || !ops->notify_completion ||
+        !ops->owner_complete)
+        return 0;
+    unit_template=unit->core.unit_template;
+    if (unit->building_update->unit_template != unit_template ||
+        (unit_template->stack_unit_id >= 0 && !ops->spawn_stack_unit) ||
+        (unit_template->foundation_terrain >= 0 &&
+         (!ops->paint_foundation || !ops->invalidate_foundation ||
+          !aoe_live_unit_building_foundation_bounds_ror(unit,&bounds))) ||
+        (unit_template->building_research_id >= 0 && !ops->apply_research))
+        return 0;
+    event_x=(double)unit->core.position.x38;
+    event_y=(double)unit->core.position.y3c;
+    if (!isfinite(event_x) || !isfinite(event_y) ||
+        event_x < (double)INT32_MIN || event_x > (double)INT32_MAX ||
+        event_y < (double)INT32_MIN || event_y > (double)INT32_MAX)
+        return 0;
+
+    if (unit_template->stack_unit_id >= 0)
+        ops->spawn_stack_unit(ops->context,unit,unit_template->stack_unit_id,
+                              unit->core.position.x38,unit->core.position.y3c,
+                              unit->core.position.z40);
+    if (unit_template->foundation_terrain >= 0) {
+        ops->paint_foundation(ops->context,unit,&bounds,
+                              (uint8_t)unit_template->foundation_terrain);
+        ops->invalidate_foundation(ops->context,unit,
+                                   (int32_t)bounds.x0-1,
+                                   (int32_t)bounds.y0-1,
+                                   (int32_t)bounds.x1+1,
+                                   (int32_t)bounds.y1+1);
+    }
+    if (unit_template->building_research_id >= 0)
+        ops->apply_research(ops->context,unit,
+                            unit_template->building_research_id);
+    ops->notify_completion(ops->context,0x69,
+                           unit->building_update->owner_id,unit_template->id,
+                           (int32_t)event_x,(int32_t)event_y);
+    ops->owner_complete(ops->context,unit,unit->building_completion_value);
+    return 1;
+}
+
+int aoe_live_unit_building_state_two_ror(
+    AoeLiveUnit *unit, const AoeBuildingStateTwoOps *ops) {
+    AoeBuildingUpdate *building;
+    if (!unit || !unit->constructed || !unit->core.unit_template ||
+        unit->core.unit_template->type != 80 || !unit->building_update ||
+        !ops)
+        return 0;
+    building=unit->building_update;
+    if (building->unit_template != unit->core.unit_template ||
+        !aoe_live_unit_building_completion_visual_ror(unit,&ops->visual) ||
+        !aoe_live_unit_building_completion_world_ror(unit,&ops->world) ||
+        !aoe_live_unit_root_state_set_ror(&unit->core,2,&ops->root_state))
+        return 0;
+    building->state=unit->core.state;
     return 1;
 }
 

@@ -311,3 +311,16 @@ alternate mode while semantic `+0x1dd` is clear, and destruction selects the
 same mode until completion switches the unit to the normal footprint. The
 mode-specific placement test verifies all 16 cells of a size-derived
 rectangle; the ordinary public placement entry remains mode zero.
+
+Type-80 live units can now acquire valid semantic building state without
+hand-written test structs. `aoe_live_unit_bind_building_update_ror` translates
+the direct constructor initialization shared by disc `004adcf0`, `004ade50`,
+`004adf70`, and initialized body `004ae1a0`: shared template/state, completed
+angle, current graphic angle count, signed build time, empty queue storage,
+enabled byte 1, status -1, owner resource view/ID, and completion value
+`+0x1d8`. It initializes both caller-owned action lists with mandatory real
+destroy/state callbacks, points their owner-state bytes at building state,
+and binds live actions `+0x184` separately from production actions `+0x1cc`.
+The storage remains explicitly caller-owned; it must outlive the live unit and
+be cleaned/detached in original order. The completion integration test now
+uses this binding instead of fabricating fields.

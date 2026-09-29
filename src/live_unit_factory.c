@@ -392,6 +392,49 @@ fail:
     return 0;
 }
 
+int aoe_live_unit_bind_building_update_ror(
+    AoeLiveUnit *unit, AoeBuildingUpdate *building,
+    AoeActionList *live_actions, AoeActionListOps live_action_ops,
+    AoeActionList *queue_actions, AoeActionListOps queue_action_ops,
+    AoePlayerResources owner_resources, int16_t owner_id,
+    uint32_t completion_value) {
+    const DatUnit *unit_template;
+    const DatGraphic *graphic;
+    if (!unit || !unit->constructed || !unit->core.unit_template ||
+        unit->core.unit_template->type != 80 || !building || !live_actions ||
+        !queue_actions || !owner_resources.values || !owner_resources.count ||
+        !live_action_ops.destroy || !live_action_ops.set_state ||
+        !queue_action_ops.destroy || !queue_action_ops.set_state ||
+        unit->building_update || unit->derived_action_list)
+        return 0;
+    unit_template=unit->core.unit_template;
+    graphic=unit->graphic.current_graphic;
+    if (graphic && graphic->angle_count > INT16_MAX) return 0;
+
+    memset(building,0,sizeof(*building));
+    memset(live_actions,0,sizeof(*live_actions));
+    memset(queue_actions,0,sizeof(*queue_actions));
+    building->unit_template=unit_template;
+    building->state=unit->core.state;
+    building->angle=(uint8_t)unit_template->building_angle;
+    building->graphic_angles=graphic ? (int16_t)graphic->angle_count : 0;
+    building->build_time=unit_template->train_time;
+    building->queue_enabled=1;
+    building->queue_status=-1;
+    building->live_actions=live_actions;
+    building->queue_actions=queue_actions;
+    building->owner_resources=owner_resources;
+    building->owner_id=owner_id;
+    live_actions->owner_state=&building->state;
+    live_actions->ops=live_action_ops;
+    queue_actions->owner_state=&building->state;
+    queue_actions->ops=queue_action_ops;
+    unit->derived_action_list=live_actions;
+    unit->building_update=building;
+    unit->building_completion_value=completion_value;
+    return 1;
+}
+
 int aoe_live_unit_scenario_dispatch_ror(
     AoeLiveUnit *unit, uint8_t scenario_state, float rotation,
     const AoeLiveUnitScenarioDispatchOps *ops) {

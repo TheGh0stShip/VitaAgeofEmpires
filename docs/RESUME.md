@@ -289,6 +289,14 @@ semantic completion byte `+0x1dd` is set; completed buildings use the normal
 radius footprint. This prevents completion from leaving a footprint different
 from the one registered by the portable factory. The common placement API
 continues to select mode zero.
+`aoe_live_unit_bind_building_update_ror` now initializes and attaches
+caller-owned type-80 building/action-list storage from the recovered
+constructor defaults. It preserves distinct live `+0x184` and production
+`+0x1cc` lists with mandatory action callbacks, queue enabled 1/status -1,
+template build time/angle information, owner resource semantics, and live
+completion value `+0x1d8`. This replaces hand-built completion test state;
+allocation and lifetime stay explicit until scenario runtime owns these
+objects directly.
 Type-80 high state is no longer an opaque scenario callback. Disc 004ae450
 (patched 004acb40) now composes its required building prelude, translated
 derived action-list clear and root high transition, building-manager removal,

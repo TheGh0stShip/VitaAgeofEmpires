@@ -175,6 +175,18 @@ void aoe_live_unit_destroy_ror(AoeLiveUnit *unit, AoePlayerUpdateState *owner,
                                AoeOwnedVisibilityRegistry *world,
                                AoeLiveUnitVisionBinding *vision);
 
+/* Bind caller-owned type-80 semantic storage after live construction. This
+   translates the direct initialization fields of disc constructors
+   004adcf0/004ade50/004adf70 and initialized body 004ae1a0. The three storage
+   objects and action callback contexts must outlive the live unit or be
+   detached after their original-order cleanup. */
+int aoe_live_unit_bind_building_update_ror(
+    AoeLiveUnit *unit, AoeBuildingUpdate *building,
+    AoeActionList *live_actions, AoeActionListOps live_action_ops,
+    AoeActionList *queue_actions, AoeActionListOps queue_action_ops,
+    AoePlayerResources owner_resources, int16_t owner_id,
+    uint32_t completion_value);
+
 typedef struct {
     AoeLiveUnitRootHighStateOps root_high;
     AoeLiveUnitMiddleActionHooks root_middle_action;

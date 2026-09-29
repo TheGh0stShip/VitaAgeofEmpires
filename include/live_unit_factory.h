@@ -23,6 +23,9 @@ typedef struct {
     AoeActionList *derived_action_list;
     /* Type-80 fields at live +0x1c0..+0x1d2, including queue actions +0x1cc. */
     AoeBuildingUpdate *building_update;
+    /* Type-80 live +0x1e0 building-manager association. Semantic pointer;
+       never serialized or truncated to the original x86 token width. */
+    void *building_manager_link;
     /* Original live +0x64 pointer, +0x68 active count, +0x70 capacity.
        Entries are world unit IDs pruned by the common +0x24 update. */
     int32_t *dependent_unit_ids;
@@ -181,10 +184,18 @@ typedef struct {
     void (*derived_middle_kind_68)(void *context, AoeLiveUnit *unit);
     /* Type 40/50/60/70 high state +0x68 = 0x00405c80. */
     void (*clear_derived_actions)(void *context, AoeLiveUnit *unit);
-    /* Type 80 high state +0x68 = 0x004ae450. */
-    void (*building_high)(void *context, AoeLiveUnit *unit);
+    /* Remaining type-80 high-state effects around translated inherited work. */
+    void (*building_pre_high)(void *context, AoeLiveUnit *unit); /* +0x258 */
+    int (*remove_building_manager)(void *context, AoeLiveUnit *unit);
     void *context;
 } AoeLiveUnitScenarioDispatchOps;
+
+/* Disc type-80 high state 004ae450 / patched 1.0a 004acb40. Runs the
+   building-specific +0x258 prelude, translated derived-list clear and root
+   high transition, removes the unit from its building manager, then clears
+   semantic live +0x1e0. */
+int aoe_live_unit_building_high_state_ror(
+    AoeLiveUnit *unit, const AoeLiveUnitScenarioDispatchOps *ops);
 
 /* Player scenario-spawn dispatch after construction (RoR player +0x60,
    0x0045d1c0). It selects the recovered class vtable family for the record

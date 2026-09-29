@@ -226,3 +226,13 @@ refund or removal occurs, but the queue revision increments and event 124 is
 still emitted. The portable queue primitive accepts that evidenced zero case
 while continuing to reject negative counts; malformed nonpositive stored
 quantities are outside the semantic API.
+
+The adjacent type-80 high-state virtual is now translated too: disc
+`004ae450` maps to patched `004acb40`. The new
+`aoe_live_unit_building_high_state_ror` calls the required building-specific
+`+0x258` prelude, directly clears the inherited `+0x184` action list, runs the
+translated root high-state transition, invokes the building-manager removal
+boundary, and clears semantic live `+0x1e0`. Scenario dispatch now selects
+this composition for type 80 instead of accepting an opaque whole-method
+callback. Tests pin the observable prelude, action destruction, manager
+removal order and final state 7.

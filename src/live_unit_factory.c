@@ -406,15 +406,27 @@ int aoe_live_unit_scenario_dispatch_ror(
                                                 &ops->root_middle_action);
     }
     if (type == 80) {
-        if (!ops->building_high) return 0;
-        ops->building_high(ops->context, unit);
-        return 1;
+        return aoe_live_unit_building_high_state_ror(unit,ops);
     }
     if (type == 40 || type == 50 || type == 60 || type == 70) {
         if (!ops->clear_derived_actions) return 0;
         ops->clear_derived_actions(ops->context, unit);
     }
     return aoe_live_unit_root_high_state_ror(&unit->core, &ops->root_high);
+}
+
+int aoe_live_unit_building_high_state_ror(
+    AoeLiveUnit *unit, const AoeLiveUnitScenarioDispatchOps *ops) {
+    if (!unit || !unit->constructed || !unit->core.unit_template ||
+        unit->core.unit_template->type != 80 || !ops ||
+        !ops->building_pre_high || !ops->remove_building_manager)
+        return 0;
+    ops->building_pre_high(ops->context,unit);
+    if (!aoe_live_unit_cleanup_derived_prefix_ror(unit) ||
+        !aoe_live_unit_root_high_state_ror(&unit->core,&ops->root_high) ||
+        !ops->remove_building_manager(ops->context,unit)) return 0;
+    unit->building_manager_link=NULL;
+    return 1;
 }
 
 typedef struct {

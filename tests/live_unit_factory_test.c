@@ -45,6 +45,25 @@ typedef struct {
     int16_t sound_id;
 } UpdateStateTrace;
 
+typedef struct { char events[8]; unsigned count; } BuildingHighTrace;
+static void building_high_event(BuildingHighTrace *t,char event) {
+    assert(t->count < sizeof(t->events)); t->events[t->count++]=event;
+}
+static void building_pre_high(void *context,AoeLiveUnit *unit) {
+    assert(unit->building_manager_link==(void *)0x1234);
+    building_high_event(context,'P');
+}
+static int building_remove(void *context,AoeLiveUnit *unit) {
+    assert(unit->core.state==7 && unit->building_manager_link==(void *)0x1234);
+    building_high_event(context,'R'); return 1;
+}
+static void building_action_destroy(void *context,void *action) {
+    assert(action==(void *)0x5678); building_high_event(context,'D');
+}
+static void building_action_state(void *context,void *action,uint8_t state) {
+    (void)context;(void)action;(void)state;assert(0);
+}
+
 static void update_event(UpdateStateTrace *trace, char event) {
     assert(trace->count < sizeof(trace->events));
     trace->events[trace->count++] = event;
@@ -389,6 +408,35 @@ int main(void) {
     assert(derived_calls == 11 && !live.core.positive_hit_points &&
            !live.core.registration_pending);
     aoe_live_unit_destroy_ror(&live, &owner, &world, &vision);
+
+    /* Type-80 high state composes 004ae450 instead of an opaque callback. */
+    unit.type=80; unit.state_notify_mode=0; unit.state_effect_mode=0;
+    assert(aoe_live_unit_construct_ror(&live, &unit, &graphics,
+                                        &resource_state, &world, &owner,
+                                        terrain, tiles, &geometry,
+                                        4, 4, &vision, &rng,
+                                        2.25f, 2.25f, 0.0f));
+    BuildingHighTrace high={0};
+    AoeActionNode *high_node=malloc(sizeof(*high_node));
+    assert(high_node); *high_node=(AoeActionNode){(void *)0x5678,NULL};
+    AoeActionList high_list={&live.core.state,high_node,
+        {&high,building_action_destroy,building_action_state}};
+    live.derived_action_list=&high_list;
+    live.building_manager_link=(void *)0x1234;
+    live.core.registration_pending=1;
+    AoeLiveUnitScenarioDispatchOps high_ops={
+        .context=&high,
+        .building_pre_high=building_pre_high,
+        .remove_building_manager=building_remove,
+        .root_high={.state={.owner_resources=&resource_state,
+                            .edition=AOE_PLAYER_RISE_OF_ROME}}
+    };
+    assert(aoe_live_unit_scenario_dispatch_ror(&live,7,0.0f,&high_ops));
+    assert(high.count==3 && !memcmp(high.events,"PDR",3));
+    assert(live.core.state==7 && !live.building_manager_link &&
+           !live.derived_action_list->head);
+    live.derived_action_list=NULL;
+    aoe_live_unit_destroy_ror(&live,&owner,&world,&vision);
     aoe_owned_visibility_registry_destroy(&world);
     return 0;
 }

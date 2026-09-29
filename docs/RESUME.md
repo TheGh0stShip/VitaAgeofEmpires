@@ -246,6 +246,11 @@ status 4 (after clearing/decrementing that status), otherwise quantity minus
 one so a single item remains. The zero-amount case still increments revision
 and emits event 124, matching both executables. Completion/world effects and
 the inherited state change still remain unported.
+Type-80 high state is no longer an opaque scenario callback. Disc 004ae450
+(patched 004acb40) now composes its required building prelude, translated
+derived action-list clear and root high transition, building-manager removal,
+and semantic `+0x1e0` clear in original order. The prelude and manager body
+remain exact effect boundaries; the surrounding control flow is translated.
 The production-list virtual update is now verified through its factory and
 vtable and translated as `aoe_action_list_update_ror` (004043c0). Production
 calls it directly. Preserve its automatic result-1 pop followed by the

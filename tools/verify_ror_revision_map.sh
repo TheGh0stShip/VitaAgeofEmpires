@@ -32,7 +32,7 @@ done
 
 # Pin the mapped building routines and the anomalous PUSH -1 at each
 # production drain call so refreshed analysis cannot silently alter the note.
-for address in 004acbf0 004add50 004adfc0; do
+for address in 004acb40 004acbf0 004add50 004adfc0; do
   awk -F '\t' -v address="$address" \
     'NR > 1 && $1 == address && $3 == "ok" { found=1 } END { exit !found }' \
     "$project_root/build/decompile/ror_10a_index.tsv"

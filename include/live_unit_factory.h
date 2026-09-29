@@ -352,6 +352,29 @@ int aoe_live_unit_building_completion_world_ror(
     AoeLiveUnit *unit, const AoeBuildingCompletionWorldOps *ops);
 
 typedef struct {
+    void *context;
+    void (*spawn_stack_unit)(void *context, AoeLiveUnit *unit,
+                             int16_t unit_id, float x, float y, float z);
+    void (*paint_foundation)(void *context, AoeLiveUnit *unit,
+                             const AoeBuildingFoundationBounds *bounds,
+                             uint8_t terrain_id);
+    void (*invalidate_foundation)(void *context, AoeLiveUnit *unit,
+                                  int32_t x0, int32_t y0,
+                                  int32_t x1, int32_t y1);
+    void (*apply_research)(void *context, AoeLiveUnit *unit,
+                           int16_t research_id);
+    void (*notify_completion)(void *context, uint32_t event,
+                              int16_t owner_id, int16_t unit_id,
+                              int32_t x, int32_t y);
+    AoeBuildingCompletionUiRor *owner_ui; /* derived player +0x23c; optional */
+} AoeBuildingCompletionWorldRuntimeOps;
+
+/* Binds derived player +0x104 to the translated owner UI routine. A null
+   owner_ui is the original headless branch, not an invented callback. */
+int aoe_live_unit_building_completion_world_runtime_ror(
+    AoeLiveUnit *unit, const AoeBuildingCompletionWorldRuntimeOps *ops);
+
+typedef struct {
     AoeBuildingCompletionVisualOps visual;
     AoeBuildingCompletionWorldOps world;
     AoeLiveUnitRootStateOps root_state;
@@ -365,12 +388,12 @@ int aoe_live_unit_building_state_two_ror(
 
 typedef struct {
     AoeBuildingCompletionVisualRuntimeOps visual;
-    AoeBuildingCompletionWorldOps world;
+    AoeBuildingCompletionWorldRuntimeOps world;
     AoeLiveUnitRootStateOps root_state;
 } AoeBuildingStateTwoRuntimeOps;
 
 /* Full state-2 composition using translated vision and owned sprite state for
-   the common completion virtuals. */
+   the common completion virtuals and the derived-player owner finalizer. */
 int aoe_live_unit_building_state_two_runtime_ror(
     AoeLiveUnit *unit, const AoeBuildingStateTwoRuntimeOps *ops);
 

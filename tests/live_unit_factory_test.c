@@ -163,6 +163,9 @@ static void completion_owner(void *context,AoeLiveUnit *unit,
 static void completion_ui_refresh(void *context) {
     unsigned *calls=context; ++*calls;
 }
+static void completion_ui_trace_refresh(void *context) {
+    completion_event(context,'O');
+}
 static void building_action_destroy(void *context,void *action) {
     assert(action==(void *)0x5678); building_high_event(context,'D');
 }
@@ -704,9 +707,20 @@ int main(void) {
         .complete_adjacent=completion_adjacent,
         .disappear=completion_disappear
     };
-    world_completion.context=&completion;
+    ui_match.completed=0;
+    completion_ui.head=&ui_match;
+    completion_ui.refresh_context=&completion;
+    completion_ui.refresh=completion_ui_trace_refresh;
+    AoeBuildingCompletionWorldRuntimeOps world_runtime={
+        .context=&completion,.spawn_stack_unit=completion_spawn,
+        .paint_foundation=completion_paint,
+        .invalidate_foundation=completion_invalidate,
+        .apply_research=completion_research,
+        .notify_completion=completion_notify,
+        .owner_ui=&completion_ui
+    };
     AoeBuildingStateTwoRuntimeOps state_two_runtime={
-        .visual=visual_runtime,.world=world_completion,
+        .visual=visual_runtime,.world=world_runtime,
         .root_state={.owner_resources=&resource_state,
                      .edition=AOE_PLAYER_RISE_OF_ROME}
     };

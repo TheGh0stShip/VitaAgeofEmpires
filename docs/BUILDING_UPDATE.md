@@ -346,3 +346,10 @@ completion key, mark it complete, bind the live object ID, set the Wonder-276
 flag, retain the original 63-byte name-copy behavior, and rebuild the summary.
 A null UI is the exact headless outer branch and performs no effect. Tests pin
 matching, nonmatching, refresh, object-ID, name, and headless behavior.
+
+The state-two owned-runtime adapter now invokes that translation directly.
+`AoeBuildingCompletionWorldRuntimeOps` retains only the still-untranslated
+stack-unit, terrain, research, and event boundaries; it takes an optional
+semantic owner UI instead of an arbitrary owner-finalization callback. The
+full runtime composition test now reaches the recovered first-match UI update
+and refresh after its concrete vision and sprite transitions.

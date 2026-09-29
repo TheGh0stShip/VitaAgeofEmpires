@@ -1,11 +1,33 @@
 #include "building_update.h"
+#include "research_action.h"
+#include "train_action.h"
 #include <math.h>
 #include <limits.h>
 
 int aoe_building_production_ops_valid(const AoeBuildingProductionOps *ops) {
-    return ops && ops->query && ops->cancel && ops->create_action &&
+    return ops && ops->cancel && ops->create_action &&
            ops->action_tick && ops->action_tick->update_head &&
            ops->action_tick->update_waiting && ops->notify;
+}
+
+int aoe_building_active_action_query_ror(const AoeBuildingUpdate *b,
+                                          int16_t *action_type,
+                                          int16_t *item_id,
+                                          int16_t *progress) {
+    const void *action;
+    int16_t type;
+    if (!b || !b->live_actions || !action_type || !item_id || !progress)
+        return 0;
+    action = b->live_actions->head ? b->live_actions->head->action : NULL;
+    type = action ? *(const int16_t *)action : 0;
+    *action_type = type;
+    if (type == 102)
+        return aoe_train_action_progress_ror(action,item_id,progress);
+    if (type == 103)
+        return aoe_research_action_progress_ror(action,item_id,progress);
+    *item_id = -1;
+    *progress = 0;
+    return 0;
 }
 static int entries_valid(const AoeBuildingUpdate *b) {
     return b->queue_count >= 0 && (!b->queue_count ||
@@ -30,7 +52,7 @@ int aoe_building_queue_consume_ror(AoeBuildingUpdate *b,
 }
 int aoe_building_production_ror(AoeBuildingUpdate *b, uint32_t *count,
                                 const AoeBuildingProductionOps *ops) {
-    int16_t code=0;
+    int16_t code=0, item_id, progress;
     uint8_t action_result;
     if (!b || !count || !aoe_building_production_ops_valid(ops) ||
         !aoe_action_list_valid(b->queue_actions) || !entries_valid(b)) return 0;
@@ -38,7 +60,9 @@ int aoe_building_production_ror(AoeBuildingUpdate *b, uint32_t *count,
         if (b->queue_status==4) { b->queue_status=-1; --*count; }
         return 1;
     }
-    if (ops->query(ops->context,b,&code) && (code==102 || code==103)) {
+    if (!b->live_actions) return 0;
+    if (aoe_building_active_action_query_ror(b,&code,&item_id,&progress) &&
+        (code==102 || code==103)) {
         while (b->queue_count>0) {
             int16_t previous=b->queue_count;
             if (!entries_valid(b)) return 0;

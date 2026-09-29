@@ -1,4 +1,6 @@
 #include "building_update.h"
+#include "research_action.h"
+#include "train_action.h"
 #include <assert.h>
 #include <limits.h>
 #include <math.h>
@@ -7,19 +9,19 @@
 typedef struct {
     AoeBuildingUpdate b;
     AoeActionList list;
+    AoeActionList live_list;
+    AoeActionNode live_node;
+    AoeTrainAction live_action;
     AoeBuildingQueueEntry entries[3];
     AoeBuildingProductionOps ops;
     AoeActionTickOps tick;
     float resources[33];
     uint32_t count;
-    int events[40], n, query_result, code, null_create, stuck_cancel;
+    int events[40], n, null_create, stuck_cancel;
     uint8_t action_result;
     int action;
 } Fixture;
 static void event(Fixture *f,int e) { assert(f->n<40); f->events[f->n++]=e; }
-static int query(void *p,AoeBuildingUpdate *b,int16_t *code) {
-    Fixture *f=p; assert(b==&f->b);event(f,1);*code=f->code;return f->query_result;
-}
 static void cancel(void *p,AoeBuildingUpdate *b,int16_t id,int16_t quantity) {
     Fixture *f=p;assert(id==b->queue_entries[0].unit_id && quantity==-1);
     event(f,2); if (!f->stuck_cancel) --b->queue_count;
@@ -48,7 +50,7 @@ static void action_state(void *p,void *a,uint8_t state) {
 static void init(Fixture *f) {
     memset(f,0,sizeof(*f));
     f->tick=(AoeActionTickOps){f,update,waiting};
-    f->ops=(AoeBuildingProductionOps){f,query,cancel,create,&f->tick,notify};
+    f->ops=(AoeBuildingProductionOps){f,cancel,create,&f->tick,notify};
     f->list=(AoeActionList){&f->b.state,NULL,{f,destroy,action_state}};
     f->entries[0]=(AoeBuildingQueueEntry){10,1};
     f->entries[1]=(AoeBuildingQueueEntry){20,2};
@@ -57,6 +59,8 @@ static void init(Fixture *f) {
     f->b.queue_enabled=1; f->b.queue_count=3;
     f->b.queue_entries=f->entries; f->b.queue_capacity=3;
     f->b.queue_actions=&f->list;
+    f->live_list=(AoeActionList){&f->b.state,NULL,{0}};
+    f->b.live_actions=&f->live_list;
     f->resources[11]=10; f->resources[32]=50; f->resources[4]=5;
     f->b.owner_resources=(AoePlayerResources){33,f->resources};
 }
@@ -72,40 +76,64 @@ int main(void) {
     Fixture f;
     for(int result=0;result<=4;++result) {
         init(&f);f.action_result=result;assert(run(&f));
-        const int finished[]={1,3,4,5,6,7}, pending[]={1,3,4,5};
+        const int finished[]={3,4,5,6,7}, pending[]={3,4,5};
         if(result>=1 && result<=3) {
-            expect(&f,finished,6);assert(f.b.queue_count==2 && f.b.queue_revision==1);
+            expect(&f,finished,5);assert(f.b.queue_count==2 && f.b.queue_revision==1);
             assert(f.entries[0].unit_id==20 && f.entries[1].unit_id==30);
             assert(f.entries[2].unit_id==30); /* stale tail retained */
         } else {
-            expect(&f,pending,4);assert(f.b.queue_count==3 && f.list.head);
+            expect(&f,pending,3);assert(f.b.queue_count==3 && f.list.head);
             assert(aoe_action_list_clear(&f.list));
         }
     }
     init(&f); f.b.queue_enabled=0;f.b.queue_status=4;f.count=1;
+    f.b.live_actions=NULL; /* original returns before querying +0x184 */
     assert(run(&f) && f.count==0 && f.b.queue_status==-1 && !f.n);
     init(&f);f.b.queue_count=0;f.b.queue_status=9;assert(run(&f));
     assert(f.b.queue_status==9 && !f.n);
+    {
+        int16_t type=9,id=9,progress=9,unknown=77;
+        init(&f);
+        assert(!aoe_building_active_action_query_ror(
+            &f.b,&type,&id,&progress));
+        assert(type==0 && id==-1 && progress==0);
+        f.live_node=(AoeActionNode){&unknown,NULL};
+        f.live_list.head=&f.live_node;
+        assert(!aoe_building_active_action_query_ror(
+            &f.b,&type,&id,&progress));
+        assert(type==77 && id==-1 && progress==0);
+    }
     for(int code=102;code<=103;++code) {
-        init(&f);f.query_result=1;f.code=code;assert(run(&f));
-        const int cancelled[]={1,2,2,2};expect(&f,cancelled,4);
+        init(&f);
+        if(code==102) {
+            f.live_action=(AoeTrainAction){.action_type=102,.state=1};
+            f.live_node=(AoeActionNode){&f.live_action,NULL};
+        } else {
+            static AoeResearchAction research;
+            research=(AoeResearchAction){.action_type=103,.state=1};
+            f.live_node=(AoeActionNode){&research,NULL};
+        }
+        f.live_list.head=&f.live_node;assert(run(&f));
+        const int cancelled[]={2,2,2};expect(&f,cancelled,3);
         assert(f.b.queue_count==0 && !f.list.head);
     }
-    init(&f);f.query_result=1;f.code=102;f.stuck_cancel=1;assert(!run(&f));
+    init(&f);f.live_action=(AoeTrainAction){.action_type=102,.state=1};
+    f.live_node=(AoeActionNode){&f.live_action,NULL};
+    f.live_list.head=&f.live_node;f.stuck_cancel=1;assert(!run(&f));
     for(int room=0;room<2;++room) {
         init(&f);if(room)f.resources[4]=0;else f.resources[11]=50;
         assert(run(&f) && f.count==1 && f.b.queue_status==4);
-        assert(f.events[1]==(room?1004:1032));f.n=0;
-        assert(run(&f) && f.count==1 && f.n==1); /* no repeated warning */
+        assert(f.events[0]==(room?1004:1032));f.n=0;
+        assert(run(&f) && f.count==1 && f.n==0); /* no repeated warning */
         f.resources[11]=10;f.resources[4]=5;f.n=0;
         f.action_result=1;assert(run(&f));assert(f.count==0 && f.b.queue_status==-1);
     }
     init(&f);f.null_create=1;assert(run(&f));
-    const int no_alloc[]={1,3,7};expect(&f,no_alloc,3);assert(!f.list.head);
+    const int no_alloc[]={3,7};expect(&f,no_alloc,2);assert(!f.list.head);
     assert(f.b.queue_count==2); /* empty list returns 1, then consumes queue */
     init(&f);assert(aoe_action_list_push(&f.list,&f.action)); f.n=0;
     f.resources[11]=50;f.resources[4]=0;f.action_result=3;
-    assert(run(&f));const int existing[]={1,5,6,7};expect(&f,existing,4);
+    assert(run(&f));const int existing[]={5,6,7};expect(&f,existing,3);
     /* Existing actions bypass resource gates, including full population. */
     init(&f);f.resources[4]=NAN;assert(!run(&f) && !f.list.head);
     init(&f);f.entries[0].quantity=2;f.b.queue_revision=255;

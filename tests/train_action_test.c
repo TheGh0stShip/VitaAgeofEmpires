@@ -77,7 +77,10 @@ int main(void) {
     unit.costs[0]=(DatUnitCost){1,50,1};
     unit.costs[1]=(DatUnitCost){2,30,256}; /* low paid byte is zero */
     unit.costs[2]=(DatUnitCost){3,-5,-1};
-    AoeTrainAction a={6,83,0,-1,0,&building,&unit,&owner,2,55,10.75f,-3.75f};
+    AoeTrainAction a={.action_type=102,.state=6,.unit_id=83,.progress=0,
+        .request_id=-1,.prepaid=0,.building_template=&building,
+        .trained_template=&unit,.owner_resources=&owner,.owner_id=2,
+        .building_id=55,.building_x=10.75f,.building_y=-3.75f};
     uint8_t result=99;
     assert(aoe_train_action_update_ror(&a,2,0,&ops,&result));
     assert(result==0 && a.progress==4 && a.state==6 && !t.n);

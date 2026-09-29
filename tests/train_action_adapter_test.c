@@ -78,13 +78,6 @@ static void train_signal(void *context, AoeTrainAction *action, uint32_t code) {
     assert(action->state == 1 && code == 506);
 }
 
-static int query(void *context, AoeBuildingUpdate *building, int16_t *code) {
-    (void)context;
-    (void)building;
-    *code = 0;
-    return 0;
-}
-
 static void cancel(void *context, AoeBuildingUpdate *building, int16_t unit,
                    int16_t quantity) {
     (void)context;
@@ -141,11 +134,12 @@ int main(void) {
 
     building = (AoeBuildingUpdate){
         .state = 0, .queue_count = 1, .queue_status = -1, .queue_actions = &actions,
+        .live_actions = &actions,
         .queue_enabled = 1, .queue_entries = queue, .queue_capacity = 1,
         .owner_resources = {33, trace.resources}, .owner_id = 2,
     };
     actions = (AoeActionList){&building.state, NULL, list_ops};
-    production = (AoeBuildingProductionOps){&adapter, query, cancel, bridge_create,
+    production = (AoeBuildingProductionOps){&adapter, cancel, bridge_create,
                                              &tick_ops, production_notify};
 
     assert(aoe_building_production_ror(&building, &blocked_count, &production));

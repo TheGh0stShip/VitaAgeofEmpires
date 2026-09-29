@@ -10,6 +10,7 @@
 /* Semantic subset needed by RoR training action +0x28. Not a complete
    original action object, constructor, or allocation factory. */
 typedef struct AoeTrainAction {
+    int16_t action_type; /* inherited action +0x04; training constructor=102 */
     uint8_t state; /* +0x0c; 6 trains, 1 returns complete */
     int16_t unit_id; /* +0x40 */
     float progress; /* +0x44 */
@@ -25,7 +26,6 @@ typedef struct AoeTrainAction {
     void *secondary_target; /* inherited action +0x14 */
     int32_t primary_target_id;   /* inherited action +0x18, -1 when null */
     int32_t secondary_target_id; /* inherited action +0x1c, -1 when null */
-    int16_t action_type; /* inherited action +0x04; training constructor=102 */
     AoeActionList *owned_actions; /* inherited action +0x34 */
     const AoeLiveUnitRegistry *unit_registry; /* owner world +0x3c */
     float candidate_x, candidate_y; /* inherited action +0x20/+0x24 */

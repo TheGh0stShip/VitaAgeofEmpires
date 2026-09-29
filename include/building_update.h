@@ -27,6 +27,7 @@ typedef struct AoeBuildingUpdate {
     uint8_t queue_revision;    /* +0x1d0 */
     uint8_t queue_aux_state;   /* +0x1d1 */
     int16_t queue_status;      /* +0x1d2; 4 has a global per-player counter */
+    AoeActionList *live_actions;  /* +0x184, distinct general action list */
     AoeActionList *queue_actions; /* +0x1cc */
     uint8_t queue_enabled;        /* +0x1c8 */
     AoeBuildingQueueEntry *queue_entries; /* +0x1c0 */
@@ -39,9 +40,6 @@ typedef struct AoeBuildingUpdate {
 
 typedef struct {
     void *context;
-    /* 004af1a0 with trailing arguments 0,0. Only its first output is used
-       here. Return the original bool, not an infrastructure error. */
-    int (*query)(void *, AoeBuildingUpdate *, int16_t *code);
     /* 004af680: cancel the selected unit id, quantity -1. Must reduce the
        queue count when called by the code-102/103 cancellation loop. */
     void (*cancel)(void *, AoeBuildingUpdate *, int16_t unit_id, int16_t quantity);
@@ -52,6 +50,17 @@ typedef struct {
     /* Global virtual +0x40(event,owner_id,reason,0,0). */
     void (*notify)(void *, uint32_t event, int16_t owner_id, uint32_t reason);
 } AoeBuildingProductionOps;
+
+/* RoR 004af1a0 with its optional text output omitted, matching production's
+   call with null text and zero length. Read the first action from building
+   +0x184, write its common +0x04 type, dispatch 102 to 004b6e00 and 103 to
+   004b7d60. Empty/other types return false with ID -1 and progress zero.
+   Portable training/research action records put action_type first so no host
+   pointer-token or original x86 object-layout assumption is required. */
+int aoe_building_active_action_query_ror(const AoeBuildingUpdate *building,
+                                          int16_t *action_type,
+                                          int16_t *item_id,
+                                          int16_t *progress);
 
 typedef struct {
     void *context;

@@ -156,13 +156,16 @@ the executable's x87 helper does, and exposes the low signed 16-bit result
 consumed by all three known callers. It does not clamp ordinary over/under
 construction values. Portable arithmetic rejects nonfinite/out-of-int64 input.
 
-Static analysis of 004af1a0 also establishes that its first action comes from
+The translated 004af1a0 establishes that its first action comes from
 the distinct live action list at building `+0x184`, not production list
 `+0x1cc`. It writes action type `+0x04`, dispatches type 102 to training query
 004b6e00 and type 103 to research query 004b7d60, or writes ID -1/progress 0
-and returns false for any other type. The production caller ignores the ID and
-progress but the original still invokes those query bodies. Preserve the two
-lists and recover the research action binding before replacing this callback.
+and returns false for any other type. `aoe_building_active_action_query_ror`
+now performs that dispatch directly and production calls it instead of an
+opaque query callback. The production caller ignores the ID and progress but
+the translated path still invokes the correct query body, like the original.
+Portable action records expose the common type as their first semantic field;
+this is not an assertion about host or original x86 object layout.
 
 The data-return portion of that research dependency is now source-backed.
 `aoe_research_action_progress_ror` translates 004b7d60 without its optional
@@ -170,11 +173,11 @@ localized-text copy. State 1 reports 100; other states call translated manager
 query 004ed8ef. That manager bounds-checks the signed research ID, returns 100
 for manager state 3, zero for states other than 2, and for state 2 truncates
 `progress * 100 / DatTech.research_time` to the low signed 16-bit result. The
-existing DAT parser supplies the exact research-time field. Remaining work for
-004af1a0 is the portable representation/binding of building `+0x184` and its
-common action-type field, not the type-103 percentage calculation.
+existing DAT parser supplies the exact research-time field. Building semantic
+state now retains both `+0x184` live actions and `+0x1cc` production actions;
+tests verify empty, unknown, training and research heads remain distinct.
 
-Next: inspect 004af1a0, 004af680, 004b6820, the production action
+Next: inspect 004af680, 004b6820, the production action
 virtual methods, and the type-80 setter 004ae500;
 translate their bodies and bind semantic building fields to runtime objects.
 Do not wire no-op callbacks to claim a working building simulation.

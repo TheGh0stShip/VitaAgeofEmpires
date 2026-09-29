@@ -20,9 +20,6 @@ static uint8_t parent(void *p, AoeBuildingUpdate *b) {
     b->current_1b0 = 42;
     return 0xa7;
 }
-static int query(void *p,AoeBuildingUpdate *b,int16_t *c) {
-    (void)p;(void)b;(void)c;assert(0);return 0;
-}
 static void cancel(void *p,AoeBuildingUpdate *b,int16_t id,int16_t q) {
     (void)p;(void)b;(void)id;(void)q;assert(0);
 }
@@ -37,7 +34,7 @@ static void notify(void *p,uint32_t e,int16_t id,uint32_t r) {
     (void)p;(void)e;(void)id;(void)r;assert(0);
 }
 static const AoeActionTickOps tick={0,update,waiting};
-static const AoeBuildingProductionOps production={0,query,cancel,create,&tick,notify};
+static const AoeBuildingProductionOps production={0,cancel,create,&tick,notify};
 static void destroy(void *p, void *a) { (void)p; (void)a; assert(0); }
 static void action_state(void *p, void *a, uint8_t s) {
     (void)p; (void)a; (void)s; assert(0);
@@ -45,6 +42,7 @@ static void action_state(void *p, void *a, uint8_t s) {
 static void attach(AoeBuildingUpdate *b, AoeActionList *list) {
     *list = (AoeActionList){&b->state, 0, {0, destroy, action_state}};
     b->queue_actions = list;
+    b->live_actions = list; /* empty during every production query in this test */
 }
 static AoeBuildingUpdate initial(void) {
     AoeBuildingUpdate b = {0};

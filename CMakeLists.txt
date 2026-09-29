@@ -223,7 +223,8 @@ target_compile_options(aoe_action_list PRIVATE -Wall -Wextra)
 
 add_library(aoe_building_update STATIC src/building_update.c src/building_production.c)
 target_include_directories(aoe_building_update PUBLIC include)
-target_link_libraries(aoe_building_update PUBLIC aoe_action_list)
+target_link_libraries(aoe_building_update PUBLIC aoe_action_list
+  aoe_train_action aoe_research_action)
 target_compile_options(aoe_building_update PRIVATE -Wall -Wextra)
 
 add_library(aoe_live_unit_state STATIC src/live_unit_state.c)

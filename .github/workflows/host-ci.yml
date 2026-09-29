@@ -20,3 +20,23 @@ jobs:
         run: cmake --build build/host --parallel 2
       - name: Test
         run: ctest --test-dir build/host --output-on-failure
+
+  parser-sanitizers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Configure parser sanitizers
+        run: >-
+          cmake -S . -B build/parser-sanitize
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
+          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+      - name: Build parser tests and WAV tool
+        run: >-
+          cmake --build build/parser-sanitize --parallel 2 --target
+          drs_format_test slp_decode_test dat_load_test wav_test wav_tool
+      - name: Run parser sanitizer tests
+        run: >-
+          ctest --test-dir build/parser-sanitize --output-on-failure
+          -R "^(drs_format_and_bounds|slp_format_decode|dat_raw_deflate_boundary|wav_riff_parser)$"

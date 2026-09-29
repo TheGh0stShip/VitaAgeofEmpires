@@ -271,6 +271,24 @@ setter's `new_state > 2` queue branch, so the composition proceeds directly
 to the translated root setter and synchronizes both semantic state views.
 The full test pins all 12 observable effects; untranslated class/world bodies
 remain mandatory callbacks, not no-ops.
+Completion visibility and graphic selection are no longer callback-only.
+Vtable resolution proves type-80 `+0xdc` is leave handler `004ac380` in
+alternate rectangle mode 1, while `+0xd8` is wrapper `004ae980`; after
+completion byte `+0x1dd` is set it enters through `004ac290` in normal radius
+mode 0. `aoe_live_unit_building_completion_visual_runtime_ror` binds those
+calls to translated vision state and binds `+0x38` to DAT-resolved owned
+sprite selection. Construction also retains the resolved walking graphic for
+later selector rules. Only the genuinely class/world-specific visual effects
+remain callbacks. `aoe_live_unit_building_state_two_runtime_ror` composes this
+adapter with the world continuation and root setter as the preferred owned
+runtime entry point.
+Incomplete type-80 factory visibility is now consistent with that completion
+transition. A mode-aware placement binding registers the constructor's
+alternate size rectangle, and destruction removes the rectangle until
+semantic completion byte `+0x1dd` is set; completed buildings use the normal
+radius footprint. This prevents completion from leaving a footprint different
+from the one registered by the portable factory. The common placement API
+continues to select mode zero.
 Type-80 high state is no longer an opaque scenario callback. Disc 004ae450
 (patched 004acb40) now composes its required building prelude, translated
 derived action-list clear and root high transition, building-manager removal,

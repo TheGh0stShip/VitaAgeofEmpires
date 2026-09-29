@@ -16,6 +16,14 @@ static const DatGraphic *standing_graphic(const DatUnit *unit,
     return &graphics->graphics[id];
 }
 
+static const DatGraphic *graphic_by_id(const DatGraphics *graphics,
+                                       int16_t id) {
+    if (!graphics || id < 0 || (uint16_t)id >= graphics->count ||
+        !graphics->graphics[id].present)
+        return 0;
+    return &graphics->graphics[id];
+}
+
 int aoe_live_unit_tick_sprites_ror(AoeLiveUnit *unit, float world_delta) {
     uint8_t type;
     if (!unit || !unit->constructed || !unit->core.unit_template ||
@@ -41,7 +49,11 @@ void aoe_live_unit_destroy_ror(AoeLiveUnit *unit, AoePlayerUpdateState *owner,
                                      unit->core.unit_id, unit->select_2c,
                                      unit->select_30, unit->owner_node, &removed);
     if (unit->placement.tile && vision && unit->core.state == 2)
-        (void)aoe_live_unit_vision_change_ror(&unit->core, vision, 0, 0);
+        (void)aoe_live_unit_vision_change_ror(
+            &unit->core,vision,0,
+            unit->core.unit_template &&
+            unit->core.unit_template->type == 80 &&
+            !unit->building_completed);
     if (unit->placement.tile)
         (void)aoe_object_update_list_detach(unit->placement.tile, &unit->core,
                                             unit->placement.node);
@@ -351,14 +363,16 @@ int aoe_live_unit_construct_ror(
                                   x, y, z, &out->core))
         return 0;
     graphic_template.standing_graphic = standing;
-    graphic_template.walking_graphic = 0;
+    graphic_template.walking_graphic = graphic_by_id(
+        graphics,unit_template->walking_graphic);
     if (standing && !aoe_unit_graphic_select_runtime(
             &out->graphic, &graphic_template, &out->sprites, 0,
             AOE_PLAYER_RISE_OF_ROME))
         goto fail;
-    if (!aoe_live_unit_place_ror_with_vision(
+    if (!aoe_live_unit_place_ror_with_vision_mode(
             &out->core, &out->placement, terrain_tiles, tile_lists,
-            geometry, width, height, x, y, z, vision))
+            geometry, width, height, x, y, z, vision,
+            unit_template->type == 80))
         goto fail;
     /* The original replacement branch requires the displaced unit's virtual
        rebase method. Do not enter it until that method is translated. */
@@ -502,6 +516,92 @@ int aoe_live_unit_building_completion_visual_ror(
     return 1;
 }
 
+typedef struct {
+    const AoeBuildingCompletionVisualRuntimeOps *ops;
+} BuildingCompletionVisualRuntimeContext;
+
+static void completion_runtime_local(void *opaque, AoeLiveUnit *unit,
+                                     int value) {
+    BuildingCompletionVisualRuntimeContext *context=opaque;
+    context->ops->local_completion(context->ops->context,unit,value);
+}
+
+static void completion_runtime_pre(void *opaque, AoeLiveUnit *unit) {
+    BuildingCompletionVisualRuntimeContext *context=opaque;
+    context->ops->building_pre_complete(context->ops->context,unit);
+}
+
+static void completion_runtime_adjacent(void *opaque, AoeLiveUnit *unit) {
+    BuildingCompletionVisualRuntimeContext *context=opaque;
+    context->ops->complete_adjacent(context->ops->context,unit);
+}
+
+static void completion_runtime_disappear(void *opaque, AoeLiveUnit *unit) {
+    BuildingCompletionVisualRuntimeContext *context=opaque;
+    context->ops->disappear(context->ops->context,unit);
+}
+
+static int completion_runtime_dc(void *opaque, AoeLiveUnit *unit) {
+    BuildingCompletionVisualRuntimeContext *context=opaque;
+    return aoe_live_unit_vision_change_ror(&unit->core,
+                                            context->ops->vision,0,1);
+}
+
+static int completion_runtime_d8(void *opaque, AoeLiveUnit *unit) {
+    BuildingCompletionVisualRuntimeContext *context=opaque;
+    return aoe_live_unit_vision_change_ror(&unit->core,
+                                            context->ops->vision,1,0);
+}
+
+static int completion_runtime_graphic(void *opaque, AoeLiveUnit *unit,
+                                      int16_t graphic_id) {
+    BuildingCompletionVisualRuntimeContext *context=opaque;
+    const DatUnit *unit_template=unit->core.unit_template;
+    const DatGraphic *requested=graphic_by_id(context->ops->graphics,
+                                               graphic_id);
+    AoeUnitGraphicTemplate graphic_template;
+    if (graphic_id >= 0 && !requested) return 0;
+    graphic_template.standing_graphic=graphic_by_id(
+        context->ops->graphics,unit_template->standing_graphic);
+    graphic_template.walking_graphic=graphic_by_id(
+        context->ops->graphics,unit_template->walking_graphic);
+    return aoe_unit_graphic_select_runtime(
+        &unit->graphic,&graphic_template,&unit->sprites,requested,
+        AOE_PLAYER_RISE_OF_ROME);
+}
+
+int aoe_live_unit_building_completion_visual_runtime_ror(
+    AoeLiveUnit *unit, const AoeBuildingCompletionVisualRuntimeOps *ops) {
+    BuildingCompletionVisualRuntimeContext context;
+    AoeBuildingCompletionVisualOps visual;
+    const DatUnit *unit_template;
+    if (!unit || !unit->core.unit_template || !ops || !ops->rng ||
+        !ops->building_pre_complete)
+        return 0;
+    unit_template=unit->core.unit_template;
+    if ((ops->signal_local_completion && !ops->local_completion) ||
+        (unit_template->disappears_when_built && !ops->disappear) ||
+        (!unit_template->disappears_when_built &&
+         (!ops->graphics || !ops->vision ||
+          (unit_template->building_adjacent_mode &&
+           !ops->complete_adjacent))))
+        return 0;
+    context.ops=ops;
+    visual=(AoeBuildingCompletionVisualOps){
+        .context=&context,
+        .rng=ops->rng,
+        .signal_local_completion=ops->signal_local_completion,
+        .local_completion=completion_runtime_local,
+        .building_pre_complete=completion_runtime_pre,
+        .visibility_dc=completion_runtime_dc,
+        .visibility_d8=completion_runtime_d8,
+        .select_graphic=completion_runtime_graphic,
+        .complete_adjacent=completion_runtime_adjacent,
+        .disappear=completion_runtime_disappear
+    };
+    return aoe_live_unit_building_completion_visual_ror(unit,&visual);
+}
+
 static int completion_edge(double value, int16_t *out) {
     if (!isfinite(value) || value < (double)INT16_MIN ||
         value > (double)INT16_MAX)
@@ -586,6 +686,24 @@ int aoe_live_unit_building_state_two_ror(
     building=unit->building_update;
     if (building->unit_template != unit->core.unit_template ||
         !aoe_live_unit_building_completion_visual_ror(unit,&ops->visual) ||
+        !aoe_live_unit_building_completion_world_ror(unit,&ops->world) ||
+        !aoe_live_unit_root_state_set_ror(&unit->core,2,&ops->root_state))
+        return 0;
+    building->state=unit->core.state;
+    return 1;
+}
+
+int aoe_live_unit_building_state_two_runtime_ror(
+    AoeLiveUnit *unit, const AoeBuildingStateTwoRuntimeOps *ops) {
+    AoeBuildingUpdate *building;
+    if (!unit || !unit->constructed || !unit->core.unit_template ||
+        unit->core.unit_template->type != 80 || !unit->building_update ||
+        !ops)
+        return 0;
+    building=unit->building_update;
+    if (building->unit_template != unit->core.unit_template ||
+        !aoe_live_unit_building_completion_visual_runtime_ror(
+            unit,&ops->visual) ||
         !aoe_live_unit_building_completion_world_ror(unit,&ops->world) ||
         !aoe_live_unit_root_state_set_ror(&unit->core,2,&ops->root_state))
         return 0;

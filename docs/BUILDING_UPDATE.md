@@ -286,3 +286,28 @@ building semantic state views finish synchronized. Class virtuals, stack
 construction, terrain mutation, research-manager mutation, notification, and
 owner-finalization bodies remain explicit integration boundaries rather than
 invented no-ops.
+
+The ordinary visual branch now has a concrete owned-runtime adapter instead
+of three opaque virtual callbacks. Type-80 vtable `0054d0c8 + 0xdc` resolves
+to leave handler `004ac380`; completion passes alternate mode 1. Slot `+0xd8`
+resolves to wrapper `004ae980`, which observes completed byte `+0x1dd` and
+enters through `004ac290` with normal radius mode 0. The new
+`aoe_live_unit_building_completion_visual_runtime_ror` calls the translated
+unit-vision helper with those exact modes, resolves the requested standing
+graphic through `DatGraphics`, and uses the owned sprite runtime selector.
+The live constructor now also retains the resolved walking graphic in its
+semantic selector template. A focused test runs the real visibility and
+sprite paths while pinning the remaining local/prelude/adjacency effects.
+`aoe_live_unit_building_state_two_runtime_ror` carries that binding through
+the world continuation and translated root setter, so runtime callers no
+longer need to reconstruct the completion ordering themselves.
+
+The adapter also exposed and fixed the matching constructor invariant.
+Incomplete type-80 `+0xd8` forces alternate rectangle mode, so the factory
+must register that footprint initially; otherwise completion's rectangle
+leave would not match the registered circular cells. The placement binding
+now accepts an explicit dynamic-class mode, type-80 construction selects
+alternate mode while semantic `+0x1dd` is clear, and destruction selects the
+same mode until completion switches the unit to the normal footprint. The
+mode-specific placement test verifies all 16 cells of a size-derived
+rectangle; the ordinary public placement entry remains mode zero.

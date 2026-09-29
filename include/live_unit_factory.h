@@ -246,6 +246,24 @@ int aoe_live_unit_building_completion_visual_ror(
     AoeLiveUnit *unit, const AoeBuildingCompletionVisualOps *ops);
 
 typedef struct {
+    void *context;
+    AoeRng *rng;
+    const DatGraphics *graphics;
+    AoeLiveUnitVisionBinding *vision;
+    uint8_t signal_local_completion;
+    void (*local_completion)(void *context, AoeLiveUnit *unit, int value);
+    void (*building_pre_complete)(void *context, AoeLiveUnit *unit);
+    void (*complete_adjacent)(void *context, AoeLiveUnit *unit);
+    void (*disappear)(void *context, AoeLiveUnit *unit);
+} AoeBuildingCompletionVisualRuntimeOps;
+
+/* Binds the completion prefix's +0xdc leave, +0xd8 enter and +0x38 graphic
+   virtuals to translated owned runtime state. The remaining class-specific
+   effects stay explicit. */
+int aoe_live_unit_building_completion_visual_runtime_ror(
+    AoeLiveUnit *unit, const AoeBuildingCompletionVisualRuntimeOps *ops);
+
+typedef struct {
     int16_t x0, y0, x1, y1;
 } AoeBuildingFoundationBounds;
 
@@ -292,6 +310,17 @@ typedef struct {
    two completion operation sets remain explicit integration boundaries. */
 int aoe_live_unit_building_state_two_ror(
     AoeLiveUnit *unit, const AoeBuildingStateTwoOps *ops);
+
+typedef struct {
+    AoeBuildingCompletionVisualRuntimeOps visual;
+    AoeBuildingCompletionWorldOps world;
+    AoeLiveUnitRootStateOps root_state;
+} AoeBuildingStateTwoRuntimeOps;
+
+/* Full state-2 composition using translated vision and owned sprite state for
+   the common completion virtuals. */
+int aoe_live_unit_building_state_two_runtime_ror(
+    AoeLiveUnit *unit, const AoeBuildingStateTwoRuntimeOps *ops);
 
 /* Player scenario-spawn dispatch after construction (RoR player +0x60,
    0x0045d1c0). It selects the recovered class vtable family for the record

@@ -34,6 +34,16 @@ int aoe_live_unit_place_ror_with_vision(
     float x, float y, float requested_z,
     AoeLiveUnitVisionBinding *vision);
 
+/* Same composition with the dynamic-class visibility mode selected by the
+   caller. Type-80 units use alternate=1 while completion byte +0x1dd is zero;
+   the common classes and completed buildings use zero. */
+int aoe_live_unit_place_ror_with_vision_mode(
+    AoeLiveUnitCore *unit, AoeLiveUnitPlacement *placement,
+    const ScnTile *terrain_tiles, AoeObjectUpdateList *tile_lists,
+    const DatMapGeometry *geometry, uint32_t width, uint32_t height,
+    float x, float y, float requested_z,
+    AoeLiveUnitVisionBinding *vision, int alternate);
+
 /* RoR root unit +0xd8/+0xdc visibility hooks, usable by state transitions.
    `alternate` selects the original size-based rectangle rather than the
    radius table. This changes only visibility surfaces, not unit state or

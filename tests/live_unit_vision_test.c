@@ -92,6 +92,24 @@ int main(void) {
            active.calls == 6);
     assert(view[3] == 0 && masks[3] == 0x10001u);
 
+    /* Type-80 construction selects the alternate placement visibility mode. */
+    AoeLiveUnitCore building = {.unit_template=&def,.state=2};
+    AoeLiveUnitPlacement building_placement={0};
+    def.size[0]=def.size[1]=1.2f;
+    memset(counts,0xff,sizeof(counts));
+    memset(masks,0,sizeof(masks));
+    memset(view,0,sizeof(view));
+    grid.explored_count=0; grid.view_codes=view;
+    vision.active_index=0; active_relations[0]=1;
+    owner.calls=active.calls=0;
+    owner.observed_count=active.observed_count=0;
+    assert(aoe_live_unit_place_ror_with_vision_mode(
+        &building,&building_placement,terrain,lists,&geometry,4,4,
+        2.0f,2.0f,0.0f,&vision,1));
+    assert(building_placement.tile==&lists[10] &&
+           grid.explored_count==16 && owner.calls==16 && active.calls==16);
+    assert(counts[0]==1 && counts[15]==1);
+
     /* RoR +0xd8/+0xdc alternate mode uses size-based rectangular bounds. */
     memset(counts, 0xff, sizeof(counts));
     memset(masks, 0, sizeof(masks));

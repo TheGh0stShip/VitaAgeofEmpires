@@ -646,6 +646,37 @@ int main(void) {
            !memcmp(completion.events,"LPCDGASFIRNO",12));
     assert(live.core.state==2 && building.state==2 &&
            live.building_completed && rng.state==41);
+
+    /* Concrete completion adapter binds vision and sprite virtuals. */
+    rng.state=1; live.building_completed=0; building.angle=0;
+    completion=(BuildingCompletionTrace){.rng=&rng};
+    AoeBuildingCompletionVisualRuntimeOps visual_runtime={
+        .context=&completion,.rng=&rng,.graphics=&graphics,.vision=&vision,
+        .signal_local_completion=1,.local_completion=completion_local,
+        .building_pre_complete=completion_pre,
+        .complete_adjacent=completion_adjacent,
+        .disappear=completion_disappear
+    };
+    assert(aoe_live_unit_building_completion_visual_runtime_ror(
+        &live,&visual_runtime));
+    assert(completion.count==3 && !memcmp(completion.events,"LPA",3));
+    assert(building.angle==7 && live.graphic.current_graphic==&graphic &&
+           live.building_completed && rng.state==41);
+
+    rng.state=1; live.building_completed=0; building.angle=0;
+    completion=(BuildingCompletionTrace){.rng=&rng};
+    visual_runtime.context=&completion;
+    world_completion.context=&completion;
+    AoeBuildingStateTwoRuntimeOps state_two_runtime={
+        .visual=visual_runtime,.world=world_completion,
+        .root_state={.owner_resources=&resource_state,
+                     .edition=AOE_PLAYER_RISE_OF_ROME}
+    };
+    assert(aoe_live_unit_building_state_two_runtime_ror(
+        &live,&state_two_runtime));
+    assert(completion.count==9 && !memcmp(completion.events,"LPASFIRNO",9));
+    assert(live.core.state==2 && building.state==2 &&
+           live.building_completed && rng.state==41);
     live.building_update=NULL;
     aoe_live_unit_destroy_ror(&live,&owner,&world,&vision);
     aoe_owned_visibility_registry_destroy(&world);

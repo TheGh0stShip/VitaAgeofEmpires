@@ -208,7 +208,11 @@ time 100 shortcuts and x87-style truncation to the low signed 16-bit result.
 The next production query 004af1a0 is now classified as a dispatcher over the
 separate building `+0x184` live action list (types 102 training and 103
 research), not the `+0x1cc` production list; research query 004b7d60 remains
-an explicit dependency before that callback can be replaced faithfully.
+an integration dependency before that callback can be replaced faithfully.
+The data-return portion of 004b7d60 and its manager percentage query 004ed8ef
+are now translated in `aoe_research_action`: state-1 completion, manager
+states 2/3/other, signed-ID bounds, DAT research time and low-word x87
+truncation are covered. Its optional localized-name copy remains excluded.
 The terminal branch now directly uses translated 004af890 cleanup and the
 new `aoe_action_list` push/append/pop/clear methods (00404410, 00404460,
 004044e0, 00403e70). Class-specific action destruction/state methods remain

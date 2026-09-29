@@ -164,6 +164,16 @@ and returns false for any other type. The production caller ignores the ID and
 progress but the original still invokes those query bodies. Preserve the two
 lists and recover the research action binding before replacing this callback.
 
+The data-return portion of that research dependency is now source-backed.
+`aoe_research_action_progress_ror` translates 004b7d60 without its optional
+localized-text copy. State 1 reports 100; other states call translated manager
+query 004ed8ef. That manager bounds-checks the signed research ID, returns 100
+for manager state 3, zero for states other than 2, and for state 2 truncates
+`progress * 100 / DatTech.research_time` to the low signed 16-bit result. The
+existing DAT parser supplies the exact research-time field. Remaining work for
+004af1a0 is the portable representation/binding of building `+0x184` and its
+common action-type field, not the type-103 percentage calculation.
+
 Next: inspect 004af1a0, 004af680, 004b6820, the production action
 virtual methods, and the type-80 setter 004ae500;
 translate their bodies and bind semantic building fields to runtime objects.

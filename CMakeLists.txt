@@ -208,6 +208,10 @@ target_include_directories(aoe_train_action PUBLIC include)
 target_link_libraries(aoe_train_action PUBLIC aoe_player_resources aoe_action_list aoe_live_unit_registry aoe_rng)
 target_compile_options(aoe_train_action PRIVATE -Wall -Wextra)
 
+add_library(aoe_research_action STATIC src/research_action.c)
+target_include_directories(aoe_research_action PUBLIC include)
+target_compile_options(aoe_research_action PRIVATE -Wall -Wextra)
+
 add_library(aoe_train_action_adapter STATIC src/train_action_adapter.c)
 target_include_directories(aoe_train_action_adapter PUBLIC include)
 target_link_libraries(aoe_train_action_adapter PUBLIC aoe_train_action)
@@ -589,6 +593,11 @@ else()
   target_link_libraries(train_action_progress_test PRIVATE aoe_train_action)
   target_compile_options(train_action_progress_test PRIVATE -UNDEBUG)
   add_test(NAME original_ror_train_action_progress COMMAND train_action_progress_test)
+
+  add_executable(research_action_test tests/research_action_test.c)
+  target_link_libraries(research_action_test PRIVATE aoe_research_action)
+  target_compile_options(research_action_test PRIVATE -UNDEBUG)
+  add_test(NAME original_ror_research_action_progress COMMAND research_action_test)
 
   add_executable(train_action_serialize_test tests/train_action_serialize_test.c)
   target_link_libraries(train_action_serialize_test PRIVATE aoe_train_action)

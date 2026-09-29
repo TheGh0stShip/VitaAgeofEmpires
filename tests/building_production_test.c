@@ -119,7 +119,9 @@ int main(void) {
     f.b.queue_count=4;assert(!aoe_building_queue_consume_ror(&f.b,&f.ops));
     /* Exercise the real update -> production -> pop -> consume composition. */
     init(&f); f.action_result=1;
-    AoeBuildingUpdateOps update_ops={&f,NULL,parent_update,&f.ops,&f.count};
+    DatUnit unit_template={.present=1,.unit_class=3};
+    f.b.unit_template=&unit_template;
+    AoeBuildingUpdateOps update_ops={&f,NULL,parent_update,1.0f,&f.ops,&f.count};
     uint8_t result=0;
     assert(aoe_building_update_ror(&f.b,123,&update_ops,&result));
     assert(result==0x71 && f.b.history_e4==456 && f.b.queue_count==2);

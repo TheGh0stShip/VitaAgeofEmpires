@@ -26,7 +26,7 @@ Order and details:
 3. Copy +1e8 to +1ec, +1e4 to +1e8, +1f4 to +1f8, +1f0 to +1f4,
    and global 007d74d0 to +1f0. These are raw 32-bit copies; field semantics
    have not yet been established.
-4. Call 004b0100 and retain AL. Examine the state after that call; state >2
+4. Call translated 004b0100 and retain AL. Examine the state after that call; state >2
    calls 004af890, otherwise 004af900.
 5. Copy +1b0 to +1e4 after that final call, then return the retained AL.
 
@@ -139,7 +139,16 @@ Tests now cover waiting-action order, two successive pops, head replacement
 or removal during update, result preservation and this null-allocation path.
 Individual action +0x28/+0x24 bodies remain explicit dependencies.
 
-Next: inspect 004b0100, 004af1a0, 004af680, 004b6820, the production action
+`aoe_building_parent_update_ror` now translates 004b0100's derived prelude.
+When template class `+0x14` is 18 and live state `+0x48` is 2, it computes
+`owner_resource[35] * world_delta + carried_amount`, stores the result at
+live `+0x44`, clamps values at or above the executable's 100.0 constant, and
+sets carried-resource type `+0x4c` to 34. It then tail-calls root update
+004272e0 on every path. That root update is still a required callback; the
+known prelude is no longer hidden inside it. Portable inputs require finite
+arithmetic and a present owner resource slot 35.
+
+Next: inspect 004af1a0, 004af680, 004b6820, the production action
 virtual methods, and the type-80 setter 004ae500;
 translate their bodies and bind semantic building fields to runtime objects.
 Do not wire no-op callbacks to claim a working building simulation.

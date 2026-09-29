@@ -2,6 +2,7 @@
 #define VITA_AOE_BUILDING_UPDATE_H
 #include <stdint.h>
 #include "action_list.h"
+#include "dat.h"
 #include "player_resources.h"
 #include <stddef.h>
 
@@ -12,6 +13,7 @@ typedef struct {
 
 /* Semantic storage, not the original packed x86 object layout. */
 typedef struct AoeBuildingUpdate {
+    const DatUnit *unit_template; /* +0x08; semantic pointer, not x86 layout */
     uint8_t state;              /* +0x48 */
     uint8_t angle;              /* +0x35 */
     int16_t graphic_angles;     /* current graphic +0x60 */
@@ -31,6 +33,8 @@ typedef struct AoeBuildingUpdate {
     size_t queue_capacity; /* portable bounds, not an original field */
     AoePlayerResources owner_resources; /* owner +0x50 */
     int16_t owner_id; /* owner +0x4a */
+    float carried_amount;       /* +0x44 */
+    int16_t carried_resource_type; /* +0x4c */
 } AoeBuildingUpdate;
 
 typedef struct {
@@ -52,12 +56,25 @@ typedef struct {
 typedef struct {
     void *context;
     void (*set_state)(void *, AoeBuildingUpdate *, uint8_t); /* virtual +0x5c */
-    uint8_t (*parent_update)(void *, AoeBuildingUpdate *);  /* 004b0100 */
+    /* Root object update 004272e0. The translated 004b0100 prelude invokes
+       this after applying its class-18 carried-resource behavior. */
+    uint8_t (*parent_update)(void *, AoeBuildingUpdate *);
+    float world_delta; /* owner +0x3c -> world +0x84 */
     const AoeBuildingProductionOps *production;           /* 004af900 */
     /* Selected original global +0xa34 + 4*owner_id, required since parent
        can change state/status. Raw unsigned storage preserves DEC wrapping. */
     uint32_t *owner_queue_status_four_count;
 } AoeBuildingUpdateOps;
+
+/* RoR 004b0100. Class-18 buildings in state 2 add owner resource 35 times
+   world delta to carried amount, clamp it to 100, set carried type 34, then
+   all paths tail-call root update 004272e0. The root body remains an explicit
+   integration boundary. Finite arithmetic is required by the portable API. */
+int aoe_building_parent_update_ror(AoeBuildingUpdate *building,
+                                    float world_delta, void *context,
+                                    uint8_t (*root_update)(void *,
+                                                           AoeBuildingUpdate *),
+                                    uint8_t *result);
 
 /* Complete control/field flow of RoR 004ae880, with untranslated callees
    required explicitly. Callbacks may change state and fields, but must keep

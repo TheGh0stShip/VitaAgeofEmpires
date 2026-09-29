@@ -4,6 +4,7 @@
 #include <string.h>
 
 typedef struct { int calls, complete, terminal, change_state; } Trace;
+static DatUnit normal_template = {.present=1,.unit_class=3};
 static void set_state(void *p, AoeBuildingUpdate *b, uint8_t s) {
     Trace *t = p;
     assert(t->calls++ == 0 && s == 2);
@@ -47,6 +48,7 @@ static void attach(AoeBuildingUpdate *b, AoeActionList *list) {
 }
 static AoeBuildingUpdate initial(void) {
     AoeBuildingUpdate b = {0};
+    b.unit_template = &normal_template;
     b.graphic_angles = 3; b.build_time = 8000;
     b.history_e4=1; b.history_e8=2; b.history_ec=3;
     b.history_f0=4; b.history_f4=5; b.history_f8=6;
@@ -59,7 +61,7 @@ int main(void) {
         AoeBuildingUpdate b = initial();
         Trace t = {0}; uint8_t result=0;
         uint32_t count=0; AoeActionList list;
-        AoeBuildingUpdateOps ops = {&t,set_state,parent,&production,&count};
+        AoeBuildingUpdateOps ops = {&t,set_state,parent,1.0f,&production,&count};
         attach(&b,&list);
         b.elapsed_build_time = times[i]; t.complete = times[i]>=8000;
         assert(aoe_building_update_ror(&b,99,&ops,&result));
@@ -70,7 +72,7 @@ int main(void) {
     {
         AoeBuildingUpdate b = initial(); Trace t = {0}; uint8_t result=0;
         uint32_t count=1; AoeActionList list;
-        AoeBuildingUpdateOps ops = {&t,set_state,parent,&production,&count};
+        AoeBuildingUpdateOps ops = {&t,set_state,parent,1.0f,&production,&count};
         attach(&b,&list); b.queue_status=4; b.queue_count=7;
         t.terminal=1; t.change_state=1;
         assert(aoe_building_update_ror(&b,99,&ops,&result));
@@ -95,6 +97,43 @@ int main(void) {
         b.build_time=1; b.elapsed_build_time=1; b.angle=9; t.complete=1;
         assert(aoe_building_update_ror(&b,99,&ops,&result));
         assert(b.angle==0);
+    }
+    {
+        DatUnit generator = {.present=1,.unit_class=18};
+        float resources[36] = {0};
+        AoeBuildingUpdate b = initial(); Trace t = {0}; uint8_t result = 0;
+        uint32_t count = 0; AoeActionList list;
+        AoeBuildingUpdateOps ops = {&t,set_state,parent,0.5f,&production,&count};
+        attach(&b,&list);
+        b.unit_template = &generator;
+        b.state = 2;
+        b.owner_resources = (AoePlayerResources){36,resources};
+        resources[35] = 12.0f;
+        b.carried_amount = 91.0f;
+        b.carried_resource_type = -1;
+        assert(aoe_building_update_ror(&b,99,&ops,&result));
+        assert(b.carried_amount == 97.0f && b.carried_resource_type == 34);
+        assert(result == 0xa7 && t.calls == 1);
+
+        b = initial(); t = (Trace){0}; attach(&b,&list);
+        b.unit_template = &generator; b.state = 2;
+        b.owner_resources = (AoePlayerResources){36,resources};
+        b.carried_amount = 99.0f;
+        assert(aoe_building_update_ror(&b,99,&ops,&result));
+        assert(b.carried_amount == 100.0f && b.carried_resource_type == 34);
+
+        b = initial(); t = (Trace){0}; attach(&b,&list);
+        b.unit_template = &generator; b.state = 2;
+        b.owner_resources = (AoePlayerResources){35,resources};
+        AoeBuildingUpdate before = b;
+        assert(!aoe_building_update_ror(&b,99,&ops,&result));
+        assert(!memcmp(&b,&before,sizeof(b)) && !t.calls);
+
+        b = initial(); t = (Trace){0}; attach(&b,&list);
+        b.unit_template = &generator; b.state = 1;
+        b.carried_amount = NAN;
+        assert(aoe_building_update_ror(&b,99,&ops,&result));
+        assert(isnan(b.carried_amount) && b.carried_resource_type == 0);
     }
     return 0;
 }

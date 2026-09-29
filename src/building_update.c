@@ -2,6 +2,43 @@
 #include <math.h>
 #include <stdlib.h>
 
+enum {
+    AOE_BUILDING_CLASS_RESOURCE_GENERATOR = 18,
+    AOE_BUILDING_GENERATED_RESOURCE = 34,
+    AOE_BUILDING_RATE_RESOURCE = 35
+};
+
+static int generator_input_valid(const AoeBuildingUpdate *b,
+                                 float world_delta) {
+    return b->owner_resources.values &&
+           b->owner_resources.count > AOE_BUILDING_RATE_RESOURCE &&
+           isfinite(b->owner_resources.values[AOE_BUILDING_RATE_RESOURCE]) &&
+           isfinite(world_delta) && isfinite(b->carried_amount);
+}
+
+int aoe_building_parent_update_ror(AoeBuildingUpdate *b, float world_delta,
+                                    void *context,
+                                    uint8_t (*root_update)(void *,
+                                                           AoeBuildingUpdate *),
+                                    uint8_t *result) {
+    if (!b || !b->unit_template || !root_update || !result) return 0;
+    if (b->unit_template->unit_class ==
+            AOE_BUILDING_CLASS_RESOURCE_GENERATOR &&
+        b->state == 2) {
+        long double accumulated;
+        if (!generator_input_valid(b, world_delta)) return 0;
+        accumulated =
+            (long double)b->owner_resources.values[AOE_BUILDING_RATE_RESOURCE] *
+                world_delta +
+            b->carried_amount;
+        if (!isfinite(accumulated)) return 0;
+        b->carried_amount = accumulated >= 100.0L ? 100.0f : (float)accumulated;
+        b->carried_resource_type = AOE_BUILDING_GENERATED_RESOURCE;
+    }
+    *result = root_update(context, b);
+    return 1;
+}
+
 int aoe_building_terminal_cleanup_ror(AoeBuildingUpdate *b, uint32_t *count) {
     if (!b || !aoe_action_list_valid(b->queue_actions) ||
         (b->queue_status == 4 && !count)) return 0;
@@ -44,10 +81,14 @@ int aoe_building_update_ror(AoeBuildingUpdate *b, uint32_t global_word,
                             const AoeBuildingUpdateOps *ops, uint8_t *result) {
     uint8_t angle = 0, parent_result;
     int complete = 0;
-    if (!b || !ops || !result || !ops->parent_update ||
+    if (!b || !b->unit_template || !ops || !result || !ops->parent_update ||
         !aoe_building_production_ops_valid(ops->production) ||
         !ops->owner_queue_status_four_count ||
         !aoe_action_list_valid(b->queue_actions)) return 0;
+    if (b->unit_template &&
+        b->unit_template->unit_class ==
+            AOE_BUILDING_CLASS_RESOURCE_GENERATOR &&
+        b->state == 2 && !generator_input_valid(b, ops->world_delta)) return 0;
     if (b->state == 0) {
         long double quotient;
         if (b->build_time <= 0 || b->graphic_angles <= 0 ||
@@ -68,7 +109,9 @@ int aoe_building_update_ror(AoeBuildingUpdate *b, uint32_t global_word,
     b->history_f8 = b->history_f4;
     b->history_f4 = b->history_f0;
     b->history_f0 = global_word;
-    parent_result = ops->parent_update(ops->context, b);
+    if (!aoe_building_parent_update_ror(b, ops->world_delta, ops->context,
+                                        ops->parent_update, &parent_result))
+        return 0;
     if (b->state > 2)
         aoe_building_terminal_cleanup_ror(b, ops->owner_queue_status_four_count);
     else if (!aoe_building_production_ror(b, ops->owner_queue_status_four_count,

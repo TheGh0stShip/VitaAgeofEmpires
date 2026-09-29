@@ -194,8 +194,9 @@ existing DAT parser supplies the exact research-time field. Building semantic
 state now retains both `+0x184` live actions and `+0x1cc` production actions;
 tests verify empty, unknown, training and research heads remain distinct.
 
-Next: translate the type-80 setter 004ae500 and bind the existing queue,
-training-action and building semantic fields to runtime objects.
+Next: translate the type-80 setter's large state-2 completion branch and bind
+the existing queue, training-action and building semantic fields to runtime
+objects.
 Do not wire no-op callbacks to claim a working building simulation.
 
 ## Type-80 completion inputs
@@ -236,3 +237,15 @@ boundary, and clears semantic live `+0x1e0`. Scenario dispatch now selects
 this composition for type 80 instead of accepting an opaque whole-method
 callback. Tests pin the observable prelude, action destruction, manager
 removal order and final state 7.
+
+The setter's exact state-2 to state-3 branch is now composed as
+`aoe_live_unit_building_state_three_ror`. It requires the live and building
+semantic views to share a type-80 template and both begin at state 2. In
+original order it invokes virtual `+0x258`, removes and clears the building
+manager link, applies the translated queue transition, applies the translated
+root state setter, and calls disc `004522e0` / patched `00451370` with the
+template ID and constants `-1.0, -1.0, 1, 2, 0`. A zero result removes the
+optional template research `+0x178`, followed by IDs `0x4a`, `0x4b`, and
+`0x4c`. The host test pins that callback order and the two semantic state
+views. This does not implement the setter's much larger requested-state-2
+completion branch.

@@ -197,6 +197,26 @@ typedef struct {
 int aoe_live_unit_building_high_state_ror(
     AoeLiveUnit *unit, const AoeLiveUnitScenarioDispatchOps *ops);
 
+typedef struct {
+    void *context;
+    void (*building_pre_state_three)(void *context, AoeLiveUnit *unit);
+    int (*remove_building_manager)(void *context, AoeLiveUnit *unit);
+    /* Disc 004522e0 / patched 00451370, called with template ID,
+       -1.0, -1.0, 1, 2, 0. Nonzero suppresses cleanup IDs. */
+    int (*completion_probe)(void *context, int16_t template_id);
+    /* Disc 004eccb4 / patched 004ea9e4. */
+    void (*remove_research)(void *context, int16_t research_id);
+    uint32_t *owner_status_four_count;
+    AoeBuildingQueueCancelOps queue_cancel;
+    AoeLiveUnitRootStateOps root_state;
+} AoeBuildingStateThreeOps;
+
+/* State-3 branch of disc type-80 setter 004ae500 / patched 004acbf0.
+   Requires the semantic live/building views to represent the same original
+   object at state 2. This excludes the large state-2 completion branch. */
+int aoe_live_unit_building_state_three_ror(
+    AoeLiveUnit *unit, const AoeBuildingStateThreeOps *ops);
+
 /* Player scenario-spawn dispatch after construction (RoR player +0x60,
    0x0045d1c0). It selects the recovered class vtable family for the record
    state: 0..2 low (including rotation), 3..6 middle, 7+ high. Unsupported

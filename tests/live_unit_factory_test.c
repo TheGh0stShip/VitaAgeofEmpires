@@ -57,6 +57,31 @@ static int building_remove(void *context,AoeLiveUnit *unit) {
     assert(unit->core.state==7 && unit->building_manager_link==(void *)0x1234);
     building_high_event(context,'R'); return 1;
 }
+static int building_remove_state_three(void *context,AoeLiveUnit *unit) {
+    assert(unit->core.state==2 && unit->building_manager_link==(void *)0x1234);
+    building_high_event(context,'R'); return 1;
+}
+static int building_probe(void *context,int16_t template_id) {
+    BuildingHighTrace *t=context; assert(template_id==109);
+    building_high_event(t,'Q'); return 0;
+}
+static void building_remove_research(void *context,int16_t research_id) {
+    BuildingHighTrace *t=context;
+    static const int16_t expected[]={105,0x4a,0x4b,0x4c};
+    unsigned index=t->count-3;
+    assert(index<4 && research_id==expected[index]);
+    building_high_event(t,'C');
+}
+static void queue_refund_unexpected(void *context,int16_t unit_id) {
+    (void)context;(void)unit_id;assert(0);
+}
+static void queue_cancel_unexpected(void *context,void *action) {
+    (void)context;(void)action;assert(0);
+}
+static void queue_notify_unexpected(void *context,uint32_t event,
+                                    int16_t owner,uint32_t reason) {
+    (void)context;(void)event;(void)owner;(void)reason;assert(0);
+}
 static void building_action_destroy(void *context,void *action) {
     assert(action==(void *)0x5678); building_high_event(context,'D');
 }
@@ -436,6 +461,40 @@ int main(void) {
     assert(live.core.state==7 && !live.building_manager_link &&
            !live.derived_action_list->head);
     live.derived_action_list=NULL;
+    aoe_live_unit_destroy_ror(&live,&owner,&world,&vision);
+
+    /* Setter state 2->3 composes its manager, queue, root and cleanup tail. */
+    unit.id=109; unit.building_research_id=105;
+    assert(aoe_live_unit_construct_ror(&live, &unit, &graphics,
+                                        &resource_state, &world, &owner,
+                                        terrain, tiles, &geometry,
+                                        4, 4, &vision, &rng,
+                                        2.25f, 2.25f, 0.0f));
+    AoeBuildingUpdate building={.unit_template=&unit,.state=2,
+        .queue_status=-1,.queue_actions=&high_list};
+    high_list.head=NULL; high_list.owner_state=&building.state;
+    live.building_update=&building;
+    live.building_manager_link=(void *)0x1234;
+    live.core.registration_pending=1;
+    high=(BuildingHighTrace){0};
+    uint32_t status_four_count=0;
+    AoeBuildingStateThreeOps state_three={
+        .context=&high,
+        .building_pre_state_three=building_pre_high,
+        .remove_building_manager=building_remove_state_three,
+        .completion_probe=building_probe,
+        .remove_research=building_remove_research,
+        .owner_status_four_count=&status_four_count,
+        .queue_cancel={&high,queue_refund_unexpected,
+                       queue_cancel_unexpected,queue_notify_unexpected},
+        .root_state={.owner_resources=&resource_state,
+                     .edition=AOE_PLAYER_RISE_OF_ROME}
+    };
+    assert(aoe_live_unit_building_state_three_ror(&live,&state_three));
+    assert(high.count==7 && !memcmp(high.events,"PRQCCCC",7));
+    assert(live.core.state==3 && building.state==3 &&
+           !live.building_manager_link);
+    live.building_update=NULL;
     aoe_live_unit_destroy_ror(&live,&owner,&world,&vision);
     aoe_owned_visibility_registry_destroy(&world);
     return 0;

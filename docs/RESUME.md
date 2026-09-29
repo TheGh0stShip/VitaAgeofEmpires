@@ -245,7 +245,13 @@ for new state above 2 and old state above 1 it cancels the whole head under
 status 4 (after clearing/decrementing that status), otherwise quantity minus
 one so a single item remains. The zero-amount case still increments revision
 and emits event 124, matching both executables. Completion/world effects and
-the inherited state change still remain unported.
+the setter's large requested-state-2 branch still remain unported. The exact
+state-2 to state-3 branch now composes virtual `+0x258`, manager removal and
+semantic `+0x1e0` clear, the translated queue transition, and the translated
+root state setter in original order. Its final probe is disc `004522e0`
+(patched `00451370`) with template ID and `-1.0, -1.0, 1, 2, 0`; a zero result
+removes optional template research `+0x178` and IDs `0x4a` through `0x4c`.
+The manager, probe, and research bodies remain explicit effect boundaries.
 Type-80 high state is no longer an opaque scenario callback. Disc 004ae450
 (patched 004acb40) now composes its required building prelude, translated
 derived action-list clear and root high transition, building-manager removal,

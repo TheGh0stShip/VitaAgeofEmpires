@@ -429,6 +429,37 @@ int aoe_live_unit_building_high_state_ror(
     return 1;
 }
 
+int aoe_live_unit_building_state_three_ror(
+    AoeLiveUnit *unit, const AoeBuildingStateThreeOps *ops) {
+    AoeBuildingUpdate *building;
+    int16_t research;
+    if (!unit || !unit->constructed || !unit->core.unit_template ||
+        unit->core.unit_template->type != 80 || !unit->building_update ||
+        !ops || !ops->building_pre_state_three ||
+        !ops->remove_building_manager || !ops->completion_probe ||
+        !ops->remove_research || !ops->owner_status_four_count)
+        return 0;
+    building=unit->building_update;
+    if (building->unit_template != unit->core.unit_template ||
+        building->state != 2 || unit->core.state != 2) return 0;
+    ops->building_pre_state_three(ops->context,unit);
+    if (!ops->remove_building_manager(ops->context,unit)) return 0;
+    unit->building_manager_link=NULL;
+    if (!aoe_building_state_queue_transition_ror(
+            building,3,ops->owner_status_four_count,&ops->queue_cancel) ||
+        !aoe_live_unit_root_state_set_ror(&unit->core,3,&ops->root_state))
+        return 0;
+    building->state=unit->core.state;
+    if (!ops->completion_probe(ops->context,unit->core.unit_template->id)) {
+        research=unit->core.unit_template->building_research_id;
+        if (research >= 0) ops->remove_research(ops->context,research);
+        ops->remove_research(ops->context,0x4a);
+        ops->remove_research(ops->context,0x4b);
+        ops->remove_research(ops->context,0x4c);
+    }
+    return 1;
+}
+
 typedef struct {
     AoeLiveUnit *live;
     AoePlayerUpdateState *owner;

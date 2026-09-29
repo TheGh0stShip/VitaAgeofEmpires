@@ -371,3 +371,12 @@ application singleton constructed at `00416950` with vtable `00547de8`; its
 this verified no-op directly, so completion no longer requires an invented
 event callback. The generic callback composition remains available for
 source-level tests and alternate integrations.
+
+The stack-unit factory now has a concrete owned-scenario binding.
+`aoe_scenario_runtime_building_spawn_stack_ror` selects the completing
+unit's semantic owner, resolves the requested ID from that player's cloned
+template table, and uses the same recovered live constructor and owned
+lifetime as the existing template `+0x18` path. It deliberately ignores a
+failed/null creation result, as `004ae500` does. The real-scenario test pins
+the spawned unit's owner, cloned template, constructed count, sprite tick,
+and eventual teardown.

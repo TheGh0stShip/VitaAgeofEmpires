@@ -275,6 +275,11 @@ the notification specifically: application vtable `00547de8` slot `+0x40`
 is `00417910`, an unconditional return, so event `0x69` is now a verified
 no-op there rather than a required callback. The generic composition retains
 the hook for alternate integrations.
+The optional stack-unit factory also has a concrete owned-scenario binding:
+`aoe_scenario_runtime_building_spawn_stack_ror` uses the completing unit's
+semantic owner, cloned player template, and the recovered live constructor,
+while preserving `004ae500`'s ignored factory return. The generic completion
+layer retains its injection point to avoid a library dependency cycle.
 Completion visibility and graphic selection are no longer callback-only.
 Vtable resolution proves type-80 `+0xdc` is leave handler `004ac380` in
 alternate rectangle mode 1, while `+0xd8` is wrapper `004ae980`; after

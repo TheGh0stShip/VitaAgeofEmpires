@@ -1919,3 +1919,12 @@ return. The completion call carrying event `0x69`, owner, template ID, and
 truncated coordinates therefore has no observable effect in this executable.
 The owned runtime binds that no-op directly; only the generic composition
 retains an event callback for alternate integrations.
+
+The adjacent optional stack-unit call is template vtable `+0x18` with the
+same owner and live XYZ; its return value is ignored. The owned scenario
+binding `aoe_scenario_runtime_building_spawn_stack_ror` now resolves the
+building's semantic owner and cloned player template, then enters the
+already-recovered live constructor. Dynamically created storage participates
+in sprite ticks and symmetric runtime teardown. The generic completion layer
+keeps the injection point so it does not acquire a dependency cycle on the
+scenario owner.

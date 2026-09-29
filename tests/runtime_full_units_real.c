@@ -105,6 +105,19 @@ int main(int argc, char **argv) {
         runtime.editor_unit_count != 1)
         goto done;
 
+    /* Building completion uses the same owner-template +0x18 factory without
+       consuming its ignored return value. Bind that path to owned storage. */
+    aoe_scenario_runtime_building_spawn_stack_ror(
+        &runtime, editor_unit, (int16_t)place_id,
+        place_x, place_y, editor_source->z);
+    if (runtime.constructed_units != loaded_units + 2 ||
+        runtime.editor_unit_count != 2 ||
+        runtime.editor_units[1]->runtime_owner_index != (int16_t)editor_player ||
+        runtime.editor_units[1]->core.unit_template != place_template ||
+        runtime.editor_units[1]->core.position.x38 != place_x ||
+        runtime.editor_units[1]->core.position.y3c != place_y)
+        goto done;
+
     /* Editor submode 1 is the original move-selected-unit path, not a
        second factory call. The outer mouse-up handler restores state 2. */
     if (aoe_scenario_editor_runtime_finish_move(&editor_context)) goto done;
@@ -117,8 +130,8 @@ int main(int argc, char **argv) {
             &runtime.players[editor_player].templates, place_id, 8, 1,
             place_x, place_y, &editor_ops,
             &editor_created) || editor_created != editor_unit ||
-        runtime.constructed_units != loaded_units + 1 ||
-        runtime.editor_unit_count != 1)
+        runtime.constructed_units != loaded_units + 2 ||
+        runtime.editor_unit_count != 2)
         goto done;
     if (!aoe_scenario_editor_runtime_finish_move(&editor_context) ||
         editor_context.moving_unit || editor_unit->core.state != 2 ||

@@ -218,6 +218,20 @@ int aoe_scenario_runtime_editor_create_ror(
     return 1;
 }
 
+void aoe_scenario_runtime_building_spawn_stack_ror(
+    void *context, AoeLiveUnit *building, int16_t unit_id,
+    float x, float y, float z) {
+    AoeScenarioRuntimeRor *runtime = context;
+    int16_t owner_index;
+    if (!runtime || !building || unit_id < 0) return;
+    owner_index = building->runtime_owner_index;
+    if (owner_index < 0 || owner_index >= AOE_SCENARIO_RUNTIME_PLAYERS)
+        return;
+    (void)aoe_scenario_runtime_editor_create_ror(
+        runtime, (uint8_t)owner_index, (uint16_t)unit_id,
+        x, y, z, NULL);
+}
+
 int aoe_scenario_runtime_tick_sprites_ror(
     AoeScenarioRuntimeRor *runtime, float world_delta,
     AoeScenarioRuntimeSpriteTickResult *result) {

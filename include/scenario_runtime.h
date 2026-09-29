@@ -76,6 +76,14 @@ int aoe_scenario_runtime_editor_create_ror(
     AoeScenarioRuntimeRor *runtime, uint8_t player_index, uint16_t object_id,
     float x, float y, float z, AoeLiveUnit **out_unit);
 
+/* Concrete binding for building completion's template +0x18 stack-unit
+   factory call. It selects the completing unit's semantic owner and creates
+   the requested cloned player template at the supplied XYZ. Like 004ae500,
+   the callback ignores a failed/null factory result. */
+void aoe_scenario_runtime_building_spawn_stack_ror(
+    void *context, AoeLiveUnit *building, int16_t unit_id,
+    float x, float y, float z);
+
 /* Runs only the recovered sprite-manager tail shared by RoR live types
    20..80, in scenario player/record order. It does not stand in for the
    still-incomplete action, movement, combat, or player update chain. */

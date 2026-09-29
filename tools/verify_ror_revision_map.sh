@@ -30,4 +30,14 @@ for address in 004a6920 004a6a40 004a8f40; do
     "$project_root/build/decompile/ror_10a_index.tsv"
 done
 
-echo "verified disc RoR -> patched 1.0a live-unit revision map"
+# Pin the mapped building routines and the anomalous PUSH -1 at each
+# production drain call so refreshed analysis cannot silently alter the note.
+for address in 004add50 004adfc0; do
+  awk -F '\t' -v address="$address" \
+    'NR > 1 && $1 == address && $3 == "ok" { found=1 } END { exit !found }' \
+    "$project_root/build/decompile/ror_10a_index.tsv"
+done
+test "$(r2 -q -c 'p8 2 @ 0x004af97a' -c q "$disc" | tr -d '\r')" = 6aff
+test "$(r2 -q -c 'p8 2 @ 0x004ae03a' -c q "$patched" | tr -d '\r')" = 6aff
+
+echo "verified disc RoR -> patched 1.0a revision map"

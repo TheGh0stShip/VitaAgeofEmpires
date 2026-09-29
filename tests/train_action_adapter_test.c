@@ -84,7 +84,7 @@ static void cancel(void *context, AoeBuildingUpdate *building, int16_t unit,
     (void)building;
     (void)unit;
     (void)quantity;
-    assert(!"cancellation is not expected");
+    assert(quantity==1); assert(!"cancellation is not expected");
 }
 
 static void *bridge_create(void *context, AoeBuildingUpdate *building, int16_t unit_id) {

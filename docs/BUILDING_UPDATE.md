@@ -75,18 +75,34 @@ callbacks that preserve the owner and operation bindings.
 
 ## Active production and queue consumption
 
-`src/building_production.c` translates 004af900–004afb3a and
-004af7f0–004af884, verified using objdump on the same executable above.
+`src/building_production.c` translates 004af900–004afb3a,
+004af7f0–004af884 and the positive-removal contract of
+004af680–004af7e9, verified using disassembly of the same executable above.
+Their patched 1.0a counterparts are 004adfc0, 004adeb0 and 004add50.
 The constant at 0054d344 is float zero. The production branch operates on
 original owner resource indices 11 (`+2c`), 32 (`+80`), and 4 (`+10`).
 For an empty action list, production can start only when resource 11 < 32
 and resource 4 > 0. This gate is bypassed when the action list has a head.
 
 Before the resource gate, 004af1a0 is queried with final arguments 0,0.
-A true result and first output 102 or 103 cancels all queued entries through
-004af680(head unit ID,-1), then returns without updating the action list.
-Those query/cancellation bodies are still required dependencies. A portable
-guard rejects a cancellation callback that fails to reduce the queue count.
+A true result and first output 102 or 103 enters a queue-drain loop, then
+returns without updating the action list. Both disc 004af900 and patched
+004adfc0 pass signed `-1` to their cancellation routines. Both cancellation
+routines subtract that signed argument from a normally positive quantity, so
+the call grows the head quantity and the loop cannot terminate. Ordinary
+callers pass positive removal counts; the network/order path also negates a
+negative delta before calling cancellation. The portable drain therefore
+passes positive `1` and retains a progress guard as a deliberate correction
+of this verified original defect.
+
+`aoe_building_queue_cancel_ror` implements the positive-count behavior:
+reverse search for the requested unit ID, refund `min(quantity, amount)` one
+item at a time, wrapping 16-bit subtraction and revision increment, exhausted
+entry removal/shift, and head-removal status/action cleanup. It emits event
+124 for every initially nonempty call, even when the ID is absent; an empty
+queue emits nothing. Refund and global notification bodies remain explicit
+integration dependencies. Head removal first invokes the current production
+action's vtable `+0x2c` cancellation method, then clears the list.
 
 If gated, set queue status 4 once, emit event 125 (reason 32 if resource 11
 >=32, otherwise reason 4), then increment the per-owner counter. Repeated

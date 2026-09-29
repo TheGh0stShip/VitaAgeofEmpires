@@ -40,8 +40,8 @@ typedef struct AoeBuildingUpdate {
 
 typedef struct {
     void *context;
-    /* 004af680: cancel the selected unit id, quantity -1. Must reduce the
-       queue count when called by the code-102/103 cancellation loop. */
+    /* Queue cancellation integration. Portable callers pass a positive
+       removal count; see aoe_building_queue_cancel_ror. */
     void (*cancel)(void *, AoeBuildingUpdate *, int16_t unit_id, int16_t quantity);
     /* Allocation plus 004b6820(building,unit_id,-1,1). NULL is an original
        allocation failure; the original still updates the action list. */
@@ -50,6 +50,15 @@ typedef struct {
     /* Global virtual +0x40(event,owner_id,reason,0,0). */
     void (*notify)(void *, uint32_t event, int16_t owner_id, uint32_t reason);
 } AoeBuildingProductionOps;
+
+typedef struct {
+    void *context;
+    /* Disc 004f3b90 / patched 1.0a 004f17f0, once per refunded item. */
+    void (*refund_one)(void *, int16_t unit_id);
+    /* Disc action-list 00404540 / patched 00404530, head vtable +0x2c. */
+    void (*cancel_action)(void *, void *action);
+    void (*notify)(void *, uint32_t event, int16_t owner_id, uint32_t reason);
+} AoeBuildingQueueCancelOps;
 
 /* RoR 004af1a0 with its optional text output omitted, matching production's
    call with null text and zero length. Read the first action from building
@@ -117,8 +126,21 @@ int aoe_building_cleanup_type80_ror(
    Does not clear the now-unused trailing entry, matching the original. */
 int aoe_building_queue_consume_ror(AoeBuildingUpdate *building,
                                     const AoeBuildingProductionOps *ops);
+/* Disc RoR 004af680 / patched 1.0a 004add50 for positive removal counts.
+   Searches from the queue tail, refunds min(quantity, amount), applies the
+   original wrapping 16-bit subtraction, removes an exhausted entry, and
+   clears queue actions/status when the head is removed. Event 124 is sent
+   whenever the queue was initially nonempty, including an ID miss. */
+int aoe_building_queue_cancel_ror(AoeBuildingUpdate *building,
+                                   int16_t unit_id, int16_t amount,
+                                   uint32_t *owner_status_four_count,
+                                   const AoeBuildingQueueCancelOps *ops);
 /* 004af900–004afb3a. Directly composes list push/pop and queue consumption.
    Valid finite owner resources are required on the empty-action gate.
+   The original disc and 1.0a code pass -1 to their signed-subtract cancel
+   routine in the 102/103 drain loop, which grows the queue forever. This
+   portable path deliberately passes positive one and retains a progress
+   guard.
    Failure after a callback/allocation may leave preceding effects applied. */
 int aoe_building_production_ror(AoeBuildingUpdate *building, uint32_t *count,
                                 const AoeBuildingProductionOps *ops);

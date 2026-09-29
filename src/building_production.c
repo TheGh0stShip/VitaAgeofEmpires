@@ -50,6 +50,50 @@ int aoe_building_queue_consume_ror(AoeBuildingUpdate *b,
     ops->notify(ops->context,124,b->owner_id,0);
     return 1;
 }
+int aoe_building_queue_cancel_ror(AoeBuildingUpdate *b, int16_t unit_id,
+                                   int16_t amount, uint32_t *count,
+                                   const AoeBuildingQueueCancelOps *ops) {
+    int index = -1;
+    int16_t quantity;
+    int16_t new_quantity;
+    int refund_count;
+    if (!b || !count || !ops || !ops->refund_one || !ops->notify ||
+        amount <= 0 || !entries_valid(b) ||
+        !aoe_action_list_valid(b->queue_actions)) return 0;
+    if (!b->queue_count) return 1;
+    for (int i=b->queue_count-1; i>=0; --i) {
+        if (b->queue_entries[i].unit_id == unit_id) { index=i; break; }
+    }
+    if (index >= 0) {
+        quantity=b->queue_entries[index].quantity;
+        new_quantity=(int16_t)((uint16_t)quantity-(uint16_t)amount);
+        if (!index && new_quantity <= 0 && b->queue_actions->head &&
+            !ops->cancel_action) return 0;
+        refund_count=quantity <= amount ? quantity : amount;
+        for (int i=0; i<refund_count; ++i)
+            ops->refund_one(ops->context,unit_id);
+        /* Preserve x86 word subtraction for malformed/extreme queue data. */
+        b->queue_entries[index].quantity=new_quantity;
+        b->queue_revision=(uint8_t)(b->queue_revision+1);
+        if (b->queue_entries[index].quantity <= 0) {
+            --b->queue_count;
+            for (int i=index; i<b->queue_count; ++i)
+                b->queue_entries[i]=b->queue_entries[i+1];
+            if (!index) {
+                void *action=b->queue_actions->head ?
+                    b->queue_actions->head->action : NULL;
+                if (b->queue_status != -1) {
+                    if (b->queue_status == 4) --*count;
+                    b->queue_status=-1;
+                }
+                if (action) ops->cancel_action(ops->context,action);
+                if (!aoe_action_list_clear(b->queue_actions)) return 0;
+            }
+        }
+    }
+    ops->notify(ops->context,124,b->owner_id,0);
+    return 1;
+}
 int aoe_building_production_ror(AoeBuildingUpdate *b, uint32_t *count,
                                 const AoeBuildingProductionOps *ops) {
     int16_t code=0, item_id, progress;
@@ -66,7 +110,7 @@ int aoe_building_production_ror(AoeBuildingUpdate *b, uint32_t *count,
         while (b->queue_count>0) {
             int16_t previous=b->queue_count;
             if (!entries_valid(b)) return 0;
-            ops->cancel(ops->context,b,b->queue_entries[0].unit_id,-1);
+            ops->cancel(ops->context,b,b->queue_entries[0].unit_id,1);
             /* A failed/misbound callee must not hang the portable runtime. */
             if (b->queue_count>=previous) return 0;
         }

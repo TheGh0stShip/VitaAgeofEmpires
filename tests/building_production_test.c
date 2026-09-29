@@ -23,7 +23,7 @@ typedef struct {
 } Fixture;
 static void event(Fixture *f,int e) { assert(f->n<40); f->events[f->n++]=e; }
 static void cancel(void *p,AoeBuildingUpdate *b,int16_t id,int16_t quantity) {
-    Fixture *f=p;assert(id==b->queue_entries[0].unit_id && quantity==-1);
+    Fixture *f=p;assert(id==b->queue_entries[0].unit_id && quantity==1);
     event(f,2); if (!f->stuck_cancel) --b->queue_count;
 }
 static void *create(void *p,AoeBuildingUpdate *b,int16_t id) {
@@ -40,6 +40,12 @@ static void notify(void *p,uint32_t e,int16_t id,uint32_t reason) {
         assert(f->b.queue_status==4 && f->count==0); /* notify before INC */
         assert(reason==32 || reason==4);event(f,1000+reason);
     } else { assert(e==124 && reason==0);event(f,7); }
+}
+static void refund_one(void *p,int16_t id) {
+    Fixture *f=p;assert(id==10 || id==20 || id==99);event(f,8);
+}
+static void cancel_action(void *p,void *action) {
+    Fixture *f=p;assert(action==&f->action && f->list.head);event(f,9);
 }
 static void destroy(void *p,void *a) {
     Fixture *f=p;assert(a==&f->action && !f->list.head);event(f,6);
@@ -145,6 +151,32 @@ int main(void) {
     f.b.queue_count=0; f.n=0;
     assert(aoe_building_queue_consume_ror(&f.b,&f.ops) && !f.n);
     f.b.queue_count=4;assert(!aoe_building_queue_consume_ror(&f.b,&f.ops));
+    {
+        AoeBuildingQueueCancelOps cancel_ops={&f,refund_one,cancel_action,notify};
+        init(&f); f.entries[0]=(AoeBuildingQueueEntry){10,2};
+        f.entries[1]=(AoeBuildingQueueEntry){20,3};
+        f.entries[2]=(AoeBuildingQueueEntry){10,4};
+        f.b.queue_status=4; f.count=1; f.b.queue_revision=255;
+        assert(aoe_building_queue_cancel_ror(&f.b,10,2,&f.count,&cancel_ops));
+        const int tail_refund[]={8,8,7}; expect(&f,tail_refund,3);
+        assert(f.entries[2].quantity==2 && f.b.queue_count==3);
+        assert(f.b.queue_revision==0 && f.b.queue_status==4 && f.count==1);
+        assert(aoe_building_queue_cancel_ror(&f.b,99,1,&f.count,&cancel_ops));
+        const int miss[]={7}; expect(&f,miss,1);
+        assert(f.b.queue_count==3 && f.b.queue_revision==0);
+        assert(aoe_building_queue_cancel_ror(&f.b,10,2,&f.count,&cancel_ops));
+        expect(&f,tail_refund,3); assert(f.b.queue_count==2);
+        assert(f.entries[0].unit_id==10 && f.entries[1].unit_id==20);
+        assert(aoe_action_list_push(&f.list,&f.action)); f.n=0;
+        assert(aoe_building_queue_cancel_ror(&f.b,10,9,&f.count,&cancel_ops));
+        const int head_refund[]={8,8,9,6,7}; expect(&f,head_refund,5);
+        assert(f.b.queue_count==1 && f.entries[0].unit_id==20);
+        assert(f.b.queue_status==-1 && f.count==0 && !f.list.head);
+        f.b.queue_count=0; f.n=0;
+        assert(aoe_building_queue_cancel_ror(&f.b,20,1,&f.count,&cancel_ops));
+        assert(!f.n);
+        assert(!aoe_building_queue_cancel_ror(&f.b,20,-1,&f.count,&cancel_ops));
+    }
     /* Exercise the real update -> production -> pop -> consume composition. */
     init(&f); f.action_result=1;
     DatUnit unit_template={.present=1,.unit_class=3};

@@ -221,9 +221,17 @@ during destruction and preserves intermediate activation during clear.
 The active branch now directly calls `aoe_building_production_ror`
 (004af900), including original resource gates, status-4 notifications and
 counter ordering. Queue consumption (004af7f0) is translated and connected
-to action results 1/2/3. Query/cancel, action construction/update and global
-notification bodies remain required dependencies; this is not yet a
-working production simulation. See `tests/building_production_test.c`.
+to action results 1/2/3. Queue cancellation's positive-count path is also
+translated from disc 004af680 (patched 1.0a 004add50), including refund,
+reverse selection, shifting, status/action cleanup and miss notification.
+Head cleanup preserves the original action `+0x2c` cancellation call before
+the translated list clear.
+Disc 004af900 and patched 004adfc0 both pass `-1` in their 102/103 drain loop
+even though the callee subtracts the signed argument; this grows a positive
+quantity forever. The portable loop deliberately passes `1` and keeps its
+progress guard. Action construction/update, refund and global notification
+bodies remain required dependencies; this is not yet a working production
+simulation. See `tests/building_production_test.c`.
 The production-list virtual update is now verified through its factory and
 vtable and translated as `aoe_action_list_update_ror` (004043c0). Production
 calls it directly. Preserve its automatic result-1 pop followed by the

@@ -5,3 +5,5 @@ live_unit	vtable_plus_24_update_predicate	004aa790	004a8f40	mnemonic trigram 0.8
 live_unit	root_vtable	0054ce80	00547da8	constructor assignment and slot inspection	verified
 live_unit	type_90_vtable	0054d608	00548474	constructor assignment and slot inspection	verified
 scenario_editor	map_click	unmapped	0051a2e0	patched vtable/call-path recovery	patched_only
+building_queue	cancel	004af680	004add50	matching field flow, reverse search, refund loop and queue/status cleanup	verified
+building_queue	production	004af900	004adfc0	matching query, resource gate, action update and queue-drain control flow	verified

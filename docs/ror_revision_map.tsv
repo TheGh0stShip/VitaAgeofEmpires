@@ -7,3 +7,4 @@ live_unit	type_90_vtable	0054d608	00548474	constructor assignment and slot inspe
 scenario_editor	map_click	unmapped	0051a2e0	patched vtable/call-path recovery	patched_only
 building_queue	cancel	004af680	004add50	matching field flow, reverse search, refund loop and queue/status cleanup	verified
 building_queue	production	004af900	004adfc0	matching query, resource gate, action update and queue-drain control flow	verified
+building_state	type_80_setter	004ae500	004acbf0	matching completion, queue cancellation, parent setter and state-3 cleanup flow	verified

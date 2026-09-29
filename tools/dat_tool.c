@@ -454,9 +454,14 @@ int main(int argc, char **argv) {
         else
             printf("unit %u/%u: absent\n", query_civ, query_unit);
         if (unit && unit->type == 80)
-            printf("building: construction graphic %d, foundation terrain %d, "
-                   "completed angle %u\n", unit->construction_graphic,
-                   unit->foundation_terrain, unit->building_angle);
+            printf("building: construction graphic %d, adjacent mode %u, "
+                   "completed angle %u, disappears %u, stack unit %d, "
+                   "foundation/old terrain %d/%d, research %d, sound %d\n",
+                   unit->construction_graphic, unit->building_adjacent_mode,
+                   unit->building_angle, unit->disappears_when_built,
+                   unit->stack_unit_id, unit->foundation_terrain,
+                   unit->old_terrain, unit->building_research_id,
+                   unit->completion_sound);
     }
     printf("next section offset: 0x%zx\n", civilizations.next_offset);
     if (!dat_parse_techs(&blob, &civilizations, &techs)) {

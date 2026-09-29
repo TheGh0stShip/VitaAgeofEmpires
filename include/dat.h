@@ -296,8 +296,14 @@ typedef struct {
     int16_t train_time, train_location_id, displayed_pierce_armor;
     int8_t button_id;
     int16_t construction_graphic; /* type 80, original template +0x168 */
-    int16_t foundation_terrain;   /* type 80, original template +0x174 */
+    uint8_t building_adjacent_mode; /* type 80, original template +0x16c */
     uint16_t building_angle;      /* type 80, original template +0x16e */
+    uint8_t disappears_when_built; /* type 80, original template +0x170 */
+    int16_t stack_unit_id;        /* type 80, original template +0x172 */
+    int16_t foundation_terrain;   /* type 80, original template +0x174 */
+    int16_t old_terrain;          /* type 80, original template +0x176 */
+    int16_t building_research_id; /* type 80, original template +0x178 */
+    int16_t completion_sound;     /* type 80, original template +0x17a */
 } DatUnit;
 
 typedef struct {

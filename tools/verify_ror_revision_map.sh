@@ -32,11 +32,17 @@ done
 
 # Pin the mapped building routines and the anomalous PUSH -1 at each
 # production drain call so refreshed analysis cannot silently alter the note.
-for address in 004add50 004adfc0; do
+for address in 004acbf0 004add50 004adfc0; do
   awk -F '\t' -v address="$address" \
     'NR > 1 && $1 == address && $3 == "ok" { found=1 } END { exit !found }' \
     "$project_root/build/decompile/ror_10a_index.tsv"
 done
+# Both type-80 setters' state-2 branches load their template pointer and
+# signed build time from +0x15a; prologue register allocation differs.
+test "$(r2 -q -c 'p8 10 @ 0x004ae514' -c q "$disc" | tr -d '\r')" = \
+  8b46080fbf885a010000
+test "$(r2 -q -c 'p8 10 @ 0x004acc02' -c q "$patched" | tr -d '\r')" = \
+  8b46080fbf885a010000
 test "$(r2 -q -c 'p8 2 @ 0x004af97a' -c q "$disc" | tr -d '\r')" = 6aff
 test "$(r2 -q -c 'p8 2 @ 0x004ae03a' -c q "$patched" | tr -d '\r')" = 6aff
 

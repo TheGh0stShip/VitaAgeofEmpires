@@ -197,3 +197,21 @@ tests verify empty, unknown, training and research heads remain distinct.
 Next: translate the type-80 setter 004ae500 and bind the existing queue,
 training-action and building semantic fields to runtime objects.
 Do not wire no-op callbacks to claim a working building simulation.
+
+## Type-80 completion inputs
+
+Disc RoR type-80 state setter `004ae500` maps to patched 1.0a `004acbf0`.
+Its state-2 completion branch reads the building tail through template
+`+0x178`; these inputs can no longer remain parser skips. `DatUnit` now
+retains construction graphic `+0x168`, adjacent mode `+0x16c`, completed
+angle `+0x16e`, disappear byte `+0x170`, stack unit `+0x172`, foundation and
+old terrains `+0x174/+0x176`, automatic research `+0x178`, and completion
+sound `+0x17a`. They are semantic fields with explicit integer widths, not a
+packed recreation of the original 32-bit object.
+
+The disc RoR DAT provides an independent boundary check: civilization 1's
+Town Center (109) decodes research 105 and completion sound 185; its Wonder
+(276) decodes research -1 and sound 133. A synthetic parser test pins every
+byte in the 16-byte serialized building tail. The setter's world, terrain,
+research, visibility and owner callbacks still require translation before
+these values are applied to live objects.

@@ -234,6 +234,13 @@ per-item refund and action-specific cancellation effects remain callbacks;
 queue mutation is no longer delegated. Action construction/update and global
 notification bodies remain required dependencies; this is not yet a working
 production simulation. See `tests/building_production_test.c`.
+The next type-80 dependency is revision-mapped as disc setter 004ae500 to
+patched 1.0a 004acbf0. Its completion inputs are now retained instead of
+skipped by the DAT parser: adjacent mode, disappear-on-build, stack unit,
+old terrain, automatic research, and completion sound, alongside the already
+parsed construction graphic, angle, and foundation terrain. Synthetic byte
+offset assertions and real disc RoR Town Center/Wonder values validate the
+16-byte serialized tail. The setter effects themselves remain unported.
 The production-list virtual update is now verified through its factory and
 vtable and translated as `aoe_action_list_update_ror` (004043c0). Production
 calls it directly. Preserve its automatic result-1 pop followed by the

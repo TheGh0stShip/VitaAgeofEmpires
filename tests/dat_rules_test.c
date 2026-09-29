@@ -136,7 +136,7 @@ int main(void) {
                                         &civilizations));
     }
     {
-        uint8_t civ_bytes[372] = {0};
+        uint8_t civ_bytes[388] = {0};
         DatBlob civ_blob = {civ_bytes, sizeof(civ_bytes)};
         DatEffects before_civs = {0};
         const DatUnit *unit;
@@ -145,7 +145,7 @@ int main(void) {
         memcpy(civ_bytes + 3, "Gaia", 5);
         put16(civ_bytes + 28, 1);
         put32(civ_bytes + 30, 1);
-        civ_bytes[34] = 70; /* creatable unit */
+        civ_bytes[34] = 80; /* building unit */
         put16(civ_bytes + 34 + 9, 4); /* civilian class */
         put16(civ_bytes + 221, 1); /* one task */
         put16(civ_bytes + 223 + 5, 101); /* build action */
@@ -162,11 +162,20 @@ int main(void) {
         put16(civ_bytes + 349, 50);
         put16(civ_bytes + 351, 1); /* paid */
         put16(civ_bytes + 365, 20); /* train time */
+        put16(civ_bytes + 372, 600); /* construction graphic */
+        civ_bytes[374] = 3; /* adjacent mode */
+        put16(civ_bytes + 375, 7); /* completed angle */
+        civ_bytes[377] = 1; /* disappears when built */
+        put16(civ_bytes + 378, 42); /* stack unit */
+        put16(civ_bytes + 380, 9); /* foundation terrain */
+        put16(civ_bytes + 382, 10); /* old terrain */
+        put16(civ_bytes + 384, 77); /* automatic research */
+        put16(civ_bytes + 386, 88); /* completion sound */
         assert(dat_parse_civilizations(&civ_blob, &before_civs,
                                        &civilizations));
         assert(civilizations.next_offset == sizeof(civ_bytes));
         unit = dat_find_unit(&civilizations, 0, 0);
-        assert(unit && unit->type == 70 && unit->unit_class == 4);
+        assert(unit && unit->type == 80 && unit->unit_class == 4);
         assert(unit->task_count == 1 && unit->tasks[0].action_type == 101);
         assert(unit->tasks[0].work_range == 2.5f);
         assert(unit->attack_count == 1 && unit->attacks[0].class_id == 4);
@@ -175,6 +184,11 @@ int main(void) {
         assert(unit->base_armor == 1 && unit->max_range == 2.5f);
         assert(unit->costs[0].amount == 50 && unit->costs[0].paid == 1);
         assert(unit->train_time == 20);
+        assert(unit->construction_graphic == 600);
+        assert(unit->building_adjacent_mode == 3 && unit->building_angle == 7);
+        assert(unit->disappears_when_built == 1 && unit->stack_unit_id == 42);
+        assert(unit->foundation_terrain == 9 && unit->old_terrain == 10);
+        assert(unit->building_research_id == 77 && unit->completion_sound == 88);
         dat_free_civilizations(&civilizations);
         civ_blob.size--;
         assert(!dat_parse_civilizations(&civ_blob, &before_civs,

@@ -236,11 +236,14 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
     }
     if (unit->type == 80) {
         unit->construction_graphic = (int16_t)u16(cursor);
-        take(cursor, 1); /* adjacent mode, template +0x16c */
+        unit->building_adjacent_mode = u8(cursor);
         unit->building_angle = u16(cursor);
-        take(cursor, 3); /* disappear byte and stack unit */
+        unit->disappears_when_built = u8(cursor);
+        unit->stack_unit_id = (int16_t)u16(cursor);
         unit->foundation_terrain = (int16_t)u16(cursor);
-        take(cursor, 6); /* old terrain, research, completion sound */
+        unit->old_terrain = (int16_t)u16(cursor);
+        unit->building_research_id = (int16_t)u16(cursor);
+        unit->completion_sound = (int16_t)u16(cursor);
     }
     return cursor->valid;
 }

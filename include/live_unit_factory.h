@@ -6,6 +6,7 @@
 #include "action_list.h"
 #include "building_update.h"
 #include "player_update.h"
+#include "research_action.h"
 #include "unit_sprite_binding.h"
 
 /* A portable owned composition of the parts initialized by the common RoR
@@ -361,8 +362,7 @@ typedef struct {
     void (*invalidate_foundation)(void *context, AoeLiveUnit *unit,
                                   int32_t x0, int32_t y0,
                                   int32_t x1, int32_t y1);
-    void (*apply_research)(void *context, AoeLiveUnit *unit,
-                           int16_t research_id);
+    AoeResearchCompletionManagerRor *research;
     void (*notify_completion)(void *context, uint32_t event,
                               int16_t owner_id, int16_t unit_id,
                               int32_t x, int32_t y);

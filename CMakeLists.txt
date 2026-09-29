@@ -236,7 +236,7 @@ add_library(aoe_live_unit_factory STATIC src/live_unit_factory.c)
 target_include_directories(aoe_live_unit_factory PUBLIC include)
 target_link_libraries(aoe_live_unit_factory PUBLIC aoe_live_unit_vision
   aoe_player_update aoe_unit_sprite_binding aoe_live_unit_state
-  aoe_action_list aoe_building_update)
+  aoe_action_list aoe_building_update aoe_research_action)
 target_compile_options(aoe_live_unit_factory PRIVATE -Wall -Wextra)
 
 add_library(aoe_live_unit_draw STATIC src/live_unit_draw.c)

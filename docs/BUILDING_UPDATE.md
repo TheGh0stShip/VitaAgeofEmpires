@@ -349,7 +349,18 @@ matching, nonmatching, refresh, object-ID, name, and headless behavior.
 
 The state-two owned-runtime adapter now invokes that translation directly.
 `AoeBuildingCompletionWorldRuntimeOps` retains only the still-untranslated
-stack-unit, terrain, research, and event boundaries; it takes an optional
+stack-unit, terrain, and event boundaries; it takes an optional
 semantic owner UI instead of an arbitrary owner-finalization callback. The
 full runtime composition test now reaches the recovered first-match UI update
 and refresh after its concrete vision and sprite transitions.
+
+Automatic building research now uses the structured translation of manager
+method `004ecd0d` rather than one opaque runtime callback. The new
+`aoe_research_complete_ror` bounds-checks the signed ID, accepts only manager
+states 0..2, writes completed state 3, applies technology effects, rebuilds
+research availability, and signals Wonder stages 0..2 for IDs 101..103 in
+the executable's order. The remaining effect/rebuild bodies are explicit
+manager dependencies. Focused tests pin invalid-state rejection, ordinary
+completion, Wonder mapping, and callback order; the building runtime test
+also proves automatic research reaches state 3 before event 105 and owner UI
+finalization.

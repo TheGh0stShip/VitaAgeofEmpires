@@ -4,6 +4,17 @@
 #include <math.h>
 #include <string.h>
 
+typedef struct { char events[4]; int count; int16_t id; int wonder; } Trace;
+static void apply(void *context,int16_t id) {
+    Trace *trace=context; trace->events[trace->count++]='A'; trace->id=id;
+}
+static void rebuild(void *context) {
+    Trace *trace=context; trace->events[trace->count++]='R';
+}
+static void wonder(void *context,int index) {
+    Trace *trace=context; trace->events[trace->count++]='W';trace->wonder=index;
+}
+
 int main(void) {
     DatTech techs_data[3];
     DatTechs techs = {3,techs_data,0};
@@ -48,5 +59,21 @@ int main(void) {
     assert(id == 0 && percent == 55);
     entries[0].progress = 1.0f; techs_data[0].research_time = 0;
     assert(!aoe_research_action_progress_ror(&action,&id,&percent));
+
+    AoeResearchProgressEntry completion_entries[104]={{0}};
+    Trace trace={{0},0,-1,-1};
+    AoeResearchCompletionManagerRor completion={
+        104,completion_entries,&trace,apply,rebuild,wonder};
+    completion_entries[100].state=2;
+    assert(aoe_research_complete_ror(&completion,100));
+    assert(completion_entries[100].state==3 && trace.count==2 &&
+           !memcmp(trace.events,"AR",2) && trace.id==100);
+    completion_entries[102].state=0; trace=(Trace){{0},0,-1,-1};
+    assert(aoe_research_complete_ror(&completion,102));
+    assert(completion_entries[102].state==3 && trace.count==3 &&
+           !memcmp(trace.events,"ARW",3) && trace.wonder==1);
+    assert(!aoe_research_complete_ror(&completion,102) && trace.count==3);
+    completion_entries[103].state=-1;
+    assert(!aoe_research_complete_ror(&completion,103));
     return 0;
 }

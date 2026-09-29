@@ -31,6 +31,25 @@ typedef struct {
     const AoeResearchProgressTable *progress_table;
 } AoeResearchAction;
 
+/* Semantic mutable manager used by RoR 004ecd0d. Effect/rebuild/wonder
+   callbacks are the three independently recovered callees; their contexts
+   and records are portable and make no original pointer-layout claim. */
+typedef struct {
+    int16_t count;
+    AoeResearchProgressEntry *entries;
+    void *context;
+    void (*apply_effect)(void *context, int16_t research_id);
+    void (*rebuild)(void *context);
+    void (*wonder_complete)(void *context, int index);
+} AoeResearchCompletionManagerRor;
+
+/* RoR 004ecd0d. Valid states 0..2 become 3, then technology effects and the
+   manager rebuild run in that order. Research IDs 101..103 additionally
+   signal Wonder stage 0..2. Invalid IDs and state -1/3+ return false without
+   mutation. */
+int aoe_research_complete_ror(AoeResearchCompletionManagerRor *manager,
+                              int16_t research_id);
+
 /* Data-return portion of RoR 004b7d60. State 1 reports 100 directly;
    otherwise percentage comes from translated 004ed8ef. The optional localized
    text-buffer branch through 004ed989/00528540 remains outside this API. */

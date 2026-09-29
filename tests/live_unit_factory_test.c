@@ -166,6 +166,15 @@ static void completion_ui_refresh(void *context) {
 static void completion_ui_trace_refresh(void *context) {
     completion_event(context,'O');
 }
+static void completion_research_apply(void *context,int16_t research_id) {
+    assert(research_id==105); completion_event(context,'R');
+}
+static void completion_research_rebuild(void *context) {
+    completion_event(context,'B');
+}
+static void completion_research_wonder(void *context,int index) {
+    (void)context;(void)index;assert(0);
+}
 static void building_action_destroy(void *context,void *action) {
     assert(action==(void *)0x5678); building_high_event(context,'D');
 }
@@ -711,11 +720,16 @@ int main(void) {
     completion_ui.head=&ui_match;
     completion_ui.refresh_context=&completion;
     completion_ui.refresh=completion_ui_trace_refresh;
+    AoeResearchProgressEntry completion_research_entries[106]={{0}};
+    AoeResearchCompletionManagerRor completion_research_manager={
+        106,completion_research_entries,&completion,
+        completion_research_apply,completion_research_rebuild,
+        completion_research_wonder};
     AoeBuildingCompletionWorldRuntimeOps world_runtime={
         .context=&completion,.spawn_stack_unit=completion_spawn,
         .paint_foundation=completion_paint,
         .invalidate_foundation=completion_invalidate,
-        .apply_research=completion_research,
+        .research=&completion_research_manager,
         .notify_completion=completion_notify,
         .owner_ui=&completion_ui
     };
@@ -726,9 +740,11 @@ int main(void) {
     };
     assert(aoe_live_unit_building_state_two_runtime_ror(
         &live,&state_two_runtime));
-    assert(completion.count==9 && !memcmp(completion.events,"LPASFIRNO",9));
+    assert(completion.count==10 &&
+           !memcmp(completion.events,"LPASFIRBNO",10));
     assert(live.core.state==2 && building.state==2 &&
-           live.building_completed && rng.state==41);
+           live.building_completed && rng.state==41 &&
+           completion_research_entries[105].state==3);
     AoeActionNode *completion_live_node=malloc(sizeof(*completion_live_node));
     AoeActionNode *completion_queue_node=malloc(sizeof(*completion_queue_node));
     assert(completion_live_node && completion_queue_node);

@@ -782,6 +782,7 @@ int aoe_live_unit_building_completion_world_ror(
 typedef struct {
     const AoeBuildingCompletionWorldRuntimeOps *ops;
     int owner_ok;
+    int research_ok;
 } BuildingCompletionWorldRuntimeContext;
 
 static void completion_world_runtime_spawn(
@@ -808,7 +809,9 @@ static void completion_world_runtime_invalidate(
 static void completion_world_runtime_research(
     void *opaque,AoeLiveUnit *unit,int16_t research_id) {
     BuildingCompletionWorldRuntimeContext *context=opaque;
-    context->ops->apply_research(context->ops->context,unit,research_id);
+    (void)unit;
+    context->research_ok=aoe_research_complete_ror(
+        context->ops->research,research_id);
 }
 
 static void completion_world_runtime_notify(
@@ -838,9 +841,9 @@ int aoe_live_unit_building_completion_world_runtime_ror(
     if ((unit_template->stack_unit_id >= 0 && !ops->spawn_stack_unit) ||
         (unit_template->foundation_terrain >= 0 &&
          (!ops->paint_foundation || !ops->invalidate_foundation)) ||
-        (unit_template->building_research_id >= 0 && !ops->apply_research))
+        (unit_template->building_research_id >= 0 && !ops->research))
         return 0;
-    context=(BuildingCompletionWorldRuntimeContext){ops,1};
+    context=(BuildingCompletionWorldRuntimeContext){ops,1,1};
     world=(AoeBuildingCompletionWorldOps){
         .context=&context,
         .spawn_stack_unit=completion_world_runtime_spawn,
@@ -851,7 +854,7 @@ int aoe_live_unit_building_completion_world_runtime_ror(
         .owner_complete=completion_world_runtime_owner
     };
     if (!aoe_live_unit_building_completion_world_ror(unit,&world)) return 0;
-    return context.owner_ok;
+    return context.owner_ok && context.research_ok;
 }
 
 int aoe_live_unit_building_state_two_ror(

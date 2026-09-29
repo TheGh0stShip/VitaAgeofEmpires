@@ -2,6 +2,25 @@
 
 #include <math.h>
 
+int aoe_research_complete_ror(AoeResearchCompletionManagerRor *manager,
+                              int16_t research_id) {
+    AoeResearchProgressEntry *entry;
+    if (!manager || !manager->entries || !manager->apply_effect ||
+        !manager->rebuild || research_id < 0 || research_id >= manager->count)
+        return 0;
+    entry=&manager->entries[research_id];
+    if (entry->state < 0 || entry->state >= 3) return 0;
+    if (research_id >= 0x65 && research_id <= 0x67 &&
+        !manager->wonder_complete)
+        return 0;
+    entry->state=3;
+    manager->apply_effect(manager->context,research_id);
+    manager->rebuild(manager->context);
+    if (research_id >= 0x65 && research_id <= 0x67)
+        manager->wonder_complete(manager->context,research_id-0x65);
+    return 1;
+}
+
 int aoe_research_progress_percent_ror(const AoeResearchProgressTable *table,
                                       int16_t research_id, int16_t *percent) {
     const AoeResearchProgressEntry *entry;

@@ -77,3 +77,18 @@ Until that boundary exists, source-backed subsystem tests remain the canonical r
 ## Intended direction
 
 The long-term shape is an integrated native Vita application that loads user-supplied original data, reconstructs a real scenario, and implements the original simulation and UI. The current host-side scene integration is meaningful progress, but it is not a playable port.
+
+## Target and host ABIs
+
+The Vita target is little-endian 32-bit ARMv7-A with an ILP32 ABI and a
+hard-float procedure-call standard. Vita configuration compiles an ABI probe,
+checks its ELF header/ARM attributes, and checks the resolved zlib dependency
+before building project libraries. A target build fails early if it is
+AArch64, non-ILP32, big-endian, or mixes floating-point calling conventions.
+
+Host builds intentionally retain their native LP64 or LLP64 ABI. Original
+32-bit values at disk, wire, checksum, or emulated pointer-token boundaries
+must therefore use explicit-width types and endian-safe access rather than
+native `long` or pointers. Host tests and emulator runs remain supporting
+evidence only; physical Vita behavior and alignment still require hardware
+validation.

@@ -3,6 +3,7 @@
 | Document | Use it for |
 |---|---|
 | [Architecture](ARCHITECTURE.md) | What is implemented, where code lives, and how the repository fits together |
+| [Related projects](RELATED_PROJECTS.md) | Clean-room survey of Genie/AoE reconstructions and lessons used here |
 | [Resume notes](RESUME.md) | Current handoff, verified recent work, and the most useful next actions |
 | [Roadmap](../TODO.md) | Project-level milestones and known blockers |
 | [Reversing notebook](reversing.md) | Detailed behavioral evidence, addresses, hypotheses, and outstanding dependencies |

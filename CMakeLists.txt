@@ -19,6 +19,22 @@ target_include_directories(aoe_wav PUBLIC include)
 target_compile_options(aoe_wav PRIVATE -Wall -Wextra)
 
 find_package(ZLIB REQUIRED)
+
+if(VITA)
+  include(cmake/VerifyVitaAbi.cmake)
+  aoe_verify_vita_abi()
+
+  get_target_property(aoe_zlib_location ZLIB::ZLIB IMPORTED_LOCATION)
+  if(NOT aoe_zlib_location)
+    get_target_property(aoe_zlib_location ZLIB::ZLIB IMPORTED_LOCATION_RELEASE)
+  endif()
+  if(aoe_zlib_location)
+    aoe_verify_vita_elf("Vita zlib" "${aoe_zlib_location}")
+  else()
+    message(FATAL_ERROR "Cannot resolve the Vita zlib ELF for ABI validation")
+  endif()
+endif()
+
 add_library(aoe_dat STATIC src/dat.c src/dat_units.c src/dat_tech.c)
 target_include_directories(aoe_dat PUBLIC include)
 target_link_libraries(aoe_dat PUBLIC ZLIB::ZLIB)

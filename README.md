@@ -22,6 +22,7 @@ The status illustration below is a reproducible estimate of the **full port**, n
 - [Build and test](#build-and-test) — get the host regression suite running.
 - [Project map](#project-map) — find runtime code, tests, reverse-engineering evidence, and generated exports.
 - [Architecture](docs/ARCHITECTURE.md) — understand how the source, tests, binary evidence, and GenieVita boundary fit together.
+- [Related projects](docs/RELATED_PROJECTS.md) — clean-room Genie/AoE reconstruction research and boundaries.
 - [Documentation guide](docs/README.md) — browse the technical notes by topic.
 - [DeepSeek tool audit](docs/DEEPSEEK_TOOL_AUDIT.md) — disposition of the supplied helper code and the corrections integrated from it.
 - [Roadmap](TODO.md) — milestones and current blockers.

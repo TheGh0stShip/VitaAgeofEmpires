@@ -295,6 +295,37 @@ typedef struct {
 int aoe_live_unit_building_foundation_bounds_ror(
     const AoeLiveUnit *unit, AoeBuildingFoundationBounds *bounds);
 
+/* Semantic view of the selected-object entries visited by derived RoR player
+   vtable 0054ee68 +0x104 -> 004f4fc0 -> 004ba540. These are portable fields,
+   not the original GUI-node layout. */
+typedef struct AoeBuildingCompletionUiEntryRor {
+    struct AoeBuildingCompletionUiEntryRor *next;
+    int16_t template_id;
+    int32_t completion_key;
+    int32_t object_id;
+    const char *display_name;
+    uint8_t active;
+    uint8_t completed;
+} AoeBuildingCompletionUiEntryRor;
+
+typedef struct {
+    AoeBuildingCompletionUiEntryRor *head;
+    uint32_t *wonder_completed;
+    char selected_name[63];
+    int32_t selected_completion_key;
+    void *refresh_context;
+    void (*refresh)(void *context);
+} AoeBuildingCompletionUiRor;
+
+/* Exact data/control portion of 004ba540. A null UI matches the outer
+   player's null +0x23c branch and has no effect. A present UI updates only
+   the first matching incomplete entry, then always requests the original
+   summary rebuild through `refresh`. `selected_name` deliberately has the
+   original 63-byte strncpy semantics and may not be NUL-terminated. */
+int aoe_live_unit_owner_complete_ui_ror(
+    AoeBuildingCompletionUiRor *ui, const AoeLiveUnit *unit,
+    uint32_t completion_value);
+
 typedef struct {
     void *context;
     void (*spawn_stack_unit)(void *context, AoeLiveUnit *unit,

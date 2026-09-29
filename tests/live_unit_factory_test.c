@@ -160,6 +160,9 @@ static void completion_owner(void *context,AoeLiveUnit *unit,
     assert(unit->building_completed && completion_value==0x12345678u);
     completion_event(context,'O');
 }
+static void completion_ui_refresh(void *context) {
+    unsigned *calls=context; ++*calls;
+}
 static void building_action_destroy(void *context,void *action) {
     assert(action==(void *)0x5678); building_high_event(context,'D');
 }
@@ -636,6 +639,31 @@ int main(void) {
     assert(aoe_live_unit_building_foundation_bounds_ror(&live,&foundation));
     assert(foundation.x0==0 && foundation.y0==1 &&
            foundation.x1==3 && foundation.y1==2);
+    unsigned ui_refreshes=0;
+    uint32_t wonder_completed=0;
+    AoeBuildingCompletionUiEntryRor ui_match={
+        .template_id=109,.completion_key=0x12345678,
+        .object_id=-1,.display_name="Town Center"};
+    AoeBuildingCompletionUiEntryRor ui_miss={
+        .next=&ui_match,.template_id=276,.completion_key=0x12345678,
+        .object_id=-1,.display_name="Wonder"};
+    AoeBuildingCompletionUiRor completion_ui={
+        .head=&ui_miss,.wonder_completed=&wonder_completed,
+        .selected_completion_key=-1,.refresh_context=&ui_refreshes,
+        .refresh=completion_ui_refresh};
+    assert(aoe_live_unit_owner_complete_ui_ror(
+        &completion_ui,&live,0x12345678u));
+    assert(ui_refreshes==1 && ui_match.completed && !ui_miss.completed &&
+           ui_match.object_id==live.core.unit_id && !wonder_completed &&
+           completion_ui.selected_completion_key==0x12345678 &&
+           !strcmp(completion_ui.selected_name,"Town Center"));
+    unit.id=276;
+    completion_ui.head=&ui_miss;
+    assert(aoe_live_unit_owner_complete_ui_ror(
+        &completion_ui,&live,0x12345678u));
+    assert(ui_refreshes==2 && ui_miss.completed && wonder_completed==1);
+    unit.id=109;
+    assert(aoe_live_unit_owner_complete_ui_ror(NULL,&live,0x12345678u));
     completion=(BuildingCompletionTrace){0};
     AoeBuildingCompletionWorldOps world_completion={
         .context=&completion,.spawn_stack_unit=completion_spawn,

@@ -695,6 +695,42 @@ int aoe_live_unit_building_foundation_bounds_ror(
            completion_edge(y+size_y-0.001,&bounds->y1);
 }
 
+int aoe_live_unit_owner_complete_ui_ror(
+    AoeBuildingCompletionUiRor *ui, const AoeLiveUnit *unit,
+    uint32_t completion_value) {
+    AoeBuildingCompletionUiEntryRor *entry;
+    int32_t key;
+    if (!unit || !unit->constructed || !unit->core.unit_template)
+        return 0;
+    if (!ui) return 1;
+    if (!ui->refresh) return 0;
+    memcpy(&key,&completion_value,sizeof(key));
+    for (entry=ui->head;entry;entry=entry->next) {
+        if (entry->template_id == unit->core.unit_template->id &&
+            !entry->active && key != -1 && entry->completion_key == key) {
+            if (!entry->display_name) return 0;
+            entry->active=0;
+            entry->completed=1;
+            entry->object_id=unit->core.unit_id;
+            if (entry->template_id == 0x114 && ui->wonder_completed)
+                *ui->wonder_completed=1;
+            {
+                size_t copied=0;
+                while (copied < sizeof(ui->selected_name) &&
+                       entry->display_name[copied])
+                    ++copied;
+                memcpy(ui->selected_name,entry->display_name,copied);
+                memset(ui->selected_name+copied,0,
+                       sizeof(ui->selected_name)-copied);
+            }
+            ui->selected_completion_key=entry->completion_key;
+            break;
+        }
+    }
+    ui->refresh(ui->refresh_context);
+    return 1;
+}
+
 int aoe_live_unit_building_completion_world_ror(
     AoeLiveUnit *unit, const AoeBuildingCompletionWorldOps *ops) {
     const DatUnit *unit_template;

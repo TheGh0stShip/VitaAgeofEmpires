@@ -333,3 +333,16 @@ inherited live-action list and detaches both semantic pointers. Preflight
 rejects missing list methods, queue deallocation, or status-counter
 dependencies before mutation. This makes scenario-owned arrays safe to add
 without hiding action destruction behind no-op callbacks.
+
+The owner-finalization virtual is no longer misattributed to the base player
+vtable. Gameplay player construction calls base `0045c390/0045c650` and then
+overwrites vtable `00549c70` with derived vtable `0054ee68`; its `+0x104`
+entry is the two-argument `004f4fc0`, not base entry `004603a0` (a four-arg
+GUI rectangle thunk). The derived method conditionally forwards through the
+player's `+0x23c` UI pointer to `004ba540`. The new
+`aoe_live_unit_owner_complete_ui_ror` translates that routine's data/control
+behavior: find the first inactive entry matching template ID and nonnegative
+completion key, mark it complete, bind the live object ID, set the Wonder-276
+flag, retain the original 63-byte name-copy behavior, and rebuild the summary.
+A null UI is the exact headless outer branch and performs no effect. Tests pin
+matching, nonmatching, refresh, object-ID, name, and headless behavior.

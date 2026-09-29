@@ -324,3 +324,12 @@ and binds live actions `+0x184` separately from production actions `+0x1cc`.
 The storage remains explicitly caller-owned; it must outlive the live unit and
 be cleaned/detached in original order. The completion integration test now
 uses this binding instead of fabricating fields.
+
+That lifetime now has a translated teardown boundary rather than a prose-only
+requirement. `aoe_live_unit_unbind_building_update_ror` runs the type-80
+`004ae110` production-list/queue cleanup first, including caller-supplied
+deallocation and status-4 counter maintenance, then clears the distinct
+inherited live-action list and detaches both semantic pointers. Preflight
+rejects missing list methods, queue deallocation, or status-counter
+dependencies before mutation. This makes scenario-owned arrays safe to add
+without hiding action destruction behind no-op callbacks.

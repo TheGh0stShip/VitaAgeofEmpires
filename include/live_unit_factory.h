@@ -187,6 +187,15 @@ int aoe_live_unit_bind_building_update_ror(
     AoePlayerResources owner_resources, int16_t owner_id,
     uint32_t completion_value);
 
+/* Symmetric type-80 teardown for caller-owned semantic storage. Clears the
+   production list and queue allocation through translated 004ae110, then
+   clears the inherited live-action list before detaching both live pointers.
+   A queue allocation requires the matching caller deallocator; status 4
+   requires its owner counter. Storage itself remains caller-owned. */
+int aoe_live_unit_unbind_building_update_ror(
+    AoeLiveUnit *unit, uint32_t *owner_queue_status_four_count,
+    void *deallocator_context, void (*deallocate)(void *, void *));
+
 typedef struct {
     AoeLiveUnitRootHighStateOps root_high;
     AoeLiveUnitMiddleActionHooks root_middle_action;

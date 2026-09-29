@@ -435,6 +435,30 @@ int aoe_live_unit_bind_building_update_ror(
     return 1;
 }
 
+int aoe_live_unit_unbind_building_update_ror(
+    AoeLiveUnit *unit, uint32_t *owner_queue_status_four_count,
+    void *deallocator_context, void (*deallocate)(void *, void *)) {
+    AoeBuildingUpdate *building;
+    if (!unit || !unit->building_update ||
+        unit->derived_action_list != unit->building_update->live_actions)
+        return 0;
+    building=unit->building_update;
+    if (!aoe_action_list_valid(building->live_actions) ||
+        !aoe_action_list_valid(building->queue_actions) ||
+        (building->queue_entries && !deallocate) ||
+        (building->queue_status == 4 && !owner_queue_status_four_count))
+        return 0;
+    if (!aoe_building_cleanup_type80_ror(
+            building,owner_queue_status_four_count,deallocator_context,
+            deallocate) ||
+        !aoe_action_list_clear(building->live_actions))
+        return 0;
+    unit->derived_action_list=NULL;
+    unit->building_update=NULL;
+    unit->building_completion_value=0;
+    return 1;
+}
+
 int aoe_live_unit_scenario_dispatch_ror(
     AoeLiveUnit *unit, uint8_t scenario_state, float rotation,
     const AoeLiveUnitScenarioDispatchOps *ops) {

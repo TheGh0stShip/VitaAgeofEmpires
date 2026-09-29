@@ -166,6 +166,9 @@ static void building_action_destroy(void *context,void *action) {
 static void building_action_state(void *context,void *action,uint8_t state) {
     (void)context;(void)action;(void)state;assert(0);
 }
+static void building_queue_deallocate(void *context,void *allocation) {
+    building_high_event(context,'F'); free(allocation);
+}
 
 static void update_event(UpdateStateTrace *trace, char event) {
     assert(trace->count < sizeof(trace->events));
@@ -684,8 +687,24 @@ int main(void) {
     assert(completion.count==9 && !memcmp(completion.events,"LPASFIRNO",9));
     assert(live.core.state==2 && building.state==2 &&
            live.building_completed && rng.state==41);
-    live.building_update=NULL;
-    live.derived_action_list=NULL;
+    AoeActionNode *completion_live_node=malloc(sizeof(*completion_live_node));
+    AoeActionNode *completion_queue_node=malloc(sizeof(*completion_queue_node));
+    assert(completion_live_node && completion_queue_node);
+    *completion_live_node=(AoeActionNode){(void *)0x5678,NULL};
+    *completion_queue_node=(AoeActionNode){(void *)0x5678,NULL};
+    completion_live_actions.head=completion_live_node;
+    completion_queue_actions.head=completion_queue_node;
+    building.queue_entries=malloc(sizeof(*building.queue_entries));
+    assert(building.queue_entries);
+    building.queue_capacity=1;
+    high=(BuildingHighTrace){0};
+    completion_live_actions.ops.context=&high;
+    completion_queue_actions.ops.context=&high;
+    assert(aoe_live_unit_unbind_building_update_ror(
+        &live,&status_four_count,&high,building_queue_deallocate));
+    assert(high.count==3 && !memcmp(high.events,"DFD",3) &&
+           !live.building_update && !live.derived_action_list &&
+           !live.building_completion_value && !building.queue_entries);
     aoe_live_unit_destroy_ror(&live,&owner,&world,&vision);
     aoe_owned_visibility_registry_destroy(&world);
     return 0;

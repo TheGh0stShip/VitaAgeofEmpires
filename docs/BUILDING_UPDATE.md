@@ -215,3 +215,14 @@ Town Center (109) decodes research 105 and completion sound 185; its Wonder
 byte in the 16-byte serialized building tail. The setter's world, terrain,
 research, visibility and owner callbacks still require translation before
 these values are applied to live objects.
+
+The setter's queue-transition subroutine is now translated as
+`aoe_building_state_queue_transition_ror`. It runs only for a requested state
+above 2 when the old state is above 1 and the queue is nonempty. Status 4 is
+cleared, its unsigned owner counter is decremented, and the complete head
+quantity is cancelled. Other statuses cancel `head quantity - 1`, deliberately
+leaving one item. A quantity of one therefore passes zero to 004af680: no
+refund or removal occurs, but the queue revision increments and event 124 is
+still emitted. The portable queue primitive accepts that evidenced zero case
+while continuing to reject negative counts; malformed nonpositive stored
+quantities are outside the semantic API.

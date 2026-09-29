@@ -240,7 +240,12 @@ skipped by the DAT parser: adjacent mode, disappear-on-build, stack unit,
 old terrain, automatic research, and completion sound, alongside the already
 parsed construction graphic, angle, and foundation terrain. Synthetic byte
 offset assertions and real disc RoR Town Center/Wonder values validate the
-16-byte serialized tail. The setter effects themselves remain unported.
+16-byte serialized tail. The setter's terminal queue branch is now translated:
+for new state above 2 and old state above 1 it cancels the whole head under
+status 4 (after clearing/decrementing that status), otherwise quantity minus
+one so a single item remains. The zero-amount case still increments revision
+and emits event 124, matching both executables. Completion/world effects and
+the inherited state change still remain unported.
 The production-list virtual update is now verified through its factory and
 vtable and translated as `aoe_action_list_update_ror` (004043c0). Production
 calls it directly. Preserve its automatic result-1 pop followed by the

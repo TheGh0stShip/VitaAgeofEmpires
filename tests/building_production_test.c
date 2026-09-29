@@ -171,6 +171,28 @@ int main(void) {
         assert(aoe_building_queue_cancel_ror(&f.b,20,1,&f.count,&cancel_ops));
         assert(!f.n);
         assert(!aoe_building_queue_cancel_ror(&f.b,20,-1,&f.count,&cancel_ops));
+        init(&f); f.b.state=2; f.entries[0].quantity=3;
+        f.b.queue_count=1; f.b.queue_revision=9;
+        assert(aoe_building_state_queue_transition_ror(
+            &f.b,3,&f.count,&cancel_ops));
+        const int preserve_one[]={8,8,7}; expect(&f,preserve_one,3);
+        assert(f.b.queue_count==1 && f.entries[0].quantity==1);
+        assert(f.b.queue_revision==10 && f.b.queue_status==-1);
+        f.entries[0].quantity=1; f.n=0;
+        assert(aoe_building_state_queue_transition_ror(
+            &f.b,3,&f.count,&cancel_ops));
+        expect(&f,miss,1); /* amount zero still revises and notifies */
+        assert(f.b.queue_count==1 && f.entries[0].quantity==1);
+        assert(f.b.queue_revision==11);
+        f.b.queue_status=4; f.count=1; f.n=0;
+        assert(aoe_building_state_queue_transition_ror(
+            &f.b,3,&f.count,&cancel_ops));
+        const int remove_last[]={8,7}; expect(&f,remove_last,2);
+        assert(f.b.queue_count==0 && f.b.queue_status==-1 && f.count==0);
+        init(&f); f.b.state=1; f.n=0;
+        assert(aoe_building_state_queue_transition_ror(
+            &f.b,3,&f.count,&cancel_ops));
+        assert(f.b.queue_count==3 && !f.n);
     }
     /* Exercise the real update -> production -> pop -> consume composition. */
     init(&f); f.action_result=1;

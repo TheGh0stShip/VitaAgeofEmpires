@@ -58,7 +58,7 @@ int aoe_building_queue_cancel_ror(AoeBuildingUpdate *b, int16_t unit_id,
     int16_t new_quantity;
     int refund_count;
     if (!b || !count || !ops || !ops->refund_one || !ops->notify ||
-        amount <= 0 || !entries_valid(b) ||
+        amount < 0 || !entries_valid(b) ||
         !aoe_action_list_valid(b->queue_actions)) return 0;
     if (!b->queue_count) return 1;
     for (int i=b->queue_count-1; i>=0; --i) {
@@ -93,6 +93,24 @@ int aoe_building_queue_cancel_ror(AoeBuildingUpdate *b, int16_t unit_id,
     }
     ops->notify(ops->context,124,b->owner_id,0);
     return 1;
+}
+int aoe_building_state_queue_transition_ror(
+    AoeBuildingUpdate *b, uint8_t new_state, uint32_t *count,
+    const AoeBuildingQueueCancelOps *ops) {
+    int16_t amount;
+    if (!b || !count || !ops) return 0;
+    if (new_state <= 2 || b->state <= 1 || b->queue_count <= 0) return 1;
+    if (!entries_valid(b)) return 0;
+    if (b->queue_status == 4) {
+        b->queue_status=-1;
+        --*count;
+        amount=b->queue_entries[0].quantity;
+    } else {
+        amount=(int16_t)((uint16_t)b->queue_entries[0].quantity-1u);
+    }
+    if (amount < 0) return 0;
+    return aoe_building_queue_cancel_ror(
+        b,b->queue_entries[0].unit_id,amount,count,ops);
 }
 int aoe_building_production_ror(AoeBuildingUpdate *b, uint32_t *count,
                                 const AoeBuildingProductionOps *ops) {

@@ -126,7 +126,7 @@ int aoe_building_cleanup_type80_ror(
    Does not clear the now-unused trailing entry, matching the original. */
 int aoe_building_queue_consume_ror(AoeBuildingUpdate *building,
                                     const AoeBuildingProductionOps *ops);
-/* Disc RoR 004af680 / patched 1.0a 004add50 for positive removal counts.
+/* Disc RoR 004af680 / patched 1.0a 004add50 for nonnegative removal counts.
    Searches from the queue tail, refunds min(quantity, amount), applies the
    original wrapping 16-bit subtraction, removes an exhausted entry, and
    clears queue actions/status when the head is removed. Event 124 is sent
@@ -135,6 +135,15 @@ int aoe_building_queue_cancel_ror(AoeBuildingUpdate *building,
                                    int16_t unit_id, int16_t amount,
                                    uint32_t *owner_status_four_count,
                                    const AoeBuildingQueueCancelOps *ops);
+/* Queue branch of disc type-80 setter 004ae500 / patched 004acbf0. For a
+   transition above state 2 from an old state above 1, preserve one head item
+   normally, but remove the whole head and clear/decrement status 4. This is
+   the exact queue subroutine, not the setter's completion/world effects or
+   inherited state change. */
+int aoe_building_state_queue_transition_ror(
+    AoeBuildingUpdate *building, uint8_t new_state,
+    uint32_t *owner_status_four_count,
+    const AoeBuildingQueueCancelOps *ops);
 /* 004af900–004afb3a. Directly composes list push/pop and queue consumption.
    Valid finite owner resources are required on the empty-action gate.
    The original disc and 1.0a code pass -1 to their signed-subtract cancel

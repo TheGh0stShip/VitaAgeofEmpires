@@ -4,6 +4,24 @@
 #include <assert.h>
 #include <string.h>
 
+typedef struct {
+    unsigned calls;
+    uint32_t x, y;
+    uint8_t old_terrain;
+    int16_t filter_terrain;
+} PaintTrace;
+
+static void paint_transition(void *context, uint32_t x, uint32_t y,
+                             uint8_t old_terrain,
+                             int16_t filter_terrain) {
+    PaintTrace *trace = context;
+    ++trace->calls;
+    trace->x = x;
+    trace->y = y;
+    trace->old_terrain = old_terrain;
+    trace->filter_terrain = filter_terrain;
+}
+
 int main(void) {
     ScnTile scenario_tiles[9] = {0};
     ScnMap scenario = {.width = 3, .height = 3,
@@ -11,8 +29,8 @@ int main(void) {
     DatMapGeometry geometry = {.tile_half_width = 32,
                                .tile_half_height = 16,
                                .elevation_height = 16};
-    DatTerrain terrain = {0};
-    DatTerrains terrains = {.count = 1, .terrains = &terrain};
+    DatTerrain terrain[2] = {{0}};
+    DatTerrains terrains = {.count = 2, .terrains = terrain};
     DatBorder border = {0};
     DatBorders borders = {.count = 1, .borders = &border};
     AoeRuntimeMap map = {0};
@@ -22,6 +40,8 @@ int main(void) {
     AoeLiveUnitPlacement placement = {0};
     int32_t relations[1] = {1};
     AoeLiveUnitVisionBinding binding = {0};
+    PaintTrace paint = {0};
+    AoeRuntimeTerrainPaintOps paint_ops = {&paint, paint_transition};
     scenario_tiles[1].elevation = 1;
     assert(aoe_runtime_map_from_scenario(&map, &scenario, &geometry,
                                           &terrains, &borders));
@@ -42,6 +62,21 @@ int main(void) {
     memset(map.cache_flags, 0, 9);
     assert(aoe_runtime_map_invalidate_ror(&map, -4, -3, -2, 8, 0));
     for (size_t i = 0; i < 9; ++i) assert(map.cache_flags[i] == 0);
+    terrain[1].enabled = 1;
+    for (unsigned shape = 0; shape < 19; ++shape)
+        terrain[1].elevation_frames[shape].frame_count = 1;
+    terrain[1].elevation_frames[6].frame_count = 0;
+    assert(aoe_runtime_map_paint_terrain_ror(
+        &map, &terrains, &borders, 1, 1, 1, 1, 1, 0, &paint_ops));
+    assert(paint.calls == 0 && map.tiles[4].terrain_id == 0);
+    terrain[1].elevation_frames[6].frame_count = 1;
+    assert(aoe_runtime_map_paint_terrain_ror(
+        &map, &terrains, &borders, 1, 1, 1, 1, 1, 0, &paint_ops));
+    assert(paint.calls == 1 && paint.x == 1 && paint.y == 1 &&
+           paint.old_terrain == 0 && paint.filter_terrain == 0 &&
+           map.tiles[4].terrain_id == 1);
+    for (size_t i = 0; i < 9; ++i)
+        assert(map.cache_flags[i] == 0xcc && map.draw_flags[i] == 0);
     assert(aoe_player_vision_state_init(&player, &map.masks, 0));
     assert(aoe_runtime_map_bind_player_vision(&map, &player, 1));
     binding.owner_grid = &player.grid;

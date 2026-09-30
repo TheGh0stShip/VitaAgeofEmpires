@@ -283,9 +283,13 @@ layer retains its injection point to avoid a library dependency cycle.
 Map invalidation after foundation paint is also translated and bound:
 `aoe_runtime_map_invalidate_ror` implements `00445760`'s reversed-bound
 normalization, clipping, cache byte `+7 = 0xcc`, and draw byte `+10` update.
-The bytes use distinct host arrays, not the packed x86 tile ABI. Do not reduce
-the remaining `00449110` paint path to tile-ID writes: its `004481b0` calls
-remove/spawn live objects from terrain records that are not parsed yet.
+The bytes use distinct host arrays, not the packed x86 tile ABI.
+`aoe_runtime_map_paint_terrain_ror` now translates `00449110`'s deterministic
+availability, signed-16 clipping, shape/frame admission, terrain writes,
+expanded border recomputation, and internal invalidation. Its per-cell
+`004481b0` hook remains mandatory because live-object removal and spawning are
+not bound yet. The terrain-unit arrays are already parsed at disk offsets
+`+254/+314/+374/+404`.
 Completion visibility and graphic selection are no longer callback-only.
 Vtable resolution proves type-80 `+0xdc` is leave handler `004ac380` in
 alternate rectangle mode 1, while `+0xd8` is wrapper `004ae980`; after

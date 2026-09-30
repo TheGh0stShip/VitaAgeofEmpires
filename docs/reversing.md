@@ -1933,8 +1933,13 @@ The post-paint invalidator `00445760` is independently complete. It swaps
 reversed signed bounds, clips them to the map, then writes `0xcc` to tile byte
 `+7` and its argument to tile byte `+10` over the inclusive rectangle.
 `aoe_runtime_map_invalidate_ror` preserves those bytes in separate semantic
-arrays and the scenario completion adapter supplies draw value zero. This is
-not yet terrain painting: `00449110` invokes `004481b0` for eligible cells,
-including terrain-record-driven live-object removal and spawning, before
-border recomputation and invalidation. Those unparsed records remain the
-painting boundary.
+arrays and the scenario completion adapter supplies draw value zero. The
+surrounding deterministic paint body is now
+`aoe_runtime_map_paint_terrain_ror`: it preserves signed-16 coordinates,
+target availability/replacement admission, the target terrain's positive
+frame-count gate for each existing elevation-shape byte, accepted terrain-ID
+writes, one-tile expansion, `004496b0` border recomputation, and invalidation.
+Each accepted write requires an explicit `004481b0` transition callback.
+Its terrain-unit IDs, densities, placement flags, and count are already
+parsed at DAT record `+254/+314/+374/+404`; only live-object transitions and
+spawning remain.

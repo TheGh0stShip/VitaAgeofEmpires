@@ -387,6 +387,11 @@ reversed inclusive bounds, reject wholly disjoint rectangles, clamp partial
 overlap, write cache byte `+7 = 0xcc`, and write draw byte `+10`. The scenario
 binding supplies completion's zero draw value. Cache byte `+7` is retained in
 its own byte array rather than pretending the host has the original packed
-24-byte x86 tile layout. Painting itself remains explicit: `00449110` calls
-`004481b0`, whose terrain-dependent object removal/spawn records are not yet
-parsed, so a direct terrain-ID fill would be incomplete.
+24-byte x86 tile layout. The deterministic shell of painting is now
+`aoe_runtime_map_paint_terrain_ror`: target availability, signed-16 bound
+handling, per-elevation-shape frame admission, terrain writes, one-cell border
+recomputation, and internal invalidation match `00449110`. Its mandatory
+per-cell transition hook preserves the remaining `004481b0` behavior. The
+terrain-unit IDs, densities, placement modes, and used count were confirmed
+already parsed from disk offsets `+254/+314/+374/+404`; remaining work is the
+live-object removal/state transition and spawn behavior.

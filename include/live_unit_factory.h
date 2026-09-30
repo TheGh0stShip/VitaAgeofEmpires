@@ -34,8 +34,10 @@ typedef struct {
     /* Original live +0x64 pointer, +0x68 active count, +0x70 capacity.
        Entries are world unit IDs pruned by the common +0x24 update. */
     int32_t *dependent_unit_ids;
-    size_t dependent_unit_count;
-    size_t dependent_unit_capacity;
+    uint32_t dependent_unit_count;
+    uint32_t dependent_unit_capacity;
+    int32_t dependent_source_id; /* original live +0x78 */
+    uint32_t dependent_context_bits; /* opaque original 32-bit +0x80 */
     /* Semantic equivalent of the type-20 base live field at RoR +0x88.
        Its constructors at 0x00415770/0x00415790 initialize it to zero; live
        action/state methods subsequently change it. */
@@ -61,6 +63,16 @@ int aoe_live_unit_tick_sprites_ror(AoeLiveUnit *unit, float world_delta);
 int aoe_live_unit_update_prelude_ror(
     AoeLiveUnit *unit, AoePlayerUpdateState *owner,
     AoeOwnedVisibilityRegistry *world, int *handled);
+
+/* Patched RoR 004abc70/004abc80. Replaces the +0x64 dependency-ID vector,
+   ignoring negative and duplicate IDs, while retaining its allocation for
+   later calls. `source_id` and `context_bits` preserve the exact 32-bit
+   fields written at +0x78/+0x80; context bits are not a host pointer. A
+   negative count follows the executable's empty-success branch. */
+int aoe_live_unit_has_dependencies_ror(const AoeLiveUnit *unit);
+int aoe_live_unit_set_dependencies_ror(
+    AoeLiveUnit *unit, const int32_t *unit_ids, int32_t count,
+    int32_t source_id, uint32_t context_bits);
 
 typedef struct {
     void *context;

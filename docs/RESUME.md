@@ -86,6 +86,12 @@ paths, state 7→8, and state 8's template-`+0xa4` result. The DAT parser now
 retains template undead graphic/mode (`+0x20/+0x24`), decay rate (`+0x80`),
 and selection/dying sound IDs (the latter resolves to runtime `+0x44`).
 `aoe_live_unit_update_predicate_ror` composes all three portions.
+The vector's patched writer `004abc80` is now translated too:
+`aoe_live_unit_set_dependencies_ror` resets the active count, ignores negative
+and duplicate IDs, retains/grows its allocation one explicit 32-bit element at
+a time, and preserves source `+0x78` plus opaque 32-bit context bits `+0x80`.
+Counts/capacity no longer inherit host `size_t`; they are `uint32_t`, and the
+allocation gate retains the original/Vita 32-bit byte domain on LP64 hosts.
 `aoe_live_unit_player_update_step_ror` binds it into actual player +0x7c
 object-list traversal by matching listed `+0x38` references against an
 explicit owned-unit roster; unrelated list objects still go through required

@@ -298,18 +298,39 @@ int main(void) {
                                         terrain, tiles, &geometry,
                                         4, 4, &vision, &rng,
                                         3.25f, 2.25f, 0.0f));
-    live.dependent_unit_ids = malloc(3 * sizeof(*live.dependent_unit_ids));
-    assert(live.dependent_unit_ids);
-    live.dependent_unit_capacity = live.dependent_unit_count = 3;
-    live.dependent_unit_ids[0] = other.core.unit_id;
-    live.dependent_unit_ids[1] = live.core.unit_id;
-    live.dependent_unit_ids[2] = 999999;
+    int32_t dependency_ids[] = {
+        other.core.unit_id, -1, live.core.unit_id,
+        other.core.unit_id, 999999};
+    int32_t repeated_dependency_ids[] = {
+        live.core.unit_id, live.core.unit_id};
+    assert(!aoe_live_unit_has_dependencies_ror(&live));
+    assert(aoe_live_unit_set_dependencies_ror(
+        &live, dependency_ids, 5, 1234, UINT32_C(0x3f800000)));
+    assert(aoe_live_unit_has_dependencies_ror(&live) &&
+           live.dependent_unit_count == 3 &&
+           live.dependent_unit_capacity == 3 &&
+           live.dependent_unit_ids[0] == other.core.unit_id &&
+           live.dependent_unit_ids[1] == live.core.unit_id &&
+           live.dependent_unit_ids[2] == 999999 &&
+           live.dependent_source_id == 1234 &&
+           live.dependent_context_bits == UINT32_C(0x3f800000));
     other.core.state = 3;
     int handled = -1;
     assert(aoe_live_unit_update_prelude_ror(
         &live, &owner, &world, &handled));
     assert(!handled && live.dependent_unit_count == 1 &&
            live.dependent_unit_ids[0] == live.core.unit_id);
+    assert(aoe_live_unit_set_dependencies_ror(
+        &live, repeated_dependency_ids, 2, -5, UINT32_C(0x40000000)) &&
+        live.dependent_unit_count == 1 &&
+        live.dependent_unit_capacity == 3 &&
+        live.dependent_unit_ids[0] == live.core.unit_id);
+    assert(aoe_live_unit_set_dependencies_ror(
+        &live, dependency_ids, -1, -7, UINT32_C(0x40400000)) &&
+        !aoe_live_unit_has_dependencies_ror(&live) &&
+        live.dependent_unit_capacity == 3 &&
+        live.dependent_source_id == -7 &&
+        live.dependent_context_bits == UINT32_C(0x40400000));
     other.core.state = 2;
     aoe_live_unit_destroy_ror(&other, &owner, &world, &vision);
 

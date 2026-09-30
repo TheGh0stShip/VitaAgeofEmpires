@@ -106,6 +106,48 @@ int aoe_live_unit_update_prelude_ror(
     return 1;
 }
 
+int aoe_live_unit_has_dependencies_ror(const AoeLiveUnit *unit) {
+    return unit && unit->dependent_unit_count != 0;
+}
+
+int aoe_live_unit_set_dependencies_ror(
+    AoeLiveUnit *unit, const int32_t *unit_ids, int32_t count,
+    int32_t source_id, uint32_t context_bits) {
+    if (!unit || !unit->constructed || !unit_ids || count == 0 ||
+        unit->dependent_unit_count > unit->dependent_unit_capacity ||
+        (unit->dependent_unit_capacity && !unit->dependent_unit_ids))
+        return 0;
+    unit->dependent_unit_count = 0;
+    for (int32_t read = 0; read < count; ++read) {
+        int32_t id = unit_ids[read];
+        uint32_t write;
+        int32_t *grown;
+        if (id < 0) continue;
+        for (write = 0; write < unit->dependent_unit_count; ++write)
+            if (unit->dependent_unit_ids[write] == id) break;
+        if (write != unit->dependent_unit_count) continue;
+        if (unit->dependent_unit_count == unit->dependent_unit_capacity) {
+            uint32_t capacity = unit->dependent_unit_count + 1u;
+            /* Preserve the original 32-bit allocation-size domain even on
+               an LP64 host. */
+            if (capacity > UINT32_MAX / sizeof(*grown)) return 0;
+            grown = malloc((size_t)capacity * sizeof(*grown));
+            if (!grown) return 0;
+            if (unit->dependent_unit_capacity)
+                memcpy(grown, unit->dependent_unit_ids,
+                       (size_t)unit->dependent_unit_capacity *
+                           sizeof(*grown));
+            free(unit->dependent_unit_ids);
+            unit->dependent_unit_ids = grown;
+            unit->dependent_unit_capacity = capacity;
+        }
+        unit->dependent_unit_ids[unit->dependent_unit_count++] = id;
+    }
+    unit->dependent_source_id = source_id;
+    unit->dependent_context_bits = context_bits;
+    return 1;
+}
+
 int aoe_live_unit_update_attached_target_ror(
     AoeLiveUnit *unit, const AoeLiveUnitUpdateTargetOps *ops, int *handled) {
     AoeLiveUnitCore *target;
@@ -357,6 +399,8 @@ int aoe_live_unit_construct_ror(
        state, this object cannot be assembled in a temporary then copied. */
     memset(out, 0, sizeof(*out));
     out->runtime_owner_index = -1;
+    out->dependent_source_id = -1;
+    out->dependent_context_bits = UINT32_C(0x40a00000);
     if (!aoe_sprite_runtime_init(&out->sprites, rng, 0, 0, 0) ||
         !aoe_live_unit_core_begin(unit_template, owner_resources,
                                   AOE_PLAYER_RISE_OF_ROME, world,

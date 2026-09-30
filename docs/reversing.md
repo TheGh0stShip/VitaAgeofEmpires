@@ -780,6 +780,21 @@ by `common_cleanup`; type 80 uses its translated building-queue prefix, the
 same inherited action-list prefix, then `common_cleanup`; root classes call
 `common_cleanup` directly.
 
+The dependency vector feeding that update path now has its recovered writer,
+not only its pruning reader. Patched RoR `004abc70/004abc80` tests whether
+live `+0x68` is nonzero, then replaces the `+0x64` ID array: active count is
+reset, negative IDs are skipped, the first occurrence of each nonnegative ID
+is retained, capacity grows by exactly one 32-bit element when needed, and
+the two supplied 32-bit values are stored at `+0x78/+0x80`. A negative input
+count takes the executable's empty-success branch; a null array or zero count
+fails before mutation. `aoe_live_unit_set_dependencies_ror` preserves those
+rules while failing safely on allocation failure. The second trailing field
+remains opaque 32-bit bits rather than being widened to or interpreted as a
+host pointer. Active count and capacity are now `uint32_t`, and allocation
+overflow is checked against the Vita/original 32-bit byte domain even when
+tests run on an LP64 host. The common constructor initializes `+0x78 = -1`
+and the exact `+0x80 = 0x40a00000` bit pattern.
+
 The type-40–70 prefix is now composed by
 `aoe_live_unit_cleanup_derived_prefix_ror`: when semantic live `+0x184` is
 present, it drains the list through `aoe_action_list_clear` (`0x00403e70`),

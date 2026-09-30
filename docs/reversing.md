@@ -1984,3 +1984,13 @@ tile `+7 = 0xcc` and `+10 = 0`. This preserves the recovered ordering:
 table. Because installed foundation terrains 7/8/9 contain no entries, the
 test separately invokes the placement/create adapter with a terrain-0 DAT
 entry. The resulting scenario constructs and ticks 3,812 live units.
+
+`aoe_scenario_runtime_building_completion_world_ops_ror` now closes the
+integration boundary between this owned paint path and type-80 completion. It
+installs the owned stack factory, complete 00449110/004481b0 painter, and the
+caller's following expanded 00445760 invalidation. Research and derived-player
+UI state remain caller-selected. The runtime-specific paint callback returns a
+status so unsupported removal/creation is not silently accepted; its wrapper
+still lets the recovered generic continuation execute subsequent effects in
+their original order before reporting the accumulated failure. The real
+campaign test reaches painting through this installed callback.

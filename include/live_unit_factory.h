@@ -356,9 +356,9 @@ typedef struct {
     void *context;
     void (*spawn_stack_unit)(void *context, AoeLiveUnit *unit,
                              int16_t unit_id, float x, float y, float z);
-    void (*paint_foundation)(void *context, AoeLiveUnit *unit,
-                             const AoeBuildingFoundationBounds *bounds,
-                             uint8_t terrain_id);
+    int (*paint_foundation)(void *context, AoeLiveUnit *unit,
+                            const AoeBuildingFoundationBounds *bounds,
+                            uint8_t terrain_id);
     void (*invalidate_foundation)(void *context, AoeLiveUnit *unit,
                                   int32_t x0, int32_t y0,
                                   int32_t x1, int32_t y1);
@@ -372,7 +372,9 @@ void aoe_live_unit_building_completion_event_ror(
     uint32_t event, int16_t owner_id, int16_t unit_id, int32_t x, int32_t y);
 
 /* Binds the inert event slot and derived player +0x104 to their translated
-   routines. A null owner_ui is the original headless branch. */
+   routines. A null owner_ui is the original headless branch. Unlike the
+   original void world callback, the runtime paint adapter reports failure so
+   an unsupported owned removal/creation cannot be accepted silently. */
 int aoe_live_unit_building_completion_world_runtime_ror(
     AoeLiveUnit *unit, const AoeBuildingCompletionWorldRuntimeOps *ops);
 

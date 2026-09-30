@@ -442,3 +442,14 @@ the target terrain before 004481b0 consults its terrain-unit table, and the
 installed foundation terrains have no entries. A separate DAT-selected
 terrain-decoration creation keeps the general Gaia factory path covered. The
 scenario now constructs and ticks 3,812 live units.
+
+The full painter is now installed into type-80 completion rather than left as
+a callable side adapter. `aoe_scenario_runtime_building_completion_world_ops_ror`
+builds the runtime continuation's stack-factory, terrain-paint, and expanded
+post-paint invalidation operations around one owned scenario. Research-manager
+and owner-UI state remain explicit caller inputs. The runtime-only paint slot
+returns success, allowing an unsupported live-object removal or failed owned
+creation to propagate out of the state-two composition; the generic recovered
+world sequence retains its original void callback and effect ordering. Tests
+exercise the installed scenario callback on the real campaign and pin failure
+propagation through the runtime completion continuation.

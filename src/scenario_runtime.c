@@ -368,6 +368,32 @@ int aoe_scenario_runtime_paint_foundation_ror(
         terrain_id, 0, &paint);
 }
 
+static int runtime_building_paint_foundation(
+    void *context, AoeLiveUnit *unit,
+    const AoeBuildingFoundationBounds *bounds, uint8_t terrain_id) {
+    (void)unit;
+    return aoe_scenario_runtime_paint_foundation_ror(
+        context, bounds, terrain_id);
+}
+
+int aoe_scenario_runtime_building_completion_world_ops_ror(
+    AoeScenarioRuntimeRor *runtime,
+    AoeResearchCompletionManagerRor *research,
+    AoeBuildingCompletionUiRor *owner_ui,
+    AoeBuildingCompletionWorldRuntimeOps *ops) {
+    if (!runtime || !runtime->initialized || !ops) return 0;
+    *ops = (AoeBuildingCompletionWorldRuntimeOps){
+        .context = runtime,
+        .spawn_stack_unit = aoe_scenario_runtime_building_spawn_stack_ror,
+        .paint_foundation = runtime_building_paint_foundation,
+        .invalidate_foundation =
+            aoe_scenario_runtime_building_invalidate_foundation_ror,
+        .research = research,
+        .owner_ui = owner_ui
+    };
+    return 1;
+}
+
 int aoe_scenario_runtime_tick_sprites_ror(
     AoeScenarioRuntimeRor *runtime, float world_delta,
     AoeScenarioRuntimeSpriteTickResult *result) {

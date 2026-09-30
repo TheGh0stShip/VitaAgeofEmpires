@@ -116,6 +116,15 @@ int aoe_scenario_runtime_paint_foundation_ror(
     AoeScenarioRuntimeRor *runtime,
     const AoeBuildingFoundationBounds *bounds, uint8_t terrain_id);
 
+/* Supplies the owned stack factory, full terrain painter, and post-paint map
+   invalidator to the translated type-80 completion continuation. Research
+   and owner UI remain caller-selected because they are gameplay/UI state. */
+int aoe_scenario_runtime_building_completion_world_ops_ror(
+    AoeScenarioRuntimeRor *runtime,
+    AoeResearchCompletionManagerRor *research,
+    AoeBuildingCompletionUiRor *owner_ui,
+    AoeBuildingCompletionWorldRuntimeOps *ops);
+
 /* Runs only the recovered sprite-manager tail shared by RoR live types
    20..80, in scenario player/record order. It does not stand in for the
    still-incomplete action, movement, combat, or player update chain. */

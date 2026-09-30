@@ -87,6 +87,7 @@ typedef struct {
     unsigned count;
     AoeRng *rng;
     uint8_t expected_angle;
+    uint8_t paint_fail;
 } BuildingCompletionTrace;
 static void completion_event(BuildingCompletionTrace *t,char event) {
     assert(t->count < sizeof(t->events)); t->events[t->count++]=event;
@@ -138,6 +139,13 @@ static void completion_paint(void *context,AoeLiveUnit *unit,
            bounds->x0==0 && bounds->y0==1 &&
            bounds->x1==3 && bounds->y1==2);
     completion_event(context,'F');
+}
+
+static int completion_paint_runtime(void *context,AoeLiveUnit *unit,
+                                    const AoeBuildingFoundationBounds *bounds,
+                                    uint8_t terrain_id) {
+    completion_paint(context,unit,bounds,terrain_id);
+    return !((BuildingCompletionTrace *)context)->paint_fail;
 }
 static void completion_invalidate(void *context,AoeLiveUnit *unit,
                                   int32_t x0,int32_t y0,
@@ -727,7 +735,7 @@ int main(void) {
         completion_research_wonder};
     AoeBuildingCompletionWorldRuntimeOps world_runtime={
         .context=&completion,.spawn_stack_unit=completion_spawn,
-        .paint_foundation=completion_paint,
+        .paint_foundation=completion_paint_runtime,
         .invalidate_foundation=completion_invalidate,
         .research=&completion_research_manager,
         .owner_ui=&completion_ui
@@ -744,6 +752,13 @@ int main(void) {
     assert(live.core.state==2 && building.state==2 &&
            live.building_completed && rng.state==41 &&
            completion_research_entries[105].state==3);
+    completion.count=0;
+    completion.paint_fail=1;
+    completion_research_entries[105].state=0;
+    ui_match.completed=0;
+    assert(!aoe_live_unit_building_completion_world_runtime_ror(
+        &live,&world_runtime));
+    assert(completion.count==6 && !memcmp(completion.events,"SFIRBO",6));
     AoeActionNode *completion_live_node=malloc(sizeof(*completion_live_node));
     AoeActionNode *completion_queue_node=malloc(sizeof(*completion_queue_node));
     assert(completion_live_node && completion_queue_node);

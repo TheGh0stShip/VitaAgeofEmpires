@@ -1609,6 +1609,9 @@ check state-7 displacement, then paints terrain 7 and checks cache/draw bytes.
 That two-step test preserves 00449110's write-before-transition ordering;
 installed foundation terrains 7/8/9 have no terrain-unit entries. It also
 separately exercises terrain-object creation and constructs/ticks 3,812 live
-units. Next
-connect `aoe_scenario_runtime_paint_foundation_ror` to the owned type-80
-completion world adapter, then continue through the live cleanup/update chain.
+units. `aoe_scenario_runtime_building_completion_world_ops_ror` now installs
+that painter, the owned stack factory, and expanded invalidator into type-80
+completion while leaving research/UI state explicit. Its runtime-only paint
+callback propagates owned transition failure after preserving the recovered
+world-effect order, and the real campaign regression enters paint through
+this adapter. Next continue through the live cleanup/update chain.

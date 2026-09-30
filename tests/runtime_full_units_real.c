@@ -54,6 +54,9 @@ int main(int argc, char **argv) {
         !aoe_scenario_runtime_set_active_player_ror(&runtime, 1)) goto done;
 
     AoeLiveUnit *terrain_removed = NULL;
+    AoeBuildingCompletionWorldRuntimeOps completion_world;
+    if (!aoe_scenario_runtime_building_completion_world_ops_ror(
+            &runtime, NULL, NULL, &completion_world)) goto done;
     for (uint32_t i = 0; i < runtime.players[0].unit_count &&
                          !terrain_removed; ++i) {
         AoeLiveUnit *candidate = &runtime.players[0].units[i];
@@ -89,11 +92,11 @@ int main(int argc, char **argv) {
         AoeBuildingFoundationBounds bounds = {x, y, x, y};
         size_t index = (size_t)(uint16_t)y * runtime.map.width +
                        (uint16_t)x;
-        if (!aoe_scenario_runtime_paint_foundation_ror(
-                &runtime, &bounds, 0) ||
+        if (!completion_world.paint_foundation(
+                completion_world.context, terrain_removed, &bounds, 0) ||
             terrain_removed->core.state != 7 ||
-            !aoe_scenario_runtime_paint_foundation_ror(
-                &runtime, &bounds, 7) ||
+            !completion_world.paint_foundation(
+                completion_world.context, terrain_removed, &bounds, 7) ||
             runtime.map.tiles[index].terrain_id != 7 ||
             runtime.map.cache_flags[index] != 0xcc ||
             runtime.map.draw_flags[index] != 0)

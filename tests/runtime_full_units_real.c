@@ -53,6 +53,32 @@ int main(int argc, char **argv) {
             &geometry, 1) ||
         !aoe_scenario_runtime_set_active_player_ror(&runtime, 1)) goto done;
 
+    AoeLiveUnit *terrain_removed = NULL;
+    for (uint32_t i = 0; i < runtime.players[0].unit_count &&
+                         !terrain_removed; ++i) {
+        AoeLiveUnit *candidate = &runtime.players[0].units[i];
+        if (candidate->core.state >= 7 ||
+            candidate->core.unit_template->type != 10)
+            continue;
+        for (uint16_t j = 0;
+             j < terrains.terrains[0].terrain_units_used_count; ++j)
+            if (terrains.terrains[0].terrain_unit_ids[j] ==
+                candidate->core.unit_template->id) {
+                terrain_removed = candidate;
+                break;
+            }
+    }
+    if (!terrain_removed ||
+        aoe_scenario_runtime_terrain_object_owner_ror(
+            &runtime, &terrain_removed->core) != 0 ||
+        aoe_scenario_runtime_terrain_object_template_ror(
+            &runtime, &terrain_removed->core) !=
+            terrain_removed->core.unit_template->id ||
+        !aoe_scenario_runtime_terrain_remove_object_ror(
+            &runtime, &terrain_removed->core) ||
+        terrain_removed->core.state != 7)
+        goto done;
+
     unsigned editor_player = 0;
     while (editor_player < AOE_SCENARIO_RUNTIME_PLAYERS &&
            !scenario.player_units[editor_player].count)

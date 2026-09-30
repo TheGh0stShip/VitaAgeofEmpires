@@ -296,6 +296,13 @@ traversal, density chunking, placement modes, exact RNG coordinate/probability
 consumption, placement probing, and creation order are translated. Dynamic
 object metadata, class removal, and template placement/factory methods remain
 explicit callbacks pending owned-scenario binding.
+Owned-scenario object lookup and removal are now bound for supported root
+classes: semantic owner/template queries validate the map-list core pointer,
+and removal uses the translated `+0x68` high-state path with persistent player,
+vision, registry, and world state. The real scenario test transitions a Gaia
+terrain-0 type-10 decoration to state 7. `dat_tool --terrain-units` confirms
+terrain 0 has 28 entries and foundation terrains 7/8/9 have no spawn entries.
+Placement probing and factory creation still require owned transition binding.
 Completion visibility and graphic selection are no longer callback-only.
 Vtable resolution proves type-80 `+0xdc` is leave handler `004ac380` in
 alternate rectangle mode 1, while `+0xd8` is wrapper `004ae980`; after

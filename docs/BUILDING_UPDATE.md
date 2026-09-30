@@ -407,3 +407,19 @@ the probability RNG value using integer division by 32767. Placement and
 creation remain dynamic template callbacks, as does the class-specific
 removal method. Tests pin removal during traversal, callback order, exact
 coordinates, and the resulting 32-bit RNG state.
+
+The removal side is now bound to owned scenario units. Runtime lookup first
+verifies the map-list core pointer belongs to a loaded or dynamically created
+unit, exposes its semantic owner/template IDs, then dispatches the already
+translated root `+0x68` high-state path with the correct player resources,
+registration, visibility, and world bindings. Transition removal and creation
+callbacks now report failure so unsupported derived classes cannot be treated
+as successful no-ops. The real `EXPANS_1_1.scx` integration test finds an
+actual Gaia terrain-0 decoration, verifies its metadata, and transitions it
+to state 7 through this binding before the full sprite tick and teardown.
+
+`dat_tool --terrain-units` provides a durable source-data audit. In the
+installed RoR DAT, terrain 0 has 28 entries (mostly type-10 decorations plus
+type-90 trees), while foundation terrains Crop/Rows/Wheat (7/8/9) have zero
+spawn entries. This narrows building completion without weakening the general
+translated density/spawn path.

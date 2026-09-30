@@ -18,10 +18,11 @@ static int16_t object_id(void *context, const void *object) {
     (void)context;
     return ((const Object *)object)->id;
 }
-static void remove_object(void *context, void *object) {
+static int remove_object(void *context, void *object) {
     Trace *trace = context;
     assert(aoe_object_update_list_detach(trace->list, object, NULL));
     ++trace->removed;
+    return 1;
 }
 static int blocked(void *context, int16_t id, float x, float y) {
     Trace *trace = context;
@@ -29,13 +30,14 @@ static int blocked(void *context, int16_t id, float x, float y) {
     ++trace->blocked_calls;
     return 0;
 }
-static void create(void *context, int16_t id, float x, float y) {
+static int create(void *context, int16_t id, float x, float y) {
     Trace *trace = context;
     assert(trace->created < 3);
     trace->created_ids[trace->created] = id;
     trace->created_x[trace->created] = x;
     trace->created_y[trace->created] = y;
     ++trace->created;
+    return 1;
 }
 
 int main(void) {

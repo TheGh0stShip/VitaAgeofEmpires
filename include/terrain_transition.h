@@ -9,9 +9,11 @@ typedef struct {
     int16_t terrain_owner_index;
     int16_t (*object_owner_index)(void *context, const void *object);
     int16_t (*object_template_id)(void *context, const void *object);
-    void (*remove_object)(void *context, void *object);
+    /* Mutation/factory callbacks return zero when their dynamic method could
+       not be represented; the transition then stops and reports failure. */
+    int (*remove_object)(void *context, void *object);
     int (*blocked)(void *context, int16_t unit_id, float x, float y);
-    void (*create)(void *context, int16_t unit_id, float x, float y);
+    int (*create)(void *context, int16_t unit_id, float x, float y);
 } AoeTerrainTransitionOps;
 
 /* RoR 004481b0, the per-cell transition called by 00449110 after writing the

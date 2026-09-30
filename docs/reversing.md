@@ -1954,3 +1954,13 @@ world RNG values times the binary-verified `1/32768` offset; mode 1 uses
 sub-1000 chunk consumes the original integer probability test
 `rng*1000/32767 < remaining`. Only object owner/template access, class removal,
 template placement, and template creation remain callbacks.
+
+The owned scenario now resolves map-list core pointers back to their actual
+portable live units and binds owner/template reads plus `+0x68` removal.
+Removal uses `aoe_live_unit_scenario_high_root_ror` with the owning player's
+resources, registry, vision, and world state, and fails rather than
+approximating unsupported derived classes. A real campaign Gaia type-10
+terrain decoration reaches state 7 through this path. The new
+`dat_tool --terrain-units` audit confirms terrain 0 has 28 removable entries;
+foundation terrains 7, 8, and 9 have no spawn entries in the installed RoR
+DAT, although the general translated spawn rules remain required.

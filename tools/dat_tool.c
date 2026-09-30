@@ -64,6 +64,8 @@ int main(int argc, char **argv) {
         strcmp(argv[2], "--factory-audit") == 0;
     int graphics_all = argc == 3 &&
         strcmp(argv[2], "--graphics-all") == 0;
+    int terrain_units = argc == 3 &&
+        strcmp(argv[2], "--terrain-units") == 0;
     int art_query = argc == 4 && strcmp(argv[2], "--terrain-art") == 0;
     int border_art_query = argc == 4 && strcmp(argv[2], "--border-art") == 0;
     int draw_terrain_query = argc == 4 &&
@@ -71,7 +73,7 @@ int main(int argc, char **argv) {
     int frame_query = argc == 7;
     int border_frame_query = argc == 8;
     if ((argc != 2 && argc != 3 && argc != 4 && argc != 5 && argc != 7 && argc != 8) ||
-        (argc == 3 && !factory_audit && !graphics_all) ||
+        (argc == 3 && !factory_audit && !graphics_all && !terrain_units) ||
         (unit_query && (strcmp(argv[2], "--unit") != 0 ||
                         !parse_id(argv[3], &query_civ) ||
                         !parse_id(argv[4], &query_unit))) ||
@@ -88,7 +90,7 @@ int main(int argc, char **argv) {
           !parse_id(argv[5], &query_pattern) ||
           !parse_id(argv[6], &query_x) ||
           !parse_id(argv[7], &query_y)))) {
-        fprintf(stderr, "usage: dat_tool FILE [--factory-audit | --graphics-all | OFFSET LENGTH | --unit CIV_ID UNIT_ID | --terrain-art TERRAIN.DRS | --border-art BORDER.DRS | --draw-terrain TERRAIN | --terrain-frame TERRAIN SHAPE X Y | --border-frame BORDER SHAPE PATTERN X Y]\n");
+        fprintf(stderr, "usage: dat_tool FILE [--factory-audit | --graphics-all | --terrain-units | OFFSET LENGTH | --unit CIV_ID UNIT_ID | --terrain-art TERRAIN.DRS | --border-art BORDER.DRS | --draw-terrain TERRAIN | --terrain-frame TERRAIN SHAPE X Y | --border-frame BORDER SHAPE PATTERN X Y]\n");
         return 2;
     }
     if (!dat_load(argv[1], &blob)) {
@@ -166,6 +168,18 @@ int main(int argc, char **argv) {
     }
     printf("terrains: %u enabled / %u slots\n", terrains.enabled_count,
            terrains.count);
+    if (terrain_units) {
+        for (uint16_t i = 0; i < terrains.count; ++i) {
+            const DatTerrain *terrain = &terrains.terrains[i];
+            printf("terrain %u %s: %u unit entries", i, terrain->name,
+                   terrain->terrain_units_used_count);
+            for (uint16_t j = 0; j < terrain->terrain_units_used_count; ++j)
+                printf(" %d/%d/%u", terrain->terrain_unit_ids[j],
+                       terrain->terrain_unit_density[j],
+                       terrain->terrain_placement_flags[j]);
+            putchar('\n');
+        }
+    }
     for (uint16_t i = 0; i < terrains.count; ++i) {
         const DatTerrain *terrain = &terrains.terrains[i];
         if (terrain->enabled)

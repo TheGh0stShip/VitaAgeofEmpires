@@ -89,6 +89,16 @@ void aoe_scenario_runtime_building_invalidate_foundation_ror(
     void *context, AoeLiveUnit *building,
     int32_t x0, int32_t y0, int32_t x1, int32_t y1);
 
+/* Owned bindings for 004481b0 object fields and its virtual +0x68 removal.
+   They accept the map-list object pointer (`AoeLiveUnitCore *`) and verify it
+   belongs to this runtime before accessing the enclosing semantic unit. */
+int16_t aoe_scenario_runtime_terrain_object_owner_ror(
+    void *context, const void *object);
+int16_t aoe_scenario_runtime_terrain_object_template_ror(
+    void *context, const void *object);
+int aoe_scenario_runtime_terrain_remove_object_ror(
+    void *context, void *object);
+
 /* Runs only the recovered sprite-manager tail shared by RoR live types
    20..80, in scenario player/record order. It does not stand in for the
    still-incomplete action, movement, combat, or player update chain. */

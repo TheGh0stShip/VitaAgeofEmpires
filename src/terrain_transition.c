@@ -41,7 +41,7 @@ int aoe_terrain_transition_cell_ror(
                         ops->terrain_owner_index &&
                     (id < min_template || max_template < id) &&
                     (!filter || terrain_contains(filter, id)))
-                    ops->remove_object(ops->context, object);
+                    if (!ops->remove_object(ops->context, object)) return 0;
             }
             node = next;
         }
@@ -64,7 +64,8 @@ int aoe_terrain_transition_cell_ror(
                 ((uint32_t)aoe_rng_next(rng) * 1000u) / 32767u <
                     (uint32_t)remaining) {
                 if (!ops->blocked(ops->context, unit_id, spawn_x, spawn_y))
-                    ops->create(ops->context, unit_id, spawn_x, spawn_y);
+                    if (!ops->create(ops->context, unit_id, spawn_x, spawn_y))
+                        return 0;
             }
             remaining -= 1000;
         } while (remaining > 0);

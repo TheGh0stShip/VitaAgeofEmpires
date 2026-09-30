@@ -242,6 +242,47 @@ void aoe_scenario_runtime_building_invalidate_foundation_ror(
         &runtime->map, x0, y0, x1, y1, 0);
 }
 
+static AoeLiveUnit *runtime_find_core(AoeScenarioRuntimeRor *runtime,
+                                     const void *object) {
+    if (!runtime || !runtime->initialized || !object) return NULL;
+    for (unsigned p = 0; p < AOE_SCENARIO_RUNTIME_PLAYERS; ++p)
+        for (uint32_t i = 0; i < runtime->players[p].unit_count; ++i)
+            if (&runtime->players[p].units[i].core == object)
+                return &runtime->players[p].units[i];
+    for (size_t i = 0; i < runtime->editor_unit_count; ++i)
+        if (runtime->editor_units[i] &&
+            &runtime->editor_units[i]->core == object)
+            return runtime->editor_units[i];
+    return NULL;
+}
+
+int16_t aoe_scenario_runtime_terrain_object_owner_ror(
+    void *context, const void *object) {
+    AoeLiveUnit *unit = runtime_find_core(context, object);
+    return unit ? unit->runtime_owner_index : -1;
+}
+
+int16_t aoe_scenario_runtime_terrain_object_template_ror(
+    void *context, const void *object) {
+    AoeLiveUnit *unit = runtime_find_core(context, object);
+    return unit && unit->core.unit_template ? unit->core.unit_template->id : -1;
+}
+
+int aoe_scenario_runtime_terrain_remove_object_ror(
+    void *context, void *object) {
+    AoeScenarioRuntimeRor *runtime = context;
+    AoeLiveUnit *unit = runtime_find_core(runtime, object);
+    int16_t owner_index;
+    if (!unit) return 0;
+    owner_index = unit->runtime_owner_index;
+    if (owner_index < 0 || owner_index >= AOE_SCENARIO_RUNTIME_PLAYERS)
+        return 0;
+    return aoe_live_unit_scenario_high_root_ror(
+        unit, &runtime->players[owner_index].resources,
+        &runtime->players[owner_index].owner, &runtime->world,
+        &runtime->players[owner_index].vision_binding);
+}
+
 int aoe_scenario_runtime_tick_sprites_ror(
     AoeScenarioRuntimeRor *runtime, float world_delta,
     AoeScenarioRuntimeSpriteTickResult *result) {

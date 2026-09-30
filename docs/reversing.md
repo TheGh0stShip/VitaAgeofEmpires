@@ -1943,3 +1943,14 @@ Each accepted write requires an explicit `004481b0` transition callback.
 Its terrain-unit IDs, densities, placement flags, and count are already
 parsed at DAT record `+254/+314/+374/+404`; only live-object transitions and
 spawning remain.
+
+`aoe_terrain_transition_cell_ror` now translates the `004481b0` control and
+data behavior around those dynamic methods. It safely captures the next tile
+node before removal, matches the terrain owner and exclusion interval, scans
+the filter terrain's unit list, and applies every current-terrain unit entry.
+Density is consumed in 1000-unit chunks. Placement mode 0 uses consecutive
+world RNG values times the binary-verified `1/32768` offset; mode 1 uses
+`+0.5,+0.5`; other modes preserve the routine's prior local coordinates. A
+sub-1000 chunk consumes the original integer probability test
+`rng*1000/32767 < remaining`. Only object owner/template access, class removal,
+template placement, and template creation remain callbacks.

@@ -395,3 +395,15 @@ per-cell transition hook preserves the remaining `004481b0` behavior. The
 terrain-unit IDs, densities, placement modes, and used count were confirmed
 already parsed from disk offsets `+254/+314/+374/+404`; remaining work is the
 live-object removal/state transition and spawn behavior.
+
+That per-cell body is now translated as
+`aoe_terrain_transition_cell_ror`. It captures each tile-list successor before
+dynamic removal, filters only the terrain owner and template IDs outside the
+original exclusion interval, scans the requested terrain-unit filter, and
+then applies the newly painted terrain's unit IDs, densities, and placement
+modes. Mode 0 consumes two RNG values for offsets using the executable's
+`1/32768` constant; mode 1 uses the tile center; density below 1000 consumes
+the probability RNG value using integer division by 32767. Placement and
+creation remain dynamic template callbacks, as does the class-specific
+removal method. Tests pin removal during traversal, callback order, exact
+coordinates, and the resulting 32-bit RNG state.

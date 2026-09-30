@@ -290,6 +290,12 @@ expanded border recomputation, and internal invalidation. Its per-cell
 `004481b0` hook remains mandatory because live-object removal and spawning are
 not bound yet. The terrain-unit arrays are already parsed at disk offsets
 `+254/+314/+374/+404`.
+The `004481b0` per-cell control flow is now
+`aoe_terrain_transition_cell_ror`: tile-list removal filtering, successor-safe
+traversal, density chunking, placement modes, exact RNG coordinate/probability
+consumption, placement probing, and creation order are translated. Dynamic
+object metadata, class removal, and template placement/factory methods remain
+explicit callbacks pending owned-scenario binding.
 Completion visibility and graphic selection are no longer callback-only.
 Vtable resolution proves type-80 `+0xdc` is leave handler `004ac380` in
 alternate rectangle mode 1, while `+0xd8` is wrapper `004ae980`; after

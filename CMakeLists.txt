@@ -189,6 +189,11 @@ target_include_directories(aoe_runtime_map PUBLIC include)
 target_link_libraries(aoe_runtime_map PUBLIC aoe_scn aoe_terrain aoe_object_update_list aoe_player_vision_state)
 target_compile_options(aoe_runtime_map PRIVATE -Wall -Wextra)
 
+add_library(aoe_terrain_transition STATIC src/terrain_transition.c)
+target_include_directories(aoe_terrain_transition PUBLIC include)
+target_link_libraries(aoe_terrain_transition PUBLIC aoe_runtime_map aoe_rng)
+target_compile_options(aoe_terrain_transition PRIVATE -Wall -Wextra)
+
 add_library(aoe_live_unit_id STATIC src/live_unit_id.c)
 target_include_directories(aoe_live_unit_id PUBLIC include)
 target_link_libraries(aoe_live_unit_id PUBLIC aoe_visibility_watch)
@@ -674,6 +679,12 @@ else()
   target_link_libraries(runtime_map_test PRIVATE aoe_runtime_map aoe_live_unit_vision)
   target_compile_options(runtime_map_test PRIVATE -UNDEBUG)
   add_test(NAME original_runtime_map_from_scenario COMMAND runtime_map_test)
+
+  add_executable(terrain_transition_test tests/terrain_transition_test.c)
+  target_link_libraries(terrain_transition_test PRIVATE aoe_terrain_transition)
+  target_compile_options(terrain_transition_test PRIVATE -UNDEBUG)
+  add_test(NAME original_ror_terrain_cell_transition
+           COMMAND terrain_transition_test)
 
   add_executable(runtime_map_real tests/runtime_map_real.c)
   target_link_libraries(runtime_map_real PRIVATE aoe_runtime_map aoe_dat)

@@ -795,6 +795,18 @@ overflow is checked against the Vita/original 32-bit byte domain even when
 tests run on an LP64 host. The common constructor initializes `+0x78 = -1`
 and the exact `+0x80 = 0x40a00000` bit pattern.
 
+The adjacent single-ID methods are translated as well. Patched `004abdf0`
+rejects every call once active count reaches 25 (including an already-present
+ID), otherwise returns success for a duplicate or appends with the same
+one-element capacity growth; its second stack argument is confirmed unread by
+raw disassembly. Patched `004ac030` has a non-obvious behavior preserved by
+`aoe_live_unit_remove_dependency_ror`: it searches and shifts the entire
+allocated capacity, not merely active count, so a stale inactive slot can
+produce success and decrement the count with a floor at zero. An empty result
+sets source `+0x78` to -1. Patched `004ac1b0` clears count/source while
+retaining allocation. Tests pin the 25-entry limit, rejection-before-dedup,
+stale-slot removal, full-capacity shifting, and retained allocation.
+
 The type-40–70 prefix is now composed by
 `aoe_live_unit_cleanup_derived_prefix_ror`: when semantic live `+0x184` is
 present, it drains the list through `aoe_action_list_clear` (`0x00403e70`),

@@ -148,6 +148,68 @@ int aoe_live_unit_set_dependencies_ror(
     return 1;
 }
 
+int aoe_live_unit_add_dependency_ror(
+    AoeLiveUnit *unit, int32_t unit_id, uint32_t unread_argument) {
+    uint32_t index;
+    (void)unread_argument;
+    if (!unit || !unit->constructed ||
+        unit->dependent_unit_count > unit->dependent_unit_capacity ||
+        (unit->dependent_unit_capacity && !unit->dependent_unit_ids) ||
+        unit->dependent_unit_count >= 25u)
+        return 0;
+    for (index = 0; index < unit->dependent_unit_count; ++index)
+        if (unit->dependent_unit_ids[index] == unit_id) return 1;
+    if (unit->dependent_unit_count == unit->dependent_unit_capacity) {
+        uint32_t capacity = unit->dependent_unit_count + 1u;
+        int32_t *grown;
+        if (capacity > UINT32_MAX / sizeof(*grown)) return 0;
+        grown = malloc((size_t)capacity * sizeof(*grown));
+        if (!grown) return 0;
+        if (unit->dependent_unit_capacity)
+            memcpy(grown, unit->dependent_unit_ids,
+                   (size_t)unit->dependent_unit_capacity * sizeof(*grown));
+        free(unit->dependent_unit_ids);
+        unit->dependent_unit_ids = grown;
+        unit->dependent_unit_capacity = capacity;
+    }
+    unit->dependent_unit_ids[unit->dependent_unit_count++] = unit_id;
+    return 1;
+}
+
+int aoe_live_unit_remove_dependency_ror(
+    AoeLiveUnit *unit, int32_t unit_id) {
+    uint32_t index;
+    int found = 0;
+    if (!unit || !unit->constructed ||
+        unit->dependent_unit_count > unit->dependent_unit_capacity ||
+        (unit->dependent_unit_capacity && !unit->dependent_unit_ids))
+        return 0;
+    for (index = 0; index < unit->dependent_unit_capacity; ++index)
+        if (unit->dependent_unit_ids[index] == unit_id) {
+            found = 1;
+            break;
+        }
+    if (found) {
+        for (++index; index < unit->dependent_unit_capacity; ++index)
+            unit->dependent_unit_ids[index - 1u] =
+                unit->dependent_unit_ids[index];
+        if (unit->dependent_unit_count)
+            --unit->dependent_unit_count;
+    }
+    if (!unit->dependent_unit_count) unit->dependent_source_id = -1;
+    return found;
+}
+
+int aoe_live_unit_clear_dependencies_ror(AoeLiveUnit *unit) {
+    if (!unit || !unit->constructed ||
+        unit->dependent_unit_count > unit->dependent_unit_capacity ||
+        (unit->dependent_unit_capacity && !unit->dependent_unit_ids))
+        return 0;
+    unit->dependent_unit_count = 0;
+    unit->dependent_source_id = -1;
+    return 1;
+}
+
 int aoe_live_unit_update_attached_target_ror(
     AoeLiveUnit *unit, const AoeLiveUnitUpdateTargetOps *ops, int *handled) {
     AoeLiveUnitCore *target;

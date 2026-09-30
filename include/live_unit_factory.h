@@ -74,6 +74,17 @@ int aoe_live_unit_set_dependencies_ror(
     AoeLiveUnit *unit, const int32_t *unit_ids, int32_t count,
     int32_t source_id, uint32_t context_bits);
 
+/* Patched 004abdf0/004ac030/004ac1b0 single-ID operations. Add rejects any
+   call once active count is 25, even a duplicate; its second stack argument
+   is present in the executable ABI but unread. Remove deliberately searches
+   allocated capacity rather than active count and shifts the whole retained
+   allocation, matching the original stale-slot behavior. Clear retains it. */
+int aoe_live_unit_add_dependency_ror(
+    AoeLiveUnit *unit, int32_t unit_id, uint32_t unread_argument);
+int aoe_live_unit_remove_dependency_ror(
+    AoeLiveUnit *unit, int32_t unit_id);
+int aoe_live_unit_clear_dependencies_ror(AoeLiveUnit *unit);
+
 typedef struct {
     void *context;
     /* Current unit vtable +0x5c. State changes are class-specific, so this

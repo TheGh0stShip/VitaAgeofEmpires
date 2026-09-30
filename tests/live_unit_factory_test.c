@@ -331,6 +331,18 @@ int main(void) {
         live.dependent_unit_capacity == 3 &&
         live.dependent_source_id == -7 &&
         live.dependent_context_bits == UINT32_C(0x40400000));
+    /* 004ac030 searches retained capacity, including inactive stale slots. */
+    assert(aoe_live_unit_remove_dependency_ror(&live, 999999) &&
+           !live.dependent_unit_count && live.dependent_source_id == -1);
+    for (int32_t id = 0; id < 25; ++id)
+        assert(aoe_live_unit_add_dependency_ror(
+            &live, id, UINT32_C(0xdeadbeef)));
+    assert(live.dependent_unit_count == 25 &&
+           live.dependent_unit_capacity == 25 &&
+           !aoe_live_unit_add_dependency_ror(&live, 24, 0) &&
+           aoe_live_unit_clear_dependencies_ror(&live) &&
+           !live.dependent_unit_count && live.dependent_unit_capacity == 25 &&
+           live.dependent_source_id == -1);
     other.core.state = 2;
     aoe_live_unit_destroy_ror(&other, &owner, &world, &vision);
 

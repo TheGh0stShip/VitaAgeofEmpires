@@ -92,6 +92,11 @@ and duplicate IDs, retains/grows its allocation one explicit 32-bit element at
 a time, and preserves source `+0x78` plus opaque 32-bit context bits `+0x80`.
 Counts/capacity no longer inherit host `size_t`; they are `uint32_t`, and the
 allocation gate retains the original/Vita 32-bit byte domain on LP64 hosts.
+Single-ID `004abdf0`, `004ac030`, and `004ac1b0` are now translated too. Add
+preserves the strict 25-active-entry gate and unread second ABI argument;
+remove deliberately scans/shifts retained capacity (including stale slots)
+and clears source `+0x78` when active count reaches zero; clear retains the
+allocation. Focused tests cover these counterintuitive boundaries.
 `aoe_live_unit_player_update_step_ror` binds it into actual player +0x7c
 object-list traversal by matching listed `+0x38` references against an
 explicit owned-unit roster; unrelated list objects still go through required

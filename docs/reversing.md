@@ -807,6 +807,18 @@ sets source `+0x78` to -1. Patched `004ac1b0` clears count/source while
 retaining allocation. Tests pin the 25-entry limit, rejection-before-dedup,
 stale-slot removal, full-capacity shifting, and retained allocation.
 
+Patched `004abea0` now composes those primitives as
+`aoe_live_unit_propagate_dependency_ror`. Raw call-site disassembly resolves
+the decompiler's unstable prototype: the target ID must resolve before any
+mutation and caller active count must be below 25; each current ID is copied
+to a fixed 25-entry local vector; every resolved member other than the caller
+receives the target through `004abdf0`; then target is appended and the caller
+is rebuilt through `004abc80` with its own ID at `+0x78` and the supplied
+32-bit context at `+0x80`. Nested add return values are intentionally ignored.
+Resolution remains an explicit semantic callback, so a registry entry is not
+blindly container-cast into a host `AoeLiveUnit`. Tests pin missing-target
+rejection, self exclusion, member propagation, order, and metadata.
+
 The type-40–70 prefix is now composed by
 `aoe_live_unit_cleanup_derived_prefix_ror`: when semantic live `+0x184` is
 present, it drains the list through `aoe_action_list_clear` (`0x00403e70`),

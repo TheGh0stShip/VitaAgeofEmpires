@@ -210,6 +210,35 @@ int aoe_live_unit_clear_dependencies_ror(AoeLiveUnit *unit) {
     return 1;
 }
 
+int aoe_live_unit_propagate_dependency_ror(
+    AoeLiveUnit *unit, int32_t target_unit_id, uint32_t context_bits,
+    const AoeLiveUnitDependencyOps *ops) {
+    int32_t ids[25];
+    uint32_t count;
+    if (!unit || !unit->constructed || !ops || !ops->resolve ||
+        !ops->resolve(ops->context, target_unit_id) ||
+        unit->dependent_unit_count > unit->dependent_unit_capacity ||
+        (unit->dependent_unit_capacity && !unit->dependent_unit_ids) ||
+        unit->dependent_unit_count >= 25u)
+        return 0;
+    count = unit->dependent_unit_count;
+    for (uint32_t i = 0; i < count; ++i) {
+        AoeLiveUnit *member;
+        ids[i] = unit->dependent_unit_ids[i];
+        if (ids[i] == unit->core.unit_id) continue;
+        member = ops->resolve(ops->context, ids[i]);
+        if (member)
+            (void)aoe_live_unit_add_dependency_ror(
+                member, target_unit_id, context_bits);
+    }
+    ids[count] = target_unit_id;
+    (void)aoe_live_unit_add_dependency_ror(
+        unit, target_unit_id, context_bits);
+    return aoe_live_unit_set_dependencies_ror(
+        unit, ids, (int32_t)(count + 1u), unit->core.unit_id,
+        context_bits);
+}
+
 int aoe_live_unit_update_attached_target_ror(
     AoeLiveUnit *unit, const AoeLiveUnitUpdateTargetOps *ops, int *handled) {
     AoeLiveUnitCore *target;

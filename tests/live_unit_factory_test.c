@@ -10,6 +10,15 @@ static void record_cell(void *context, int32_t x, int32_t y) {
     (void)y;
 }
 
+static AoeLiveUnit *resolve_live(void *context, int32_t unit_id) {
+    AoeLiveUnit **units = context;
+    for (size_t i = 0; i < 2; ++i)
+        if (units[i] && units[i]->constructed &&
+            units[i]->core.unit_id == unit_id)
+            return units[i];
+    return NULL;
+}
+
 static int lookup_kind_68(void *context, int16_t *kind) {
     int *called = context;
     *called += 1;
@@ -343,6 +352,25 @@ int main(void) {
            aoe_live_unit_clear_dependencies_ror(&live) &&
            !live.dependent_unit_count && live.dependent_unit_capacity == 25 &&
            live.dependent_source_id == -1);
+    int32_t member_id = other.core.unit_id;
+    AoeLiveUnit *dependency_units[] = {&live, &other};
+    AoeLiveUnitDependencyOps dependency_ops = {
+        dependency_units, resolve_live};
+    assert(aoe_live_unit_set_dependencies_ror(
+        &live, &member_id, 1, -1, 0) &&
+        !aoe_live_unit_propagate_dependency_ror(
+            &live, 999999, UINT32_C(0x40800000), &dependency_ops) &&
+        live.dependent_unit_count == 1 &&
+        aoe_live_unit_propagate_dependency_ror(
+            &live, live.core.unit_id, UINT32_C(0x40800000),
+            &dependency_ops));
+    assert(live.dependent_unit_count == 2 &&
+           live.dependent_unit_ids[0] == other.core.unit_id &&
+           live.dependent_unit_ids[1] == live.core.unit_id &&
+           live.dependent_source_id == live.core.unit_id &&
+           live.dependent_context_bits == UINT32_C(0x40800000) &&
+           other.dependent_unit_count == 1 &&
+           other.dependent_unit_ids[0] == live.core.unit_id);
     other.core.state = 2;
     aoe_live_unit_destroy_ror(&other, &owner, &world, &vision);
 

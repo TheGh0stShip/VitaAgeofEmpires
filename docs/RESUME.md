@@ -97,6 +97,12 @@ preserves the strict 25-active-entry gate and unread second ABI argument;
 remove deliberately scans/shifts retained capacity (including stale slots)
 and clears source `+0x78` when active count reaches zero; clear retains the
 allocation. Focused tests cover these counterintuitive boundaries.
+Patched group propagator `004abea0` is now composed over those operations: it
+pre-resolves the target, copies current IDs in order, adds target to every
+resolved non-self member, and rebuilds the caller with caller ID/context
+metadata. The resolver is explicit rather than assuming arbitrary registry
+objects use the portable container layout; nested add results remain ignored
+as in the executable.
 `aoe_live_unit_player_update_step_ror` binds it into actual player +0x7c
 object-list traversal by matching listed `+0x38` references against an
 explicit owned-unit roster; unrelated list objects still go through required

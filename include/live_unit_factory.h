@@ -87,6 +87,20 @@ int aoe_live_unit_clear_dependencies_ror(AoeLiveUnit *unit);
 
 typedef struct {
     void *context;
+    AoeLiveUnit *(*resolve)(void *context, int32_t unit_id);
+} AoeLiveUnitDependencyOps;
+
+/* Patched 004abea0 group propagation. The target must resolve and the caller
+   must have fewer than 25 active IDs. Every resolved non-self current member
+   receives target through 004abdf0; then the caller is rebuilt from its prior
+   IDs plus target with caller ID/context stored at +0x78/+0x80. Nested add
+   results are ignored by the executable. */
+int aoe_live_unit_propagate_dependency_ror(
+    AoeLiveUnit *unit, int32_t target_unit_id, uint32_t context_bits,
+    const AoeLiveUnitDependencyOps *ops);
+
+typedef struct {
+    void *context;
     /* Current unit vtable +0x5c. State changes are class-specific, so this
        hook is mandatory when attached_unit->state is above 2. */
     int (*set_state)(void *context, AoeLiveUnit *unit, uint8_t state);

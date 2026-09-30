@@ -263,7 +263,8 @@ target_compile_options(aoe_runtime_viewport PRIVATE -Wall -Wextra)
 add_library(aoe_scenario_runtime STATIC src/scenario_runtime.c)
 target_include_directories(aoe_scenario_runtime PUBLIC include)
 target_link_libraries(aoe_scenario_runtime PUBLIC aoe_runtime_map
-  aoe_live_unit_factory aoe_player_templates)
+  aoe_live_unit_factory aoe_player_templates aoe_unit_placement_check
+  aoe_terrain_transition)
 target_compile_options(aoe_scenario_runtime PRIVATE -Wall -Wextra)
 
 add_library(aoe_scenario_editor_catalog STATIC src/scenario_editor_catalog.c)

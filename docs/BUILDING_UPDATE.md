@@ -423,3 +423,22 @@ installed RoR DAT, terrain 0 has 28 entries (mostly type-10 decorations plus
 type-90 trees), while foundation terrains Crop/Rows/Wheat (7/8/9) have zero
 spawn entries. This narrows building completion without weakening the general
 translated density/spawn path.
+
+The transition's remaining placement and creation boundaries are now bound to
+the owned scenario runtime. Placement selects Gaia's cloned template and its
+restriction row from the retained DAT intro, then calls
+`aoe_unit_placement_check_ror` with 004481b0's verified arguments: visibility
+off, shape mode 1, reserved zero, clearance on, overlap exception off, and
+unit collision on. Creation enters the existing owned live-unit factory as
+Gaia at Z zero. `aoe_scenario_runtime_paint_foundation_ror` composes these
+bindings with terrain writes, object displacement, general terrain-unit spawn
+rules, border recomputation, and map invalidation. Parsed intro, terrain, and
+border tables remain caller-owned and must outlive the scenario runtime.
+
+The real campaign regression repaints terrain 0 under an actual Gaia type-10
+terrain-0 decoration, observes its state-7 removal, then paints terrain 7 and
+checks the exact tile cache/draw bytes. This ordering matters: 00449110 writes
+the target terrain before 004481b0 consults its terrain-unit table, and the
+installed foundation terrains have no entries. A separate DAT-selected
+terrain-decoration creation keeps the general Gaia factory path covered. The
+scenario now constructs and ticks 3,812 live units.

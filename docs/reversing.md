@@ -1964,3 +1964,23 @@ terrain decoration reaches state 7 through this path. The new
 `dat_tool --terrain-units` audit confirms terrain 0 has 28 removable entries;
 foundation terrains 7, 8, and 9 have no spawn entries in the installed RoR
 DAT, although the general translated spawn rules remain required.
+
+The remaining 004481b0 dynamic boundaries now have concrete owned-runtime
+bindings. Its template `+0x20` check selects Gaia's cloned template and the
+restriction row retained from `DatIntro`, using the verified argument tuple
+`(require_visible=0, shape_mode=1, reserved=0, use_clearance=1,
+honor_overlap=0, check_units=1)`. Its template `+0x18` creation path enters
+the owned live factory for Gaia at Z zero. The scenario runtime therefore
+retains caller-owned pointers to the parsed intro, terrain, and border tables;
+all three must outlive it.
+
+`aoe_scenario_runtime_paint_foundation_ror` is now the full owned composition
+of 00449110 and 004481b0: admitted terrain writes, live-object displacement,
+terrain density/placement spawning, expanded border refresh, and invalidation.
+The real campaign regression first repaints Grass under an actual terrain-0
+Gaia decoration and checks its state-7 removal, then paints Crop and checks
+tile `+7 = 0xcc` and `+10 = 0`. This preserves the recovered ordering:
+00449110 writes the target terrain before 004481b0 reads its terrain-unit
+table. Because installed foundation terrains 7/8/9 contain no entries, the
+test separately invokes the placement/create adapter with a terrain-0 DAT
+entry. The resulting scenario constructs and ticks 3,812 live units.

@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
         !dat_parse_civilizations(&blob, &effects, &civs) ||
         !scn_load_map(argv[1], (uint8_t)intro.terrain_count, &scenario) ||
         !aoe_scenario_runtime_build_ror(
-            &runtime, &scenario, &civs, &graphics, &terrains, &borders,
+            &runtime, &scenario, &intro, &civs, &graphics, &terrains, &borders,
             &geometry, 1) ||
         !aoe_scenario_runtime_set_active_player_ror(&runtime, 1)) goto done;
 
@@ -57,8 +57,16 @@ int main(int argc, char **argv) {
     for (uint32_t i = 0; i < runtime.players[0].unit_count &&
                          !terrain_removed; ++i) {
         AoeLiveUnit *candidate = &runtime.players[0].units[i];
+        int32_t tile_x = (int32_t)candidate->core.position.x38;
+        int32_t tile_y = (int32_t)candidate->core.position.y3c;
         if (candidate->core.state >= 7 ||
-            candidate->core.unit_template->type != 10)
+            candidate->core.unit_template->type != 10 ||
+            tile_x < 0 || tile_y < 0 ||
+            (uint32_t)tile_x >= runtime.map.width ||
+            (uint32_t)tile_y >= runtime.map.height ||
+            terrains.terrains[0].elevation_frames[
+                runtime.map.shapes[(size_t)tile_y * runtime.map.width +
+                                   (uint32_t)tile_x]].frame_count <= 0)
             continue;
         for (uint16_t j = 0;
              j < terrains.terrains[0].terrain_units_used_count; ++j)
@@ -73,11 +81,24 @@ int main(int argc, char **argv) {
             &runtime, &terrain_removed->core) != 0 ||
         aoe_scenario_runtime_terrain_object_template_ror(
             &runtime, &terrain_removed->core) !=
-            terrain_removed->core.unit_template->id ||
-        !aoe_scenario_runtime_terrain_remove_object_ror(
-            &runtime, &terrain_removed->core) ||
-        terrain_removed->core.state != 7)
+            terrain_removed->core.unit_template->id)
         goto done;
+    {
+        int16_t x = (int16_t)terrain_removed->core.position.x38;
+        int16_t y = (int16_t)terrain_removed->core.position.y3c;
+        AoeBuildingFoundationBounds bounds = {x, y, x, y};
+        size_t index = (size_t)(uint16_t)y * runtime.map.width +
+                       (uint16_t)x;
+        if (!aoe_scenario_runtime_paint_foundation_ror(
+                &runtime, &bounds, 0) ||
+            terrain_removed->core.state != 7 ||
+            !aoe_scenario_runtime_paint_foundation_ror(
+                &runtime, &bounds, 7) ||
+            runtime.map.tiles[index].terrain_id != 7 ||
+            runtime.map.cache_flags[index] != 0xcc ||
+            runtime.map.draw_flags[index] != 0)
+            goto done;
+    }
 
     unsigned editor_player = 0;
     while (editor_player < AOE_SCENARIO_RUNTIME_PLAYERS &&
@@ -174,6 +195,30 @@ int main(int argc, char **argv) {
     if (!aoe_scenario_editor_runtime_finish_move(&editor_context) ||
         editor_context.moving_unit || editor_unit->core.state != 2 ||
         aoe_scenario_editor_runtime_finish_move(&editor_context))
+        goto done;
+
+    AoeTerrainTransitionOps terrain_ops;
+    float terrain_x = 0.0f, terrain_y = 0.0f;
+    int terrain_found = 0;
+    int16_t terrain_spawn_id = terrains.terrains[0].terrain_unit_ids[0];
+    if (!aoe_scenario_runtime_terrain_transition_ops_ror(
+            &runtime, &terrain_ops)) goto done;
+    for (uint32_t py = 0; py < runtime.map.height && !terrain_found; ++py)
+        for (uint32_t px = 0; px < runtime.map.width && !terrain_found; ++px) {
+            float x = (float)px + 0.5f, y = (float)py + 0.5f;
+            if (!terrain_ops.blocked(
+                    terrain_ops.context, terrain_spawn_id, x, y)) {
+                terrain_x = x;
+                terrain_y = y;
+                terrain_found = 1;
+            }
+        }
+    if (!terrain_found || !terrain_ops.create(
+            terrain_ops.context, terrain_spawn_id, terrain_x, terrain_y) ||
+        runtime.constructed_units != loaded_units + 3 ||
+        runtime.editor_unit_count != 3 ||
+        runtime.editor_units[2]->runtime_owner_index != 0 ||
+        runtime.editor_units[2]->core.unit_template->id != terrain_spawn_id)
         goto done;
 
     if (loaded_units != runtime.low_state_units + runtime.high_state_units ||

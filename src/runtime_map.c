@@ -154,8 +154,10 @@ int aoe_runtime_map_paint_terrain_ror(
                 continue;
             old_terrain = map->tiles[index].terrain_id;
             map->tiles[index].terrain_id = terrain_id;
-            ops->transition_cell(ops->context, (uint32_t)x, (uint32_t)y,
-                                 old_terrain, filter_terrain);
+            if (!ops->transition_cell(
+                    ops->context, (uint32_t)x, (uint32_t)y,
+                    old_terrain, filter_terrain))
+                return 0;
         }
     if (x0 > 0) --x0;
     if (y0 > 0) --y0;

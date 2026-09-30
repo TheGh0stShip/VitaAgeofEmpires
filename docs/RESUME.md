@@ -1597,3 +1597,18 @@ from the separate scenario-object byte array at `+0x251`. Do not replace this
 unrecovered field with the current tool's explicit conventional color map.
 Next: trace construction of those 65-byte records, port action/update methods,
 and advance real units into combat for the requested fighting alpha.
+
+The owned terrain-completion path now fully composes RoR 00449110 with
+004481b0. Placement uses Gaia's cloned template, its restriction row retained
+from `DatIntro`, and the exact recovered validator arguments (visibility off,
+shape mode 1, reserved zero, clearance on, overlap exception off, unit
+collisions on). Creation uses the owned Gaia live factory at Z zero. Parsed
+intro, terrains, and borders are caller-owned and must outlive the runtime.
+The real campaign regression repaints terrain 0 under a Gaia decoration to
+check state-7 displacement, then paints terrain 7 and checks cache/draw bytes.
+That two-step test preserves 00449110's write-before-transition ordering;
+installed foundation terrains 7/8/9 have no terrain-unit entries. It also
+separately exercises terrain-object creation and constructs/ticks 3,812 live
+units. Next
+connect `aoe_scenario_runtime_paint_foundation_ror` to the owned type-80
+completion world adapter, then continue through the live cleanup/update chain.

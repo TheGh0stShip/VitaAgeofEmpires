@@ -4,6 +4,7 @@
 #include "live_unit_factory.h"
 #include "player_templates.h"
 #include "runtime_map.h"
+#include "terrain_transition.h"
 #include "tile_object_draw.h"
 
 enum { AOE_SCENARIO_RUNTIME_PLAYERS = 9 };
@@ -38,6 +39,9 @@ typedef struct {
     size_t editor_unit_capacity;
     const DatGraphics *graphics;
     const DatMapGeometry *geometry;
+    const DatIntro *intro;
+    const DatTerrains *terrains;
+    const DatBorders *terrain_borders;
     int32_t diplomacy[AOE_SCENARIO_RUNTIME_PLAYERS]
                      [AOE_SCENARIO_RUNTIME_PLAYERS];
     uint64_t constructed_units;
@@ -55,6 +59,7 @@ typedef struct {
 
 int aoe_scenario_runtime_build_ror(
     AoeScenarioRuntimeRor *runtime, const ScnMap *scenario,
+    const DatIntro *intro,
     const DatCivilizations *civilizations, const DatGraphics *graphics,
     const DatTerrains *terrains, const DatBorders *borders,
     const DatMapGeometry *geometry, uint32_t rng_seed);
@@ -98,6 +103,18 @@ int16_t aoe_scenario_runtime_terrain_object_template_ror(
     void *context, const void *object);
 int aoe_scenario_runtime_terrain_remove_object_ror(
     void *context, void *object);
+
+/* Builds the complete owned callback set consumed by
+   aoe_terrain_transition_cell_ror. Placement uses 004481b0's exact template
+   +0x20 argument set; creation uses Gaia's cloned template +0x18 factory. */
+int aoe_scenario_runtime_terrain_transition_ops_ror(
+    AoeScenarioRuntimeRor *runtime, AoeTerrainTransitionOps *ops);
+
+/* Complete owned composition of completion's 00449110 call, including its
+   004481b0 per-cell object transitions, border refresh, and invalidation. */
+int aoe_scenario_runtime_paint_foundation_ror(
+    AoeScenarioRuntimeRor *runtime,
+    const AoeBuildingFoundationBounds *bounds, uint8_t terrain_id);
 
 /* Runs only the recovered sprite-manager tail shared by RoR live types
    20..80, in scenario player/record order. It does not stand in for the

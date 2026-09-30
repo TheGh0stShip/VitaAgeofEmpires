@@ -1,4 +1,5 @@
 #include "scenario_runtime.h"
+#include "unit_placement_check.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -39,15 +40,20 @@ void aoe_scenario_runtime_destroy_ror(AoeScenarioRuntimeRor *runtime) {
 
 int aoe_scenario_runtime_build_ror(
     AoeScenarioRuntimeRor *runtime, const ScnMap *scenario,
+    const DatIntro *intro,
     const DatCivilizations *civilizations, const DatGraphics *graphics,
     const DatTerrains *terrains, const DatBorders *borders,
     const DatMapGeometry *geometry, uint32_t rng_seed) {
-    if (!runtime || !scenario || !civilizations || !graphics || !terrains ||
+    if (!runtime || !scenario || !intro || !intro->terrain_restrictions ||
+        !civilizations || !graphics || !terrains ||
         !borders || !geometry || runtime->initialized || runtime->map.tiles ||
         runtime->world.view.positive || runtime->world.view.negative)
         return 0;
     runtime->active_player = -1;
     runtime->rng.state = rng_seed;
+    runtime->intro = intro;
+    runtime->terrains = terrains;
+    runtime->terrain_borders = borders;
     runtime->graphics = graphics;
     runtime->geometry = geometry;
     for (unsigned p = 1; p < AOE_SCENARIO_RUNTIME_PLAYERS; ++p) {
@@ -281,6 +287,85 @@ int aoe_scenario_runtime_terrain_remove_object_ror(
         unit, &runtime->players[owner_index].resources,
         &runtime->players[owner_index].owner, &runtime->world,
         &runtime->players[owner_index].vision_binding);
+}
+
+static int runtime_terrain_blocked(void *context, int16_t unit_id,
+                                   float x, float y) {
+    AoeScenarioRuntimeRor *runtime = context;
+    DatUnit *unit;
+    const float *restriction;
+    AoeUnitPlacementCheckContext check;
+    int32_t blocker = -1;
+    if (!runtime || !runtime->initialized || !runtime->intro || unit_id < 0 ||
+        !(unit = aoe_player_templates_get(
+              &runtime->players[0].templates, (uint16_t)unit_id)) ||
+        unit->terrain_restriction < 0 ||
+        (uint16_t)unit->terrain_restriction >=
+            runtime->intro->restriction_count)
+        return 1;
+    restriction = runtime->intro->terrain_restrictions +
+        (size_t)(uint16_t)unit->terrain_restriction *
+            runtime->intro->terrain_count;
+    check = (AoeUnitPlacementCheckContext){
+        &runtime->map, restriction, runtime->intro->terrain_count, 0};
+    return aoe_unit_placement_check_ror(
+        unit, &check, x, y, &blocker,
+        0, 1, 0, 1, 0, 1) != AOE_PLACEMENT_OK;
+}
+
+static int runtime_terrain_create(void *context, int16_t unit_id,
+                                  float x, float y) {
+    if (unit_id < 0) return 0;
+    return aoe_scenario_runtime_editor_create_ror(
+        context, 0, (uint16_t)unit_id, x, y, 0.0f, NULL);
+}
+
+int aoe_scenario_runtime_terrain_transition_ops_ror(
+    AoeScenarioRuntimeRor *runtime, AoeTerrainTransitionOps *ops) {
+    if (!runtime || !runtime->initialized || !ops) return 0;
+    *ops = (AoeTerrainTransitionOps){
+        runtime, 0,
+        aoe_scenario_runtime_terrain_object_owner_ror,
+        aoe_scenario_runtime_terrain_object_template_ror,
+        aoe_scenario_runtime_terrain_remove_object_ror,
+        runtime_terrain_blocked,
+        runtime_terrain_create
+    };
+    return 1;
+}
+
+typedef struct {
+    AoeScenarioRuntimeRor *runtime;
+    AoeTerrainTransitionOps ops;
+} RuntimeTerrainPaintContext;
+
+static int runtime_paint_transition(void *opaque, uint32_t x, uint32_t y,
+                                    uint8_t old_terrain,
+                                    int16_t filter_terrain) {
+    RuntimeTerrainPaintContext *context = opaque;
+    (void)old_terrain;
+    return aoe_terrain_transition_cell_ror(
+        &context->runtime->map, context->runtime->terrains,
+        &context->runtime->rng, x, y, filter_terrain, -1, -1,
+        &context->ops);
+}
+
+int aoe_scenario_runtime_paint_foundation_ror(
+    AoeScenarioRuntimeRor *runtime,
+    const AoeBuildingFoundationBounds *bounds, uint8_t terrain_id) {
+    RuntimeTerrainPaintContext context;
+    AoeRuntimeTerrainPaintOps paint;
+    if (!runtime || !runtime->initialized || !bounds || !runtime->terrains ||
+        !runtime->terrain_borders ||
+        !aoe_scenario_runtime_terrain_transition_ops_ror(
+            runtime, &context.ops))
+        return 0;
+    context.runtime = runtime;
+    paint = (AoeRuntimeTerrainPaintOps){&context, runtime_paint_transition};
+    return aoe_runtime_map_paint_terrain_ror(
+        &runtime->map, runtime->terrains, runtime->terrain_borders,
+        bounds->x0, bounds->y0, bounds->x1, bounds->y1,
+        terrain_id, 0, &paint);
 }
 
 int aoe_scenario_runtime_tick_sprites_ror(

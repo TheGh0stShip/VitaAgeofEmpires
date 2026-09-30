@@ -171,7 +171,7 @@ int main(int argc, char **argv) {
         !aoe_color_table_set_load_drs_fallback(
             &intro, interface_archives, 2, &color_tables) ||
         !aoe_graphic_art_cache_init(&graphic_cache, 128, 64u * 1024u * 1024u) ||
-        !aoe_scenario_runtime_build_ror(&runtime, &scenario, &civs, &graphics,
+        !aoe_scenario_runtime_build_ror(&runtime, &scenario, &intro, &civs, &graphics,
             &terrains, &borders, &geometry, 1) ||
         !aoe_scenario_runtime_set_active_player_ror(&runtime, 1)) goto done;
     palette_bytes = malloc(palette_match.entry->size);

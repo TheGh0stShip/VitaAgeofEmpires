@@ -51,10 +51,11 @@ int aoe_runtime_map_invalidate_ror(AoeRuntimeMap *map,
 typedef struct {
     void *context;
     /* 004481b0, invoked once for every admitted cell after its terrain byte
-       is written. `filter_terrain` is completion's final zero argument. */
-    void (*transition_cell)(void *context, uint32_t x, uint32_t y,
-                            uint8_t old_terrain,
-                            int16_t filter_terrain);
+       is written. `filter_terrain` is completion's final zero argument.
+       Return zero if a required dynamic removal or creation failed. */
+    int (*transition_cell)(void *context, uint32_t x, uint32_t y,
+                           uint8_t old_terrain,
+                           int16_t filter_terrain);
 } AoeRuntimeTerrainPaintOps;
 
 /* Deterministic map portion of RoR 00449110 for its write-enabled path.
@@ -62,7 +63,8 @@ typedef struct {
    and clipped. Admitted cells require a positive target-terrain frame count
    for their existing elevation shape. The mandatory transition hook keeps
    004481b0 object removal/spawning explicit. Borders and invalidation are
-   recomputed over the one-cell-expanded painted rectangle. */
+   recomputed over the one-cell-expanded painted rectangle. A failed hook is
+   propagated after the admitted terrain write, before border/invalidation. */
 int aoe_runtime_map_paint_terrain_ror(
     AoeRuntimeMap *map, const DatTerrains *terrains,
     const DatBorders *borders, int32_t x0, int32_t y0,

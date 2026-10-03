@@ -99,6 +99,17 @@ int aoe_live_unit_propagate_dependency_ror(
     AoeLiveUnit *unit, int32_t target_unit_id, uint32_t context_bits,
     const AoeLiveUnitDependencyOps *ops);
 
+/* Patched 004ac0a0/004ac1d0 group removal. Ordinary removal deletes the ID
+   from resolved non-self members using 004ac0a0's inline capacity scan (which
+   does not clear their +0x78), then calls 004ac030 on the caller. Removing
+   the caller's own source ID instead clears every resolved non-self member
+   and the caller, as does the explicit group-clear entry. */
+int aoe_live_unit_remove_dependency_group_ror(
+    AoeLiveUnit *unit, int32_t unit_id,
+    const AoeLiveUnitDependencyOps *ops);
+int aoe_live_unit_clear_dependency_group_ror(
+    AoeLiveUnit *unit, const AoeLiveUnitDependencyOps *ops);
+
 typedef struct {
     void *context;
     /* Current unit vtable +0x5c. State changes are class-specific, so this

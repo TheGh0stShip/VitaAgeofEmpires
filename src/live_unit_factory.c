@@ -176,8 +176,8 @@ int aoe_live_unit_add_dependency_ror(
     return 1;
 }
 
-int aoe_live_unit_remove_dependency_ror(
-    AoeLiveUnit *unit, int32_t unit_id) {
+static int remove_dependency(
+    AoeLiveUnit *unit, int32_t unit_id, int clear_empty_source) {
     uint32_t index;
     int found = 0;
     if (!unit || !unit->constructed ||
@@ -196,8 +196,14 @@ int aoe_live_unit_remove_dependency_ror(
         if (unit->dependent_unit_count)
             --unit->dependent_unit_count;
     }
-    if (!unit->dependent_unit_count) unit->dependent_source_id = -1;
+    if (clear_empty_source && !unit->dependent_unit_count)
+        unit->dependent_source_id = -1;
     return found;
+}
+
+int aoe_live_unit_remove_dependency_ror(
+    AoeLiveUnit *unit, int32_t unit_id) {
+    return remove_dependency(unit, unit_id, 1);
 }
 
 int aoe_live_unit_clear_dependencies_ror(AoeLiveUnit *unit) {
@@ -237,6 +243,45 @@ int aoe_live_unit_propagate_dependency_ror(
     return aoe_live_unit_set_dependencies_ror(
         unit, ids, (int32_t)(count + 1u), unit->core.unit_id,
         context_bits);
+}
+
+int aoe_live_unit_clear_dependency_group_ror(
+    AoeLiveUnit *unit, const AoeLiveUnitDependencyOps *ops) {
+    uint32_t count;
+    if (!unit || !unit->constructed || !ops || !ops->resolve ||
+        unit->dependent_unit_count > unit->dependent_unit_capacity ||
+        (unit->dependent_unit_capacity && !unit->dependent_unit_ids))
+        return 0;
+    count = unit->dependent_unit_count;
+    for (uint32_t i = 0; i < count; ++i) {
+        AoeLiveUnit *member = ops->resolve(
+            ops->context, unit->dependent_unit_ids[i]);
+        if (member && member->core.unit_id != unit->core.unit_id)
+            (void)aoe_live_unit_clear_dependencies_ror(member);
+    }
+    return aoe_live_unit_clear_dependencies_ror(unit);
+}
+
+int aoe_live_unit_remove_dependency_group_ror(
+    AoeLiveUnit *unit, int32_t unit_id,
+    const AoeLiveUnitDependencyOps *ops) {
+    uint32_t count;
+    if (!unit || !unit->constructed || !ops || !ops->resolve ||
+        unit->dependent_unit_count > unit->dependent_unit_capacity ||
+        (unit->dependent_unit_capacity && !unit->dependent_unit_ids))
+        return 0;
+    if (unit_id == unit->core.unit_id &&
+        unit->core.unit_id == unit->dependent_source_id)
+        return aoe_live_unit_clear_dependency_group_ror(unit, ops);
+    count = unit->dependent_unit_count;
+    for (uint32_t i = 0; i < count; ++i) {
+        AoeLiveUnit *member = ops->resolve(
+            ops->context, unit->dependent_unit_ids[i]);
+        if (member && member->core.unit_id != unit->core.unit_id)
+            (void)remove_dependency(member, unit_id, 0);
+    }
+    (void)aoe_live_unit_remove_dependency_ror(unit, unit_id);
+    return 1;
 }
 
 int aoe_live_unit_update_attached_target_ror(

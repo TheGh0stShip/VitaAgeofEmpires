@@ -371,6 +371,29 @@ int main(void) {
            live.dependent_context_bits == UINT32_C(0x40800000) &&
            other.dependent_unit_count == 1 &&
            other.dependent_unit_ids[0] == live.core.unit_id);
+    /* Source-ID self removal selects 004ac1d0's whole-group clear. */
+    assert(aoe_live_unit_remove_dependency_group_ror(
+        &live, live.core.unit_id, &dependency_ops) &&
+        !live.dependent_unit_count && live.dependent_source_id == -1 &&
+        !other.dependent_unit_count && other.dependent_source_id == -1);
+    assert(aoe_live_unit_set_dependencies_ror(
+        &live, &member_id, 1, -1, 0) &&
+        aoe_live_unit_propagate_dependency_ror(
+            &live, live.core.unit_id, UINT32_C(0x40800000),
+            &dependency_ops));
+    live.dependent_source_id = -1;
+    other.dependent_source_id = 55;
+    assert(aoe_live_unit_remove_dependency_group_ror(
+        &live, live.core.unit_id, &dependency_ops) &&
+        live.dependent_unit_count == 1 &&
+        live.dependent_unit_ids[0] == other.core.unit_id &&
+        !other.dependent_unit_count && other.dependent_source_id == 55);
+    assert(aoe_live_unit_add_dependency_ror(
+               &other, live.core.unit_id, 0) &&
+           aoe_live_unit_clear_dependency_group_ror(
+               &live, &dependency_ops) &&
+           !live.dependent_unit_count && live.dependent_source_id == -1 &&
+           !other.dependent_unit_count && other.dependent_source_id == -1);
     other.core.state = 2;
     aoe_live_unit_destroy_ror(&other, &owner, &world, &vision);
 

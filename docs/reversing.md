@@ -931,6 +931,17 @@ count `+0x68 > 1`. It is not an action list. The disc-address table above
 (live vtables and their `+0x5c/+0x68/+0x6c/+0xb4` columns) remains
 unpatched-release evidence.
 
+That state-3 body is now `aoe_live_unit_dependency_handoff_ror`. Over the
+source's IDs, re-reading count `+0x68` each step, it skips the source's own
+ID. Each member that resolves, has state `<= 2` and a non-null `+0x74`
+(getter RoR `0x00407a60`, base `0x004aa8b0`) gets `+0x78` = the first such
+member's ID. That member then calls `0x00413050` (base `0x00412e40`) on its
+`+0x74` object with the source's `+0x74 -> +0x12c` record. That call lazily
+constructs its own 0x1c8-byte `+0x12c` record (`0x0040d2f0`) and copies the
+old one in (`0x0040d670`). The source keeps its own `+0x78` and list.
+`-1` doubles as the "no leader yet" sentinel, as in the executable. What the
+`+0x74` object and its `+0x12c` record represent is not yet identified.
+
 The type-40–70 prefix is now composed by
 `aoe_live_unit_cleanup_derived_prefix_ror`: when semantic live `+0x184` is
 present, it drains the list through `aoe_action_list_clear` (`0x00403e70`),

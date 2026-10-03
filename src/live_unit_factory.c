@@ -298,6 +298,34 @@ int aoe_live_unit_set_dependency_group_ror(
     return 1;
 }
 
+int aoe_live_unit_dependency_handoff_ror(
+    AoeLiveUnit *unit, const AoeLiveUnitDependencyHandoffOps *ops) {
+    int32_t leader_id = -1;
+    if (!unit || !unit->constructed || !ops || !ops->world.resolve ||
+        !ops->has_group_object || !ops->adopt_group ||
+        unit->dependent_unit_count > unit->dependent_unit_capacity ||
+        (unit->dependent_unit_capacity && !unit->dependent_unit_ids) ||
+        unit->dependent_source_id != unit->core.unit_id ||
+        unit->dependent_unit_count < 2 ||
+        !ops->has_group_object(ops->context, unit))
+        return 0;
+    for (uint32_t i = 0; i < unit->dependent_unit_count; ++i) {
+        int32_t id = unit->dependent_unit_ids[i];
+        AoeLiveUnit *member;
+        if (id == unit->core.unit_id) continue;
+        member = ops->world.resolve(ops->world.context, id);
+        if (!member || member->core.state > 2 ||
+            !ops->has_group_object(ops->context, member))
+            continue;
+        /* -1 is also the "no leader yet" sentinel, exactly as in the
+           executable's local. */
+        if (leader_id == -1) leader_id = id;
+        member->dependent_source_id = leader_id;
+        if (id == leader_id) ops->adopt_group(ops->context, member, unit);
+    }
+    return 1;
+}
+
 int aoe_live_unit_add_build_work_ror(
     AoeLiveUnit *unit, float amount, const AoeLiveUnitSetStateOps *ops,
     int *completed) {

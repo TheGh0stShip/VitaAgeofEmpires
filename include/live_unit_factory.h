@@ -130,6 +130,32 @@ typedef struct {
 } AoeLiveUnitUpdateTargetOps;
 
 typedef struct {
+    AoeLiveUnitDependencyOps world;
+    void *context;
+    /* 0x00407a60: the member's +0x74 object is non-null. */
+    int (*has_group_object)(void *context, const AoeLiveUnit *unit);
+    /* (new_leader +0x74)->0x00413050((source +0x74)->+0x12c): lazily build
+       the leader's 0x1c8-byte +0x12c record (0x0040d2f0) and copy the old
+       source's record into it (0x0040d670) when both exist. */
+    void (*adopt_group)(void *context, AoeLiveUnit *new_leader,
+                        AoeLiveUnit *old_source);
+} AoeLiveUnitDependencyHandoffOps;
+
+/* State-3 group handoff body inside patched RoR 1.0a root setter
+   0x004aa550. Patched AoE 1.0c 0x004a9430 has the same body (getter
+   0x004aa8b0, adopt 0x00412e40, lookup 0x00519f60). The setter runs it after
+   storing state 3 when the unit is its own source (+0x04 == +0x78), its
+   +0x74 object exists and count +0x68 > 1. Over the source's IDs in order
+   (count re-read each step), the source's own ID is skipped, and each
+   member that resolves with state <= 2 and a group object gets
+   +0x78 = the first such member's ID. That first member alone then adopts
+   the group through `adopt_group`. The source's own +0x78 and list are
+   unchanged. Returns 0 for missing dependencies or a source that does not
+   meet the branch condition. */
+int aoe_live_unit_dependency_handoff_ror(
+    AoeLiveUnit *unit, const AoeLiveUnitDependencyHandoffOps *ops);
+
+typedef struct {
     void *context;
     int (*set_state)(void *context, AoeLiveUnit *unit,
                      uint8_t state); /* current unit vtable +0x5c */

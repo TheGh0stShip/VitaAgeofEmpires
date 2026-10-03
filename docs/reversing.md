@@ -1117,6 +1117,20 @@ Tribe opcodes 0x6a/0x6b/0x6d/0x6e/0x6f (`src/command_tribe_unit.c`):
 - 0x6f issues, for each unit, its owner's `+0x34` task (owner, unit,
   0x2d1, unit, owner, x, y, 0, 1.0f, 1, 0, 100) after `0x004ac320`.
 
+Tribe opcodes 0x64/0x65 (`0x004e85e0`/`0x004e8780`; 0x10-byte records:
+building `+0x04`, player `+0x08`, int16 item `+0x0a`, request `+0x0c`) are
+train and research.
+- If the building resolves and its active-action query `0x004ad870` (head
+  action type) is neither 0x66 nor 0x67, the item's location is checked:
+  train uses template `+0x15c`, which must equal the building ID or be -1;
+  research uses tech tree `+0x224` entry `+0x28`, which must match exactly.
+  On a match, the 0x50-byte train action `0x004b4f10` or the 0x48-byte
+  research action `0x004b60b0` is added through building `+0x208`, and a
+  group object hears `0x0040f6d0(0x26c)` and `0x00412f50(request, -1,
+  -1.0f x3)`. A location mismatch does nothing.
+- A missing or busy building defers to player `+0x10c` (train) or
+  `+0x118` (research) with the raw building ID.
+
 The type-40–70 prefix is now composed by
 `aoe_live_unit_cleanup_derived_prefix_ror`: when semantic live `+0x184` is
 present, it drains the list through `aoe_action_list_clear` (`0x00403e70`),

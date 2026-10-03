@@ -215,3 +215,16 @@ void aoe_command_bind_tribe_unit_ror(AoeCommandTribeDispatchRor *dispatch,
         b->context = (void *)ops;
     }
 }
+
+static int production(void *c, const uint8_t *m, size_t n) {
+    return aoe_command_execute_production_ror(m, n, c);
+}
+
+void aoe_command_bind_production_ror(AoeCommandTribeDispatchRor *dispatch,
+                                     const AoeCommandProductionOps *ops) {
+    if (!dispatch) return;
+    for (int op = AOE_COMMAND_TRAIN_ROR; op <= AOE_COMMAND_RESEARCH_ROR; ++op) {
+        dispatch->tribe[op - AOE_COMMAND_TRIBE_FIRST_ROR].handler = production;
+        dispatch->tribe[op - AOE_COMMAND_TRIBE_FIRST_ROR].context = (void *)ops;
+    }
+}

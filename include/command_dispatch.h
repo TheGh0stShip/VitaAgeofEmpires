@@ -10,6 +10,7 @@
 #include "command_object.h"
 #include "command_order.h"
 #include "command_player_task.h"
+#include "command_production.h"
 #include "command_tribe_unit.h"
 #include "command_player.h"
 
@@ -118,6 +119,9 @@ void aoe_command_bind_object_create_ror(AoeCommandDispatchRor *dispatch,
                                         const AoeCommandObjectOps *ops);
 void aoe_command_bind_object_create_tribe_ror(
     AoeCommandTribeDispatchRor *dispatch, const AoeCommandObjectOps *ops);
+/* Tribe opcodes 0x64 (train) and 0x65 (research). */
+void aoe_command_bind_production_ror(AoeCommandTribeDispatchRor *dispatch,
+                                     const AoeCommandProductionOps *ops);
 /* Tribe opcodes 0x6a, 0x6b, 0x6d, 0x6e and 0x6f. */
 void aoe_command_bind_tribe_unit_ror(AoeCommandTribeDispatchRor *dispatch,
                                      const AoeCommandTribeUnitOps *ops);

@@ -942,6 +942,27 @@ old one in (`0x0040d670`). The source keeps its own `+0x78` and list.
 `-1` doubles as the "no leader yet" sentinel, as in the executable. What the
 `+0x74` object and its `+0x12c` record represent is not yet identified.
 
+Tribe command 0x77 (`0x004e9450`, builder `0x004e9c20`, 0x0c bytes:
+building ID `+0x04`, int16 unit `+0x08`, int16 count `+0x0a`) has no player
+byte and no owner check. A positive count calls queue add `0x004adab0`;
+otherwise `0x004add50` cancel receives the 16-bit negated count. Raw
+disassembly of `0x004adab0`:
+- A tail entry with the same unit ID gets up to `count` additions. Each is
+  owner `0x004f15f0(unit, &slot, 1.0f, 1)` then `0x004f1750(unit, 1.0f, 1)`
+  and a word increment.
+- `0x004f15f0` always writes -1 (or the failing resource, or 0x20) to the
+  argument slot, and event 0x7d reports that slot's low word.
+- A failure with nothing added returns before the `+0x1d0` bump and event
+  0x7c.
+- A different unit ID first drains the whole queue with
+  `0x004add50(head, 1)` (one unit type per building), then performs one
+  up-front check. A full queue grows by 10 entries (`calloc`, copy,
+  `free`; allocation failure returns silently), and the new entry is
+  filled by the per-item loop. It is appended even when empty.
+`aoe_building_queue_add_ror` and `aoe_command_execute_building_queue_ror`
+translate this. The cost check and payment `0x004f15f0`/`0x004f1750`
+remain callbacks.
+
 The type-40–70 prefix is now composed by
 `aoe_live_unit_cleanup_derived_prefix_ror`: when semantic live `+0x184` is
 present, it drains the list through `aoe_action_list_clear` (`0x00403e70`),

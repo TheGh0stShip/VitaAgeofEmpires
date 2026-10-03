@@ -109,3 +109,17 @@ void aoe_command_bind_object_create_tribe_ror(
     dispatch->opcode4.handler = object_create_tribe;
     dispatch->opcode4.context = (void *)ops;
 }
+
+static int building_queue(void *context, const uint8_t *command,
+                          size_t size) {
+    return aoe_command_execute_building_queue_ror(command, size, context);
+}
+
+void aoe_command_bind_building_queue_ror(AoeCommandTribeDispatchRor *dispatch,
+                                         const AoeCommandBuildingOps *ops) {
+    if (!dispatch) return;
+    dispatch->tribe[AOE_COMMAND_BUILDING_QUEUE_ROR -
+                    AOE_COMMAND_TRIBE_FIRST_ROR].handler = building_queue;
+    dispatch->tribe[AOE_COMMAND_BUILDING_QUEUE_ROR -
+                    AOE_COMMAND_TRIBE_FIRST_ROR].context = (void *)ops;
+}

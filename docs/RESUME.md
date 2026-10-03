@@ -125,9 +125,12 @@ opcode-4 override, and opcodes 0x64-0x6f/0x77, all reported as UNBOUND until
 translated. The tribe processor is now traced as the one real sessions
 construct. Opcode 4 is translated for both processors, including the
 tribe override's 4.0f elevation and instant building completion through
-`0x004ad7b0`. Next: tribe opcodes 0x64-0x6f/0x77, base opcodes 0-3, 6 and
-0x0a-0x11, and re-mapping the suspect root `+0x5c` address in
-`live_unit_state.h`.
+`0x004ad7b0`. Root setter labels are now the patched `0x004aa550` (RoR)
+and `0x004a9430` (AoE 1.0c), and its state-3 dependency-group leadership
+handoff is translated. Tribe opcode 0x77 (production queue add/cancel,
+`0x004adab0`) is translated. Next: owner cost check/payment
+`0x004f15f0`/`0x004f1750`, tribe opcodes 0x64-0x6f, and base opcodes 0-3,
+6 and 0x0a-0x11.
 `aoe_live_unit_player_update_step_ror` binds it into actual player +0x7c
 object-list traversal by matching listed `+0x38` references against an
 explicit owned-unit roster; unrelated list objects still go through required

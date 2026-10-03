@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "aoe_rng.h"
+#include "command_building.h"
 #include "command_dependency.h"
 #include "command_object.h"
 #include "command_player.h"
@@ -106,6 +107,9 @@ void aoe_command_bind_object_create_ror(AoeCommandDispatchRor *dispatch,
                                         const AoeCommandObjectOps *ops);
 void aoe_command_bind_object_create_tribe_ror(
     AoeCommandTribeDispatchRor *dispatch, const AoeCommandObjectOps *ops);
+/* Tribe opcode 0x77: 0x004e9450 production queue add/cancel. */
+void aoe_command_bind_building_queue_ror(AoeCommandTribeDispatchRor *dispatch,
+                                         const AoeCommandBuildingOps *ops);
 /* Opcode 7: both processor vtables keep 0x0042ad40 in slot +0x00. */
 void aoe_command_bind_player_tribute_ror(AoeCommandDispatchRor *dispatch,
                                          const AoeCommandPlayerOps *ops);

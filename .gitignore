@@ -34,3 +34,5 @@ status/port-progress-footprint-v4.jpg
 *.log
 __pycache__/
 *.py[cod]
+# Locally supplied Windows Mobile / Pocket PC research material (never commit)
+Windows Mobile AoE/

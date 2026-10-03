@@ -122,8 +122,12 @@ Opcode 7 (tribute) is translated with its exact `__ftol` reporting. The
 derived tribe router `0x004e83e0` is modelled by
 `aoe_command_dispatch_tribe_ror`: one CRT `rand()` step per command, an
 opcode-4 override, and opcodes 0x64-0x6f/0x77, all reported as UNBOUND until
-translated. The next command work is those tribe handlers, base opcodes 0-4,
-6 and 0x0a-0x11, and tracing which processor a real session constructs.
+translated. The tribe processor is now traced as the one real sessions
+construct. Opcode 4 is translated for both processors, including the
+tribe override's 4.0f elevation and instant building completion through
+`0x004ad7b0`. Next: tribe opcodes 0x64-0x6f/0x77, base opcodes 0-3, 6 and
+0x0a-0x11, and re-mapping the suspect root `+0x5c` address in
+`live_unit_state.h`.
 `aoe_live_unit_player_update_step_ror` binds it into actual player +0x7c
 object-list traversal by matching listed `+0x38` references against an
 explicit owned-unit roster; unrelated list objects still go through required

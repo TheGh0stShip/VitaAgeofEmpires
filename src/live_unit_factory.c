@@ -298,6 +298,41 @@ int aoe_live_unit_set_dependency_group_ror(
     return 1;
 }
 
+int aoe_live_unit_add_build_work_ror(
+    AoeLiveUnit *unit, float amount, const AoeLiveUnitSetStateOps *ops,
+    int *completed) {
+    const DatUnit *unit_template;
+    AoeBuildingUpdate *building;
+    double total, hit_points, finished;
+    if (!unit || !unit->constructed || !completed ||
+        !(unit_template = unit->core.unit_template) ||
+        !(building = unit->building_update) ||
+        building->unit_template != unit_template)
+        return 0;
+    if (unit->core.state != 0) {
+        *completed = 1;
+        return 1;
+    }
+    if (!ops || !ops->set_state) return 0;
+    total = (double)unit_template->train_time;
+    if ((double)amount + building->elapsed_build_time > total)
+        amount = (float)(total - building->elapsed_build_time);
+    hit_points = (double)unit_template->hit_points * amount / total +
+                 unit->core.hit_points;
+    unit->core.hit_points = (float)hit_points;
+    if (hit_points > (double)(float)unit_template->hit_points)
+        unit->core.hit_points = (float)unit_template->hit_points;
+    finished = (double)amount + building->elapsed_build_time;
+    building->elapsed_build_time = (float)finished;
+    if (!(finished >= total)) {
+        *completed = 0;
+        return 1;
+    }
+    if (!ops->set_state(ops->context, unit, 2)) return 0;
+    *completed = 1;
+    return 1;
+}
+
 int aoe_live_unit_update_attached_target_ror(
     AoeLiveUnit *unit, const AoeLiveUnitUpdateTargetOps *ops, int *handled) {
     AoeLiveUnitCore *target;

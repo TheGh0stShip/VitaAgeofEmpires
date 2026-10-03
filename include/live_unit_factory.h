@@ -129,6 +129,29 @@ typedef struct {
     int (*set_state)(void *context, AoeLiveUnit *unit, uint8_t state);
 } AoeLiveUnitUpdateTargetOps;
 
+typedef struct {
+    void *context;
+    int (*set_state)(void *context, AoeLiveUnit *unit,
+                     uint8_t state); /* current unit vtable +0x5c */
+} AoeLiveUnitSetStateOps;
+
+/* Patched RoR 1.0a 0x004ad7b0, building construction progress. A unit
+   whose +0x48 state is nonzero reports `completed=1` untouched. Otherwise,
+   with T = template +0x15a (train_time) and H = template +0x26 (hit
+   points):
+   - if amount + elapsed(+0x1d4) > T, amount becomes (float)(T - elapsed);
+   - hp(+0x30) += H * amount / T; if the sum exceeds H the stored hp
+     becomes H (the original compares the unrounded sum, which is
+     equivalent because H is exact and float rounding is monotonic);
+   - elapsed += amount; if the unrounded total is >= T, vtable +0x5c sets
+     state 2 and `completed=1`, otherwise `completed=0` (also for NaN).
+   Unrounded x87 stack values are modelled as double, assuming the MSVC
+   default 53-bit precision control; values are rounded to float only where
+   the original stores them. Returns 0 only for missing dependencies. */
+int aoe_live_unit_add_build_work_ror(
+    AoeLiveUnit *unit, float amount, const AoeLiveUnitSetStateOps *ops,
+    int *completed);
+
 /* Attached-unit branch of patched RoR 1.0a 0x004a8f40. A non-null original
    live +0x20 suppresses the normal state switch. If the attached unit is in
    state 3 or higher, its state is propagated to the current unit through

@@ -85,3 +85,27 @@ void aoe_command_bind_player_tribute_ror(AoeCommandDispatchRor *dispatch,
     dispatch->opcodes[AOE_COMMAND_PLAYER_TRIBUTE_ROR].handler = player_tribute;
     dispatch->opcodes[AOE_COMMAND_PLAYER_TRIBUTE_ROR].context = (void *)ops;
 }
+
+static int object_create(void *context, const uint8_t *command, size_t size) {
+    return aoe_command_execute_object_create_ror(command, size, context);
+}
+
+static int object_create_tribe(void *context, const uint8_t *command,
+                               size_t size) {
+    return aoe_command_execute_object_create_tribe_ror(command, size,
+                                                       context);
+}
+
+void aoe_command_bind_object_create_ror(AoeCommandDispatchRor *dispatch,
+                                        const AoeCommandObjectOps *ops) {
+    if (!dispatch) return;
+    dispatch->opcodes[AOE_COMMAND_OBJECT_CREATE_ROR].handler = object_create;
+    dispatch->opcodes[AOE_COMMAND_OBJECT_CREATE_ROR].context = (void *)ops;
+}
+
+void aoe_command_bind_object_create_tribe_ror(
+    AoeCommandTribeDispatchRor *dispatch, const AoeCommandObjectOps *ops) {
+    if (!dispatch) return;
+    dispatch->opcode4.handler = object_create_tribe;
+    dispatch->opcode4.context = (void *)ops;
+}

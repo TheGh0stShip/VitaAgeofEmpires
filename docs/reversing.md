@@ -895,6 +895,36 @@ every other value to `0x0042a180`. Patched CRT `srand`/`rand` are RoR
 `0x0051fc8f`/`0x0051fc99` (seed `0x005591ec`); the `aoe_rng` header had
 quoted unpatched-release addresses.
 
+The derived processor is the one RoR sessions run. Entry `0x00528f78`
+calls WinMain `0x004436f0`, which allocates and constructs only the tribe
+game (`0x004fdfa0`, vtable `0x0054a264`). Its world factory (`+0xbc` =
+`0x004ff3c0`, 0x124 bytes) builds the tribe world `0x00509ae0` (vtable
+`0x0054a4f8`), and that world's `+0x54` (`0x0050a090`) installs processor
+vtable `0x00549904` at world `+0x58`. The base world vtable `0x0054a954`
+(`+0x54` = `0x0051c790`) and base game factory `0x004198d0` exist, but they
+are installed only as base-class parts of those constructors.
+
+Opcode 4 (builder `0x0042ba90`, 0x14 bytes: int16 template index `+0x02`,
+player `+0x04`, floats `+0x08/+0x0c/+0x10`) is handled in that session by
+the tribe override `0x004e8570`, not base `0x0042acd0`:
+- template `+0x68` (`elevation_mode`) equal to 1 forces z to 4.0f by
+  writing the record;
+- the template's vtable `+0x18` creates the object;
+- if the new unit's template type is 80, `0x004ad7b0` gets 10000.0f of
+  work.
+`0x004ad7b0` adds construction work. With state `+0x48` nonzero it returns
+1. Otherwise it clamps the work to the remaining `+0x15a` time, adds
+`H*work/T` hit points (`+0x26`, clamped to H), accumulates `+0x1d4`, and
+when the total reaches T calls vtable `+0x5c(2)`; NaN does not complete.
+These are `aoe_command_execute_object_create_tribe_ror` and
+`aoe_live_unit_add_build_work_ror`. Intermediates use double, on the MSVC
+default 53-bit x87 precision-control assumption, which has not yet been
+verified against the running game.
+
+Open address question: `include/live_unit_state.h` names `0x004abdf0` as the
+RoR root `+0x5c`, but in the patched RoR image `0x004abdf0` is dependency
+add. That entry is probably a disc-release address and needs re-mapping.
+
 The type-40–70 prefix is now composed by
 `aoe_live_unit_cleanup_derived_prefix_ror`: when semantic live `+0x184` is
 present, it drains the list through `aoe_action_list_clear` (`0x00403e70`),

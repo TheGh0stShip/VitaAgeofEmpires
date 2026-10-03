@@ -6,6 +6,7 @@
 
 #include "aoe_rng.h"
 #include "command_dependency.h"
+#include "command_object.h"
 #include "command_player.h"
 
 /* Patched Rise of Rome 1.0a command-processor vtable 0x00543498 slot +0x08
@@ -52,9 +53,12 @@ AoeCommandRouteRor aoe_command_dispatch_ror(
     size_t size);
 
 /* Derived ("tribe") processor vtable 0x00549904 slot +0x08 = 0x004e83e0,
-   installed by 0x004e8390 from 0x0050a090; base processors are built from
-   0x0051c790. Both store the processor at owner +0x58. Which one a session
-   uses is inferred, not yet traced.
+   is the processor real RoR sessions run. Traced chain: entry 0x00528f78
+   -> WinMain 0x004436f0 constructs only tribe game 0x004fdfa0 (vtable
+   0x0054a264) -> game +0xbc 0x004ff3c0 builds tribe world 0x00509ae0
+   (vtable 0x0054a4f8) -> world +0x54 0x0050a090 -> 0x004e8390 installs
+   0x00549904 at world +0x58. The base world's +0x54 (0x0051c790, base
+   processor) is reached only through base-world vtable 0x0054a954.
    0x004e83e0 first calls CRT rand() (0x0052605d) once per command and
    discards the result, so every dispatched command advances the shared
    seed. It then decodes the opcode through byte table 0x004e84fc and jump
@@ -96,6 +100,12 @@ void aoe_command_bind_dependency_ror(AoeCommandDispatchRor *dispatch,
                                      const AoeCommandDependencyOps *ops);
 void aoe_command_bind_player_resource_ror(AoeCommandDispatchRor *dispatch,
                                           const AoeCommandPlayerOps *ops);
+/* Opcode 4: base 0x0042acd0 into the base table, and tribe 0x004e8570 into
+   the derived override slot. */
+void aoe_command_bind_object_create_ror(AoeCommandDispatchRor *dispatch,
+                                        const AoeCommandObjectOps *ops);
+void aoe_command_bind_object_create_tribe_ror(
+    AoeCommandTribeDispatchRor *dispatch, const AoeCommandObjectOps *ops);
 /* Opcode 7: both processor vtables keep 0x0042ad40 in slot +0x00. */
 void aoe_command_bind_player_tribute_ror(AoeCommandDispatchRor *dispatch,
                                          const AoeCommandPlayerOps *ops);

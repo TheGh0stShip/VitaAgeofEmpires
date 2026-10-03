@@ -52,6 +52,7 @@ static void set_flag(void *c, AoeLiveUnit *u, int32_t v) {
 }
 static void order(void *c, AoeLiveUnit *u, AoeLiveUnit *t, float x, float y) {
     (void)c;
+    assert(order_count < 8);
     orders[order_count++] = (Order){u, t, x, y};
 }
 static int32_t map_size(void *c, const AoeLiveUnit *u, int axis) {
@@ -122,6 +123,7 @@ int main(void) {
            orders[2].x == 10.5f && orders[2].y == 20.5f);
     /* Owner kind 1 empties the group before re-adding (no duplicates). */
     kinds[1] = 1;
+    order_count = 0;
     assert(aoe_command_dispatch_ror(&dispatch, record, size) ==
                AOE_COMMAND_ROUTE_HANDLED &&
            units[1].group_unit_count == 2);
@@ -150,14 +152,17 @@ int main(void) {
                rand_result == aoe_rng_next(&expected));
         /* The local player's own commands skip the gate. */
         ops.local_player = 2;
+        order_count = 0;
         assert(aoe_command_execute_order_ror(record, size, &ops) == 1 &&
                rng.state == expected.state);
         ops.local_player = 1;
         /* So does a non-session game, or a computer-owned first unit. */
         session = 0;
+        order_count = 0;
         assert(aoe_command_execute_order_ror(record, size, &ops) == 1);
         session = 1;
         kinds[1] = 2;
+        order_count = 0;
         assert(aoe_command_execute_order_ror(record, size, &ops) == 1);
         kinds[1] = 0;
         flag_104 = 1;

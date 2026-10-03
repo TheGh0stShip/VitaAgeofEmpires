@@ -1150,6 +1150,25 @@ rejects the transfer:
 The decompiler misreads the subtraction operands as stray registers; the
 translation follows the disassembly.
 
+Tribe opcode 0x67 (`0x004e8eb0`, jump table `0x004e9104`) is game control.
+Sub-code 0 changes diplomacy: it sets player `+0x88`, calls `0x0045da70`
+with `__ftol` of the float stance, raises event 8, and refreshes the world.
+`0x0045da70` writes stance byte `+0x84[other]` and relation dword
+`+0x8c[other]`: 0 for gaia, 1 for self, 2 for stance 0, 3 for stance 1 and
+4 otherwise. It then calls `+0x94(other, stance)` on every object in the
+player's `+0x28` list. `0x0045da60` returns the raw stance byte, and the
+task predicate and tribe selector read any nonzero value as hostile, so
+stance 0 is allied. The other sub-codes are:
+- 1: world `+0x18`;
+- 2: player `+0x78` resource add;
+- 4: game `+0x9a8`;
+- 5: player `+0x108`;
+- 6: cheat dispatcher `0x0050c570`;
+- 7: world `+0x4c` object `+8(0x71, player)`;
+- 8: out-of-sync handling (`syncerr%d.gam`).
+`src/player_diplomacy.c` and `src/command_game.c` translate this; the
+cheat dispatcher and sync-error screen remain callbacks.
+
 The type-40–70 prefix is now composed by
 `aoe_live_unit_cleanup_derived_prefix_ror`: when semantic live `+0x184` is
 present, it drains the list through `aoe_action_list_clear` (`0x00403e70`),

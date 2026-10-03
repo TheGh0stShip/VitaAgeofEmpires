@@ -7,6 +7,7 @@
 #include "aoe_rng.h"
 #include "command_building.h"
 #include "command_dependency.h"
+#include "command_game.h"
 #include "command_object.h"
 #include "command_order.h"
 #include "command_player_task.h"
@@ -122,6 +123,9 @@ void aoe_command_bind_object_create_tribe_ror(
 /* Tribe opcode 0x6c: fee tribute through derived processor +0x10. */
 void aoe_command_bind_player_tribute_fee_ror(
     AoeCommandTribeDispatchRor *dispatch, const AoeCommandPlayerOps *ops);
+/* Tribe opcode 0x67: game control (diplomacy, cheats, sync error). */
+void aoe_command_bind_game_ror(AoeCommandTribeDispatchRor *dispatch,
+                               const AoeCommandGameOps *ops);
 /* Tribe opcodes 0x64 (train) and 0x65 (research). */
 void aoe_command_bind_production_ror(AoeCommandTribeDispatchRor *dispatch,
                                      const AoeCommandProductionOps *ops);

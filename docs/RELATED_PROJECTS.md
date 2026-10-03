@@ -46,6 +46,13 @@ original data, or observed original-game behavior.
   Local compiler ELF attributes are authoritative for floating-point PCS;
   CPU VFP/NEON support alone does not establish that calling convention.
 
+## Pocket PC editions
+
+Locally supplied Pocket PC releases (Gold Edition 1.07 and 1.25, published
+by ZIO and credited as based on Ensemble's Genie code) are ARM builds of the
+same engine lineage. They are a cross-revision research reference, never
+evidence for PC behaviour. See [`POCKETPC.md`](POCKETPC.md).
+
 ## Upstream survey (refreshed 2026-10-03)
 
 License and last-push data come from the GitHub API on 2026-10-03. "Use"

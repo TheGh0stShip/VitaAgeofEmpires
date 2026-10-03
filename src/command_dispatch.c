@@ -137,6 +137,10 @@ static int order_formation(void *context, const uint8_t *command,
     return aoe_command_execute_order_formation_ror(command, size, context);
 }
 
+static int arrange(void *context, const uint8_t *command, size_t size) {
+    return aoe_command_execute_arrange_ror(command, size, context);
+}
+
 static int order_alternate(void *context, const uint8_t *command,
                            size_t size) {
     return aoe_command_execute_order_alternate_ror(command, size, context);
@@ -155,4 +159,6 @@ void aoe_command_bind_order_ror(AoeCommandDispatchRor *dispatch,
     dispatch->opcodes[AOE_COMMAND_ORDER_FORMATION_ROR].handler =
         order_formation;
     dispatch->opcodes[AOE_COMMAND_ORDER_FORMATION_ROR].context = (void *)ops;
+    dispatch->opcodes[AOE_COMMAND_ARRANGE_ROR].handler = arrange;
+    dispatch->opcodes[AOE_COMMAND_ARRANGE_ROR].context = (void *)ops;
 }

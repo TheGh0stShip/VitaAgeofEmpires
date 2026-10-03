@@ -148,10 +148,20 @@ static AoeLiveUnit *formation_target;
 static int32_t reported_id, reported_class;
 static float reported_x;
 
+static float placed_x[8], placed_y[8];
+static AoeLiveUnit *placed_unit[8];
+static uint32_t last_arg;
+
 static void formation(void *c, AoeLiveUnit *u, AoeLiveUnit *t, float x,
-                      float y) {
-    (void)c; (void)u; (void)x; (void)y;
+                      float y, uint32_t last) {
+    (void)c;
     formation_target = t;
+    last_arg = last;
+    if (formation_orders < 8) {
+        placed_unit[formation_orders] = u;
+        placed_x[formation_orders] = x;
+        placed_y[formation_orders] = y;
+    }
     ++formation_orders;
 }
 static int has_group(void *c, const AoeLiveUnit *u) {
@@ -345,6 +355,50 @@ int main(void) {
     house.unit_class = 3;
     assert(aoe_command_execute_order_formation_ror(record, size, &ops) == 1 &&
            reported_id == 9 && reported_class == 3);
+    /* Opcode 6: leader is the unit nearest the origin (unit 2 at
+       (10, 9)); others step from it. Pattern 4 zig-zags. */
+    {
+        int32_t arrange_ids[3] = {1, 2, 3};
+        uint8_t arrange_record[0x0c + 12];
+        size_t n;
+        units[1].core.position.x38 = 50.0f; units[1].core.position.y3c = 5.0f;
+        units[2].core.position.x38 = 10.0f; units[2].core.position.y3c = 9.0f;
+        units[3].core.position.x38 = 30.0f; units[3].core.position.y3c = 4.0f;
+        n = aoe_command_encode_arrange_ror(arrange_record,
+                                           sizeof(arrange_record), 4,
+                                           arrange_ids, 3);
+        formation_orders = 0;
+        assert(n == 0x18 &&
+               aoe_command_dispatch_ror(&dispatch, arrange_record, n) ==
+                   AOE_COMMAND_ROUTE_HANDLED);
+        assert(formation_orders == 2 && last_arg == 0x3f800000 &&
+               formation_target == NULL);
+        assert(placed_unit[0] == &units[1] && placed_x[0] == 11.5f &&
+               placed_y[0] == 7.5f);
+        assert(placed_unit[1] == &units[3] && placed_x[1] == 11.5f &&
+               placed_y[1] == 10.5f);
+        /* Pattern 1 (anti-diagonal) and pattern 3 (column). */
+        aoe_le_put_u32(arrange_record + 8, 1);
+        formation_orders = 0;
+        assert(aoe_command_execute_arrange_ror(arrange_record, n, &ops) == 1 &&
+               placed_x[0] == 11.5f && placed_y[0] == 7.5f &&
+               placed_x[1] == 13.0f && placed_y[1] == 6.0f);
+        aoe_le_put_u32(arrange_record + 8, 3);
+        formation_orders = 0;
+        assert(aoe_command_execute_arrange_ror(arrange_record, n, &ops) == 1 &&
+               placed_x[0] == 10.0f && placed_y[0] == 11.0f &&
+               placed_y[1] == 13.0f);
+        /* A single unit does nothing, not even group preparation. */
+        aoe_le_put_u32(arrange_record + 4, 1);
+        formation_orders = 0;
+        flag_calls = 0;
+        assert(aoe_command_execute_arrange_ror(arrange_record, n, &ops) == 1 &&
+               !formation_orders && !flag_calls);
+        /* Count larger than the record is malformed. */
+        aoe_le_put_u32(arrange_record + 4, 4);
+        assert(aoe_command_execute_arrange_ror(arrange_record, n, &ops) == -1);
+    }
+
     record[0] = AOE_COMMAND_ORDER_ROR;
     /* Short record. */
     assert(aoe_command_execute_order_ror(record, size - 1, &ops) == -1);

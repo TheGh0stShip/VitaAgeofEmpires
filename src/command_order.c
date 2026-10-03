@@ -2,6 +2,8 @@
 
 #include <string.h>
 
+#include <math.h>
+
 #include "aoe_ftol.h"
 #include "le_bytes.h"
 
@@ -115,7 +117,7 @@ static void issue(const AoeCommandOrderOps *ops, OrderKind kind,
     if (kind == ORDER_PRIMARY) {
         ops->order(ops->context, unit, order_target, x, y);
     } else {
-        ops->order_formation(ops->context, unit, order_target, x, y);
+        ops->order_formation(ops->context, unit, order_target, x, y, 0);
         notify_group(ops, unit, target, x, y);
     }
 }
@@ -261,5 +263,104 @@ int aoe_command_execute_order_alternate_ror(const uint8_t *command,
                              aoe_le_f32(command + 0x08),
                              aoe_le_f32(command + 0x0c));
     }
+    return 1;
+}
+
+size_t aoe_command_encode_arrange_ror(uint8_t *out, size_t out_size,
+                                      int32_t pattern,
+                                      const int32_t *unit_ids, uint8_t count) {
+    size_t size = AOE_COMMAND_ARRANGE_HEADER_SIZE_ROR + 4u * count;
+    if (!out || out_size < size || (count && !unit_ids)) return 0;
+    memset(out, 0, size);
+    out[0] = AOE_COMMAND_ARRANGE_ROR;
+    aoe_le_put_u32(out + 4, count);
+    aoe_le_put_u32(out + 8, (uint32_t)pattern);
+    for (uint8_t i = 0; i < count; ++i)
+        aoe_le_put_u32(out + 0x0c + 4u * i, (uint32_t)unit_ids[i]);
+    return size;
+}
+
+int aoe_command_execute_arrange_ror(const uint8_t *command, size_t size,
+                                    const AoeCommandOrderOps *ops) {
+    int32_t count, pattern;
+    AoeLiveUnit *leader = NULL;
+    float best = 0.0f, step_x, step_y;
+    int toggle = 0;
+    if (!command || size < AOE_COMMAND_ARRANGE_HEADER_SIZE_ROR ||
+        command[0] != AOE_COMMAND_ARRANGE_ROR || !ops ||
+        !ops->world.resolve || !ops->owner_kind || !ops->set_order_flag ||
+        !ops->order_formation)
+        return -1;
+    count = aoe_le_i32(command + 4);
+    pattern = aoe_le_i32(command + 8);
+    if (count <= 1) return 1;
+    if ((size_t)count > (size - AOE_COMMAND_ARRANGE_HEADER_SIZE_ROR) / 4u)
+        return -1;
+#define ARRANGE_ID(i) aoe_le_i32(command + 0x0c + 4u * (unsigned)(i))
+    for (int32_t i = 0; i < count; ++i) {
+        AoeLiveUnit *unit = lookup(ops, ARRANGE_ID(i));
+        double x, y, distance;
+        if (!unit) continue;
+        x = unit->core.position.x38;
+        y = unit->core.position.y3c;
+        distance = sqrt(x * x + y * y);
+        /* fcom; test ah,1: strictly smaller or unordered replaces. */
+        if (!leader || !(distance >= (double)best)) {
+            best = (float)distance;
+            leader = unit;
+        }
+    }
+    step_x = step_y = 1.0f;
+    if (pattern == 1 || pattern == 4 || pattern == 5) step_x = step_y = 1.5f;
+    else if (pattern == 2 || pattern == 3) step_x = step_y = 2.0f;
+    for (int32_t i = 0; i < count; ++i) {
+        AoeLiveUnit *unit = lookup(ops, ARRANGE_ID(i));
+        float x, y;
+        if (!unit) continue;
+        if (!aoe_live_unit_reset_group_ror(unit,
+                                           ops->owner_kind(ops->context, unit)))
+            return -1;
+        ops->set_order_flag(ops->context, unit, 1);
+        for (int32_t j = 0; j < count; ++j)
+            if (j != i && !aoe_live_unit_add_group_member_ror(unit, ARRANGE_ID(j)))
+                return -1;
+        if (unit == leader) continue;
+        x = leader->core.position.x38;
+        y = leader->core.position.y3c;
+        switch (pattern) {
+        case 0:
+            x += step_x; step_x += 1.0f;
+            y += step_y; step_y += 1.0f;
+            break;
+        case 1:
+            x += step_x; step_x += 1.5f;
+            y -= step_y; step_y += 1.5f;
+            break;
+        case 2:
+            x += step_x; step_x += 2.0f;
+            break;
+        case 3:
+            y += step_y; step_y += 2.0f;
+            break;
+        case 4:
+        case 5:
+            x = pattern == 4 ? x + step_x : x - step_x;
+            if (!toggle) {
+                y -= step_y;
+                toggle = 1;
+            } else {
+                y += step_y;
+                toggle = 0;
+                step_y += 1.5f;
+                step_x += 1.5f;
+            }
+            break;
+        default:
+            break;
+        }
+        ops->order_formation(ops->context, unit, NULL, x, y,
+                             UINT32_C(0x3f800000));
+    }
+#undef ARRANGE_ID
     return 1;
 }

@@ -19,7 +19,11 @@ enum {
     AOE_COMMAND_STOP_ROR = 0x01,
     AOE_COMMAND_ORDER_ALTERNATE_ROR = 0x02,
     /* Opcode 3 (0x0042a850): opcode 0's layout. */
-    AOE_COMMAND_ORDER_FORMATION_ROR = 0x03
+    AOE_COMMAND_ORDER_FORMATION_ROR = 0x03,
+    /* Opcode 6 (0x0042ae20): int32 count +0x04, int32 pattern +0x08, unit
+       IDs from +0x0c. */
+    AOE_COMMAND_ARRANGE_ROR = 0x06,
+    AOE_COMMAND_ARRANGE_HEADER_SIZE_ROR = 0x0c
 };
 
 typedef struct {
@@ -49,9 +53,12 @@ typedef struct {
        (0x00405ee0) is +0x98's +0x1f8 call with final flag 1. */
     void (*order_alternate)(void *context, AoeLiveUnit *unit,
                             AoeLiveUnit *target, float x, float y);
-    /* Opcode 3: vtable +0x9c(target, x, y, 0). */
+    /* Opcodes 3 and 6: vtable +0x9c(target, x, y, last). `last` is the
+       raw 32-bit fourth argument: 0 for opcode 3, 0x3f800000 (1.0f) for
+       opcode 6. */
     void (*order_formation)(void *context, AoeLiveUnit *unit,
-                            AoeLiveUnit *target, float x, float y);
+                            AoeLiveUnit *target, float x, float y,
+                            uint32_t last);
     /* Opcode 3: when the unit's +0x74 group object exists (0x00407a60),
        it runs 0x0040f6c0(0x2c6), 0x0040f6d0(0x262) and then
        0x00412f50(target_id, target_class, x, y, 0). */
@@ -96,6 +103,30 @@ int aoe_command_execute_order_ror(const uint8_t *command, size_t size,
 int aoe_command_execute_order_formation_ror(const uint8_t *command,
                                             size_t size,
                                             const AoeCommandOrderOps *ops);
+
+size_t aoe_command_encode_arrange_ror(uint8_t *out, size_t out_size,
+                                      int32_t pattern,
+                                      const int32_t *unit_ids, uint8_t count);
+
+/* 0x0042ae20. Nothing happens unless count > 1. The leader is the unit
+   with the smallest sqrt(x*x + y*y) (computed unrounded, kept as a float;
+   a later unit replaces it when strictly closer or NaN). Every resolved
+   unit runs 0x004ac320, +0x12c(1) and the group update; each non-leader is
+   then ordered through +0x9c(0, x, y, 1.0f) at a point stepped from the
+   leader's own position:
+     0: (+sx, +sy), steps start 1.0 and grow by 1.0 (diagonal);
+     1: (+sx, -sy), start 1.5, grow 1.5;
+     2: (+sx, 0), start 2.0, grow 2.0;   3: (0, +sy), likewise;
+     4/5: x = +sx (4) or -sx (5) with steps starting 1.5; a toggle shared
+          by all units alternates y = -sy (set toggle) and y = +sy (clear
+          toggle, then both steps grow by 1.5);
+     other: the leader's own point.
+   Host deviation: if the unit at index 0 does not resolve, the original
+   compares the next distance against an uninitialised local; here the first
+   resolved unit becomes the leader. Returns -1 for a malformed record or
+   missing dependencies. */
+int aoe_command_execute_arrange_ror(const uint8_t *command, size_t size,
+                                    const AoeCommandOrderOps *ops);
 
 size_t aoe_command_encode_stop_ror(uint8_t *out, size_t out_size,
                                    const int32_t *unit_ids, uint8_t count);

@@ -1073,6 +1073,21 @@ or has no positive size, and x/y are the coordinates the unit was ordered
 to. In the simple path the order itself still receives the unfiltered
 target. Opcodes 0 and 3 share one routine in `src/command_order.c`.
 
+Base opcode 6 (`0x0042ae20`, int32 count `+0x04`, int32 pattern `+0x08`,
+IDs from `+0x0c`) arranges a group around a leader. Nothing happens for
+counts <= 1. The leader is the unit with the smallest unrounded
+`sqrt(x*x + y*y)`, with the best value stored as a float. If the index-0
+unit does not resolve, the original compares against an uninitialised
+local; the translation then takes the first resolved unit, a documented
+host deviation. Every resolved unit is prepared like an opcode-0 unit.
+Non-leaders are then sent through `+0x9c(0, x, y, 1.0f)` to a point
+stepped from the leader's position:
+- 0: diagonal, steps 1.0;
+- 1: anti-diagonal, steps 1.5;
+- 2: row and 3: column, steps 2.0;
+- 4/5: a zig-zag whose toggle alternates -/+ y and grows both 1.5 steps
+  only on the + half (jump tables `0x0042b0ec`, `0x0042b104`).
+
 The type-40–70 prefix is now composed by
 `aoe_live_unit_cleanup_derived_prefix_ror`: when semantic live `+0x184` is
 present, it drains the list through `aoe_action_list_clear` (`0x00403e70`),

@@ -99,6 +99,8 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
     unit->terrain_restriction = (int16_t)at16(p + 2);
     unit->elevation_mode = p[4]; /* live placement vtable +0x34 */
     unit->decay_rate = atfloat(p + 7); /* runtime template +0x80 */
+    unit->field_8c = p[12]; /* loader 0x004413b0 order: +0x8b,+0x8c,... */
+    unit->field_8f = p[15];
     p = take(cursor, 16); /* help/hotkey IDs and flags at +0xa4..+0xa7 */
     if (!p) return 0;
     unit->negative_id_mode = p[12]; /* live constructor 0x004a8200 */
@@ -173,6 +175,9 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
             task->auto_search = p[33];
             task->search_wait = atfloat(p + 34);
             task->enable_targeting = p[38];
+            task->owner_mode = p[44];
+            task->requires_carried_resource = p[45];
+            task->unbuilt_target = p[46];
             task->moving_graphic = (int16_t)at16(p + 47);
             task->proceeding_graphic = (int16_t)at16(p + 49);
             task->working_graphic = (int16_t)at16(p + 51);

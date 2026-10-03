@@ -244,6 +244,10 @@ typedef struct {
     int16_t moving_graphic, proceeding_graphic, working_graphic;
     int16_t carrying_graphic, gathering_sound, deposit_sound;
     uint8_t is_default, auto_search, enable_targeting;
+    /* Runtime task +0x10/+0x11/+0x12 (file bytes 44..46), read by patched
+       RoR 1.0a 0x004e7f90/0x004e7dc0: owner-relationship mode 1..5, "target
+       must carry a resource", and "applies to a state-0 target". */
+    uint8_t owner_mode, requires_carried_resource, unbuilt_target;
 } DatUnitTask;
 
 typedef struct {
@@ -274,6 +278,10 @@ typedef struct {
     uint8_t draw_class; /* template +0x65, RoR tile draw 0x00451fd0 */
     int16_t terrain_restriction; /* original template +0x66 */
     uint8_t elevation_mode; /* original template +0x68 */
+    /* Original template +0x8c/+0x8f bytes, read by the RoR task selectors
+       0x004e7dc0/0x004e7f90/0x00508010. Their meaning beyond those uses is
+       not yet established. */
+    uint8_t field_8c, field_8f;
     float decay_rate;       /* original template +0x80 */
     int16_t selection_sound;
     int16_t dying_sound;    /* resolves to original template +0x44 */

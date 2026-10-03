@@ -1016,6 +1016,36 @@ translation follows raw disassembly. The record has count `+0x01`, target
   unbounded deduplicated vector at `+0x54/+0x58/+0x60`), then vtable
   `+0x98(target, x, y, 0)`.
 
+For action-capable live classes, unit vtable `+0x98` is `0x00405d70`, which
+calls `+0x1f8(target, x, y, z, 0)` unless the target is the unit itself and
+then increments byte `+0x188`. The root `+0x98` (`0x00415300`) is empty.
+`+0x12c` is `0x0044eb30`, which stores its byte at `+0x155`. Every
+action-capable vtable found uses `+0x1f8` = `0x00405f20`. That function asks
+the actor template's task list (`+0xd8`, list vtable `+4`) for the task an
+order means, then builds actions.
+
+There are two task-list classes:
+- Base templates (factory `+0x38` = `0x0043e4d0`) select with `0x004e7dc0`.
+- Tribe templates (template vtable `0x00549930`, factory `0x004ece50`,
+  list vtable `0x005499ac`) select with `0x00508010`, falling back to
+  `0x004e7dc0`.
+
+The task loader `0x004e74f0` and the template loader `0x004413b0` fix the
+offsets used:
+- task: `+0x08` target class, `+0x0a` target unit, `+0x0c` enable
+  targeting, `+0x0e` terrain, and `+0x10/+0x11/+0x12` from file bytes
+  44..46;
+- template: `+0x10` id, `+0x14` class, `+0x8c/+0x8f` from bytes 12 and 15
+  of the `+0x64..+0x90` block.
+
+The predicate `0x004e7f90` and both selectors are translated in
+`src/unit_task.c`. The tribe selector covers drop-off (classes 4/21 onto own
+buildings 109/103/68/45 by carried type), build (0x65), action 3 for
+`+0x8f` = 7 targets, repair (0x6a) for damaged buildings other than id 50
+and for ship classes 2/20/21/22, and priest convert/heal (0x68/0x69). The
+priest branch never falls through to the base selector. `dat_tool --unit`
+now prints the task and selector fields.
+
 The type-40–70 prefix is now composed by
 `aoe_live_unit_cleanup_derived_prefix_ror`: when semantic live `+0x184` is
 present, it drains the list through `aoe_action_list_clear` (`0x00403e70`),

@@ -128,9 +128,10 @@ tribe override's 4.0f elevation and instant building completion through
 `0x004ad7b0`. Root setter labels are now the patched `0x004aa550` (RoR)
 and `0x004a9430` (AoE 1.0c), and its state-3 dependency-group leadership
 handoff is translated. Tribe opcode 0x77 (production queue add/cancel,
-`0x004adab0`) is translated. Next: owner cost check/payment
-`0x004f15f0`/`0x004f1750`, tribe opcodes 0x64-0x6f, and base opcodes 0-3,
-6 and 0x0a-0x11.
+`0x004adab0`) is translated, along with the tribe-player cost
+check/pay/refund `0x004f15f0`/`0x004f1750`/`0x004f17f0` (including the
+`values[29]` gold-substitution budget) and queue-ready adapters. Next:
+tribe opcodes 0x64-0x6f and base opcodes 0-3, 6 and 0x0a-0x11.
 `aoe_live_unit_player_update_step_ror` binds it into actual player +0x7c
 object-list traversal by matching listed `+0x38` references against an
 explicit owned-unit roster; unrelated list objects still go through required

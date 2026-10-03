@@ -961,7 +961,33 @@ disassembly of `0x004adab0`:
   filled by the per-item loop. It is appended even when empty.
 `aoe_building_queue_add_ror` and `aoe_command_execute_building_queue_ror`
 translate this. The cost check and payment `0x004f15f0`/`0x004f1750`
-remain callbacks.
+are translated as `aoe_player_cost_check_ror`/`aoe_player_cost_pay_ror`
+(see below), with queue-compatible adapters.
+
+Patched RoR tribe-player cost methods (`this` = player; template from
+player `+0x24[index]`, costs at `+0x148`, 6 bytes each, deduct byte
+`+0x14c`; only the low byte of the 16-bit field is read):
+- Check `0x004f15f0(index, *failing, mult, pop_flag)` writes -1 first.
+  Gold (`values[3]`) acts as a substitution budget only when `values[29]`
+  is at least the double 1.0 at `0x005425f8`; otherwise the budget is 0.0
+  (`0x00542458`).
+- Population (type 4) with `pop_flag` 0 fails with 0x20 when `+0x2c >=
+  +0x80` (`values[11] >= values[32]`). Gold's own cost reduces the budget
+  (fail 3 below zero).
+- A short resource fails with its type unless its deduct byte is set and
+  the budget covers the gap, which is then consumed. Costs are evaluated
+  in order, and `amount*mult` is rounded to float.
+- Pay `0x004f1750` re-checks with a NULL out-pointer. It then charges
+  each deductible cost (population skipped for nonzero `pop_flag`) with
+  an unrounded product. A cost above the value takes the remainder from
+  gold and zeroes the value: gold is written first, so a gold cost ends
+  at 0.
+- Refund `0x004f17f0` adds `(float)amount` back for each deductible cost of
+  a type >= 70 template, without the multiplier and including population.
+  The production queue pays with `pop_flag` 1, so a cancelled queue item
+  refunds a population unit that was never charged. This asymmetry is
+  what the code does; whether other code compensates for it is not yet
+  established.
 
 The type-40–70 prefix is now composed by
 `aoe_live_unit_cleanup_derived_prefix_ror`: when semantic live `+0x184` is

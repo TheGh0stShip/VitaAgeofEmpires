@@ -110,6 +110,18 @@ int aoe_live_unit_remove_dependency_group_ror(
 int aoe_live_unit_clear_dependency_group_ror(
     AoeLiveUnit *unit, const AoeLiveUnitDependencyOps *ops);
 
+/* Patched 004abd80 group replacement. The caller is used only to reach the
+   world lookup (unit +0x0c -> owner +0x3c). A null list or zero count
+   returns 0 and a negative count returns 1 without lookups. Otherwise every
+   listed ID that resolves, including the caller's, is rebuilt through
+   004abc80 from the whole list with the given +0x78/+0x80 values; nested
+   results are ignored and the call returns 1. `unit_ids` must not alias a
+   member's own vector, which the rebuild may reallocate. */
+int aoe_live_unit_set_dependency_group_ror(
+    AoeLiveUnit *unit, const int32_t *unit_ids, int32_t count,
+    int32_t source_id, uint32_t context_bits,
+    const AoeLiveUnitDependencyOps *ops);
+
 typedef struct {
     void *context;
     /* Current unit vtable +0x5c. State changes are class-specific, so this

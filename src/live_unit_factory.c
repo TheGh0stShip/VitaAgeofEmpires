@@ -284,6 +284,20 @@ int aoe_live_unit_remove_dependency_group_ror(
     return 1;
 }
 
+int aoe_live_unit_set_dependency_group_ror(
+    AoeLiveUnit *unit, const int32_t *unit_ids, int32_t count,
+    int32_t source_id, uint32_t context_bits,
+    const AoeLiveUnitDependencyOps *ops) {
+    if (!unit || !ops || !ops->resolve || !unit_ids || !count) return 0;
+    for (int32_t i = 0; i < count; ++i) {
+        AoeLiveUnit *member = ops->resolve(ops->context, unit_ids[i]);
+        if (member)
+            (void)aoe_live_unit_set_dependencies_ror(
+                member, unit_ids, count, source_id, context_bits);
+    }
+    return 1;
+}
+
 int aoe_live_unit_update_attached_target_ror(
     AoeLiveUnit *unit, const AoeLiveUnitUpdateTargetOps *ops, int *handled) {
     AoeLiveUnitCore *target;

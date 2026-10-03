@@ -394,6 +394,20 @@ int main(void) {
                &live, &dependency_ops) &&
            !live.dependent_unit_count && live.dependent_source_id == -1 &&
            !other.dependent_unit_count && other.dependent_source_id == -1);
+    /* 004abd80: null/zero lists fail, negative counts succeed untouched. */
+    assert(!aoe_live_unit_set_dependency_group_ror(
+               &live, NULL, 1, 0, 0, &dependency_ops) &&
+           !aoe_live_unit_set_dependency_group_ror(
+               &live, &member_id, 0, 0, 0, &dependency_ops) &&
+           aoe_live_unit_set_dependency_group_ror(
+               &live, &member_id, -1, 0, 0, &dependency_ops) &&
+           !live.dependent_unit_count && !other.dependent_unit_count);
+    assert(aoe_live_unit_set_dependency_group_ror(
+               &live, &member_id, 1, 77, 9, &dependency_ops) &&
+           !live.dependent_unit_count &&
+           other.dependent_unit_count == 1 &&
+           other.dependent_source_id == 77 &&
+           other.dependent_context_bits == 9);
     other.core.state = 2;
     aoe_live_unit_destroy_ror(&other, &owner, &world, &vision);
 

@@ -819,6 +819,35 @@ Resolution remains an explicit semantic callback, so a registry entry is not
 blindly container-cast into a host `AoeLiveUnit`. Tests pin missing-target
 rejection, self exclusion, member propagation, order, and metadata.
 
+Patched `004ac0a0` (group remove) and `004ac1d0` (group clear) are translated
+as `aoe_live_unit_remove_dependency_group_ror` and
+`aoe_live_unit_clear_dependency_group_ror`. Removing an ID equal to both the
+caller's ID and its `+0x78` source tail-calls `004ac1d0`; otherwise each
+resolved non-self member gets an inline capacity scan/shift with a floored
+decrement that, unlike `004ac030`, never clears the member's `+0x78`, and
+then the caller is handled by `004ac030`. `004ac1d0` applies `004ac1b0` to
+every resolved non-self member and then to the caller. Patched `004abd80`
+(`aoe_live_unit_set_dependency_group_ror`) is thiscall, but raw disassembly
+shows it uses the caller only to reach the world (`unit+0x0c -> owner+0x3c`)
+for `005206d0`. A null list or zero count returns 0, a negative count returns
+1, and every resolved listed unit, caller included, is rebuilt by `004abc80`
+from the whole list.
+
+These four operations are the only users of the patched command opcodes 8,
+9, 0x0e and 0x0f in dispatcher `0x0042a180` (handlers `0042b460`,
+`0042b520`, `0042b4a0`, `0042b4e0`). Raw disassembly of each handler shows
+the same gate: resolve command `+0x04` through command-processor `+0x04`,
+then compare the unit owner's `+0x4a` word with the zero-extended player byte
+`+0x01`. A mismatch or failed lookup is a silent no-op. The builders
+`0042bbe0`/`0042bcc0`/`0042bc40`/`0042bc80` calloc 0x74/0x08/0x10/0x0c
+bytes: set stores context `+0x08`, up to 25 IDs at `+0x0c`, and the count
+byte at `+0x70`; propagate stores context `+0x08` and target `+0x0c`;
+remove stores the removed ID at `+0x08`. Neither the builder nor
+`004abc80` bounds the set count, so `aoe_command_execute_dependency_ror`
+rejects a count above 25 as a host-only bounds guard, not original behavior.
+`src/command_dependency.c` encodes and decodes these records little-endian
+byte by byte, so host layout and `size_t` width never reach the wire format.
+
 The type-40–70 prefix is now composed by
 `aoe_live_unit_cleanup_derived_prefix_ror`: when semantic live `+0x184` is
 present, it drains the list through `aoe_action_list_clear` (`0x00403e70`),

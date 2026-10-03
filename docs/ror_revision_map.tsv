@@ -9,3 +9,4 @@ building_queue	cancel	004af680	004add50	matching field flow, reverse search, ref
 building_queue	production	004af900	004adfc0	matching query, resource gate, action update and queue-drain control flow	verified
 building_state	type_80_setter	004ae500	004acbf0	matching completion, queue cancellation, parent setter and state-3 cleanup flow	verified
 building_state	type_80_high	004ae450	004acb40	matching +0x25c prelude, inherited high call, manager removal and +0x1e0 clear	verified
+live_unit	root_vtable_plus_5c_state_setter	004abdf0	004aa550	patched root vtable 0x00547da8 slot inspection plus matching state/visibility/dependency-group flow	verified

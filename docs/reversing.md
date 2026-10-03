@@ -921,9 +921,15 @@ These are `aoe_command_execute_object_create_tribe_ror` and
 default 53-bit x87 precision-control assumption, which has not yet been
 verified against the running game.
 
-Open address question: `include/live_unit_state.h` names `0x004abdf0` as the
-RoR root `+0x5c`, but in the patched RoR image `0x004abdf0` is dependency
-add. That entry is probably a disc-release address and needs re-mapping.
+The root setter labels were unpatched-release addresses. Patched RoR root
+vtable `0x00547da8` `+0x5c` is `0x004aa550` (disc `0x004abdf0`). Patched
+AoE 1.0c's setter is `0x004a9430`: it was found by its unique `+0x48`
+state-store shape, and it uses visibility slots `+0xd4/+0xd0` where RoR
+uses `+0xdc/+0xd8`. In both games the state-3 branch tests the dependency
+group: unit ID `+0x04` equals source `+0x78`, `+0x74` is nonzero, and
+count `+0x68 > 1`. It is not an action list. The disc-address table above
+(live vtables and their `+0x5c/+0x68/+0x6c/+0xb4` columns) remains
+unpatched-release evidence.
 
 The type-40–70 prefix is now composed by
 `aoe_live_unit_cleanup_derived_prefix_ror`: when semantic live `+0x184` is

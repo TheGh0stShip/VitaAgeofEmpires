@@ -228,3 +228,16 @@ void aoe_command_bind_production_ror(AoeCommandTribeDispatchRor *dispatch,
         dispatch->tribe[op - AOE_COMMAND_TRIBE_FIRST_ROR].context = (void *)ops;
     }
 }
+
+static int tribute_fee(void *c, const uint8_t *m, size_t n) {
+    return aoe_command_execute_player_tribute_fee_ror(m, n, c);
+}
+
+void aoe_command_bind_player_tribute_fee_ror(
+    AoeCommandTribeDispatchRor *dispatch, const AoeCommandPlayerOps *ops) {
+    if (!dispatch) return;
+    dispatch->tribe[AOE_COMMAND_PLAYER_TRIBUTE_FEE_ROR -
+                    AOE_COMMAND_TRIBE_FIRST_ROR].handler = tribute_fee;
+    dispatch->tribe[AOE_COMMAND_PLAYER_TRIBUTE_FEE_ROR -
+                    AOE_COMMAND_TRIBE_FIRST_ROR].context = (void *)ops;
+}

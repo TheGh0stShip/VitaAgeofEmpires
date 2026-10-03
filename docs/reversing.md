@@ -1131,6 +1131,22 @@ train and research.
 - A missing or busy building defers to player `+0x10c` (train) or
   `+0x118` (research) with the raw building ID.
 
+Tribe sessions also have a second tribute: opcode 0x6c, through derived
+processor slot `+0x10` = `0x004e91b0`. It is built by slot `+0x14` =
+`0x004e9a10`, the tribe override of the base `+0x0c` builder `0x0042bb20`.
+The record is sender `+0x01`, receiver `+0x02`, resource `+0x03`, float
+amount `+0x04` and float fee rate `+0x08`. Unlike opcode 7 it never
+rejects the transfer:
+- A negative or NaN amount becomes 0, and fee = rate*A.
+- When A + fee exceeds the sender's stock S, fee = S*rate and A = S - fee.
+- The receiver gains A, and the sender loses A + fee.
+- Resource 0x35 records the balance: the sender gains the total, and the
+  receiver loses A.
+- Event 7 reports `__ftol(A)`, while the receiver notice reports the
+  requested amount.
+The decompiler misreads the subtraction operands as stray registers; the
+translation follows the disassembly.
+
 The type-40–70 prefix is now composed by
 `aoe_live_unit_cleanup_derived_prefix_ror`: when semantic live `+0x184` is
 present, it drains the list through `aoe_action_list_clear` (`0x00403e70`),

@@ -124,6 +124,38 @@ static void tribute_tests(void) {
     assert(aoe_command_execute_player_tribute_ror(record, 8, &ops) == -1);
 }
 
+static void tribute_fee_tests(void) {
+    AoeCommandPlayerOps ops = {0, tribute_lookup, game_event,
+                               receiver_notice};
+    uint8_t record[12];
+    memset(giver_values, 0, sizeof(giver_values));
+    memset(taker_values, 0, sizeof(taker_values));
+    tribute_players[1].refresh_world = refresh;
+    /* 100 gold at a 25% fee with 500 in stock: receiver +100, sender
+       -125, balance +125 / -100. */
+    giver_values[3] = 500.0f;
+    assert(aoe_command_encode_player_tribute_fee_ror(
+               record, sizeof(record), 1, 2, 3, 100.0f, 0.25f) == 12 &&
+           record[0] == 0x6c);
+    order_used = 0;
+    order[0] = 0;
+    assert(aoe_command_execute_player_tribute_fee_ror(record, 12, &ops) == 1);
+    assert(taker_values[3] == 100.0f && giver_values[3] == 375.0f &&
+           giver_values[0x35] == 125.0f && taker_values[0x35] == -100.0f &&
+           event_args[4] == 100 && notice_args[5] == 100);
+    /* Not enough: 375 in stock caps the transfer at 375 - 93.75. */
+    assert(aoe_command_encode_player_tribute_fee_ror(
+               record, sizeof(record), 1, 2, 3, 400.0f, 0.25f) == 12 &&
+           aoe_command_execute_player_tribute_fee_ror(record, 12, &ops) == 1);
+    assert(taker_values[3] == 100.0f + 281.25f && giver_values[3] == 0.0f &&
+           event_args[4] == 281 && notice_args[5] == 400);
+    /* Negative amounts become zero: nothing moves, events report 0. */
+    assert(aoe_command_encode_player_tribute_fee_ror(
+               record, sizeof(record), 1, 2, 3, -5.0f, 0.25f) == 12 &&
+           aoe_command_execute_player_tribute_fee_ror(record, 12, &ops) == 1 &&
+           event_args[4] == 0 && (int32_t)notice_args[5] == -5);
+}
+
 int main(void) {
     static const uint8_t expected[8] = {5, 1, 0x32, 0, 0x00, 0x00, 0xc0, 0xbf};
     AoeCommandPlayerOps ops = {0, lookup};
@@ -158,5 +190,6 @@ int main(void) {
     record[1] = 0;
     assert(aoe_command_execute_player_resource_add_ror(record, 8, &ops) == -1);
     tribute_tests();
+    tribute_fee_tests();
     return 0;
 }

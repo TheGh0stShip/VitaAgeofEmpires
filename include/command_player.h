@@ -20,7 +20,14 @@ enum {
     AOE_COMMAND_PLAYER_TRIBUTE_ROR = 0x07,
     AOE_COMMAND_PLAYER_TRIBUTE_SIZE_ROR = 0x08,
     /* Constant pushed to receiver vtable +0xe8 by 0x0042ad40. */
-    AOE_COMMAND_PLAYER_TRIBUTE_NOTICE_ROR = 0x20a
+    AOE_COMMAND_PLAYER_TRIBUTE_NOTICE_ROR = 0x20a,
+    /* Tribe opcode 0x6c: derived processor vtable +0x10 = 0x004e91b0,
+       built by +0x14 = 0x004e9a10 (12 bytes: sender +0x01, receiver +0x02,
+       resource +0x03, float amount +0x04, float fee rate +0x08). */
+    AOE_COMMAND_PLAYER_TRIBUTE_FEE_ROR = 0x6c,
+    AOE_COMMAND_PLAYER_TRIBUTE_FEE_SIZE_ROR = 0x0c,
+    /* Resource receiving the tribute balance in 0x004e91b0. */
+    AOE_PLAYER_TRIBUTE_BALANCE_ROR = 0x35
 };
 
 /* Stores the float's exact 32-bit pattern little-endian. Returns the record
@@ -67,6 +74,22 @@ int aoe_command_execute_player_resource_add_ror(
    rejection, and resolving both players before any mutation, are host-only
    guards. */
 int aoe_command_execute_player_tribute_ror(
+    const uint8_t *command, size_t size, const AoeCommandPlayerOps *ops);
+
+size_t aoe_command_encode_player_tribute_fee_ror(
+    uint8_t *out, size_t out_size, uint8_t sender, uint8_t receiver,
+    uint8_t resource, float amount, float fee_rate);
+
+/* 0x004e91b0, the tribute used by tribe sessions. A = amount, or 0 when
+   negative or NaN; fee = (float)(rate * A) when A > 0. If A + fee
+   (unrounded) exceeds the sender's raw stock S, fee = (float)(S * rate)
+   and A = (float)(S - fee); there is no rejection. Then, in order:
+   receiver +0x78(resource, A); sender +0x78(resource, -total) with total =
+   (float)(A + fee); sender +0x78(0x35, total); receiver +0x78(0x35, -A);
+   game event (7, sender, receiver, resource, __ftol(A)); receiver notice
+   (sender, receiver, 0x20a, resource, __ftol(requested amount), 0).
+   Returns 1, or -1 under the same host guards as opcode 7. */
+int aoe_command_execute_player_tribute_fee_ror(
     const uint8_t *command, size_t size, const AoeCommandPlayerOps *ops);
 
 #endif

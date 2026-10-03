@@ -119,6 +119,9 @@ void aoe_command_bind_object_create_ror(AoeCommandDispatchRor *dispatch,
                                         const AoeCommandObjectOps *ops);
 void aoe_command_bind_object_create_tribe_ror(
     AoeCommandTribeDispatchRor *dispatch, const AoeCommandObjectOps *ops);
+/* Tribe opcode 0x6c: fee tribute through derived processor +0x10. */
+void aoe_command_bind_player_tribute_fee_ror(
+    AoeCommandTribeDispatchRor *dispatch, const AoeCommandPlayerOps *ops);
 /* Tribe opcodes 0x64 (train) and 0x65 (research). */
 void aoe_command_bind_production_ror(AoeCommandTribeDispatchRor *dispatch,
                                      const AoeCommandProductionOps *ops);

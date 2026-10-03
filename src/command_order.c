@@ -88,24 +88,44 @@ static float clamp_axis(const AoeCommandOrderOps *ops, const AoeLiveUnit *unit,
     return value;
 }
 
-int aoe_command_execute_order_ror(const uint8_t *command, size_t size,
-                                  const AoeCommandOrderOps *ops) {
-    unsigned count;
-    AoeLiveUnit *target;
+static AoeLiveUnit *sized_target(AoeLiveUnit *target) {
+    return target && target->core.unit_template &&
+                   (target->core.unit_template->size[0] > 0.0f ||
+                    target->core.unit_template->size[1] > 0.0f)
+               ? target
+               : NULL;
+}
+
+typedef enum { ORDER_PRIMARY, ORDER_FORMATION } OrderKind;
+
+/* Opcode 3 only: the +0x74 group object hears about the order. */
+static void notify_group(const AoeCommandOrderOps *ops, AoeLiveUnit *unit,
+                         AoeLiveUnit *target, float x, float y) {
+    AoeLiveUnit *sized;
+    if (!ops->has_group_object(ops->context, unit)) return;
+    sized = sized_target(target);
+    ops->group_order(ops->context, unit,
+                     sized ? sized->core.unit_id : -1,
+                     sized ? sized->core.unit_template->unit_class : -1, x, y);
+}
+
+static void issue(const AoeCommandOrderOps *ops, OrderKind kind,
+                  AoeLiveUnit *unit, AoeLiveUnit *order_target,
+                  AoeLiveUnit *target, float x, float y) {
+    if (kind == ORDER_PRIMARY) {
+        ops->order(ops->context, unit, order_target, x, y);
+    } else {
+        ops->order_formation(ops->context, unit, order_target, x, y);
+        notify_group(ops, unit, target, x, y);
+    }
+}
+
+/* Shared body of 0x0042a280 (opcode 0) and 0x0042a850 (opcode 3). */
+static int run_orders(const uint8_t *command, unsigned count,
+                      AoeLiveUnit *target, OrderKind kind,
+                      const AoeCommandOrderOps *ops) {
     float min_x = 10000.0f, max_x = 0.0f, min_y = 10000.0f, max_y = 0.0f;
     float sum_x = 0.0f, sum_y = 0.0f, center_x, center_y;
-    int result;
-    if (!command || size < AOE_COMMAND_ORDER_HEADER_SIZE_ROR ||
-        command[0] != AOE_COMMAND_ORDER_ROR || !ops || !ops->world.resolve ||
-        !ops->session_check || !ops->owner_kind || !ops->player_104 ||
-        !ops->map_cell || !ops->rng || !ops->rand_result ||
-        !ops->set_order_flag || !ops->order || !ops->map_size)
-        return -1;
-    count = command[1];
-    if (size < AOE_COMMAND_ORDER_HEADER_SIZE_ROR + 4u * count) return -1;
-    target = lookup(ops, aoe_le_i32(command + 4));
-    if ((result = gate(command, count, target, ops)) != 1) return result;
-
     if (count > 1) {
         for (unsigned i = 0; i < count; ++i) {
             AoeLiveUnit *unit = lookup(ops, unit_id_at(command, i));
@@ -128,7 +148,6 @@ int aoe_command_execute_order_ror(const uint8_t *command, size_t size,
             center_y = (float)((double)sum_y / (double)count);
             for (unsigned i = 0; i < count; ++i) {
                 AoeLiveUnit *unit = lookup(ops, unit_id_at(command, i));
-                AoeLiveUnit *passed = NULL;
                 float x, y;
                 if (!unit) continue;
                 if (!prepare(unit, command, count, i, ops)) return -1;
@@ -138,11 +157,7 @@ int aoe_command_execute_order_ror(const uint8_t *command, size_t size,
                             aoe_le_f32(command + 0x0c));
                 x = clamp_axis(ops, unit, x, 0);
                 y = clamp_axis(ops, unit, y, 1);
-                if (target && target->core.unit_template &&
-                    (target->core.unit_template->size[0] > 0.0f ||
-                     target->core.unit_template->size[1] > 0.0f))
-                    passed = target;
-                ops->order(ops->context, unit, passed, x, y);
+                issue(ops, kind, unit, sized_target(target), target, x, y);
             }
             return 1;
         }
@@ -151,10 +166,47 @@ int aoe_command_execute_order_ror(const uint8_t *command, size_t size,
         AoeLiveUnit *unit = lookup(ops, unit_id_at(command, i));
         if (!unit) continue;
         if (!prepare(unit, command, count, i, ops)) return -1;
-        ops->order(ops->context, unit, target, aoe_le_f32(command + 0x08),
-                   aoe_le_f32(command + 0x0c));
+        issue(ops, kind, unit, target, target, aoe_le_f32(command + 0x08),
+              aoe_le_f32(command + 0x0c));
     }
     return 1;
+}
+
+static int order_ops_valid(const AoeCommandOrderOps *ops) {
+    return ops && ops->world.resolve && ops->owner_kind &&
+           ops->set_order_flag && ops->map_size;
+}
+
+int aoe_command_execute_order_ror(const uint8_t *command, size_t size,
+                                  const AoeCommandOrderOps *ops) {
+    unsigned count;
+    AoeLiveUnit *target;
+    int result;
+    if (!command || size < AOE_COMMAND_ORDER_HEADER_SIZE_ROR ||
+        command[0] != AOE_COMMAND_ORDER_ROR || !order_ops_valid(ops) ||
+        !ops->session_check || !ops->player_104 || !ops->map_cell ||
+        !ops->rng || !ops->rand_result || !ops->order)
+        return -1;
+    count = command[1];
+    if (size < AOE_COMMAND_ORDER_HEADER_SIZE_ROR + 4u * count) return -1;
+    target = lookup(ops, aoe_le_i32(command + 4));
+    if ((result = gate(command, count, target, ops)) != 1) return result;
+    return run_orders(command, count, target, ORDER_PRIMARY, ops);
+}
+
+int aoe_command_execute_order_formation_ror(const uint8_t *command,
+                                            size_t size,
+                                            const AoeCommandOrderOps *ops) {
+    unsigned count;
+    if (!command || size < AOE_COMMAND_ORDER_HEADER_SIZE_ROR ||
+        command[0] != AOE_COMMAND_ORDER_FORMATION_ROR ||
+        !order_ops_valid(ops) || !ops->order_formation ||
+        !ops->has_group_object || !ops->group_order)
+        return -1;
+    count = command[1];
+    if (size < AOE_COMMAND_ORDER_HEADER_SIZE_ROR + 4u * count) return -1;
+    return run_orders(command, count, lookup(ops, aoe_le_i32(command + 4)),
+                      ORDER_FORMATION, ops);
 }
 
 size_t aoe_command_encode_stop_ror(uint8_t *out, size_t out_size,

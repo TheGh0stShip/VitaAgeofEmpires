@@ -132,6 +132,11 @@ static int stop(void *context, const uint8_t *command, size_t size) {
     return aoe_command_execute_stop_ror(command, size, context);
 }
 
+static int order_formation(void *context, const uint8_t *command,
+                           size_t size) {
+    return aoe_command_execute_order_formation_ror(command, size, context);
+}
+
 static int order_alternate(void *context, const uint8_t *command,
                            size_t size) {
     return aoe_command_execute_order_alternate_ror(command, size, context);
@@ -147,4 +152,7 @@ void aoe_command_bind_order_ror(AoeCommandDispatchRor *dispatch,
     dispatch->opcodes[AOE_COMMAND_ORDER_ALTERNATE_ROR].handler =
         order_alternate;
     dispatch->opcodes[AOE_COMMAND_ORDER_ALTERNATE_ROR].context = (void *)ops;
+    dispatch->opcodes[AOE_COMMAND_ORDER_FORMATION_ROR].handler =
+        order_formation;
+    dispatch->opcodes[AOE_COMMAND_ORDER_FORMATION_ROR].context = (void *)ops;
 }

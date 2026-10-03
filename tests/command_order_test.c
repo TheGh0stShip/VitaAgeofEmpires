@@ -143,6 +143,30 @@ static void stop_tests(void) {
            building.queue_count == 0 && refunds == 2 && group_stops == 2);
 }
 
+static int formation_orders, group_reports;
+static AoeLiveUnit *formation_target;
+static int32_t reported_id, reported_class;
+static float reported_x;
+
+static void formation(void *c, AoeLiveUnit *u, AoeLiveUnit *t, float x,
+                      float y) {
+    (void)c; (void)u; (void)x; (void)y;
+    formation_target = t;
+    ++formation_orders;
+}
+static int has_group(void *c, const AoeLiveUnit *u) {
+    (void)c;
+    return u->core.unit_id != 3; /* unit 3 has no +0x74 object */
+}
+static void group_order(void *c, AoeLiveUnit *u, int32_t id, int32_t cls,
+                        float x, float y) {
+    (void)c; (void)u; (void)y;
+    reported_id = id;
+    reported_class = cls;
+    reported_x = x;
+    ++group_reports;
+}
+
 static void place(int i, int32_t id, const DatUnit *t, float x, float y) {
     units[i].constructed = 1;
     units[i].core.unit_id = id;
@@ -157,7 +181,8 @@ int main(void) {
     int32_t rand_result = -5;
     AoeCommandOrderOps ops = {
         {0, resolve}, 0, session_check, owner_kind, 1, player_104, map_cell,
-        &rng, &rand_result, set_flag, order, map_size, stop_unit, alternate};
+        &rng, &rand_result, set_flag, order, map_size, stop_unit, alternate,
+        formation, has_group, group_order};
     AoeCommandDispatchRor dispatch;
     uint8_t record[0x1c + 16];
     int32_t ids[3] = {1, 2, 3};
@@ -299,6 +324,28 @@ int main(void) {
            alternates == 3 && alternate_target == &units[0]);
 
     record[0] = AOE_COMMAND_ORDER_ROR; /* short-record check below */
+    /* Opcode 3, simple path (units spread > 8): the order gets the raw
+       target even with zero size, but the group report filters it to
+       -1/-1. Unit 3 has no group object and reports nothing. */
+    house.size[0] = 0.0f;
+    house.size[1] = 0.0f;
+    units[1].core.position.x38 = 50.0f;
+    units[2].core.position.x38 = 10.0f;
+    units[3].core.position.x38 = 30.0f;
+    size = aoe_command_encode_order_ror(record, sizeof(record), 2, 9, 7.5f,
+                                        8.5f, 0, 0, 0, ids, 3);
+    record[0] = AOE_COMMAND_ORDER_FORMATION_ROR;
+    assert(aoe_command_dispatch_ror(&dispatch, record, size) ==
+               AOE_COMMAND_ROUTE_HANDLED &&
+           formation_orders == 3 && formation_target == &units[0] &&
+           group_reports == 2 && reported_id == -1 && reported_class == -1 &&
+           reported_x == 7.5f);
+    /* With a sized target the report carries its ID and class. */
+    house.size[0] = 1.0f;
+    house.unit_class = 3;
+    assert(aoe_command_execute_order_formation_ror(record, size, &ops) == 1 &&
+           reported_id == 9 && reported_class == 3);
+    record[0] = AOE_COMMAND_ORDER_ROR;
     /* Short record. */
     assert(aoe_command_execute_order_ror(record, size - 1, &ops) == -1);
     for (int i = 0; i < 4; ++i) free(units[i].group_unit_ids);

@@ -17,7 +17,9 @@ enum {
     /* Opcode 1 (0x0042a730): count +0x01, unit IDs from the unaligned
        offset +0x02. Opcode 2 (0x0042a780): opcode 0's layout. */
     AOE_COMMAND_STOP_ROR = 0x01,
-    AOE_COMMAND_ORDER_ALTERNATE_ROR = 0x02
+    AOE_COMMAND_ORDER_ALTERNATE_ROR = 0x02,
+    /* Opcode 3 (0x0042a850): opcode 0's layout. */
+    AOE_COMMAND_ORDER_FORMATION_ROR = 0x03
 };
 
 typedef struct {
@@ -47,6 +49,15 @@ typedef struct {
        (0x00405ee0) is +0x98's +0x1f8 call with final flag 1. */
     void (*order_alternate)(void *context, AoeLiveUnit *unit,
                             AoeLiveUnit *target, float x, float y);
+    /* Opcode 3: vtable +0x9c(target, x, y, 0). */
+    void (*order_formation)(void *context, AoeLiveUnit *unit,
+                            AoeLiveUnit *target, float x, float y);
+    /* Opcode 3: when the unit's +0x74 group object exists (0x00407a60),
+       it runs 0x0040f6c0(0x2c6), 0x0040f6d0(0x262) and then
+       0x00412f50(target_id, target_class, x, y, 0). */
+    int (*has_group_object)(void *context, const AoeLiveUnit *unit);
+    void (*group_order)(void *context, AoeLiveUnit *unit, int32_t target_id,
+                        int32_t target_class, float x, float y);
 } AoeCommandOrderOps;
 
 size_t aoe_command_encode_order_ror(
@@ -76,6 +87,15 @@ size_t aoe_command_encode_order_ror(
    failed group update. */
 int aoe_command_execute_order_ror(const uint8_t *command, size_t size,
                                   const AoeCommandOrderOps *ops);
+
+/* 0x0042a850: opcode 0's formation/simple paths without the validity
+   gate, ordering through +0x9c. After each order a unit with a group
+   object reports the target ID/class, or -1/-1 when the target is missing
+   or has no positive size, and the x/y the unit was ordered to. In the
+   simple path the order itself still receives the unfiltered target. */
+int aoe_command_execute_order_formation_ror(const uint8_t *command,
+                                            size_t size,
+                                            const AoeCommandOrderOps *ops);
 
 size_t aoe_command_encode_stop_ror(uint8_t *out, size_t out_size,
                                    const int32_t *unit_ids, uint8_t count);

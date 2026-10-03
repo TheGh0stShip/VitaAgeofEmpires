@@ -1064,6 +1064,15 @@ update `0x004043b0`, push `0x00404400`, append `0x00404450`, pop
 `0x004044d0` and clear `0x00403e50`; patched `0x00403e70` is an action
 factory switch.
 
+Base opcode 3 (`0x0042a850`) repeats opcode 0's formation and simple paths
+without the validity gate, ordering through `+0x9c`. After each order, a
+unit whose `+0x74` group object exists calls three methods on it:
+`0x0040f6c0(0x2c6)`, `0x0040f6d0(0x262)` and `0x00412f50(target ID, target
+class, x, y, 0)`. The target ID and class are -1 when the target is missing
+or has no positive size, and x/y are the coordinates the unit was ordered
+to. In the simple path the order itself still receives the unfiltered
+target. Opcodes 0 and 3 share one routine in `src/command_order.c`.
+
 The type-40–70 prefix is now composed by
 `aoe_live_unit_cleanup_derived_prefix_ror`: when semantic live `+0x184` is
 present, it drains the list through `aoe_action_list_clear` (`0x00403e70`),

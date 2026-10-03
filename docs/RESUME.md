@@ -136,7 +136,7 @@ and the `+0x54` group vector) is translated. So is task selection, the
 decision step of unit `+0x98 -> +0x1f8` (`0x004e7dc0`, `0x00508010`,
 predicate `0x004e7f90`). Next: the rest of `0x00405f20` (action creation
 through the action manager `0x004045b0/0x004045c0`), tribe opcodes
-0x64-0x6f, and base opcodes 1-3, 6 and 0x0a-0x11.
+0x64-0x6f, and base opcodes 6 and 0x0a-0x11 (0-5 and 7-9 are done).
 `aoe_live_unit_player_update_step_ror` binds it into actual player +0x7c
 object-list traversal by matching listed `+0x38` references against an
 explicit owned-unit roster; unrelated list objects still go through required

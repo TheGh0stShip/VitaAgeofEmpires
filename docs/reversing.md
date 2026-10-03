@@ -848,6 +848,27 @@ rejects a count above 25 as a host-only bounds guard, not original behavior.
 `src/command_dependency.c` encodes and decodes these records little-endian
 byte by byte, so host layout and `size_t` width never reach the wire format.
 
+Patched RoR 1.0a command opcode 5 (`0x0042ad10`, builder `0x0042bae0` called
+from player vtable `+0xb4` = `0x0045e580`) is an 8-byte record: player byte
+`+0x01`, resource byte `+0x02`, float `+0x04`. The handler indexes world
+`+0x40` by the unbounded player byte and calls player vtable `+0x78` with the
+zero-extended resource word, the amount, and flag 0. Earlier player-resource
+notes quoted disc/unpatched addresses. The patched RoR player vtable is
+`0x00544d18` (installed at `0x45b46f`, `0x45b6fa`, `0x45ba71`); its
+`+0x74/+0x78` are `0x0045cfc0/0x0045cfe0`, and its `+0x7c` world-tick target
+is `0x0045d040`. Patched AoE 1.0c's set/add pair is `0x0045e7a0/0x0045e7c0`.
+Two derived RoR vtables, `0x00549a44` and `0x00549b80`, share the `+0x78`
+override `0x004f6c60`:
+- resource 3 with a nonzero flag first adds to raw value slot 49 (`+0xc4`)
+  with no count check;
+- resource `0x32` stores 1 at player `+0x104` and calls world `0x00520c60`
+  (through player `+0x3c`), which resets per-player `+0xd4..+0x104` fields;
+- every path ends in `0x0045cfe0`.
+`aoe_player_resource_add_virtual_ror` and `src/command_player.c` translate
+this; the slot-49 allocation check and the NULL-player rejection are
+host-only guards. Which players are built with which derived vtable has not
+yet been established.
+
 The type-40–70 prefix is now composed by
 `aoe_live_unit_cleanup_derived_prefix_ror`: when semantic live `+0x184` is
 present, it drains the list through `aoe_action_list_clear` (`0x00403e70`),

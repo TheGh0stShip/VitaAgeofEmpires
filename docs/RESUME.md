@@ -108,7 +108,11 @@ the family. They are bound to the patched dependency command opcodes
 8/9/0x0e/0x0f of dispatcher `0x0042a180` by `aoe_command_execute_dependency_ror`,
 which includes byte-exact builders for the 0x74/0x08/0x10/0x0c records, the
 owner `+0x4a` word gate, and a documented host guard for set counts above 25.
-The remaining dispatcher opcodes (0–7, 0x0a–0x0c, 0x10, 0x11) are untranslated.
+Opcode 5 (player resource add) is translated with patched RoR player
+vtable `0x00544d18` and its derived `+0x78` override `0x004f6c60`; the
+player-resource header now carries patched rather than disc addresses.
+The remaining dispatcher opcodes (0–4, 6, 7, 0x0a–0x0c, 0x10, 0x11) are
+untranslated; `0x00520c60` (world refresh) is still an explicit callback.
 `aoe_live_unit_player_update_step_ror` binds it into actual player +0x7c
 object-list traversal by matching listed `+0x38` references against an
 explicit owned-unit roster; unrelated list objects still go through required

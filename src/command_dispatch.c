@@ -123,3 +123,14 @@ void aoe_command_bind_building_queue_ror(AoeCommandTribeDispatchRor *dispatch,
     dispatch->tribe[AOE_COMMAND_BUILDING_QUEUE_ROR -
                     AOE_COMMAND_TRIBE_FIRST_ROR].context = (void *)ops;
 }
+
+static int order(void *context, const uint8_t *command, size_t size) {
+    return aoe_command_execute_order_ror(command, size, context);
+}
+
+void aoe_command_bind_order_ror(AoeCommandDispatchRor *dispatch,
+                                const AoeCommandOrderOps *ops) {
+    if (!dispatch) return;
+    dispatch->opcodes[AOE_COMMAND_ORDER_ROR].handler = order;
+    dispatch->opcodes[AOE_COMMAND_ORDER_ROR].context = (void *)ops;
+}

@@ -989,6 +989,33 @@ player `+0x24[index]`, costs at `+0x148`, 6 bytes each, deduct byte
   what the code does; whether other code compensates for it is not yet
   established.
 
+Base opcode 0 (`0x0042a280`, used by both processors) is the unit order.
+Its decompilation is unusable (registers are mistaken for pointers), so the
+translation follows raw disassembly. The record has count `+0x01`, target
+`+0x04`, x/y `+0x08/+0x0c`, issuing player `+0x10`, flag `+0x12`, masks
+`+0x14/+0x18`, and IDs from `+0x1c`.
+- A multiplayer validity gate can drop the command after storing CRT
+  `rand()` in `0x00581ab0`, so dropped commands still advance the seed. It
+  applies only when the target resolves, `0x0041b760` is true, the first
+  unit's owner `+0x04` (`0x00454150`) is 0, the issuer is not the local
+  player (world `+0x7c`), and the target type is 80/90/10/20.
+- The gate drops the command when player `+0x104` is 0 while the flag is
+  set, when the masks are disjoint, or when map cell
+  `0x007d205c[__ftol(y)][__ftol(x)]` lacks mask `+0x18`'s high bits.
+- With more than one unit whose min/max spread is at most 8.0 (double
+  `0x005434a8`) on both axes, units keep their offsets from the centre.
+  Coordinates are clamped to 1.0 when negative and to size-1 at or beyond
+  the map edge (map `+0x08/+0x0c`). The target is kept only if its template
+  `size[0]` or `size[1]` is positive.
+- The min/max scan updates the maximum only in an `else` branch.
+  Strictly decreasing coordinates therefore leave the maximum at 0, and a
+  wide group can still move in formation. This is the original behaviour
+  and is preserved and tested.
+- Each unit runs `0x004ac320` (empty the `+0x54` group when owner `+0x04`
+  is 1), vtable `+0x12c(1)`, `0x004ac280` for every other listed ID (an
+  unbounded deduplicated vector at `+0x54/+0x58/+0x60`), then vtable
+  `+0x98(target, x, y, 0)`.
+
 The type-40–70 prefix is now composed by
 `aoe_live_unit_cleanup_derived_prefix_ror`: when semantic live `+0x184` is
 present, it drains the list through `aoe_action_list_clear` (`0x00403e70`),

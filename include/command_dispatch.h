@@ -8,6 +8,7 @@
 #include "command_building.h"
 #include "command_dependency.h"
 #include "command_object.h"
+#include "command_order.h"
 #include "command_player.h"
 
 /* Patched Rise of Rome 1.0a command-processor vtable 0x00543498 slot +0x08
@@ -101,6 +102,9 @@ void aoe_command_bind_dependency_ror(AoeCommandDispatchRor *dispatch,
                                      const AoeCommandDependencyOps *ops);
 void aoe_command_bind_player_resource_ror(AoeCommandDispatchRor *dispatch,
                                           const AoeCommandPlayerOps *ops);
+/* Opcode 0: 0x0042a280 unit order (shared by both processors). */
+void aoe_command_bind_order_ror(AoeCommandDispatchRor *dispatch,
+                                const AoeCommandOrderOps *ops);
 /* Opcode 4: base 0x0042acd0 into the base table, and tribe 0x004e8570 into
    the derived override slot. */
 void aoe_command_bind_object_create_ror(AoeCommandDispatchRor *dispatch,

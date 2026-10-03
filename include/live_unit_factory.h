@@ -38,6 +38,11 @@ typedef struct {
     uint32_t dependent_unit_capacity;
     int32_t dependent_source_id; /* original live +0x78 */
     uint32_t dependent_context_bits; /* opaque original 32-bit +0x80 */
+    /* Command group vector +0x54 (IDs), +0x58 (count), +0x60 (capacity),
+       written by 0x004ac280 and emptied by 0x004ac320. */
+    int32_t *group_unit_ids;
+    uint32_t group_unit_count;
+    uint32_t group_unit_capacity;
     /* Semantic equivalent of the type-20 base live field at RoR +0x88.
        Its constructors at 0x00415770/0x00415790 initialize it to zero; live
        action/state methods subsequently change it. */
@@ -128,6 +133,17 @@ typedef struct {
        hook is mandatory when attached_unit->state is above 2. */
     int (*set_state)(void *context, AoeLiveUnit *unit, uint8_t state);
 } AoeLiveUnitUpdateTargetOps;
+
+/* Patched RoR 1.0a 0x004ac280: append an ID to the +0x54 group vector
+   unless already present among the active entries. There is no count
+   limit; the allocation grows by exactly one element when full and is kept
+   across clears. Returns 0 only for missing/inconsistent storage or
+   allocation failure. */
+int aoe_live_unit_add_group_member_ror(AoeLiveUnit *unit, int32_t unit_id);
+
+/* Patched RoR 1.0a 0x004ac320: empties the group (count = 0) when the
+   owner player's +0x04 (0x00454150) equals 1; otherwise does nothing. */
+int aoe_live_unit_reset_group_ror(AoeLiveUnit *unit, int32_t owner_kind);
 
 typedef struct {
     AoeLiveUnitDependencyOps world;

@@ -59,6 +59,7 @@ void aoe_live_unit_destroy_ror(AoeLiveUnit *unit, AoePlayerUpdateState *owner,
                                             unit->placement.node);
     aoe_sprite_runtime_clear(&unit->sprites);
     free(unit->dependent_unit_ids);
+    free(unit->group_unit_ids);
     memset(unit, 0, sizeof(*unit));
 }
 
@@ -295,6 +296,36 @@ int aoe_live_unit_set_dependency_group_ror(
             (void)aoe_live_unit_set_dependencies_ror(
                 member, unit_ids, count, source_id, context_bits);
     }
+    return 1;
+}
+
+int aoe_live_unit_add_group_member_ror(AoeLiveUnit *unit, int32_t unit_id) {
+    if (!unit || !unit->constructed ||
+        unit->group_unit_count > unit->group_unit_capacity ||
+        (unit->group_unit_capacity && !unit->group_unit_ids))
+        return 0;
+    for (uint32_t i = 0; i < unit->group_unit_count; ++i)
+        if (unit->group_unit_ids[i] == unit_id) return 1;
+    if (unit->group_unit_count == unit->group_unit_capacity) {
+        uint32_t capacity = unit->group_unit_count + 1u;
+        int32_t *grown;
+        if (capacity > UINT32_MAX / sizeof(*grown)) return 0;
+        grown = malloc((size_t)capacity * sizeof(*grown));
+        if (!grown) return 0;
+        if (unit->group_unit_capacity)
+            memcpy(grown, unit->group_unit_ids,
+                   (size_t)unit->group_unit_capacity * sizeof(*grown));
+        free(unit->group_unit_ids);
+        unit->group_unit_ids = grown;
+        unit->group_unit_capacity = capacity;
+    }
+    unit->group_unit_ids[unit->group_unit_count++] = unit_id;
+    return 1;
+}
+
+int aoe_live_unit_reset_group_ror(AoeLiveUnit *unit, int32_t owner_kind) {
+    if (!unit || !unit->constructed) return 0;
+    if (owner_kind == 1) unit->group_unit_count = 0;
     return 1;
 }
 

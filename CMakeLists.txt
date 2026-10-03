@@ -266,7 +266,7 @@ target_compile_options(aoe_player_costs PRIVATE -Wall -Wextra)
 
 add_library(aoe_command_order STATIC src/command_order.c)
 target_include_directories(aoe_command_order PUBLIC include)
-target_link_libraries(aoe_command_order PUBLIC aoe_live_unit_factory aoe_rng)
+target_link_libraries(aoe_command_order PUBLIC aoe_live_unit_factory aoe_rng m)
 target_compile_options(aoe_command_order PRIVATE -Wall -Wextra)
 
 add_library(aoe_unit_task STATIC src/unit_task.c)

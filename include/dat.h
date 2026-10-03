@@ -289,6 +289,7 @@ typedef struct {
     char *name;
     DatUnitStorage storage[3];
     int16_t default_task_id;
+    uint8_t task_swap_group; /* original template +0xec (type >= 40) */
     float search_radius, work_rate;
     uint16_t task_count;
     DatUnitTask *tasks;

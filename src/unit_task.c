@@ -68,10 +68,10 @@ int aoe_unit_task_allowed_ror(const DatUnitTask *task,
 
 typedef enum { MATCH_UNBUILT, MATCH_UNIT, MATCH_CLASS, MATCH_TARGETING } Pass;
 
-static int pass(const AoeLiveUnit *actor, const AoeLiveUnit *target,
-                Pass kind, const AoeUnitTaskOps *ops,
-                const DatUnitTask **task) {
-    const DatUnit *a = tmpl(actor), *t = tmpl(target);
+static int pass(const DatUnit *a, const AoeLiveUnit *actor,
+                const AoeLiveUnit *target, Pass kind,
+                const AoeUnitTaskOps *ops, const DatUnitTask **task) {
+    const DatUnit *t = tmpl(target);
     for (uint16_t i = 0; i < a->task_count; ++i) {
         const DatUnitTask *candidate = &a->tasks[i];
         int match = 0, allowed;
@@ -93,24 +93,24 @@ static int pass(const AoeLiveUnit *actor, const AoeLiveUnit *target,
     return 1;
 }
 
-int aoe_unit_task_select_base_ror(const AoeLiveUnit *actor,
-                                  const AoeLiveUnit *target, float x,
-                                  float y, const AoeUnitTaskOps *ops,
-                                  const DatUnitTask **task) {
-    const DatUnit *a = tmpl(actor);
-    if (!a || !task || !ops_valid(ops) || (a->task_count && !a->tasks) ||
+int aoe_unit_task_select_base_with_ror(const DatUnit *a,
+                                       const AoeLiveUnit *actor,
+                                       const AoeLiveUnit *target, float x,
+                                       float y, const AoeUnitTaskOps *ops,
+                                       const DatUnitTask **task) {
+    if (!a || !tmpl(actor) || !task || !ops_valid(ops) || (a->task_count && !a->tasks) ||
         (target && !tmpl(target)))
         return 0;
     *task = NULL;
     if (!a->task_count) return 1;
     if (target) {
         if (target->core.state == 0 &&
-            (!pass(actor, target, MATCH_UNBUILT, ops, task) || *task))
+            (!pass(a, actor, target, MATCH_UNBUILT, ops, task) || *task))
             return 1;
-        if (!pass(actor, target, MATCH_UNIT, ops, task) || *task) return 1;
-        if (!pass(actor, target, MATCH_CLASS, ops, task) || *task) return 1;
+        if (!pass(a, actor, target, MATCH_UNIT, ops, task) || *task) return 1;
+        if (!pass(a, actor, target, MATCH_CLASS, ops, task) || *task) return 1;
         if (target->core.state < 3 && tmpl(target)->field_8c &&
-            (!pass(actor, target, MATCH_TARGETING, ops, task) || *task))
+            (!pass(a, actor, target, MATCH_TARGETING, ops, task) || *task))
             return 1;
     }
     /* fcomp; test ah,0x40: equal or unordered skips the terrain pass. */
@@ -142,14 +142,16 @@ static int damaged(const AoeLiveUnit *unit) {
            (double)tmpl(unit)->hit_points;
 }
 
-int aoe_unit_task_select_tribe_ror(const AoeLiveUnit *actor,
-                                   const AoeLiveUnit *target, float x,
-                                   float y, const AoeUnitTaskOps *ops,
-                                   const DatUnitTask **task) {
+int aoe_unit_task_select_tribe_with_ror(const DatUnit *list,
+                                        const AoeLiveUnit *actor,
+                                        const AoeLiveUnit *target, float x,
+                                        float y, const AoeUnitTaskOps *ops,
+                                        const DatUnitTask **task) {
     const DatUnit *a = tmpl(actor), *t;
     int16_t carried, actor_owner, target_owner;
     int same, accepted, mutual;
-    if (!a || !task || !ops_valid(ops) || (a->task_count && !a->tasks) ||
+    if (!a || !list || !task || !ops_valid(ops) ||
+        (list->task_count && !list->tasks) ||
         (target && !tmpl(target)))
         return 0;
     *task = NULL;
@@ -175,8 +177,8 @@ int aoe_unit_task_select_tribe_ror(const AoeLiveUnit *actor,
         }
         if ((t->id == first || t->id == second) &&
             target_owner == actor_owner)
-            for (uint16_t i = 0; i < a->task_count; ++i) {
-                const DatUnitTask *c = &a->tasks[i];
+            for (uint16_t i = 0; i < list->task_count; ++i) {
+                const DatUnitTask *c = &list->tasks[i];
                 if (c->resource_in == carried &&
                     (c->action_type == 5 || c->action_type == 0x6e ||
                      c->action_type == 0x6f)) {
@@ -194,20 +196,20 @@ int aoe_unit_task_select_tribe_ror(const AoeLiveUnit *actor,
                  (ops->owner_accepts(ops->context, actor_owner, target_owner) &&
                   ops->owner_accepts(ops->context, target_owner, actor_owner));
         if (same && t->type == 80 && target->core.state == 0) {
-            *task = first_action(a, 0x65);
+            *task = first_action(list, 0x65);
             return 1;
         }
         if (mutual && target->core.state < 3 && t->field_8f == 7) {
-            *task = first_action(a, 3);
+            *task = first_action(list, 3);
             return 1;
         }
         if (accepted && t->type == 80 && damaged(target) &&
             target->core.state < 3 && t->id != 50) {
-            for (uint16_t i = 0; i < a->task_count; ++i)
-                if (a->tasks[i].action_type == 0x6a &&
-                    (a->tasks[i].target_class == -1 ||
-                     a->tasks[i].target_class == 0)) {
-                    *task = &a->tasks[i];
+            for (uint16_t i = 0; i < list->task_count; ++i)
+                if (list->tasks[i].action_type == 0x6a &&
+                    (list->tasks[i].target_class == -1 ||
+                     list->tasks[i].target_class == 0)) {
+                    *task = &list->tasks[i];
                     break;
                 }
             return 1;
@@ -216,10 +218,10 @@ int aoe_unit_task_select_tribe_ror(const AoeLiveUnit *actor,
             (t->unit_class == 2 || t->unit_class == 20 ||
              t->unit_class == 21 || t->unit_class == 22) &&
             damaged(target) && target->core.state < 3) {
-            for (uint16_t i = 0; i < a->task_count; ++i)
-                if (a->tasks[i].action_type == 0x6a &&
-                    a->tasks[i].target_class == t->unit_class) {
-                    *task = &a->tasks[i];
+            for (uint16_t i = 0; i < list->task_count; ++i)
+                if (list->tasks[i].action_type == 0x6a &&
+                    list->tasks[i].target_class == t->unit_class) {
+                    *task = &list->tasks[i];
                     break;
                 }
             return 1;
@@ -233,16 +235,33 @@ int aoe_unit_task_select_tribe_ror(const AoeLiveUnit *actor,
                 target_owner > 0 &&
                 !ops->owner_accepts(ops->context, actor_owner, target_owner) &&
                 c != 1) {
-                *task = first_action(a, 0x68);
+                *task = first_action(list, 0x68);
                 return 1;
             }
             if ((target_owner == actor_owner ||
                  ops->owner_accepts(ops->context, actor_owner, target_owner)) &&
                 damaged(target) && target->core.state < 3 && c != 21 &&
                 c != 2 && c != 20 && c != 22 && c != 1 && c != 27 && c != 3)
-                *task = first_action(a, 0x69);
+                *task = first_action(list, 0x69);
         }
         return 1;
     }
-    return aoe_unit_task_select_base_ror(actor, target, x, y, ops, task);
+    return aoe_unit_task_select_base_with_ror(list, actor, target, x, y, ops,
+                                             task);
+}
+
+int aoe_unit_task_select_base_ror(const AoeLiveUnit *actor,
+                                  const AoeLiveUnit *target, float x,
+                                  float y, const AoeUnitTaskOps *ops,
+                                  const DatUnitTask **task) {
+    return aoe_unit_task_select_base_with_ror(tmpl(actor), actor, target, x,
+                                              y, ops, task);
+}
+
+int aoe_unit_task_select_tribe_ror(const AoeLiveUnit *actor,
+                                   const AoeLiveUnit *target, float x,
+                                   float y, const AoeUnitTaskOps *ops,
+                                   const DatUnitTask **task) {
+    return aoe_unit_task_select_tribe_with_ror(tmpl(actor), actor, target, x,
+                                               y, ops, task);
 }

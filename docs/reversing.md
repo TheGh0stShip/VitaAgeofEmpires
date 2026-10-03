@@ -1197,6 +1197,37 @@ int16 template `+0x08`, dword `+0x0c` and builders from `+0x10`.
   run. Pieces are created through template `+0x3c`.
 - Builders are sent to the first piece created.
 
+Unit vtable `+0x1f8` = `0x00405f20`, reached from `+0x98`/`+0xa0` (whose
+final flag it never reads), is the order-to-action step. It is translated
+as `aoe_unit_order_ror`:
+- **Task selection and job switch.** The unit's list selects a task. If
+  none fits and template `+0xec` (`task_swap_group`, the first of the five
+  bytes after the drop sites) is set, the first owner template with the
+  same class, type and swap group whose list yields a task becomes the
+  unit's template (`+0x54`). In the RoR data, the Man, Builder, Fisherman,
+  Forager, Hunter, Lumberjack and Miner templates all share class 4,
+  type 70 and swap group 1: this is the villager job switch.
+- **Reusing the head action.** A head action built from the same task is
+  retargeted through `+0x34`. A type-9 head already aimed at the target is
+  also retargeted and skips creation.
+- **Building an action.** Otherwise the `+0x184` list factory builds one:
+  the base list `0x00542600` uses `0x004040b0`, and the tribe list
+  `0x005488a8` uses `0x004b4600`, which defers to the base. The routes are
+  taken from the jump tables `0x0040434c/0x00404334` and
+  `0x004b4c04/0x004b4bd4`:
+  - base: 4 point; 5 target/point; 7 attack with group notices; 0xa
+    point; 0x15 task-only;
+  - tribe: 3 target, even for NULL; 0xc point; target/point pairs for
+    0x65, 0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6e and 0x6f; 0x78 unit-only.
+  Allocation sizes and constructor addresses are recorded per route.
+- **Fallback.** Failing all of that, the unit moves through `+0x9c` with
+  result 1.
+- **Acknowledgement.** Group objects acknowledge the result through table
+  `0x00406264/0x00406230`.
+- **Attack arguments.** The attack constructors take task range and
+  template `min_range` (`+0x138`), `projectile_unit_id` (`+0x124`) and
+  `frame_delay` (`+0x12a`).
+
 The type-40–70 prefix is now composed by
 `aoe_live_unit_cleanup_derived_prefix_ror`: when semantic live `+0x184` is
 present, it drains the list through `aoe_action_list_clear` (`0x00403e70`),

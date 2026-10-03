@@ -468,8 +468,8 @@ int main(int argc, char **argv) {
         else
             printf("unit %u/%u: absent\n", query_civ, query_unit);
         if (unit) {
-            printf("selector bytes: +0x8c %u, +0x8f %u\n", unit->field_8c,
-                   unit->field_8f);
+            printf("selector bytes: +0x8c %u, +0x8f %u, task swap group %u\n",
+                   unit->field_8c, unit->field_8f, unit->task_swap_group);
             for (uint16_t t = 0; t < unit->task_count; ++t) {
                 const DatUnitTask *task = &unit->tasks[t];
                 printf("task %u: action %d, class %d, unit %d, terrain %d, "

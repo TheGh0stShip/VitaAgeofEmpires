@@ -138,8 +138,12 @@ predicate `0x004e7f90`). Next: the rest of `0x00405f20` (action creation
 through the action manager `0x004045b0/0x004045c0`), tribe opcodes
 nothing: every tribe opcode (4, 0x64-0x6f, 0x77) is translated, including
 fee tribute 0x6c, diplomacy, building placement and walls. The command layer
-is complete; the next layer is action creation (`0x00405f20` after task
-selection, action factory `0x00403e70`).
+is complete. The order-to-action step `0x00405f20` is translated
+(`src/unit_order.c`), including the villager job switch, head-action
+retargeting, the action routing table and acknowledgements. Next: the
+individual action classes (move `+0x9c`, gather 5, attack 7, build 0x65,
+...) behind the routed constructors. Note `0x00403e70` is the base list's
+stream loader (slot 0), not the order path.
 Every base
 opcode (0-0x11; 0x0d is a no-op) is translated.
 `aoe_live_unit_player_update_step_ror` binds it into actual player +0x7c

@@ -146,7 +146,9 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
         unit->search_radius = f32(cursor);
         unit->work_rate = f32(cursor);
         take(cursor, 4); /* two drop sites */
-        take(cursor, 5); /* task-swap group, attack and move sounds */
+        p = take(cursor, 5); /* task-swap group, attack and move sounds */
+        if (!p) return 0;
+        unit->task_swap_group = p[0]; /* template +0xec, 0x0043e810 order */
         take(cursor, 1); /* run pattern */
         task_count = u16(cursor);
         if (!cursor->valid || task_count > 1024) return 0;

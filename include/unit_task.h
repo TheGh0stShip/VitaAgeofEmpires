@@ -78,4 +78,18 @@ int aoe_unit_task_select_tribe_ror(const AoeLiveUnit *actor,
                                    float y, const AoeUnitTaskOps *ops,
                                    const DatUnitTask **task);
 
+/* Variants that read the task list of `list_template` while every other
+   check still uses the actor's current template (0x00405f20 asks other
+   templates' lists before switching the unit's template). */
+int aoe_unit_task_select_base_with_ror(const DatUnit *list_template,
+                                       const AoeLiveUnit *actor,
+                                       const AoeLiveUnit *target, float x,
+                                       float y, const AoeUnitTaskOps *ops,
+                                       const DatUnitTask **task);
+int aoe_unit_task_select_tribe_with_ror(const DatUnit *list_template,
+                                        const AoeLiveUnit *actor,
+                                        const AoeLiveUnit *target, float x,
+                                        float y, const AoeUnitTaskOps *ops,
+                                        const DatUnitTask **task);
+
 #endif

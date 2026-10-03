@@ -259,9 +259,17 @@ static int place(void *c, const uint8_t *m, size_t n) {
     return aoe_command_execute_place_ror(m, n, c);
 }
 
+static int wall(void *c, const uint8_t *m, size_t n) {
+    return aoe_command_execute_wall_ror(m, n, c);
+}
+
 void aoe_command_bind_place_ror(AoeCommandTribeDispatchRor *dispatch,
                                 const AoeCommandPlaceOps *ops) {
     if (!dispatch) return;
+    dispatch->tribe[AOE_COMMAND_WALL_ROR - AOE_COMMAND_TRIBE_FIRST_ROR]
+        .handler = wall;
+    dispatch->tribe[AOE_COMMAND_WALL_ROR - AOE_COMMAND_TRIBE_FIRST_ROR]
+        .context = (void *)ops;
     dispatch->tribe[AOE_COMMAND_PLACE_ROR - AOE_COMMAND_TRIBE_FIRST_ROR]
         .handler = place;
     dispatch->tribe[AOE_COMMAND_PLACE_ROR - AOE_COMMAND_TRIBE_FIRST_ROR]

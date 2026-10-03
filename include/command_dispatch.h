@@ -124,7 +124,7 @@ void aoe_command_bind_object_create_tribe_ror(
 /* Tribe opcode 0x6c: fee tribute through derived processor +0x10. */
 void aoe_command_bind_player_tribute_fee_ror(
     AoeCommandTribeDispatchRor *dispatch, const AoeCommandPlayerOps *ops);
-/* Tribe opcode 0x66: building placement. */
+/* Tribe opcodes 0x66 (building placement) and 0x69 (walls). */
 void aoe_command_bind_place_ror(AoeCommandTribeDispatchRor *dispatch,
                                 const AoeCommandPlaceOps *ops);
 /* Tribe opcode 0x67: game control (diplomacy, cheats, sync error). */

@@ -1184,6 +1184,19 @@ dword `+0x10` and builders from `+0x14`.
 out-value at 0 rather than truncating the host record pointer the original
 would leave there.
 
+Tribe opcode 0x69 (`0x004e8b00`) lays walls. The record has builder count
+`+0x01`, player `+0x02`, endpoint bytes x1/y1/x2/y2 at `+0x03..+0x06`,
+int16 template `+0x08`, dword `+0x0c` and builders from `+0x10`.
+- If |dx| = |dy| the wall is one straight or 45-degree run. Otherwise it
+  is an L: the longer axis is laid first from the start point, then the
+  other axis from one cell past the corner.
+- The run helper `0x004e8d00` steps -1/0/+1 per axis through both
+  endpoints. Each cell is checked at its centre (+0.5f, `0x00542468`) with
+  template `+0x20` arguments (NULL, 1, placement_class, 0, 1, 1, 1).
+- Accepted cells are paid individually; a failed payment ends only that
+  run. Pieces are created through template `+0x3c`.
+- Builders are sent to the first piece created.
+
 The type-40–70 prefix is now composed by
 `aoe_live_unit_cleanup_derived_prefix_ror`: when semantic live `+0x184` is
 present, it drains the list through `aoe_action_list_clear` (`0x00403e70`),

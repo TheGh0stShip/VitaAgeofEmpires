@@ -162,3 +162,37 @@ void aoe_command_bind_order_ror(AoeCommandDispatchRor *dispatch,
     dispatch->opcodes[AOE_COMMAND_ARRANGE_ROR].handler = arrange;
     dispatch->opcodes[AOE_COMMAND_ARRANGE_ROR].context = (void *)ops;
 }
+
+static int unit_task(void *c, const uint8_t *m, size_t n) {
+    return aoe_command_execute_unit_task_ror(m, n, c);
+}
+static int resign(void *c, const uint8_t *m, size_t n) {
+    return aoe_command_execute_resign_ror(m, n, c);
+}
+static int unit_records(void *c, const uint8_t *m, size_t n) {
+    return aoe_command_execute_unit_records_ror(m, n, c);
+}
+static int unit_record_list(void *c, const uint8_t *m, size_t n) {
+    return aoe_command_execute_unit_record_list_ror(m, n, c);
+}
+static int unit_task_list(void *c, const uint8_t *m, size_t n) {
+    return aoe_command_execute_unit_task_list_ror(m, n, c);
+}
+
+void aoe_command_bind_player_task_ror(AoeCommandDispatchRor *dispatch,
+                                      const AoeCommandPlayerTaskOps *ops) {
+    static const struct {
+        uint8_t opcode;
+        AoeCommandHandlerRor handler;
+    } bindings[] = {
+        {AOE_COMMAND_UNIT_TASK_ROR, unit_task},
+        {AOE_COMMAND_RESIGN_ROR, resign},
+        {AOE_COMMAND_UNIT_RECORDS_ROR, unit_records},
+        {AOE_COMMAND_UNIT_RECORD_LIST_ROR, unit_record_list},
+        {AOE_COMMAND_UNIT_TASK_LIST_ROR, unit_task_list}};
+    if (!dispatch) return;
+    for (size_t i = 0; i < sizeof(bindings) / sizeof(bindings[0]); ++i) {
+        dispatch->opcodes[bindings[i].opcode].handler = bindings[i].handler;
+        dispatch->opcodes[bindings[i].opcode].context = (void *)ops;
+    }
+}

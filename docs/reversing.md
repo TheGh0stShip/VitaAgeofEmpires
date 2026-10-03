@@ -1088,6 +1088,24 @@ stepped from the leader's position:
 - 4/5: a zig-zag whose toggle alternates -/+ y and grows both 1.5 steps
   only on the + half (jump tables `0x0042b0ec`, `0x0042b104`).
 
+The remaining base opcodes route through player virtuals that the base and
+both derived player vtables share:
+- **0x0a** (`0x0042b120`, builder `0x0042bcf0`, 0x28 bytes) resets the
+  group of the unit at `+0x04`. The issuing player's `+0x34`
+  (`0x0045beb0`) then receives 12 record fields; it forwards them to the
+  unit's `+0x74` group object (`+0x10`) only when the unit is owned by that
+  player.
+- **0x11** (`0x0042b1a0`) is the multi-unit form, with IDs from `+0x24`.
+  Coordinates whose bits equal `0xbf800000` (-1.0f) are replaced by the
+  unit's own `+0x38/+0x3c/+0x40`.
+- **0x0b** (`0x0042b290`) is resignation. Outside a session it calls player
+  `+0x08` (`0x0045bd00`: set `+0x81`, `+4(2)`, and event 5 on the first
+  resignation). In a session it marks game `+0xa15[slot]`, tears down a
+  local slot, and resigns the player only when every slot 1..8 mapped to it
+  (`0x0041c080`) has left.
+- **0x0c** (`0x0042b3b0`) and **0x10** (`0x0042b3f0`) feed 3-byte records to
+  unit `+0x1bc(record, 1)` through player `+0x48` (`0x0045bf90`).
+
 The type-40–70 prefix is now composed by
 `aoe_live_unit_cleanup_derived_prefix_ror`: when semantic live `+0x184` is
 present, it drains the list through `aoe_action_list_clear` (`0x00403e70`),

@@ -118,6 +118,12 @@ untranslated; `0x00520c60` (world refresh) is still an explicit callback.
 `0x0042ad40`) and reports routed-but-unbound opcodes rather than dropping
 them. See `docs/RELATED_PROJECTS.md` for the 2026-10-03 upstream survey and
 work-reduction plan.
+Opcode 7 (tribute) is translated with its exact `__ftol` reporting. The
+derived tribe router `0x004e83e0` is modelled by
+`aoe_command_dispatch_tribe_ror`: one CRT `rand()` step per command, an
+opcode-4 override, and opcodes 0x64-0x6f/0x77, all reported as UNBOUND until
+translated. The next command work is those tribe handlers, base opcodes 0-4,
+6 and 0x0a-0x11, and tracing which processor a real session constructs.
 `aoe_live_unit_player_update_step_ror` binds it into actual player +0x7c
 object-list traversal by matching listed `+0x38` references against an
 explicit owned-unit roster; unrelated list objects still go through required

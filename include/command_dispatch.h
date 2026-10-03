@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "aoe_rng.h"
 #include "command_dependency.h"
 #include "command_player.h"
 
@@ -50,11 +51,53 @@ AoeCommandRouteRor aoe_command_dispatch_ror(
     const AoeCommandDispatchRor *dispatch, const uint8_t *command,
     size_t size);
 
+/* Derived ("tribe") processor vtable 0x00549904 slot +0x08 = 0x004e83e0,
+   installed by 0x004e8390 from 0x0050a090; base processors are built from
+   0x0051c790. Both store the processor at owner +0x58. Which one a session
+   uses is inferred, not yet traced.
+   0x004e83e0 first calls CRT rand() (0x0052605d) once per command and
+   discards the result, so every dispatched command advances the shared
+   seed. It then decodes the opcode through byte table 0x004e84fc and jump
+   table 0x004e84c0:
+      4 004e8570 (overrides base 0042acd0)
+     64 004e85e0  65 004e8780  66 004e8920  67 004e8eb0  68 004e8e20
+     69 004e8b00  6a 004e9130  6b 004e9160  6c vtable +0x10 = 004e91b0
+     6d 004e9340  6e 004e9380  6f 004e93d0  77 004e9450
+   Every other value, including 0x70..0x76 and values above 0x77, falls
+   through to 0x0042a180. */
+enum {
+    AOE_COMMAND_TRIBE_FIRST_ROR = 0x64,
+    AOE_COMMAND_TRIBE_LAST_ROR = 0x77,
+    AOE_COMMAND_TRIBE_COUNT_ROR =
+        AOE_COMMAND_TRIBE_LAST_ROR - AOE_COMMAND_TRIBE_FIRST_ROR + 1
+};
+
+typedef struct {
+    AoeCommandDispatchRor base;    /* fallback 0x0042a180; its [4] unused */
+    AoeCommandBindingRor opcode4;  /* 0x004e8570 */
+    /* Indexed by opcode - 0x64. Only routed slots are consulted. */
+    AoeCommandBindingRor tribe[AOE_COMMAND_TRIBE_COUNT_ROR];
+    AoeRng *rng;                   /* shared CRT seed */
+} AoeCommandTribeDispatchRor;
+
+/* Whether 0x004e83e0 handles the opcode itself (not via 0x0042a180). */
+int aoe_command_opcode_tribe_routed_ror(uint8_t opcode);
+
+/* Advances `rng` once, exactly as the original does for every command,
+   then routes. Returns INVALID without advancing when the dispatcher, RNG
+   or record is missing. */
+AoeCommandRouteRor aoe_command_dispatch_tribe_ror(
+    const AoeCommandTribeDispatchRor *dispatch, const uint8_t *command,
+    size_t size);
+
 /* Bindings for opcodes that are already translated. Each stores `ops` by
    reference; the caller keeps it alive for the dispatcher's lifetime. */
 void aoe_command_bind_dependency_ror(AoeCommandDispatchRor *dispatch,
                                      const AoeCommandDependencyOps *ops);
 void aoe_command_bind_player_resource_ror(AoeCommandDispatchRor *dispatch,
                                           const AoeCommandPlayerOps *ops);
+/* Opcode 7: both processor vtables keep 0x0042ad40 in slot +0x00. */
+void aoe_command_bind_player_tribute_ror(AoeCommandDispatchRor *dispatch,
+                                         const AoeCommandPlayerOps *ops);
 
 #endif

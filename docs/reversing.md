@@ -869,6 +869,32 @@ this; the slot-49 allocation check and the NULL-player rejection are
 host-only guards. Which players are built with which derived vtable has not
 yet been established.
 
+Opcode 7 (tribute) is processor vtable slot `+0x00` = `0x0042ad40` in both
+the base (`0x00543498`) and derived (`0x00549904`) processor vtables. Builder
+`0x0042bb20` (slot `+0x0c`) writes sender `+0x01`, receiver `+0x02`, resource
+`+0x03` and float `+0x04`. Raw disassembly shows:
+- the gate `fld values[r]; fcomp amount; test ah,1`: it proceeds only when
+  the sender's unchecked raw value is `>=` the amount, so NaN fails;
+- sender `+0x78(r, -amount, 0)` (exact `fchs`) and receiver
+  `+0x78(r, amount, 0)`, with no fee;
+- game `*0x00580e38` vtable `+0x40(7, sender, receiver, r, __ftol(amount))`;
+- receiver vtable `+0xe8(sender, receiver, 0x20a, r, __ftol(amount), 0)`.
+  Base `0x0045e930` and derived `0x004f3350` implement that slot; Ghidra
+  dropped the trailing zero argument.
+`__ftol` (`0x0052602c`) truncates via a 64-bit `fistp` and returns the low
+32 bits; `include/aoe_ftol.h` reproduces that, including integer-indefinite
+inputs.
+
+The derived processor's dispatch `0x004e83e0` (installed by `0x004e8390`
+from `0x0050a090`; the base processor is built from `0x0051c790`) calls CRT
+`rand()` once per command before routing, so command count affects the
+shared seed. It overrides opcode 4 with `0x004e8570`, handles 0x64-0x6f and
+0x77 itself (0x6c through its own vtable `+0x10` = `0x004e91b0`), and passes
+every other value to `0x0042a180`. Patched CRT `srand`/`rand` are RoR
+`0x00526053`/`0x0052605d` (seed `0x00560664`) and AoE 1.0c
+`0x0051fc8f`/`0x0051fc99` (seed `0x005591ec`); the `aoe_rng` header had
+quoted unpatched-release addresses.
+
 The type-40–70 prefix is now composed by
 `aoe_live_unit_cleanup_derived_prefix_ror`: when semantic live `+0x184` is
 present, it drains the list through `aoe_action_list_clear` (`0x00403e70`),

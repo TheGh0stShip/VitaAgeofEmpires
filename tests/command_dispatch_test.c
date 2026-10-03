@@ -86,5 +86,49 @@ int main(void) {
                AOE_COMMAND_ROUTE_HANDLED && calls == 1);
     assert(aoe_command_dispatch_ror(0, record, 8) ==
            AOE_COMMAND_ROUTE_INVALID);
+
+    /* Derived processor 0x004e83e0. */
+    {
+        AoeCommandTribeDispatchRor tribe;
+        AoeRng rng, expected;
+        memset(&tribe, 0, sizeof(tribe));
+        aoe_rng_seed(&rng, 1);
+        aoe_rng_seed(&expected, 1);
+        tribe.base = dispatch;
+        tribe.rng = &rng;
+        for (unsigned op = 0; op < 0x100; ++op)
+            assert(aoe_command_opcode_tribe_routed_ror((uint8_t)op) ==
+                   (op == 4 || (op >= 0x64 && op <= 0x6f) || op == 0x77));
+        /* rand() advances once for every command, even ignored ones. */
+        record[0] = 0x0d;
+        assert(aoe_command_dispatch_tribe_ror(&tribe, record, 1) ==
+                   AOE_COMMAND_ROUTE_IGNORED &&
+               rng.state == (aoe_rng_next(&expected), expected.state));
+        record[0] = 0x70; /* inside the byte table but default-routed */
+        assert(aoe_command_dispatch_tribe_ror(&tribe, record, 1) ==
+                   AOE_COMMAND_ROUTE_IGNORED &&
+               rng.state == (aoe_rng_next(&expected), expected.state));
+        /* Opcode 4 uses the derived override, not the base slot. */
+        tribe.base.opcodes[4].handler = tribute;
+        tribe.base.opcodes[4].context = &calls;
+        record[0] = 4;
+        assert(aoe_command_dispatch_tribe_ror(&tribe, record, 8) ==
+                   AOE_COMMAND_ROUTE_UNBOUND && calls == 1);
+        record[0] = 0x6c;
+        assert(aoe_command_dispatch_tribe_ror(&tribe, record, 8) ==
+               AOE_COMMAND_ROUTE_UNBOUND);
+        /* Fallback reaches base handlers (opcode 7 here). */
+        record[0] = 7;
+        assert(aoe_command_dispatch_tribe_ror(&tribe, record, 8) ==
+                   AOE_COMMAND_ROUTE_HANDLED && calls == 2);
+        aoe_rng_next(&expected);
+        aoe_rng_next(&expected);
+        aoe_rng_next(&expected);
+        assert(rng.state == expected.state);
+        /* Missing RNG is rejected without consuming anything. */
+        tribe.rng = 0;
+        assert(aoe_command_dispatch_tribe_ror(&tribe, record, 8) ==
+               AOE_COMMAND_ROUTE_INVALID && calls == 2);
+    }
     return 0;
 }

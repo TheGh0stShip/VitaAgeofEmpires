@@ -1,5 +1,13 @@
 #include "command_dispatch.h"
 
+static AoeCommandRouteRor call(const AoeCommandBindingRor *binding,
+                               const uint8_t *command, size_t size) {
+    if (!binding->handler) return AOE_COMMAND_ROUTE_UNBOUND;
+    return binding->handler(binding->context, command, size) < 0
+               ? AOE_COMMAND_ROUTE_INVALID
+               : AOE_COMMAND_ROUTE_HANDLED;
+}
+
 int aoe_command_opcode_routed_ror(uint8_t opcode) {
     return opcode < AOE_COMMAND_OPCODE_COUNT_ROR && opcode != 0x0d;
 }
@@ -12,10 +20,26 @@ AoeCommandRouteRor aoe_command_dispatch_ror(
     if (!aoe_command_opcode_routed_ror(command[0]))
         return AOE_COMMAND_ROUTE_IGNORED;
     binding = &dispatch->opcodes[command[0]];
-    if (!binding->handler) return AOE_COMMAND_ROUTE_UNBOUND;
-    return binding->handler(binding->context, command, size) < 0
-               ? AOE_COMMAND_ROUTE_INVALID
-               : AOE_COMMAND_ROUTE_HANDLED;
+    return call(binding, command, size);
+}
+
+int aoe_command_opcode_tribe_routed_ror(uint8_t opcode) {
+    return opcode == 4 ||
+           (opcode >= AOE_COMMAND_TRIBE_FIRST_ROR && opcode <= 0x6f) ||
+           opcode == AOE_COMMAND_TRIBE_LAST_ROR;
+}
+
+AoeCommandRouteRor aoe_command_dispatch_tribe_ror(
+    const AoeCommandTribeDispatchRor *dispatch, const uint8_t *command,
+    size_t size) {
+    if (!dispatch || !dispatch->rng || !command || !size)
+        return AOE_COMMAND_ROUTE_INVALID;
+    (void)aoe_rng_next(dispatch->rng);
+    if (!aoe_command_opcode_tribe_routed_ror(command[0]))
+        return aoe_command_dispatch_ror(&dispatch->base, command, size);
+    if (command[0] == 4) return call(&dispatch->opcode4, command, size);
+    return call(&dispatch->tribe[command[0] - AOE_COMMAND_TRIBE_FIRST_ROR],
+                command, size);
 }
 
 static int dependency(void *context, const uint8_t *command, size_t size) {
@@ -48,4 +72,16 @@ void aoe_command_bind_player_resource_ror(AoeCommandDispatchRor *dispatch,
         player_resource;
     dispatch->opcodes[AOE_COMMAND_PLAYER_RESOURCE_ADD_ROR].context =
         (void *)ops;
+}
+
+static int player_tribute(void *context, const uint8_t *command,
+                          size_t size) {
+    return aoe_command_execute_player_tribute_ror(command, size, context);
+}
+
+void aoe_command_bind_player_tribute_ror(AoeCommandDispatchRor *dispatch,
+                                         const AoeCommandPlayerOps *ops) {
+    if (!dispatch) return;
+    dispatch->opcodes[AOE_COMMAND_PLAYER_TRIBUTE_ROR].handler = player_tribute;
+    dispatch->opcodes[AOE_COMMAND_PLAYER_TRIBUTE_ROR].context = (void *)ops;
 }

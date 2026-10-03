@@ -1106,6 +1106,17 @@ both derived player vtables share:
 - **0x0c** (`0x0042b3b0`) and **0x10** (`0x0042b3f0`) feed 3-byte records to
   unit `+0x1bc(record, 1)` through player `+0x48` (`0x0045bf90`).
 
+Tribe opcodes 0x6a/0x6b/0x6d/0x6e/0x6f (`src/command_tribe_unit.c`):
+- 0x6a calls unit `+0x244` on the unit at `+0x04`.
+- 0x6b calls unit `+0x14c(+0x04, +0x08, 0, 1)` for the IDs at `+0x0c`.
+- 0x6d writes the int16 at `+0x04` to unit word `+0x4c` (the carried
+  resource type) for the IDs at `+0x08`.
+- 0x6e runs repair-target `0x004b0870` with the source at `+0x04`. That
+  method finds the actor's action-0x6a task matching the source (buildings
+  take target class -1/0, other targets their class) and builds the action.
+- 0x6f issues, for each unit, its owner's `+0x34` task (owner, unit,
+  0x2d1, unit, owner, x, y, 0, 1.0f, 1, 0, 100) after `0x004ac320`.
+
 The type-40–70 prefix is now composed by
 `aoe_live_unit_cleanup_derived_prefix_ror`: when semantic live `+0x184` is
 present, it drains the list through `aoe_action_list_clear` (`0x00403e70`),

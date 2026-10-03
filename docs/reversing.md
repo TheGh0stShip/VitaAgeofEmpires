@@ -1228,6 +1228,38 @@ as `aoe_unit_order_ror`:
   template `min_range` (`+0x138`), `projectile_unit_id` (`+0x124`) and
   `frame_delay` (`+0x12a`).
 
+The move fallback `+0x9c` = `0x00405db0` has three steps:
+- It ignores a self-target, and it stops when the head action's `+0x30`
+  absorbs the move (`0x00404550`).
+- Otherwise it allocates a 0x44-byte move action (type 1, vtable
+  `0x005426dc`): `0x004052d0(unit, target, 0.4f, 0)` or
+  `0x00405250(unit, x, y, z, 0.4f, 0)`.
+- A group object is told (0x2c6, 0x262, target, x, y, z). The action is
+  adopted and `+0x188` incremented.
+
+Base actions (vtable `0x005429d8`) are initialised by `0x00407050`. Their
+target setter `0x00407380` calls `+0xc4(unit)` on a released target and
+`+0xc0(unit, type, 0)` on an attached one, and keeps `+0x18` in sync.
+
+The move action translated in `src/action_move.c`:
+- **Defaults.** A non-positive range becomes 0.4, and the graphic defaults
+  to template `+0xbc` or `+0x18`.
+- **Activation** (`0x00405430`): in range gives state 1; speed `+0xfc` 0
+  or NaN gives 0xd; otherwise 3.
+- **Update** (`0x00405500`, jump table `0x00405888/0x00405874`):
+  - **Validation.** A lost or dead target is cleared. The update then
+    returns 5 when quiet; otherwise it sends notice 0x1fb with the reset
+    ID and returns 4.
+  - **State 3.** It finishes if already in range. Otherwise it records the
+    destination, sets range, target ID and size on the unit's movement
+    system, and enters state 4 when `0x0044bf00` reports 0.
+  - **State 4.** A target that drifted more than 1 tile forces a re-path:
+    notice 0x1fc, state 3, then two nested updates. Here dx is compared
+    unrounded and dy after float rounding. Otherwise movement status 0
+    arrives at the point (result 3), and status 2 arrives near the target
+    (result 2).
+  - **States 1 and 0xd.** These report done (1) and arrival (3).
+
 The type-40–70 prefix is now composed by
 `aoe_live_unit_cleanup_derived_prefix_ror`: when semantic live `+0x184` is
 present, it drains the list through `aoe_action_list_clear` (`0x00403e70`),

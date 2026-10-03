@@ -141,8 +141,10 @@ fee tribute 0x6c, diplomacy, building placement and walls. The command layer
 is complete. The order-to-action step `0x00405f20` is translated
 (`src/unit_order.c`), including the villager job switch, head-action
 retargeting, the action routing table and acknowledgements. Next: the
-individual action classes (move `+0x9c`, gather 5, attack 7, build 0x65,
-...) behind the routed constructors. Note `0x00403e70` is the base list's
+individual action classes behind the routed constructors. The move action
+(`+0x9c`, type 1) is translated against an explicit movement interface;
+next are gather 5, attack 7 and build 0x65, and the unit movement system
+(`0x0044be90`..`0x0044c2d0`) itself. Note `0x00403e70` is the base list's
 stream loader (slot 0), not the order path.
 Every base
 opcode (0-0x11; 0x0d is a no-op) is translated.

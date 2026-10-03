@@ -46,6 +46,54 @@ original data, or observed original-game behavior.
   Local compiler ELF attributes are authoritative for floating-point PCS;
   CPU VFP/NEON support alone does not establish that calling convention.
 
+## Upstream survey (refreshed 2026-10-03)
+
+License and last-push data come from the GitHub API on 2026-10-03. "Use"
+states the only way each project may affect this repository.
+
+| Project | License | Last push | Use here |
+|---|---|---|---|
+| [SFTtech/openage](https://github.com/SFTtech/openage) | GPLv3+ (GitHub reports NOASSERTION) | 2026-10-03, active | Architecture and layering questions only |
+| [folkertvanverseveld/aoe](https://github.com/folkertvanverseveld/aoe) | Apache-2.0 | 2026-09-22, active | Subsystem checklist only; disassembly-derived, so excluded as a code or behavior source |
+| [sandsmark/freeaoe](https://github.com/sandsmark/freeaoe) | GPL-3.0 | 2022-12-08 | Architecture reference; AoE2-focused |
+| [ChariotEngine/Chariot](https://github.com/ChariotEngine/Chariot) | not detected | 2018-04-17, inactive | Historical AoE1 reference only |
+| [Tapsa/genieutils](https://github.com/Tapsa/genieutils) (active fork of [sandsmark/genieutils](https://github.com/sandsmark/genieutils)) | LGPL-3.0 | 2026-07-08 | Host-only, out-of-process format oracle |
+| [SiegeEngineers/genie-rs](https://github.com/SiegeEngineers/genie-rs) | GPL-3.0 | 2023-04-04 | Host-only format oracle; mainly AoC layouts |
+| [SDL](https://github.com/libsdl-org/SDL) with [Vita port](https://github.com/libsdl-org/SDL/blob/main/docs/README-vita.md) | zlib | active | Candidate platform layer; SDL2 and SDL3 already ship with the local VitaSDK |
+| [Ghidra BSim](https://ghidra.re/ghidra_docs/GhidraClass/BSim/README.html) | Apache-2.0 (Ghidra) | bundled with Ghidra 12 | Cross-revision function-candidate search |
+
+## Work-reduction plan
+
+Each item removes repeated effort without weakening the evidence rule.
+
+1. **One platform backend for host and Vita.** VitaSDK already provides
+   SDL2/SDL3 (zlib license, GPL-compatible), with Vita controller, touch and
+   audio support. A single SDL-backed video/audio/input layer runs the same
+   reconstructed runtime on a desktop host and on Vita, replacing two
+   hand-written platform layers. Choose SDL2 or SDL3 only after measuring
+   on real Vita hardware.
+2. **Cross-revision candidates through BSim.** Mapping disc RoR, patched
+   RoR 1.0a and patched AoE 1.0c functions has so far relied on manual or
+   trigram matching (`docs/ror_revision_map.tsv`). BSim's decompiler feature
+   vectors can rank candidates in bulk. A BSim hit is only a candidate:
+   acceptance still needs the existing semantic or disassembly comparison.
+   The opcode-5 work showed the cost of skipping this step: older player
+   resource notes had silently carried disc addresses.
+3. **Differential format oracles.** genieutils (LGPL-3.0) or genie-rs
+   (GPL-3.0) may run as separate host processes against locally supplied
+   data, so their DAT/DRS/SLP readings can be compared with ours. They are
+   never linked into the port or copied. A disagreement is a research lead;
+   the original executable decides.
+4. **Peer subsystem checklists.** The folkertvanverseveld/aoe and openage
+   subsystem lists (AI, networking, UI, scenario flow) go into `TODO.md` as
+   coverage questions, never as behavior.
+5. **Shared in-tree primitives.** `include/le_bytes.h` gives one
+   endian- and alignment-safe codec for original 32-bit records, and
+   `command_dispatch` translates the RoR 1.0a router `0x0042a180`, so each
+   remaining opcode only needs a handler and a binding. Private `le32`
+   copies in the older parsers (`cpx.c`, `dat_tech.c`, `drs.c`) can move to
+   it when those files are next touched.
+
 ## Consequences for this port
 
 1. Preserve original 32-bit identifiers, serialization, command ordering, and
@@ -58,4 +106,4 @@ original data, or observed original-game behavior.
 4. Treat deterministic simulation and real-hardware performance as independent
    gates. Host and emulator success cannot prove physical Vita correctness.
 
-Research refreshed 2026-09-29.
+Research refreshed 2026-10-03.

@@ -1169,6 +1169,21 @@ stance 0 is allied. The other sub-codes are:
 `src/player_diplomacy.c` and `src/command_game.c` translate this; the
 cheat dispatcher and sync-error screen remain callbacks.
 
+Tribe opcode 0x66 (`0x004e8920`) places buildings. The record has builder
+count `+0x01`, player `+0x02`, x/y `+0x04/+0x08`, int16 template `+0x0c`,
+dword `+0x10` and builders from `+0x14`.
+- Template `+0x20` checks placement and writes its out-value into the
+  handler's argument slot. A failure is reported through player `+0x100`,
+  but only when the first builder resolves.
+- For template 109 whose own `enabled` byte (`+0x52`) is 0, a live town
+  center found by `0x00451370` refuses the placement silently.
+- Payment is `0x004f1750` with pop flag 0; a failed payment reports code 0.
+- On success, template `+0x3c` creates the foundation, and every builder
+  resets its group and gets `+0x98(foundation, x, y, 0)`.
+`src/command_place.c` translates this. The translation starts the
+out-value at 0 rather than truncating the host record pointer the original
+would leave there.
+
 The type-40–70 prefix is now composed by
 `aoe_live_unit_cleanup_derived_prefix_ror`: when semantic live `+0x184` is
 present, it drains the list through `aoe_action_list_clear` (`0x00403e70`),

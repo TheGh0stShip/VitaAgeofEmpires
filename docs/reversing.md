@@ -1046,6 +1046,24 @@ and for ship classes 2/20/21/22, and priest convert/heal (0x68/0x69). The
 priest branch never falls through to the base selector. `dat_tool --unit`
 now prints the task and selector fields.
 
+Base opcodes 1 and 2 are translated:
+- Opcode 1 (`0x0042a730`, IDs at the unaligned offset `+0x02`) skips
+  template 50 and otherwise runs `0x004ac320` and unit vtable `+0xa4`.
+- Opcode 2 (`0x0042a780`) is opcode 0's simple path with `+0xa0` in place
+  of `+0x98`. For action classes `+0xa0` is `0x00405ee0`, which calls
+  `+0x1f8` with final flag 1.
+
+The `+0xa4` stop variants are root `0x0045bcc0` (ret), action `0x004064e0`
+(clear the `+0x184` list unless head `+0x2c` accepts), group `0x00426250`
+(also `+0x74` object `+0x58(1)`), and building `0x004ae290` (also drain the
+production queue through `0x004add50`). They are
+`aoe_live_unit_stop_ror`.
+
+The action-list labels were disc addresses. The patched list methods are
+update `0x004043b0`, push `0x00404400`, append `0x00404450`, pop
+`0x004044d0` and clear `0x00403e50`; patched `0x00403e70` is an action
+factory switch.
+
 The type-40–70 prefix is now composed by
 `aoe_live_unit_cleanup_derived_prefix_ror`: when semantic live `+0x184` is
 present, it drains the list through `aoe_action_list_clear` (`0x00403e70`),

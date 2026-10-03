@@ -156,3 +156,58 @@ int aoe_command_execute_order_ror(const uint8_t *command, size_t size,
     }
     return 1;
 }
+
+size_t aoe_command_encode_stop_ror(uint8_t *out, size_t out_size,
+                                   const int32_t *unit_ids, uint8_t count) {
+    size_t size = 2u + 4u * count;
+    if (!out || out_size < size || (count && !unit_ids)) return 0;
+    memset(out, 0, size);
+    out[0] = AOE_COMMAND_STOP_ROR;
+    out[1] = count;
+    for (uint8_t i = 0; i < count; ++i)
+        aoe_le_put_u32(out + 2 + 4u * i, (uint32_t)unit_ids[i]);
+    return size;
+}
+
+int aoe_command_execute_stop_ror(const uint8_t *command, size_t size,
+                                 const AoeCommandOrderOps *ops) {
+    if (!command || size < 2 || command[0] != AOE_COMMAND_STOP_ROR || !ops ||
+        !ops->world.resolve || !ops->owner_kind || !ops->stop ||
+        size < 2u + 4u * command[1])
+        return -1;
+    for (unsigned i = 0; i < command[1]; ++i) {
+        AoeLiveUnit *unit = lookup(ops, aoe_le_i32(command + 2 + 4u * i));
+        if (!unit) continue;
+        if (!unit->core.unit_template) return -1;
+        if (unit->core.unit_template->id == 50) continue;
+        if (!aoe_live_unit_reset_group_ror(unit,
+                                           ops->owner_kind(ops->context, unit)) ||
+            !ops->stop(ops->context, unit))
+            return -1;
+    }
+    return 1;
+}
+
+int aoe_command_execute_order_alternate_ror(const uint8_t *command,
+                                            size_t size,
+                                            const AoeCommandOrderOps *ops) {
+    unsigned count;
+    AoeLiveUnit *target;
+    if (!command || size < AOE_COMMAND_ORDER_HEADER_SIZE_ROR ||
+        command[0] != AOE_COMMAND_ORDER_ALTERNATE_ROR || !ops ||
+        !ops->world.resolve || !ops->owner_kind || !ops->set_order_flag ||
+        !ops->order_alternate)
+        return -1;
+    count = command[1];
+    if (size < AOE_COMMAND_ORDER_HEADER_SIZE_ROR + 4u * count) return -1;
+    target = lookup(ops, aoe_le_i32(command + 4));
+    for (unsigned i = 0; i < count; ++i) {
+        AoeLiveUnit *unit = lookup(ops, unit_id_at(command, i));
+        if (!unit) continue;
+        if (!prepare(unit, command, count, i, ops)) return -1;
+        ops->order_alternate(ops->context, unit, target,
+                             aoe_le_f32(command + 0x08),
+                             aoe_le_f32(command + 0x0c));
+    }
+    return 1;
+}

@@ -299,6 +299,40 @@ int aoe_live_unit_set_dependency_group_ror(
     return 1;
 }
 
+int aoe_live_unit_stop_ror(AoeLiveUnit *unit, AoeLiveUnitStopClassRor kind,
+                           const AoeLiveUnitStopOps *ops) {
+    AoeActionList *list;
+    if (!unit || !unit->constructed || !ops) return 0;
+    if (kind == AOE_LIVE_UNIT_STOP_ROOT_ROR) return 1;
+    list = unit->derived_action_list;
+    if (!list || !aoe_action_list_valid(list) || !ops->cancel_head ||
+        (kind != AOE_LIVE_UNIT_STOP_ACTION_ROR &&
+         (!ops->has_group_object || !ops->stop_group)) ||
+        (kind == AOE_LIVE_UNIT_STOP_BUILDING_ROR &&
+         (!unit->building_update || !ops->owner_status_four_count)))
+        return 0;
+    if (!(list->head && ops->cancel_head(ops->context, list->head->action)) &&
+        !aoe_action_list_clear(list))
+        return 0;
+    if (kind == AOE_LIVE_UNIT_STOP_ACTION_ROR) return 1;
+    if (ops->has_group_object(ops->context, unit))
+        ops->stop_group(ops->context, unit);
+    if (kind == AOE_LIVE_UNIT_STOP_GROUP_ROR) return 1;
+    while (unit->building_update->queue_count > 0) {
+        AoeBuildingUpdate *b = unit->building_update;
+        int16_t count = b->queue_count;
+        AoeBuildingQueueEntry head = b->queue_entries[0];
+        if (!aoe_building_queue_cancel_ror(b, head.unit_id, 1,
+                                           ops->owner_status_four_count,
+                                           &ops->queue_cancel) ||
+            (b->queue_count == count &&
+             b->queue_entries[0].unit_id == head.unit_id &&
+             b->queue_entries[0].quantity == head.quantity))
+            return 0;
+    }
+    return 1;
+}
+
 int aoe_live_unit_add_group_member_ror(AoeLiveUnit *unit, int32_t unit_id) {
     if (!unit || !unit->constructed ||
         unit->group_unit_count > unit->group_unit_capacity ||

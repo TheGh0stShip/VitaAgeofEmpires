@@ -13,7 +13,11 @@
    `count` unit IDs from +0x1c. */
 enum {
     AOE_COMMAND_ORDER_ROR = 0x00,
-    AOE_COMMAND_ORDER_HEADER_SIZE_ROR = 0x1c
+    AOE_COMMAND_ORDER_HEADER_SIZE_ROR = 0x1c,
+    /* Opcode 1 (0x0042a730): count +0x01, unit IDs from the unaligned
+       offset +0x02. Opcode 2 (0x0042a780): opcode 0's layout. */
+    AOE_COMMAND_STOP_ROR = 0x01,
+    AOE_COMMAND_ORDER_ALTERNATE_ROR = 0x02
 };
 
 typedef struct {
@@ -37,6 +41,12 @@ typedef struct {
                   float x, float y);              /* vtable +0x98(..., 0) */
     /* Owner +0x3c -> world +0x28 -> map +0x08 (axis 0) / +0x0c (axis 1). */
     int32_t (*map_size)(void *context, const AoeLiveUnit *unit, int axis);
+    /* Opcode 1: vtable +0xa4 (see aoe_live_unit_stop_ror). */
+    int (*stop)(void *context, AoeLiveUnit *unit);
+    /* Opcode 2: vtable +0xa0(target, x, y, 0), which for action classes
+       (0x00405ee0) is +0x98's +0x1f8 call with final flag 1. */
+    void (*order_alternate)(void *context, AoeLiveUnit *unit,
+                            AoeLiveUnit *target, float x, float y);
 } AoeCommandOrderOps;
 
 size_t aoe_command_encode_order_ror(
@@ -66,5 +76,21 @@ size_t aoe_command_encode_order_ror(
    failed group update. */
 int aoe_command_execute_order_ror(const uint8_t *command, size_t size,
                                   const AoeCommandOrderOps *ops);
+
+size_t aoe_command_encode_stop_ror(uint8_t *out, size_t out_size,
+                                   const int32_t *unit_ids, uint8_t count);
+
+/* 0x0042a730: each resolved unit whose template ID is not 50 runs
+   0x004ac320 and then stop. Returns -1 for a malformed record, missing
+   dependencies, or a failed stop; otherwise 1. */
+int aoe_command_execute_stop_ror(const uint8_t *command, size_t size,
+                                 const AoeCommandOrderOps *ops);
+
+/* 0x0042a780: the target is looked up once, then every resolved unit runs
+   0x004ac320, +0x12c(1), the 0x004ac280 group update, and order_alternate
+   with the raw x/y. No validity gate or formation logic. */
+int aoe_command_execute_order_alternate_ror(const uint8_t *command,
+                                            size_t size,
+                                            const AoeCommandOrderOps *ops);
 
 #endif

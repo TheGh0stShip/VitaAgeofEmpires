@@ -102,7 +102,8 @@ void aoe_command_bind_dependency_ror(AoeCommandDispatchRor *dispatch,
                                      const AoeCommandDependencyOps *ops);
 void aoe_command_bind_player_resource_ror(AoeCommandDispatchRor *dispatch,
                                           const AoeCommandPlayerOps *ops);
-/* Opcode 0: 0x0042a280 unit order (shared by both processors). */
+/* Opcodes 0, 1 and 2: 0x0042a280 unit order, 0x0042a730 stop and
+   0x0042a780 alternate order (shared by both processors). */
 void aoe_command_bind_order_ror(AoeCommandDispatchRor *dispatch,
                                 const AoeCommandOrderOps *ops);
 /* Opcode 4: base 0x0042acd0 into the base table, and tribe 0x004e8570 into

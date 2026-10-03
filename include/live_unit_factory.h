@@ -134,6 +134,36 @@ typedef struct {
     int (*set_state)(void *context, AoeLiveUnit *unit, uint8_t state);
 } AoeLiveUnitUpdateTargetOps;
 
+/* Unit vtable +0xa4 "stop" in patched RoR 1.0a, by class:
+   - ROOT (root vtable 0x00547da8): 0x0045bcc0, a bare `ret`;
+   - ACTION (0x00542748): 0x004064e0. Unless the head action of the
+     +0x184 list accepts cancellation (0x00404530 = head vtable +0x2c,
+     returning nonzero), the whole list is cleared (0x00403e50);
+   - GROUP (0x0054324c, 0x005445e8, 0x0054820c): 0x00426250, ACTION, then
+     the +0x74 group object's vtable +0x58(1) when it exists;
+   - BUILDING (type-80 vtable 0x00547fa0): 0x004ae290, GROUP, then the
+     production queue is drained one item at a time through 0x004add50. */
+typedef enum {
+    AOE_LIVE_UNIT_STOP_ROOT_ROR,
+    AOE_LIVE_UNIT_STOP_ACTION_ROR,
+    AOE_LIVE_UNIT_STOP_GROUP_ROR,
+    AOE_LIVE_UNIT_STOP_BUILDING_ROR
+} AoeLiveUnitStopClassRor;
+
+typedef struct {
+    void *context;
+    int (*cancel_head)(void *context, void *action); /* head vtable +0x2c */
+    int (*has_group_object)(void *context, const AoeLiveUnit *unit);
+    void (*stop_group)(void *context, AoeLiveUnit *unit); /* +0x74 +0x58(1) */
+    AoeBuildingQueueCancelOps queue_cancel;
+    uint32_t *owner_status_four_count;
+} AoeLiveUnitStopOps;
+
+/* Returns 0 for missing dependencies, an invalid action list, or a queue
+   drain that fails or stops making progress (host guard). */
+int aoe_live_unit_stop_ror(AoeLiveUnit *unit, AoeLiveUnitStopClassRor kind,
+                           const AoeLiveUnitStopOps *ops);
+
 /* Patched RoR 1.0a 0x004ac280: append an ID to the +0x54 group vector
    unless already present among the active entries. There is no count
    limit; the allocation grows by exactly one element when full and is kept
@@ -273,7 +303,7 @@ int aoe_live_unit_player_update_step_ror(
 int aoe_live_unit_cleanup_uses_reuse_pool_ror(const AoeLiveUnit *unit);
 
 /* Derived cleanup prefix 0x00405a70: types 40..70 and 80 drain their +0x184
-   action list with the translated 0x00403e70 clear. Other types have no work
+   action list with the translated clear (patched 0x00403e50, disc 0x00403e70). Other types have no work
    here. Call before the common +0x08 cleanup adapter. */
 int aoe_live_unit_cleanup_derived_prefix_ror(AoeLiveUnit *unit);
 

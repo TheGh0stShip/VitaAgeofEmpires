@@ -10,3 +10,8 @@ building_queue	production	004af900	004adfc0	matching query, resource gate, actio
 building_state	type_80_setter	004ae500	004acbf0	matching completion, queue cancellation, parent setter and state-3 cleanup flow	verified
 building_state	type_80_high	004ae450	004acb40	matching +0x25c prelude, inherited high call, manager removal and +0x1e0 clear	verified
 live_unit	root_vtable_plus_5c_state_setter	004abdf0	004aa550	patched root vtable 0x00547da8 slot inspection plus matching state/visibility/dependency-group flow	verified
+action_list	update	004043c0	004043b0	patched body comparison (same list +8 head, node layout and action virtual calls)	verified
+action_list	push	00404410	00404400	patched body comparison (same list +8 head, node layout and action virtual calls)	verified
+action_list	append	00404460	00404450	patched body comparison (same list +8 head, node layout and action virtual calls)	verified
+action_list	pop	004044e0	004044d0	patched body comparison (same list +8 head, node layout and action virtual calls)	verified
+action_list	clear	00403e70	00403e50	patched body comparison (same list +8 head, node layout and action virtual calls)	verified

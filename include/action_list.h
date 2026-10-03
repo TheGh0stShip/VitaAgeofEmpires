@@ -22,14 +22,15 @@ typedef struct {
 } AoeActionList;
 
 int aoe_action_list_valid(const AoeActionList *list);
-/* RoR 00404410 / 00404460. In terminal owner states, destroy the offered
+/* Patched RoR 1.0a 00404400 / 00404450 (disc 00404410 / 00404460). In terminal owner states, destroy the offered
    action without allocating. Otherwise NULL is invalid, and success transfers
    action ownership to the list. Allocation failure leaves ownership with caller.
    Initialize an empty list with head=NULL, owner_state and both callbacks.
    Node storage is owned by these functions; do not link stack nodes. */
 int aoe_action_list_push(AoeActionList *list, void *action);
 int aoe_action_list_append(AoeActionList *list, void *action);
-/* RoR 004044e0 / 00403e70. Unlink before destruction; then read the live
+/* Patched RoR 1.0a 004044d0 / 00403e50 (disc 004044e0 / 00403e70; patched
+   00403e70 is an action factory). Unlink before destruction; then read the live
    head and owner state and activate a surviving head for owner state <3.
    Clear repeats pop, including its intermediate activations. */
 int aoe_action_list_pop(AoeActionList *list);
@@ -39,7 +40,7 @@ typedef struct {
     uint8_t (*update_head)(void *, void *action); /* action virtual +0x28 */
     void (*update_waiting)(void *, void *action); /* action virtual +0x24 */
 } AoeActionTickOps;
-/* RoR 004043c0, vtable +0xc in both root and building-production lists.
+/* Patched RoR 1.0a 004043b0 (disc 004043c0), vtable +0xc in both root and building-production lists.
    Empty returns original result 1. Re-read head after its update, update
    its successors, then pop the live head if the saved result is 1.
    Waiting callbacks must not destroy their current list node (same lifetime

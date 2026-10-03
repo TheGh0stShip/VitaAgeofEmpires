@@ -60,6 +60,89 @@ static int32_t map_size(void *c, const AoeLiveUnit *u, int axis) {
     return axis ? 22 : 64;
 }
 
+static int stops, alternates, cancels_accepted, group_stops, refunds;
+static AoeLiveUnit *alternate_target;
+
+static int stop_unit(void *c, AoeLiveUnit *u) {
+    (void)c; (void)u;
+    ++stops;
+    return 1;
+}
+static void alternate(void *c, AoeLiveUnit *u, AoeLiveUnit *t, float x,
+                      float y) {
+    (void)c; (void)u;
+    assert(x == 7.5f && y == 8.5f);
+    alternate_target = t;
+    ++alternates;
+}
+static int cancel_head(void *c, void *action) {
+    (void)c; (void)action;
+    return cancels_accepted;
+}
+static int group_object(void *c, const AoeLiveUnit *u) {
+    (void)c; (void)u;
+    return 1;
+}
+static void stop_group(void *c, AoeLiveUnit *u) {
+    (void)c; (void)u;
+    ++group_stops;
+}
+static void refund(void *c, int16_t id) { (void)c; (void)id; ++refunds; }
+static void queue_notify(void *c, uint32_t e, int16_t o, uint32_t r) {
+    (void)c; (void)e; (void)o; (void)r;
+}
+static int destroyed;
+static void destroy_action(void *c, void *a) { (void)c; (void)a; ++destroyed; }
+static void action_state(void *c, void *a, uint8_t s) {
+    (void)c; (void)a; (void)s;
+}
+
+static void stop_tests(void) {
+    AoeLiveUnit unit;
+    AoeActionList list;
+    AoeBuildingUpdate building;
+    AoeBuildingQueueEntry entries[2] = {{83, 2}, {0, 0}};
+    AoeActionList queue_list;
+    uint32_t status_four = 0;
+    int action_a, action_b;
+    AoeLiveUnitStopOps ops = {0, cancel_head, group_object, stop_group,
+                              {0, refund, NULL, queue_notify}, &status_four};
+    memset(&unit, 0, sizeof(unit));
+    memset(&building, 0, sizeof(building));
+    unit.constructed = 1;
+    unit.core.state = 2;
+    list = (AoeActionList){&unit.core.state, NULL,
+                           {0, destroy_action, action_state}};
+    unit.derived_action_list = &list;
+    assert(aoe_action_list_push(&list, &action_a) &&
+           aoe_action_list_append(&list, &action_b));
+    /* Root stop is a bare ret. */
+    assert(aoe_live_unit_stop_ror(&unit, AOE_LIVE_UNIT_STOP_ROOT_ROR, &ops) &&
+           list.head && !destroyed);
+    /* A head that accepts cancellation keeps the list. */
+    cancels_accepted = 1;
+    assert(aoe_live_unit_stop_ror(&unit, AOE_LIVE_UNIT_STOP_ACTION_ROR,
+                                  &ops) && list.head && !destroyed);
+    /* Otherwise the whole list is cleared; group classes also stop +0x74. */
+    cancels_accepted = 0;
+    assert(aoe_live_unit_stop_ror(&unit, AOE_LIVE_UNIT_STOP_GROUP_ROR, &ops) &&
+           !list.head && destroyed == 2 && group_stops == 1);
+    /* Buildings also drain their queue one refund at a time. */
+    queue_list = (AoeActionList){&building.state, NULL,
+                                 {0, destroy_action, action_state}};
+    building.state = 2;
+    building.queue_actions = &queue_list;
+    building.queue_entries = entries;
+    building.queue_capacity = 2;
+    building.queue_aux_count = 2;
+    building.queue_count = 1;
+    building.queue_status = -1;
+    unit.building_update = &building;
+    assert(aoe_live_unit_stop_ror(&unit, AOE_LIVE_UNIT_STOP_BUILDING_ROR,
+                                  &ops) &&
+           building.queue_count == 0 && refunds == 2 && group_stops == 2);
+}
+
 static void place(int i, int32_t id, const DatUnit *t, float x, float y) {
     units[i].constructed = 1;
     units[i].core.unit_id = id;
@@ -69,11 +152,12 @@ static void place(int i, int32_t id, const DatUnit *t, float x, float y) {
 }
 
 int main(void) {
+    stop_tests();
     AoeRng rng;
     int32_t rand_result = -5;
     AoeCommandOrderOps ops = {
         {0, resolve}, 0, session_check, owner_kind, 1, player_104, map_cell,
-        &rng, &rand_result, set_flag, order, map_size};
+        &rng, &rand_result, set_flag, order, map_size, stop_unit, alternate};
     AoeCommandDispatchRor dispatch;
     uint8_t record[0x1c + 16];
     int32_t ids[3] = {1, 2, 3};
@@ -190,6 +274,31 @@ int main(void) {
     assert(aoe_command_execute_order_ror(record, size, &ops) == 1 &&
            order_count == 1 && orders[0].target == NULL &&
            orders[0].x == -3.0f && orders[0].y == 99.0f);
+    /* Opcode 1: unaligned IDs from +0x02; template 50 is skipped. */
+    {
+        int32_t stop_ids[3] = {1, 2, 99};
+        uint8_t stop_record[2 + 12];
+        size_t n = aoe_command_encode_stop_ror(stop_record, sizeof(stop_record),
+                                               stop_ids, 3);
+        assert(n == 14 && stop_record[2] == 1 && stop_record[6] == 2);
+        villager.id = 50;
+        units[2].core.unit_template = &house;
+        stops = 0;
+        assert(aoe_command_dispatch_ror(&dispatch, stop_record, n) ==
+                   AOE_COMMAND_ROUTE_HANDLED && stops == 1);
+        villager.id = 0;
+        units[2].core.unit_template = &villager;
+    }
+    /* Opcode 2: raw point and target for every unit, no gate. */
+    size = aoe_command_encode_order_ror(record, sizeof(record), 2, 9, 7.5f,
+                                        8.5f, 1, 0, 0, ids, 3);
+    record[0] = AOE_COMMAND_ORDER_ALTERNATE_ROR;
+    cell_bits = 0;
+    assert(aoe_command_dispatch_ror(&dispatch, record, size) ==
+               AOE_COMMAND_ROUTE_HANDLED &&
+           alternates == 3 && alternate_target == &units[0]);
+
+    record[0] = AOE_COMMAND_ORDER_ROR; /* short-record check below */
     /* Short record. */
     assert(aoe_command_execute_order_ror(record, size - 1, &ops) == -1);
     for (int i = 0; i < 4; ++i) free(units[i].group_unit_ids);

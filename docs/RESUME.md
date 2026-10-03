@@ -136,7 +136,8 @@ and the `+0x54` group vector) is translated. So is task selection, the
 decision step of unit `+0x98 -> +0x1f8` (`0x004e7dc0`, `0x00508010`,
 predicate `0x004e7f90`). Next: the rest of `0x00405f20` (action creation
 through the action manager `0x004045b0/0x004045c0`), tribe opcodes
-0x66-0x69 (4, 0x64, 0x65, 0x6a-0x6f and 0x77 are done, including fee tribute 0x6c).
+0x66, 0x67 and 0x69 (4, 0x64, 0x65, 0x68, 0x6a-0x6f and 0x77 are done,
+including fee tribute 0x6c).
 Every base
 opcode (0-0x11; 0x0d is a no-op) is translated.
 `aoe_live_unit_player_update_step_ror` binds it into actual player +0x7c

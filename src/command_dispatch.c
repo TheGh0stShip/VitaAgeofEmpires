@@ -204,7 +204,7 @@ static int tribe_unit(void *c, const uint8_t *m, size_t n) {
 void aoe_command_bind_tribe_unit_ror(AoeCommandTribeDispatchRor *dispatch,
                                      const AoeCommandTribeUnitOps *ops) {
     static const uint8_t opcodes[] = {
-        AOE_COMMAND_TRIBE_UNIT_244_ROR, AOE_COMMAND_TRIBE_UNIT_14C_ROR,
+        AOE_COMMAND_TRIBE_POINT_17C_ROR, AOE_COMMAND_TRIBE_UNIT_244_ROR, AOE_COMMAND_TRIBE_UNIT_14C_ROR,
         AOE_COMMAND_TRIBE_SET_4C_ROR, AOE_COMMAND_TRIBE_REPAIR_ROR,
         AOE_COMMAND_TRIBE_GROUP_POINT_ROR};
     if (!dispatch) return;

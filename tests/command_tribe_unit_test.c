@@ -37,6 +37,14 @@ static void unit_14c(void *c, AoeLiveUnit *u, uint32_t a, uint32_t b) {
     last_a = a; last_b = b;
     ++calls_14c;
 }
+static int calls_17c;
+static int32_t last_x, last_y;
+static int player_present(void *c, uint8_t p) { (void)c; return p == 2; }
+static void unit_17c(void *c, AoeLiveUnit *u, int32_t x, int32_t y) {
+    (void)c; (void)u;
+    last_x = x; last_y = y;
+    ++calls_17c;
+}
 static void repair(void *c, AoeLiveUnit *u, AoeLiveUnit *s) {
     (void)c; (void)u;
     repair_source = s;
@@ -59,6 +67,8 @@ int main(void) {
     ops.unit_244 = unit_244;
     ops.unit_14c = unit_14c;
     ops.repair = repair;
+    ops.player_present = player_present;
+    ops.unit_17c = unit_17c;
     for (int i = 0; i < 3; ++i) {
         units[i].constructed = 1;
         units[i].core.unit_id = 10 + i;
@@ -111,5 +121,18 @@ int main(void) {
            last_task.extra_32 == 0x3f800000 && last_task.extra_a == 1 &&
            !last_task.extra_b && last_task.extra_c == 100);
     assert(aoe_command_execute_tribe_unit_ror(record, n - 1, &ops) == -1);
+
+    /* 0x68: truncated tile coordinates, only for an existing player. */
+    n = aoe_command_encode_unit_list_ror(record, sizeof(record), 0x68, 0x0c,
+                                         ids, 2);
+    record[2] = 2;
+    aoe_le_put_u32(record + 4, 0x41260000); /* 10.375f */
+    aoe_le_put_u32(record + 8, 0xc0200000); /* -2.5f */
+    assert(aoe_command_dispatch_tribe_ror(&tribe, record, n) ==
+               AOE_COMMAND_ROUTE_HANDLED &&
+           calls_17c == 2 && last_x == 10 && last_y == -2);
+    record[2] = 5;
+    assert(aoe_command_execute_tribe_unit_ror(record, n, &ops) == 1 &&
+           calls_17c == 2);
     return 0;
 }

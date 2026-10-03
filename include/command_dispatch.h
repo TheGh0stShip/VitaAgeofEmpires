@@ -125,7 +125,7 @@ void aoe_command_bind_player_tribute_fee_ror(
 /* Tribe opcodes 0x64 (train) and 0x65 (research). */
 void aoe_command_bind_production_ror(AoeCommandTribeDispatchRor *dispatch,
                                      const AoeCommandProductionOps *ops);
-/* Tribe opcodes 0x6a, 0x6b, 0x6d, 0x6e and 0x6f. */
+/* Tribe opcodes 0x68, 0x6a, 0x6b, 0x6d, 0x6e and 0x6f. */
 void aoe_command_bind_tribe_unit_ror(AoeCommandTribeDispatchRor *dispatch,
                                      const AoeCommandTribeUnitOps *ops);
 /* Tribe opcode 0x77: 0x004e9450 production queue add/cancel. */

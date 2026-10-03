@@ -10,6 +10,7 @@
    carry a count byte at +0x01 and 32-bit unit IDs from the listed offset;
    IDs go through 0x0042a120 (-1 never resolves). */
 enum {
+    AOE_COMMAND_TRIBE_POINT_17C_ROR = 0x68,  /* 0x004e8e20, IDs +0x0c */
     AOE_COMMAND_TRIBE_UNIT_244_ROR = 0x6a,   /* 0x004e9130, ID +0x04 */
     AOE_COMMAND_TRIBE_UNIT_14C_ROR = 0x6b,   /* 0x004e9160, IDs +0x0c */
     AOE_COMMAND_TRIBE_SET_4C_ROR = 0x6d,     /* 0x004e9340, IDs +0x08 */
@@ -26,6 +27,11 @@ typedef struct {
     /* 0x004b0870: pick the actor's action-0x6a task for `source` and
        build the action. */
     void (*repair)(void *context, AoeLiveUnit *unit, AoeLiveUnit *source);
+    /* 0x68: world +0x40 player slot is non-null, and unit +0x17c(x, y, 1)
+       (0x004275b0 in action classes, 0x004059f0 = return 0 in others). */
+    int (*player_present)(void *context, uint8_t player);
+    void (*unit_17c)(void *context, AoeLiveUnit *unit, int32_t x,
+                     int32_t y);
 } AoeCommandTribeUnitOps;
 
 /* Writes the opcode, count byte and IDs at `ids_offset`, zero-filling the
@@ -36,6 +42,8 @@ size_t aoe_command_encode_unit_list_ror(uint8_t *out, size_t out_size,
                                         uint8_t count);
 
 /* One entry point for 0x6a/0x6b/0x6d/0x6e/0x6f:
+   0x68: when the player at +0x02 exists, each unit runs 0x004ac320 and
+         +0x17c(__ftol(+0x04), __ftol(+0x08), 1).
    0x6a: the unit at +0x04 (direct lookup) runs vtable +0x244.
    0x6b: each unit runs +0x14c(+0x04, +0x08, 0, 1).
    0x6d: each unit's word +0x4c (carried resource type) becomes the int16

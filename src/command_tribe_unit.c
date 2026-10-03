@@ -2,6 +2,7 @@
 
 #include <string.h>
 
+#include "aoe_ftol.h"
 #include "le_bytes.h"
 
 size_t aoe_command_encode_unit_list_ror(uint8_t *out, size_t out_size,
@@ -42,6 +43,14 @@ int aoe_command_execute_tribe_unit_ror(const uint8_t *command, size_t size,
         if (!ops->unit_14c) return -1;
         ids = 0x0c;
         break;
+    case AOE_COMMAND_TRIBE_POINT_17C_ROR:
+        if (!ops->player_present || !ops->unit_17c ||
+            !ops->player.owner_kind)
+            return -1;
+        if (size < 0x0c + 4u * command[1]) return -1;
+        if (!ops->player_present(ops->player.context, command[2])) return 1;
+        ids = 0x0c;
+        break;
     case AOE_COMMAND_TRIBE_SET_4C_ROR:
         ids = 0x08;
         break;
@@ -66,6 +75,14 @@ int aoe_command_execute_tribe_unit_ror(const uint8_t *command, size_t size,
         case AOE_COMMAND_TRIBE_UNIT_14C_ROR:
             ops->unit_14c(ops->player.context, unit, aoe_le_u32(command + 4),
                           aoe_le_u32(command + 8));
+            break;
+        case AOE_COMMAND_TRIBE_POINT_17C_ROR:
+            if (!aoe_live_unit_reset_group_ror(
+                    unit, ops->player.owner_kind(ops->player.context, unit)))
+                return -1;
+            ops->unit_17c(ops->player.context, unit,
+                          aoe_ftol32(aoe_le_f32(command + 4)),
+                          aoe_ftol32(aoe_le_f32(command + 8)));
             break;
         case AOE_COMMAND_TRIBE_SET_4C_ROR:
             unit->core.storage.carried_resource_type = (int16_t)(uint16_t)(

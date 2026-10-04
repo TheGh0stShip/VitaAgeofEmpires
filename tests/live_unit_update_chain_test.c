@@ -61,6 +61,28 @@ static int attached_update(void *context, AoeLiveUnit *unit,
     return 1;
 }
 
+static const DatGraphic *selected;
+static unsigned selections;
+static int select_graphic(void *context, AoeLiveUnit *unit,
+                          const DatGraphic *graphic) {
+    (void)context; (void)unit;
+    selected = graphic;
+    ++selections;
+    return 1;
+}
+static int has_sprite(const AoeLiveUnit *u, const DatGraphic *g,
+                      int32_t *x, int32_t *y) {
+    for (size_t i = 0;; ++i) {
+        const AoeSpriteInstance *si = aoe_sprite_runtime_at(&u->sprites, i);
+        if (!si) return 0;
+        if (si->graphic == g) {
+            if (x) *x = si->offset_x;
+            if (y) *y = si->offset_y;
+            return 1;
+        }
+    }
+}
+
 static int list_count(const AoeActionList *l) {
     int n = 0;
     for (const AoeActionNode *x = l->head; x; x = x->next) ++n;
@@ -247,6 +269,80 @@ int main(void) {
         assert(list_count(&list) == 0 && destroyed == 4);
         assert(aoe_live_unit_update_action_list_ror(&awake, NULL, &ops));
         awake.core.state = 2;
+    }
+
+    /* 0x004a9240 damage graphics: entries 25% mode 0, 50% mode 1 (random
+       offset), 75% mode 2 (replaces the unit's graphic). */
+    {
+        DatGraphic g4[4];
+        DatGraphics gs = {.count = 4, .present_count = 4, .graphics = g4};
+        DatDamageGraphic table[3] = {{1, 25, 0}, {2, 50, 1}, {3, 75, 2}};
+        DatUnit hut = {.present = 1, .type = 70, .hit_points = 100,
+                       .standing_graphic = 0, .walking_graphic = -1,
+                       .default_task_id = -1, .size = {0.5f, 0.5f, 1.0f},
+                       .damage_graphic_count = 3, .damage_graphics = table};
+        AoeLiveUnit b = {0};
+        AoeRng probe;
+        AoeLiveUnitDamageGraphicOps o = {NULL, select_graphic, &gs,
+                                         &geometry, &rng};
+        int16_t ex, ey;
+        int32_t x, y;
+        float px, py;
+        for (unsigned i = 0; i < 4; ++i)
+            g4[i] = (DatGraphic){.present = 1, .frame_count = 1,
+                                 .angle_count = 1, .frame_duration = 1.0f};
+        assert(aoe_live_unit_construct_ror(&b, &hut, &gs, &resource_state,
+                                           &world, &owner, terrain, tiles,
+                                           &geometry, 4, 4, &vision, &rng,
+                                           1.25f, 3.75f, 0.0f));
+        assert(b.core.damage_percent == 0);
+        /* Unchanged level: nothing. */
+        assert(aoe_live_unit_damage_graphics_ror(&b, &o) &&
+               b.core.damage_percent == 0);
+        /* 70 HP: level 30 passes the 25% entry (mode 0, no offset). */
+        b.core.hit_points = 70.0f;
+        assert(aoe_live_unit_damage_graphics_ror(&b, &o));
+        assert(b.core.damage_percent == 30 && has_sprite(&b, &g4[1], &x, &y) &&
+               x == 0 && y == 0);
+        /* 40 HP: level 60 adds the 50% entry at a random offset (two
+           rand() draws) and removes the 25% sprite. */
+        probe = rng;
+        {
+            double vx = (double)aoe_rng_next(&probe) * 0.5f *
+                            (double)6.1037019e-05f - 0.5f;
+            double vy = (double)aoe_rng_next(&probe) * 0.5f *
+                            (double)6.1037019e-05f - 0.5f;
+            px = (float)(vx + 0.25);
+            py = (float)(vy + 0.75);
+        }
+        aoe_map_screen_offset_ror(&geometry, px, py, 0.0f, 0, 0, &ex, &ey);
+        b.core.hit_points = 40.0f;
+        assert(aoe_live_unit_damage_graphics_ror(&b, &o));
+        assert(b.core.damage_percent == 60 && rng.state == probe.state &&
+               !has_sprite(&b, &g4[1], NULL, NULL) &&
+               has_sprite(&b, &g4[2], &x, &y) && x == ex && y == ey);
+        /* 10 HP: level 90 selects the 75% graphic, removes the 50% one. */
+        b.core.hit_points = 10.0f;
+        assert(aoe_live_unit_damage_graphics_ror(&b, &o));
+        assert(selected == &g4[3] && selections == 1 &&
+               !has_sprite(&b, &g4[2], NULL, NULL));
+        /* Healing to level 0 leaves mode 2: the standing graphic returns. */
+        b.core.hit_points = 100.0f;
+        assert(aoe_live_unit_damage_graphics_ror(&b, &o));
+        assert(selected == &g4[0] && selections == 2 &&
+               b.core.damage_percent == 0);
+        /* Overheal: level 100 - 120 wraps to 236 (>= 100): stored only. */
+        b.core.hit_points = 120.0f;
+        assert(aoe_live_unit_damage_graphics_ror(&b, &o));
+        assert(b.core.damage_percent == 236 && selections == 2);
+        aoe_live_unit_destroy_ror(&b, &owner, &world, &vision);
+    }
+    /* 0x00448cc0 with the fixture's 32/16 half tile. */
+    {
+        int16_t sx, sy;
+        aoe_map_screen_offset_ror(&geometry, 1.5f, 0.5f, 0.25f, 10, 20, &sx,
+                                  &sy);
+        assert(sx == 64 + 10 && sy == -4 + 20 - 16);
     }
 
     aoe_live_unit_destroy_ror(&awake, &owner, &world, &vision);

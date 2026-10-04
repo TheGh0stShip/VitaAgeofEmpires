@@ -1545,11 +1545,17 @@ static int set_state(void *opaque, AoeLiveUnit *u, uint8_t state) {
         u, state, &r->players[o].resources, &r->players[o].owner, &r->world,
         &r->players[o].vision_binding);
 }
-/* State 2 +0x28 = 0x004a9240: damage graphics (template +0x93/+0x94) by
-   hit-point percentage, not translated yet (it also draws rand()). */
-static int damage_graphics(void *opaque, AoeLiveUnit *u) {
-    (void)opaque; (void)u;
+/* State 2 +0x28 = 0x004a9240: damage graphics by hit-point level. */
+static int damage_select(void *opaque, AoeLiveUnit *u, const DatGraphic *g) {
+    select_graphic(opaque, u, g);
     return 1;
+}
+static int damage_graphics(void *opaque, AoeLiveUnit *u) {
+    AoeWorldCombatRor *c = opaque;
+    AoeScenarioRuntimeRor *r = c->motion->runtime;
+    AoeLiveUnitDamageGraphicOps o = {c, damage_select, r->graphics,
+                                     r->geometry, &r->rng};
+    return aoe_live_unit_damage_graphics_ror(u, &o);
 }
 static int select_graphic_id(void *opaque, AoeLiveUnit *u, int16_t id) {
     select_graphic(opaque, u, graphic_by_id(opaque, id));

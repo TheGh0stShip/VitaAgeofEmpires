@@ -18,6 +18,7 @@ typedef struct {
     int16_t draw_right;           /* +0x2c */
     int16_t draw_bottom;          /* +0x2e */
     float hit_points;             /* +0x30 */
+    uint8_t damage_percent;       /* +0x34: last damage-graphic level */
     uint8_t action_flags_36;      /* +0x36, bit 0 gates action cleanup */
     AoeUnitStorageState storage;  /* +0x44/+0x4c */
     uint8_t state;                /* +0x48, initially 2 */

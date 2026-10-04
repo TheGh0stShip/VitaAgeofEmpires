@@ -1,5 +1,7 @@
 #include "live_unit_factory.h"
 
+#include "aoe_ftol.h"
+
 #include <limits.h>
 #include <math.h>
 #include <stdlib.h>
@@ -1636,5 +1638,101 @@ int aoe_live_unit_target_release_ror(AoeLiveUnit *unit,
     if (type < 20 || type > 80) return 1;
     if (!aoe_live_unit_set_dormant_ror(unit, owner, world, 0)) return 0;
     if (type >= 50 && notice) *notice = 1;
+    return 1;
+}
+
+void aoe_map_screen_offset_ror(const DatMapGeometry *g, float x, float y,
+                               float z, int32_t base_x, int32_t base_y,
+                               int16_t *out_x, int16_t *out_y) {
+    int32_t sx = aoe_ftol32(((double)x + y) * g->tile_half_width);
+    int32_t sy = aoe_ftol32(((double)y + 1.0 - x - z) * g->tile_half_height);
+    *out_x = (int16_t)(sx + base_x);
+    *out_y = (int16_t)(sy + base_y - 0x10);
+}
+
+static const DatGraphic *damage_graphic(const AoeLiveUnitDamageGraphicOps *o,
+                                        int16_t id) {
+    const DatGraphics *g = o->graphics;
+    if (!g || id < 0 || (uint16_t)id >= g->count || !g->graphics[id].present)
+        return NULL;
+    return &g->graphics[id];
+}
+
+/* Mode 1: (float)rand() x size x (2 / 32767) - size, plus the position's
+   offset within its tile (x - (int16)ftol(x)). */
+static float damage_offset(AoeRng *rng, float size, float position) {
+    double v = (double)aoe_rng_next(rng) * size * (double)6.1037019e-05f -
+               size;
+    int16_t whole = (int16_t)aoe_ftol32(position);
+    return (float)(v + ((double)position - whole));
+}
+
+int aoe_live_unit_damage_graphics_ror(AoeLiveUnit *unit,
+                                      const AoeLiveUnitDamageGraphicOps *o) {
+    const DatUnit *t;
+    const DatDamageGraphic *e;
+    uint8_t level, old;
+    int next = -1, prev = -1;
+    if (!unit || !unit->constructed || !(t = unit->core.unit_template) || !o ||
+        !o->select_graphic || !o->geometry || !o->rng)
+        return 0;
+    if (t->hit_points <= 0 || !t->damage_graphic_count) return 1;
+    if (!t->damage_graphics) return 0;
+    level = (uint8_t)(100 - (uint8_t)aoe_ftol32(
+                                (double)unit->core.hit_points * 100.0f /
+                                t->hit_points));
+    old = unit->core.damage_percent;
+    if (level == old) return 1;
+    if (level >= 100) {
+        unit->core.damage_percent = level;
+        return 1;
+    }
+    e = t->damage_graphics;
+    for (int i = 0; i < t->damage_graphic_count; ++i) {
+        if (e[i].damage_percent < level) next = i;
+        if (e[i].damage_percent < old) prev = i;
+    }
+    if (next != prev) {
+        if (next >= 0) {
+            const DatGraphic *g = damage_graphic(o, e[next].graphic_id);
+            switch (e[next].apply_mode) {
+            case 0:
+                if (!aoe_sprite_runtime_add(&unit->sprites, g, 0x5a, 0, 0))
+                    return 0;
+                break;
+            case 1: {
+                int16_t sx, sy;
+                float px = damage_offset(o->rng, t->size[0],
+                                         unit->core.position.x38);
+                float py = damage_offset(o->rng, t->size[1],
+                                         unit->core.position.y3c);
+                aoe_map_screen_offset_ror(o->geometry, px, py,
+                                          unit->core.position.z40, 0, 0, &sx,
+                                          &sy);
+                if (!aoe_sprite_runtime_add(&unit->sprites, g, 0x5a, sx, sy))
+                    return 0;
+                break;
+            }
+            case 2:
+                if (!o->select_graphic(o->context, unit, g)) return 0;
+                break;
+            default:
+                break;
+            }
+        }
+        if (prev >= 0) {
+            if (e[prev].apply_mode <= 1) {
+                if (!aoe_sprite_runtime_remove(
+                        &unit->sprites, damage_graphic(o, e[prev].graphic_id)))
+                    return 0;
+            } else if (e[prev].apply_mode == 2 &&
+                       (next < 0 || e[next].apply_mode != 2)) {
+                if (!o->select_graphic(o->context, unit,
+                                       damage_graphic(o, t->standing_graphic)))
+                    return 0;
+            }
+        }
+    }
+    unit->core.damage_percent = level;
     return 1;
 }

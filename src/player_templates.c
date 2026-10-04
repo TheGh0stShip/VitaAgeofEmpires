@@ -9,6 +9,7 @@ static void free_unit(DatUnit *unit) {
     if (!unit) return;
     free(unit->name);
     free(unit->tasks);
+    free(unit->damage_graphics);
     free(unit->attacks);
     free(unit->armors);
     free(unit);
@@ -39,6 +40,7 @@ static DatUnit *clone_unit(const DatUnit *source) {
     *copy = *source;
     copy->name = NULL;
     copy->tasks = NULL;
+    copy->damage_graphics = NULL;
     copy->attacks = NULL;
     copy->armors = NULL;
     if (!source->name) goto fail;
@@ -49,6 +51,12 @@ static DatUnit *clone_unit(const DatUnit *source) {
         copy->tasks = copy_array(source->tasks, source->task_count,
                                  sizeof(*copy->tasks));
         if (!copy->tasks) goto fail;
+    }
+    if (source->damage_graphic_count) {
+        copy->damage_graphics = copy_array(source->damage_graphics,
+                                           source->damage_graphic_count,
+                                           sizeof(*copy->damage_graphics));
+        if (!copy->damage_graphics) goto fail;
     }
     if (source->attack_count) {
         copy->attacks = copy_array(source->attacks, source->attack_count,

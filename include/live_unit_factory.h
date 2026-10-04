@@ -368,6 +368,39 @@ int aoe_live_unit_scenario_state_set_ror(
     AoePlayerUpdateState *owner, AoeOwnedVisibilityRegistry *world,
     AoeLiveUnitVisionBinding *vision);
 
+typedef struct {
+    void *context;
+    /* Unit +0x38: select a graphic as the unit's current one. */
+    int (*select_graphic)(void *context, AoeLiveUnit *unit,
+                          const DatGraphic *graphic);
+    const DatGraphics *graphics;
+    const DatMapGeometry *geometry; /* map +0x8d9c/+0x8d9a half tile */
+    AoeRng *rng;                    /* the game's rand() */
+} AoeLiveUnitDamageGraphicOps;
+
+/* Root state-2 update +0x28 = 0x004a9240: damage graphics. With template
+   HP > 0 and damage entries (+0x93/+0x94), the damage level is 100 minus
+   ftol(HP x 100 / template HP), as a byte. An unchanged level does
+   nothing; a level >= 100 (unsigned, so also negative damage) is only
+   stored. Otherwise the last entry whose percent is below the new level
+   and the last below the old level (+0x34) are chosen; when they differ
+   the new entry is applied - mode 0 adds its sprite (priority 0x5a), mode
+   1 adds it at a random offset (two rand() calls: +/- template size around
+   the unit's position in its tile, projected by 0x00448cc0), mode 2 makes
+   it the unit's graphic - and then the old one is undone: modes 0/1
+   remove their sprite, mode 2 restores the standing graphic unless the
+   new entry is also mode 2. The new level is stored in +0x34. */
+int aoe_live_unit_damage_graphics_ror(AoeLiveUnit *unit,
+                                      const AoeLiveUnitDamageGraphicOps *ops);
+
+/* 0x00448cc0: tile-space offset to screen offset. x = ftol((x + y) x half
+   width) + base_x, y = ftol((y - x + 1 - z) x half height) + base_y - 16,
+   both kept as int16. */
+void aoe_map_screen_offset_ror(const DatMapGeometry *geometry, float x,
+                               float y, float z, int32_t base_x,
+                               int32_t base_y, int16_t *out_x,
+                               int16_t *out_y);
+
 /* Patched RoR 1.0a 0x004ac380 (disc 0x004adc70) on a constructed unit with
    its owner lists. Waking (0) a dormant unit removes it from +0x2c and
    registers it in +0x28 (or +0x30 for type 25), unless a deferred

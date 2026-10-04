@@ -1671,9 +1671,30 @@ Unit update chain and world loop (RoR 1.0a). Translated in
     frames and history shifts, calls the type-70 update, then runs
     production `0x004adf50` (or `0x004adfc0` above state 2). That part is
     not yet bound.
-- **Root state 2** calls `+0x28 = 0x004a9240`, the damage graphics by HP
-  percentage (template `+0x93/+0x94`; it also draws rand()). It is not
-  translated yet.
+- **Root state 2** calls `+0x28 = 0x004a9240`, the damage graphics
+  (`aoe_live_unit_damage_graphics_ror`):
+  - **Inputs.** The table lives at template `+0x93/+0x94`, filled by
+    loader `0x00441775` from the 5-byte DAT entries: graphic, damage
+    percent (byte 2), apply mode (byte 4).
+  - **Level.** It runs only when template HP > 0. The level is the byte
+    `100 - ftol(HP x 100 / template HP)`. An unchanged level returns at
+    once. A level >= 100 (unsigned, so overheal wraps) is only stored in
+    `+0x34`.
+  - **Entry choice.** It takes the last entry below the new level and the
+    last below the old one. If they differ, the new entry is applied and
+    the old one then undone:
+    - mode 0 adds its sprite at priority 0x5a (`0x00415640`);
+    - mode 1 does the same at a random offset: two rand() calls give
+      ±template size (constant `0x00547f98` = 2/32767) around the unit's
+      position in its tile, projected by `0x00448cc0`;
+    - mode 2 selects the entry's graphic (`+0x38`).
+  - **Undo.** Modes 0/1 remove their sprite (`0x004156f0`). Mode 2
+    restores the standing graphic unless the new entry is also mode 2.
+  - **`0x00448cc0`** maps an offset to the screen: x = ftol((x + y) × half
+    width) + base x, y = ftol((y − x + 1 − z) × half height) + base y − 16.
+    Map `+0x8d9c` is the half width and `+0x8d9a` the half height.
+  - **Regression.** On EXPANS_1_1 a finished house (3 entries) at 20/75 HP
+    reaches level 74 and gains its damage sprite.
 - **Type-20 tail** (`0x00415200` after the root switch):
   - State 3 goes through the setter to 4 if template `+0x1c` (dying
     graphic) is set, else to 5.

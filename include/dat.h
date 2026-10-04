@@ -236,6 +236,15 @@ typedef struct {
     int16_t amount;
 } DatUnitAttackArmor;
 
+/* Damage graphic (5 file bytes; runtime template +0x94 entries of 8 bytes,
+   loader 0x00441775): graphic +0, damage percent +4 (file byte 2) and
+   apply mode +5 (file byte 4; byte 3 is overwritten by the loader). */
+typedef struct {
+    int16_t graphic_id;
+    uint8_t damage_percent;
+    uint8_t apply_mode;
+} DatDamageGraphic;
+
 typedef struct {
     int16_t task_type, id, action_type;
     int16_t target_class, target_unit, target_terrain;
@@ -296,6 +305,8 @@ typedef struct {
     uint8_t blast_defense_level;
     uint8_t blast_level;    /* type >= 50, template +0x11c */
     float decay_rate;       /* original template +0x80 */
+    uint8_t damage_graphic_count;     /* template +0x93 */
+    DatDamageGraphic *damage_graphics; /* template +0x94 */
     int16_t selection_sound;
     int16_t dying_sound;    /* resolves to original template +0x44 */
     float speed;

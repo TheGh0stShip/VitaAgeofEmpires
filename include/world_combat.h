@@ -162,8 +162,7 @@ int aoe_world_combat_change_template_ror(AoeWorldCombatRor *combat,
    - type 70/80 class-18 faith regeneration (0x004ae7d0), type 50..80
      reload countdown (0x00426bf0);
    - the common predicate (prelude, attached unit, 0x004a8f40 state
-     switch; the state-2 damage-graphic update +0x28 = 0x004a9240 is not
-     translated);
+     switch with the state-2 damage graphics +0x28 = 0x004a9240);
    - the 0x00415200 tail (dying states, sprites) and the 0x00406500 action
      list (projectiles update their flight there);
    - units reaching state 8 are cleaned up (+0x08) and removed.

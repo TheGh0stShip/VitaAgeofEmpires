@@ -120,7 +120,19 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
     }
     damage_count = u8(cursor);
     if (damage_count > 64) return 0;
-    take(cursor, (size_t)damage_count * 5);
+    p = take(cursor, (size_t)damage_count * 5);
+    if (damage_count && !p) return 0;
+    unit->damage_graphic_count = damage_count;
+    if (damage_count) {
+        unit->damage_graphics =
+            calloc(damage_count, sizeof(*unit->damage_graphics));
+        if (!unit->damage_graphics) return 0;
+        for (unsigned i = 0; i < damage_count; ++i) {
+            unit->damage_graphics[i].graphic_id = (int16_t)at16(p + i * 5);
+            unit->damage_graphics[i].damage_percent = p[i * 5 + 2];
+            unit->damage_graphics[i].apply_mode = p[i * 5 + 4];
+        }
+    }
     p = take(cursor, 6); /* selection/dying sounds and two reaction bytes */
     if (!p) return 0;
     unit->selection_sound = (int16_t)at16(p);
@@ -283,6 +295,7 @@ void dat_free_civilizations(DatCivilizations *civilizations) {
                 for (uint16_t j = 0; j < civ->unit_count; ++j) {
                     free(civ->units[j].name);
                     free(civ->units[j].tasks);
+                    free(civ->units[j].damage_graphics);
                     free(civ->units[j].attacks);
                     free(civ->units[j].armors);
                 }

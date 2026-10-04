@@ -392,6 +392,21 @@ int main(int argc, char **argv) {
              combat.completions == 1 &&
              house->core.hit_points ==
                  (float)house->core.unit_template->hit_points;
+        /* Damage graphics (0x004a9240): at 20/75 HP the house passes its
+           damage entries and gains the deepest one's sprite. */
+        if (ok) {
+            const DatUnit *ht = house->core.unit_template;
+            size_t before = aoe_sprite_list_count(&house->sprites.list);
+            house->core.hit_points = 20.0f;
+            ok = aoe_world_combat_update_unit_ror(&combat, house, 0.05f);
+            printf("damaged house: %u damage entries, level %u, sprites "
+                   "%zu -> %zu\n",
+                   ht->damage_graphic_count, house->core.damage_percent,
+                   before, aoe_sprite_list_count(&house->sprites.list));
+            ok = ok && ht->damage_graphic_count &&
+                 house->core.damage_percent == 74 &&
+                 aoe_sprite_list_count(&house->sprites.list) > before;
+        }
     }
     /* World loop: every player's +0x28 list updates together. A villager
        without a task for the point gets the +0x9c move fallback (a type-1

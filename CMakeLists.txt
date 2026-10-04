@@ -411,7 +411,8 @@ target_link_libraries(aoe_world_combat PUBLIC aoe_world_motion
   aoe_action_attack aoe_action_build aoe_action_farm aoe_action_gather aoe_action_list aoe_combat
   aoe_projectile aoe_unit_sprite_binding aoe_unit_task aoe_player_resources
   aoe_unit_order aoe_train_action_adapter aoe_train_action aoe_building_update
-  aoe_player_costs aoe_unit_placement_check aoe_player_templates)
+  aoe_player_costs aoe_unit_placement_check aoe_player_templates
+  aoe_command_production aoe_research_action)
 target_compile_options(aoe_world_combat PRIVATE -Wall -Wextra)
 
 add_library(aoe_scenario_editor_catalog STATIC src/scenario_editor_catalog.c)
@@ -1013,6 +1014,14 @@ else()
   target_compile_options(doppelganger_real PRIVATE -UNDEBUG)
   if(EXISTS "${CMAKE_SOURCE_DIR}/build/ror/scenarios/EXPANS_1_1.scx")
     add_test(NAME ror_doppelganger_fog_memory COMMAND doppelganger_real
+      "${CMAKE_SOURCE_DIR}/build/ror/scenarios/EXPANS_1_1.scx"
+      "${CMAKE_SOURCE_DIR}/build/ror/disc/GAME/DATA2/EMPIRES.DAT")
+  endif()
+  add_executable(research_command_real tests/research_command_real.c)
+  target_link_libraries(research_command_real PRIVATE aoe_world_combat aoe_dat m)
+  target_compile_options(research_command_real PRIVATE -UNDEBUG)
+  if(EXISTS "${CMAKE_SOURCE_DIR}/build/ror/scenarios/EXPANS_1_1.scx")
+    add_test(NAME ror_research_and_train_commands COMMAND research_command_real
       "${CMAKE_SOURCE_DIR}/build/ror/scenarios/EXPANS_1_1.scx"
       "${CMAKE_SOURCE_DIR}/build/ror/disc/GAME/DATA2/EMPIRES.DAT")
   endif()

@@ -9,6 +9,8 @@
 #include "action_gather.h"
 #include "action_list.h"
 #include "combat.h"
+#include "command_production.h"
+#include "research_action.h"
 #include "projectile.h"
 #include "train_action_adapter.h"
 #include "unit_order.h"
@@ -121,6 +123,13 @@ typedef struct AoeWorldCombatRor {
     AoeLiveUnitRegistry registry_view;
     uint32_t update_serial;
     uint32_t trained, train_failures, production_events;
+    /* Research actions (type 0x67) on building +0x184 lists: completions
+       (owner +0x11c), refusals and stops (owner +0x118) and portable
+       dependency failures. */
+    uint32_t researched, research_stopped, research_failures;
+    /* Production commands answered by the player fallback (busy or
+       missing building: owner +0x10c / +0x118). */
+    uint32_t production_fallbacks;
 } AoeWorldCombatRor;
 
 int aoe_world_combat_init_ror(AoeWorldCombatRor *combat,
@@ -195,6 +204,22 @@ int aoe_world_combat_update_world_ror(AoeWorldCombatRor *combat, float tick);
 int aoe_world_combat_train_ror(AoeWorldCombatRor *combat,
                                AoeLiveUnit *building, int16_t unit_id,
                                int16_t count);
+
+/* Tribe commands 0x64 (train, 0x004e85e0) and 0x65 (research,
+   0x004e8780) from a 16-byte record (aoe_command_encode_production_ror),
+   bound to this world: the building resolves through the world (ID
+   lookup 0x005206d0); a type-80 building whose +0x184 head is not a
+   0x66/0x67 action gets the action through +0x208 (0x00406490: clear the
+   list, push and activate). Train actions from a command are not prepaid
+   (0x004b4f10(building, unit, request, 0)) and charge on activation;
+   research actions pay through the owner's manager (0x004eb100). Both then
+   run as the building's head action during its update. Buildings have no
+   group object (+0x74). The player fallbacks (owner +0x10c / +0x118) are
+   counted. Returns aoe_command_execute_production_ror's result, or -1
+   when the world is unusable or the action could not be built. */
+int aoe_world_combat_command_production_ror(AoeWorldCombatRor *combat,
+                                            const uint8_t *command,
+                                            size_t size);
 
 /* Advances the world clock by `tick` seconds and runs one unit (which must
    have a record, e.g. from an order) through the same class chain as the

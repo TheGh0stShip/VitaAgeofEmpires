@@ -240,8 +240,31 @@ Next:
      of player 2's sight and checks the image's life cycle.
    - **Not yet.** The `+0xa8`/`+0xa9` display bytes (source template
      `+0x8e`/`+0x90`) are unparsed. Fog is still bypassed for rendering.
-   Next: research actions (103), the active player's view-code refresh, the transport
-   action (type 12) and the type-50 visibility spotting.
+   **Research and production commands (2026-10-04).** All against patched
+   RoR 1.0a:
+   - **Manager.** The research manager (`aoe_research_*_ror` in
+     `src/research_action.c`) can start, progress, stop and reset techs:
+     - check `0x004eaf4c`: when resource 29 is at least 1.0, gold is a
+       reserve that covers shortfalls;
+     - start `0x004eb100`, progress `0x004eab23`, stop with or without
+       refund `0x004eb27b`, reset `0x004ea9e4`.
+   - **Research action.** The type-0x67 action (vtable `0x00548990`):
+     - constructor `0x004b60b0`;
+     - activate `0x004b6200`;
+     - update `0x004b6290`: tick × building work rate, or 1000 per update
+       with fast research;
+     - cancel `0x004b6390`, which refunds;
+     - destructor `0x004b60f0`, which does not refund.
+   - **World binding.** Tribe commands 0x64/0x65 are bound to the world
+     (`aoe_world_combat_command_production_ror`, through `0x00406490`).
+     Building +0x184 heads run command-started train (0x66) and research
+     (0x67) actions. The type-80 setter's research removal now resets the
+     tech and rebuilds the manager.
+   - **Test.** `ror_research_and_train_commands` researches Bronze Age at a
+     real town centre in 2,800 updates (140 s, work rate 1.0), then trains a
+     commanded villager.
+   Next: the active player's view-code refresh, the transport action (type
+   12) and the type-50 visibility spotting.
 2. Replace placeholder bindings (diplomacy, zones, sounds, victory
    conditions, player +0x30 lists).
 3. The remaining action classes.

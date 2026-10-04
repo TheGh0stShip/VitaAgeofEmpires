@@ -39,11 +39,27 @@ AoeWorldCombatUnitRor *aoe_world_combat_unit_ror(AoeWorldCombatRor *c,
 /* Unit +0x184 list entries (context: the unit's record): the record itself
    stands for its adopted gather/attack/build action; anything else is a
    move action owned by the list. */
+static int16_t entry_type(const void *action);
+static int research_ops(AoeWorldCombatRor *c, int16_t owner,
+                        AoeResearchActionOps *o);
+/* Type-80 heads may also be command-started training (0x66, 0x004b4f10)
+   and research (0x67, 0x004b60b0) actions; their destructors run first. */
 static void head_destroy(void *context, void *action) {
     AoeWorldCombatUnitRor *s = context;
     if (action == s) {
         s->attacking = s->gathering = s->constructing = 0;
         return;
+    }
+    if (entry_type(action) == 0x66) {
+        aoe_train_action_adapter_destroy(&s->world->train, action);
+        return;
+    }
+    if (entry_type(action) == 0x67) {
+        AoeResearchAction *a = action;
+        AoeResearchActionOps o;
+        if (!research_ops(s->world, a->owner_index, &o) ||
+            !aoe_research_action_destroy_ror(a, &o))
+            ++s->world->research_failures;
     }
     free(action);
 }
@@ -261,6 +277,17 @@ static void head_activate(void *context, void *action, uint8_t state) {
         AoeFarmActionOps o;
         farm_ops(s->world, &o);
         (void)aoe_farm_action_activate_ror(action, &o);
+        break;
+    }
+    case 0x66:
+        aoe_train_action_adapter_state(&s->world->train, action, state);
+        break;
+    case 0x67: {
+        AoeResearchAction *a = action;
+        AoeResearchActionOps o;
+        if (!research_ops(s->world, a->owner_index, &o) ||
+            !aoe_research_action_activate_ror(a, state, &o))
+            ++s->world->research_failures;
         break;
     }
     default:
@@ -1554,6 +1581,16 @@ static uint8_t unit_update_head(void *context, void *action) {
         AoeFarmActionOps o;
         farm_ops(s->world, &o);
         if (!aoe_farm_action_update_ror(action, &o, &r)) r = 0;
+    } else if (entry_type(action) == 0x66) {
+        r = aoe_train_action_adapter_head(&s->world->train, action);
+    } else if (entry_type(action) == 0x67) {
+        AoeResearchActionOps o;
+        AoeResearchAction *a = action;
+        if (!research_ops(s->world, a->owner_index, &o) ||
+            !aoe_research_action_update_ror(a, &o, &r)) {
+            ++s->world->research_failures;
+            r = 0;
+        }
     } else {
         AoeMoveActionOps o;
         move_ops(s->world, &o);
@@ -1567,9 +1604,9 @@ static uint8_t foreign_head(void *context, void *action) {
     return 0;
 }
 
-/* Type-80 setter bindings. The building manager (world +0x40) and owner
-   research removal are not modelled (counted); queue refunds and
-   cancellations are counted until production is bound. */
+/* Type-80 setter bindings. The building manager (world +0x40) is not
+   modelled; queue refunds and cancellations are counted until production
+   is bound. */
 static int no_manager(void *c, AoeLiveUnit *u) {
     (void)c; (void)u;
     return 1;
@@ -1593,9 +1630,13 @@ static int probe_template(void *c, AoeLiveUnit *u, int16_t id) {
     }
     return 0;
 }
+/* Owner +0x224 0x004ea9e4: the building's techs drop back to state 0 and
+   the manager rebuilds. */
 static void remove_research(void *c, AoeLiveUnit *u, int16_t id) {
-    (void)u; (void)id;
+    AoeScenarioRuntimePlayerRor *p = owner_of(c, u);
     ++((AoeWorldCombatRor *)c)->research_removals;
+    if (p && p->research.entries)
+        (void)aoe_research_reset_ror(&p->research, id);
 }
 static void refund_one(void *c, int16_t unit_id) {
     (void)unit_id;
@@ -2137,6 +2178,183 @@ int aoe_world_combat_train_ror(AoeWorldCombatRor *c, AoeLiveUnit *u,
     return aoe_building_queue_add_ror(u->building_update, unit_id, count,
                                       &ops) &&
            !t.failed;
+}
+
+/* Research action bindings (context: the world). */
+static void research_notify(void *ctx, uint32_t e, int16_t o, int16_t id,
+                            int32_t x, int32_t y) {
+    (void)e; (void)o; (void)id; (void)x; (void)y;
+    ++((AoeWorldCombatRor *)ctx)->production_events;
+}
+static void research_failed(void *ctx, const AoeResearchAction *a,
+                            int16_t reason) {
+    (void)a; (void)reason;
+    ++((AoeWorldCombatRor *)ctx)->research_stopped;
+}
+static void research_completed(void *ctx, const AoeResearchAction *a) {
+    (void)a;
+    ++((AoeWorldCombatRor *)ctx)->researched;
+}
+static void research_signal(void *ctx, const AoeResearchAction *a,
+                            uint32_t code) {
+    (void)a; (void)code;
+    ++((AoeWorldCombatRor *)ctx)->production_events;
+}
+static int research_ops(AoeWorldCombatRor *c, int16_t owner,
+                        AoeResearchActionOps *o) {
+    AoeScenarioRuntimeRor *r = c->motion->runtime;
+    AoeScenarioRuntimePlayerRor *p;
+    if (owner < 0 || owner >= AOE_SCENARIO_RUNTIME_PLAYERS || !r->techs)
+        return 0;
+    p = &r->players[owner];
+    memset(o, 0, sizeof(*o));
+    o->context = c;
+    o->owner = (AoeResearchOwnerRor){&p->research, r->techs, &p->resources};
+    o->notify = research_notify;
+    o->failed = research_failed;
+    o->completed = research_completed;
+    o->signal = research_signal;
+    o->tick = c->tick;
+    return 1;
+}
+
+/* Command 0x64/0x65 bindings. */
+static AoeLiveUnit *command_resolve(void *c, int32_t id) {
+    return resolve(c, id);
+}
+static int16_t command_busy(void *c, const AoeLiveUnit *u) {
+    const AoeActionList *list = u->derived_action_list;
+    const void *head;
+    (void)c;
+    if (!list || !list->head || !(head = list->head->action)) return 0;
+    return entry_type(head) == AOE_WORLD_COMBAT_RECORD_TAG ? 0
+                                                           : entry_type(head);
+}
+static const DatUnit *command_template(void *c, const AoeLiveUnit *b,
+                                       int16_t index) {
+    AoeScenarioRuntimePlayerRor *p = owner_of(c, (AoeLiveUnit *)b);
+    return p && index >= 0
+               ? aoe_player_templates_get(&p->templates, (uint16_t)index)
+               : NULL;
+}
+static int16_t command_research_location(void *c, const AoeLiveUnit *b,
+                                         int16_t tech) {
+    const DatTechs *t = ((AoeWorldCombatRor *)c)->motion->runtime->techs;
+    (void)b;
+    return t && tech >= 0 && (uint16_t)tech < t->count
+               ? t->techs[tech].research_location
+               : -1;
+}
+typedef struct {
+    AoeWorldCombatRor *c;
+    int failed;
+} CommandContext;
+/* Building +0x208 = 0x00406490 on the adopted +0x184 list. */
+static void command_adopt(AoeWorldCombatRor *c, AoeLiveUnit *b,
+                          void *action, int *failed) {
+    AoeActionList *list = b->derived_action_list;
+    if (!action) {
+        *failed = 1;
+        return;
+    }
+    if (!bind_building(c, b) || !list ||
+        list != b->building_update->live_actions) {
+        AoeWorldCombatUnitRor *s = peek_unit(c, b);
+        if (s) head_destroy(s, action);
+        else free(action);
+        *failed = 1;
+        return;
+    }
+    (void)aoe_action_list_clear(list);
+    if (!aoe_action_list_push(list, action)) {
+        list->ops.destroy(list->ops.context, action);
+        *failed = 1;
+    }
+}
+static void command_train(void *ctx, AoeLiveUnit *b, int16_t unit,
+                          int32_t request) {
+    CommandContext *k = ctx;
+    AoeTrainActionCreate create;
+    AoeTrainAction *a = NULL;
+    if (!bind_building(k->c, b)) {
+        k->failed = 1;
+        return;
+    }
+    building_to_view(b, b->building_update);
+    aoe_train_action_adapter_set_timing(&k->c->train, k->c->tick, 0);
+    if (train_prepare(k->c, b->building_update, unit, &create)) {
+        create.request_id = request;
+        create.prepaid = 0;
+        a = aoe_train_action_create_ror(&create);
+    }
+    command_adopt(k->c, b, a, &k->failed);
+}
+static void command_research(void *ctx, AoeLiveUnit *b, int16_t tech,
+                             int32_t request) {
+    CommandContext *k = ctx;
+    AoeResearchAction *a = calloc(1, sizeof(*a));
+    if (a) {
+        aoe_research_action_init_ror(a, tech, request);
+        a->building_id = b->core.unit_id;
+        a->owner_index = b->runtime_owner_index;
+        a->building_x = b->core.position.x38;
+        a->building_y = b->core.position.y3c;
+        a->work_rate = b->core.unit_template->work_rate;
+    }
+    command_adopt(k->c, b, a, &k->failed);
+}
+static int command_no_group(void *c, const AoeLiveUnit *u) {
+    (void)c; (void)u;
+    return 0;
+}
+static void command_group(void *c, AoeLiveUnit *b, int32_t request) {
+    (void)c; (void)b; (void)request;
+}
+static void command_player_train(void *ctx, uint8_t player, int16_t unit,
+                                 int32_t building, int32_t request) {
+    (void)player; (void)unit; (void)building; (void)request;
+    ++((CommandContext *)ctx)->c->production_fallbacks;
+}
+static void command_player_research(void *ctx, uint8_t player, int16_t tech,
+                                    int32_t building, int32_t request) {
+    (void)player; (void)tech; (void)building; (void)request;
+    ++((CommandContext *)ctx)->c->production_fallbacks;
+}
+static int16_t command_busy_ctx(void *ctx, const AoeLiveUnit *u) {
+    return command_busy(((CommandContext *)ctx)->c, u);
+}
+static const DatUnit *command_template_ctx(void *ctx, const AoeLiveUnit *b,
+                                           int16_t index) {
+    return command_template(((CommandContext *)ctx)->c, b, index);
+}
+static int16_t command_location_ctx(void *ctx, const AoeLiveUnit *b,
+                                    int16_t tech) {
+    return command_research_location(((CommandContext *)ctx)->c, b, tech);
+}
+
+int aoe_world_combat_command_production_ror(AoeWorldCombatRor *c,
+                                            const uint8_t *command,
+                                            size_t size) {
+    CommandContext k = {c, 0};
+    AoeCommandProductionOps ops;
+    int result;
+    if (!c || !c->motion || !c->motion->runtime) return -1;
+    refresh_registry(c);
+    memset(&ops, 0, sizeof(ops));
+    ops.world.context = c;
+    ops.world.resolve = command_resolve;
+    ops.context = &k;
+    ops.active_action_type = command_busy_ctx;
+    ops.owner_unit_template = command_template_ctx;
+    ops.research_location = command_location_ctx;
+    ops.start_train = command_train;
+    ops.start_research = command_research;
+    ops.has_group_object = command_no_group;
+    ops.group_production = command_group;
+    ops.player_train = command_player_train;
+    ops.player_research = command_player_research;
+    result = aoe_command_execute_production_ror(command, size, &ops);
+    return k.failed ? -1 : result;
 }
 
 /* One unit through the whole chain, outside the player list. */

@@ -99,5 +99,25 @@ int main(int argc, char **argv) {
     synthetic();
     for (int i = 1; i < argc; ++i)
         if (!real_dat(argv[i])) return 1;
+    {
+        /* Frame-reached / looped queries (0x00416180 / 0x004161b0). */
+        AoeSpriteInstance inst;
+        memset(&inst, 0, sizeof(inst));
+        inst.kind = 2;
+        inst.animation.frame = 5;
+        inst.animation.previous_frame = 3;
+        assert(!aoe_sprite_instance_reached_ror(&inst, 4));
+        inst.animation.frame_changed = 1;
+        assert(aoe_sprite_instance_reached_ror(&inst, 4) &&
+               aoe_sprite_instance_reached_ror(&inst, 5) &&
+               !aoe_sprite_instance_reached_ror(&inst, 3) &&
+               !aoe_sprite_instance_reached_ror(&inst, 6));
+        inst.animation.looped = 1;
+        assert(aoe_sprite_instance_reached_ror(&inst, 9) &&
+               aoe_sprite_instance_looped_ror(&inst));
+        inst.kind = 1;
+        assert(!aoe_sprite_instance_reached_ror(&inst, 9) &&
+               !aoe_sprite_instance_looped_ror(&inst));
+    }
     return 0;
 }

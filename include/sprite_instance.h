@@ -29,6 +29,16 @@ int aoe_sprite_instance_init(AoeSpriteInstance *instance,
 int aoe_sprite_instance_tick(AoeSpriteInstance *instance,
                              float time_delta, float speed);
 
+/* Animated sprite vtable 0x00543078 +0x28 (0x00416180) / +0x2c
+   (0x004161b0), reached through the sprite manager's +0x20/+0x24
+   (0x004158f0 / 0x00415920) for the unit's current graphic. Reached: the
+   frame changed this tick and either the animation looped or
+   previous < frame <= current. Done: the looped byte. Static sprites
+   (vtable 0x00543030) answer 0 to both. */
+int aoe_sprite_instance_reached_ror(const AoeSpriteInstance *instance,
+                                    int16_t frame);
+int aoe_sprite_instance_looped_ror(const AoeSpriteInstance *instance);
+
 /* Frame selected for drawing at the supplied graphic angle. */
 int aoe_sprite_instance_frame(const AoeSpriteInstance *instance,
                               uint16_t angle, AoeGraphicFrame *out);

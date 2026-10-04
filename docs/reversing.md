@@ -1460,6 +1460,43 @@ lifted before each move and restored after.
   oscillation snap never fires. Real orders avoid this because the move
   action substitutes 0.4 for a non-positive range.
 
+Sprite queries used by the attack action. The sprite manager (vtable
+`0x00543000`, constructor `0x00415370`) forwards `+0x20(graphic, frame)`
+and `+0x24(graphic)` to the matching sprite's `+0x28` and `+0x2c`.
+- **Animated sprites** (vtable `0x00543078`) report a frame as reached
+  when it changed this tick and either looped or `previous < f ≤ current`
+  (`0x00416180`). "Done" is the looped byte (`0x004161b0`).
+- **Static sprites** (`0x00543030`) answer 0 to both.
+
+Tribe overrides:
+- **Fire** `0x004aec50` alerts the target's non-Gaia owner (player
+  `+0x94(0x70, x, y, z, 0)`) for ranged attacks before the base fire.
+- **Melee hit** `0x004aeca0`:
+  - With the option at global `0x00580e38 +0x9a8`, template IDs 122/123
+    remove their target outright.
+  - Blast units with max range below 0.99 splash (excluding the target)
+    and then roll a direct hit.
+
+World combat binding (`src/world_combat.c`):
+- Per attacker it keeps the reload timer, the last-turn time, the attack
+  action and the sub-action list (the translated action list: push
+  activates, update pops on 1).
+- Each tick it counts the reload down and animates sprites. Live `+0x88`
+  doubles as the sprite speed, so it is synced from the movement speed.
+  Then it updates the attack.
+- Attack parameters follow the type-7 route (`0x00405f20`): the first
+  action-type-7 task supplies the graphics (`+0x34`/`+0x38`) and range,
+  and the template supplies the rest.
+- Not yet bound: projectiles, blast tile scans, terrain defense bonuses,
+  visibility, owner refusal, groups and target death.
+- **Real-map regression** (`tests/world_combat_real.c`, `EXPANS_1_1.scx`):
+  a player-1 villager (template 83, attack 3) walks about 4 tiles to a
+  relocated enemy villager and lands 9 hits (25 → 0 hp) at a 1.51 s
+  average against the 1.5 s reload.
+  - Single gaps can be shorter than the reload: the reload resets as a
+    shot starts, while the hit lands at the fire frame of an animation
+    that is not restarted.
+
 Combat core (RoR 1.0a; type-50 vtable `0x0054324c`, tribe `0x00547fa0`):
 - **Reload.** `+0x7c` `0x004269f0` reports ready when the reload timer
   `+0x1b4` is <= 0. `0x00426a10` resets it from template `+0x120`.

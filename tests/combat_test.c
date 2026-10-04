@@ -22,10 +22,16 @@ static void attack_notice(void *c, AoeLiveUnit *a, int32_t id) {
     (void)c; (void)a; (void)id;
     ++attack_notices;
 }
-static void blast(void *c, AoeLiveUnit *a, float x, float y, float z) {
-    (void)c; (void)a; (void)x; (void)y; (void)z;
+static AoeLiveUnit *blast_excluded;
+static void blast(void *c, AoeLiveUnit *a, float x, float y, float z,
+                  AoeLiveUnit *src, AoeLiveUnit *excluded) {
+    (void)c; (void)x; (void)y; (void)z;
+    assert(src == a);
     ++blasts;
+    blast_excluded = excluded;
 }
+static int destroyed_count;
+static void destroy(void *c, AoeLiveUnit *t) { (void)c; (void)t; ++destroyed_count; }
 static float multiplier(void *c, AoeLiveUnit *a, AoeLiveUnit *t) {
     (void)c; (void)a; (void)t;
     return 1.5f;
@@ -76,7 +82,7 @@ int main(void) {
     DatUnitAttackArmor armors[2] = {{4, 1}, {4, 2}};
     AoeCombatReceiveOps rops = {NULL, damaged, owner, credit};
     AoeCombatHitOps hops = {NULL, rnd, attack_notice, blast, multiplier,
-                            receive};
+                            receive, 0, destroy};
     float x, y, z, r;
     memset(&at, 0, sizeof(at));
     memset(&tt, 0, sizeof(tt));
@@ -170,6 +176,29 @@ int main(void) {
     at.blast_width = 1.0f; /* blast templates hand over without a notice */
     assert(aoe_combat_melee_hit_ror(&attacker, &target, 0, 0, 0, &hops) == 0 &&
            blasts == 1 && attack_notices == 2);
+    assert(blast_excluded == NULL);
+    /* Tribe: a short-range blast unit splashes around the target and
+       still rolls a direct hit; long-range blast units use the base path. */
+    at.max_range = 0.5f;
+    at.accuracy_percent = 100;
+    rand_value = 0;
+    assert(aoe_combat_melee_hit_tribe_ror(&attacker, &target, 0, 0, 0,
+                                          &hops) == 1 &&
+           blasts == 2 && blast_excluded == &target && receives == 2 &&
+           attack_notices == 3);
+    at.max_range = 0.99f;
+    assert(aoe_combat_melee_hit_tribe_ror(&attacker, &target, 0, 0, 0,
+                                          &hops) == 0 &&
+           blasts == 3 && receives == 2);
+    /* The instant-kill option for template IDs 122/123. */
+    hops.instant_kill_option = 1;
+    at.id = 122;
+    assert(aoe_combat_melee_hit_tribe_ror(&attacker, &target, 0, 0, 0,
+                                          &hops) == 1 &&
+           destroyed_count == 1);
+    at.id = 4;
+    hops.instant_kill_option = 0;
+    at.blast_width = 0.0f;
     assert(aoe_combat_melee_hit_ror(&attacker, NULL, 0, 0, 0, &hops) == 0);
     assert(aoe_combat_melee_hit_ror(&attacker, &target, 0, 0, 0, NULL) == -1);
 

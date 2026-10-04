@@ -435,10 +435,14 @@ int aoe_world_motion_tick_ror(AoeWorldMotionRor *m, AoeLiveUnit *unit,
     AoeWorldMotionUnitRor *s;
     AoeMovementTickOps o;
     AoePathBudgetRor *budget;
+    int r;
     if (!m || !unit || !(s = aoe_world_motion_unit_ror(m, unit)) ||
         !(budget = budget_of(m, unit)))
         return -1;
     m->tick = tick;
     aoe_world_motion_tick_ops_ror(m, &o);
-    return aoe_movement_tick_ror(unit, &s->movement, budget, &o);
+    r = aoe_movement_tick_ror(unit, &s->movement, budget, &o);
+    /* Live +0x88 is both the movement speed and the sprite speed. */
+    unit->animation_rate = s->movement.current_speed;
+    return r;
 }

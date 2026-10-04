@@ -130,7 +130,7 @@ int aoe_combat_melee_hit_ror(AoeLiveUnit *attacker, AoeLiveUnit *target,
     if (!target) return 0;
     t = attacker->core.unit_template;
     if (t->blast_width > 0.0f) {
-        ops->blast(ops->context, attacker, x, y, z);
+        ops->blast(ops->context, attacker, x, y, z, attacker, NULL);
         return 0;
     }
     ops->attack_notice(ops->context, attacker, target->core.unit_id);
@@ -261,4 +261,32 @@ double aoe_combat_point_distance_ror(const AoeLiveUnit *u, float x,
     if (ex < 0.0f || isnan(ex)) ex = 0.0f;
     if (ey < 0.0 || isnan(ey)) ey = 0.0;
     return sqrt(ey * ey + (double)ex * ex);
+}
+
+int aoe_combat_melee_hit_tribe_ror(AoeLiveUnit *attacker, AoeLiveUnit *target,
+                                   float x, float y, float z,
+                                   const AoeCombatHitOps *ops) {
+    const DatUnit *t;
+    if (!attacker || !attacker->core.unit_template || !ops || !ops->rand ||
+        !ops->attack_notice || !ops->blast || !ops->multiplier ||
+        !ops->receive || (ops->instant_kill_option && !ops->destroy))
+        return -1;
+    if (!target) return 0;
+    t = attacker->core.unit_template;
+    if (ops->instant_kill_option && (t->id == 0x7a || t->id == 0x7b)) {
+        ops->attack_notice(ops->context, attacker, target->core.unit_id);
+        ops->destroy(ops->context, target);
+        return 1;
+    }
+    if (t->blast_width > 0.0f && !(t->max_range >= 0.99f)) {
+        ops->blast(ops->context, attacker, x, y, z, attacker, target);
+        ops->attack_notice(ops->context, attacker, target->core.unit_id);
+        if (ops->rand(ops->context) * 100 / 32767 > t->accuracy_percent)
+            return 0;
+        ops->receive(ops->context, target, t->attacks, t->attack_count,
+                     ops->multiplier(ops->context, attacker, target),
+                     attacker);
+        return 1;
+    }
+    return aoe_combat_melee_hit_ror(attacker, target, x, y, z, ops);
 }

@@ -83,9 +83,9 @@ typedef struct {
     /* Attacker +0x148(self, self, 0x200, 0x258, target ID, 0). */
     void (*attack_notice)(void *context, AoeLiveUnit *attacker,
                           int32_t target_id);
-    /* Vtable +0x220(x, y, z, attacker, 0): blast damage. */
+    /* Vtable +0x220(x, y, z, source, excluded): blast damage. */
     void (*blast)(void *context, AoeLiveUnit *attacker, float x, float y,
-                  float z);
+                  float z, AoeLiveUnit *source, AoeLiveUnit *excluded);
     float (*multiplier)(void *context, AoeLiveUnit *attacker,
                         AoeLiveUnit *target);                 /* +0xf0 */
     /* Target vtable +0x70(attacks, count, multiplier, attacker player,
@@ -93,6 +93,10 @@ typedef struct {
     void (*receive)(void *context, AoeLiveUnit *target,
                     const DatUnitAttackArmor *attacks, int32_t count,
                     float multiplier, AoeLiveUnit *attacker);
+    /* Tribe only: game option global 0x00580e38 +0x9a8, and target vtable
+       +0x6c (immediate removal). */
+    int instant_kill_option;
+    void (*destroy)(void *context, AoeLiveUnit *target);
 } AoeCombatHitOps;
 
 /* 0x004267b0 (vtable +0x22c, reached from the fire method with the
@@ -103,6 +107,15 @@ typedef struct {
 int aoe_combat_melee_hit_ror(AoeLiveUnit *attacker, AoeLiveUnit *target,
                              float x, float y, float z,
                              const AoeCombatHitOps *ops);
+
+/* Tribe vtable +0x22c = 0x004aeca0. With the option set, template IDs 122
+   and 123 notice 0x200 and remove the target outright (returns 1). Blast
+   units with max range below 0.99 splash (+0x220 at the point, excluding
+   the target) and then roll for a direct hit on the target. Everything
+   else takes the base hit 0x004267b0. */
+int aoe_combat_melee_hit_tribe_ror(AoeLiveUnit *attacker, AoeLiveUnit *target,
+                                   float x, float y, float z,
+                                   const AoeCombatHitOps *ops);
 
 /* Edge distances between footprints (template +0x30/+0x34), per axis
    |delta| minus the sizes and clamped at 0 (the x term is rounded to

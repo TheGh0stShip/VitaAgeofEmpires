@@ -377,6 +377,12 @@ target_link_libraries(aoe_world_motion PUBLIC aoe_scenario_runtime
   aoe_movement aoe_pathfinder)
 target_compile_options(aoe_world_motion PRIVATE -Wall -Wextra)
 
+add_library(aoe_world_combat STATIC src/world_combat.c)
+target_include_directories(aoe_world_combat PUBLIC include)
+target_link_libraries(aoe_world_combat PUBLIC aoe_world_motion
+  aoe_action_attack aoe_action_list aoe_combat aoe_unit_sprite_binding)
+target_compile_options(aoe_world_combat PRIVATE -Wall -Wextra)
+
 add_library(aoe_scenario_editor_catalog STATIC src/scenario_editor_catalog.c)
 target_include_directories(aoe_scenario_editor_catalog PUBLIC include)
 target_link_libraries(aoe_scenario_editor_catalog PUBLIC aoe_player_templates)
@@ -906,6 +912,9 @@ else()
   target_link_libraries(runtime_units_real PRIVATE aoe_runtime_map aoe_dat
                                                 aoe_live_unit_vision aoe_player_templates)
   target_compile_options(runtime_units_real PRIVATE -UNDEBUG)
+  add_executable(world_combat_real tests/world_combat_real.c)
+  target_link_libraries(world_combat_real PRIVATE aoe_world_combat aoe_dat m)
+  target_compile_options(world_combat_real PRIVATE -UNDEBUG)
   add_executable(world_motion_real tests/world_motion_real.c)
   target_link_libraries(world_motion_real PRIVATE aoe_world_motion aoe_dat m)
   target_compile_options(world_motion_real PRIVATE -UNDEBUG)
@@ -920,6 +929,9 @@ else()
       "${CMAKE_SOURCE_DIR}/build/ror/disc/GAME/DATA2/EMPIRES.DAT")
     add_test(NAME ror_runtime_unit_link_audit COMMAND runtime_units_real
       "${CMAKE_SOURCE_DIR}/build/ror/scenarios/EXPANS_1_0.scx"
+      "${CMAKE_SOURCE_DIR}/build/ror/disc/GAME/DATA2/EMPIRES.DAT")
+    add_test(NAME ror_world_combat_real COMMAND world_combat_real
+      "${CMAKE_SOURCE_DIR}/build/ror/scenarios/EXPANS_1_1.scx"
       "${CMAKE_SOURCE_DIR}/build/ror/disc/GAME/DATA2/EMPIRES.DAT")
     add_test(NAME ror_world_motion_real COMMAND world_motion_real
       "${CMAKE_SOURCE_DIR}/build/ror/scenarios/EXPANS_1_1.scx"

@@ -86,3 +86,17 @@ int aoe_sprite_instance_frame(const AoeSpriteInstance *instance,
     int16_t frame = instance->kind == 2 ? instance->animation.frame : 0;
     return aoe_graphic_select_frame(instance->graphic, angle, frame, out);
 }
+
+int aoe_sprite_instance_reached_ror(const AoeSpriteInstance *instance,
+                                    int16_t frame) {
+    const AoeSpriteAnimationState *a;
+    if (!instance || instance->kind != 2) return 0;
+    a = &instance->animation;
+    if (!a->frame_changed) return 0;
+    if (a->looped) return 1;
+    return a->frame >= frame && a->previous_frame < frame;
+}
+
+int aoe_sprite_instance_looped_ror(const AoeSpriteInstance *instance) {
+    return instance && instance->kind == 2 && instance->animation.looped;
+}

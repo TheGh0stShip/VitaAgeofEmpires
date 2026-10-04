@@ -21,10 +21,16 @@ typedef struct {
     uint8_t action_flags_36;      /* +0x36, bit 0 gates action cleanup */
     AoeUnitStorageState storage;  /* +0x44/+0x4c */
     uint8_t state;                /* +0x48, initially 2 */
-    uint8_t positive_hit_points;  /* +0x49 */
+    /* +0x49: dormancy. The root constructor initialises it to HP > 0;
+       dormant units are registered in player list +0x2c, which is never
+       updated. */
+    uint8_t positive_hit_points;
     uint8_t type_25;             /* +0x4a */
     uint8_t registration_pending; /* +0x4b */
     uint8_t class_code;          /* +0x4e, initially 10 */
+    /* +0x4f: actions targeting the unit (target attach +0xc0 / release
+       +0xc4), saturating at 0xfa. */
+    uint8_t target_refs;
     /* Type-30..80 derived live field +0x9c, written by scenario low-state
        virtual 0x0044ca40. It is not present in the root object. */
     float scenario_rotation;

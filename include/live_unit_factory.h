@@ -48,7 +48,10 @@ typedef struct {
        action/state methods subsequently change it. */
     float animation_rate;
     int16_t runtime_owner_index; /* Semantic owner for portable scene state. */
-    uint8_t select_2c; /* Constructor argument: live +0x49 (HP > 0). */
+    /* Registration selector: live +0x49, the dormancy flag (initialised to
+       HP > 0; dormant units sit in player list +0x2c, which no update
+       traverses). */
+    uint8_t select_2c;
     uint8_t select_30; /* Constructor argument: live +0x4a (type 25). */
     uint8_t constructed;
 } AoeLiveUnit;
@@ -268,6 +271,40 @@ int aoe_live_unit_update_predicate_ror(
     const AoeLiveUnitUpdateStateOps *state_ops,
     uint8_t *predicate_result);
 
+/* Tail of the patched RoR 1.0a type-20 update predicate 0x00415200, run
+   after its root call 0x004a8f40 (types 20..80 inherit it). State 3 moves
+   through the class setter to 4 when the template has a dying graphic
+   (+0x1c), else to 5. State 4 waits on the sprite manager's +0x18
+   (0x00415890: the current graphic's sprite +0x20, its frame; static or
+   missing sprites answer 0): when the frame's low byte is 0 the state byte
+   becomes 5 directly and +0x88 is cleared. Every path then ticks the
+   sprites (aoe_live_unit_tick_sprites_ror). */
+int aoe_live_unit_update_type20_tail_ror(AoeLiveUnit *unit,
+                                         const AoeLiveUnitUpdateStateOps *ops,
+                                         int has_dying_graphic);
+
+typedef struct {
+    void *context;
+    /* Unit +0x1fc = 0x004063d0: build the template's default task (+0xdc)
+       through the action factory and adopt it (+0x208). */
+    int (*default_task)(void *context, AoeLiveUnit *unit, int16_t task_id);
+    /* List vtable +0x08, used instead of the update while an attached unit
+       (+0x20) is present. */
+    int (*attached_update)(void *context, AoeLiveUnit *unit,
+                           AoeActionList *list);
+    const AoeActionTickOps *tick; /* list vtable +0x0c = 0x004043b0 */
+} AoeLiveUnitActionListOps;
+
+/* Action-list part of the type-40 update 0x00406500, after its 0x00415200
+   call. Above state 2 a non-empty +0x184 list is cleared (0x00403e50). An
+   empty list in state 2 builds the template default task when it is not
+   -1. Otherwise the list updates (0x004043b0, which already pops the head
+   on result 1) and the head is popped again (0x004044d0) for result 1 or
+   3, as in the executable. A NULL list does nothing. */
+int aoe_live_unit_update_action_list_ror(AoeLiveUnit *unit,
+                                         AoeActionList *list,
+                                         const AoeLiveUnitActionListOps *ops);
+
 typedef struct {
     AoePlayerUpdateState *owner;
     AoeOwnedVisibilityRegistry *world;
@@ -290,6 +327,15 @@ typedef struct {
     int (*cooperative_pending)(void *context);
     void (*cooperative_pump)(void *context);
     int failed;
+    /* Optional. Resolves list objects missing from `units` (for example
+       units created during this traversal); NULL means "not a live unit". */
+    AoeLiveUnit *(*resolve_live)(void *context, void *object);
+    /* Optional derived +0x24 layers around the common predicate: `before`
+       runs ahead of it (e.g. the type-50 reload countdown) and `after`
+       receives its byte result (e.g. the 0x00415200 tail and 0x00406500
+       action list) and may replace it. */
+    int (*before_update)(void *context, AoeLiveUnit *unit);
+    int (*after_update)(void *context, AoeLiveUnit *unit, uint8_t *result);
 } AoeLiveUnitPlayerUpdateBinding;
 
 /* Installs callbacks into a copy of AoePlayerUpdateOps and runs the actual
@@ -314,18 +360,48 @@ int aoe_live_unit_cleanup_derived_prefix_ror(AoeLiveUnit *unit);
    scenario runtime: owner registration lists, visibility leave/enter and
    the mode-2 visibility watch. Refuses (returns 0) type 80 (setter
    0x004acbf0), type-70 class-1 units leaving the active states (0x004aeed0),
-   the state-3 dependency leadership handoff and other untranslated
-   per-player state effects. */
+   the state-3 dependency leadership handoff, and transitions reaching the
+   template +0xa6 == 2 method or the pre-terminal +0x60 outside their
+   translated zero high-mask case. */
 int aoe_live_unit_scenario_state_set_ror(
     AoeLiveUnit *unit, uint8_t new_state, AoePlayerResources *owner_resources,
     AoePlayerUpdateState *owner, AoeOwnedVisibilityRegistry *world,
     AoeLiveUnitVisionBinding *vision);
 
+/* Patched RoR 1.0a 0x004ac380 (disc 0x004adc70) on a constructed unit with
+   its owner lists. Waking (0) a dormant unit removes it from +0x2c and
+   registers it in +0x28 (or +0x30 for type 25), unless a deferred
+   dormancy (+0x4b) is pending, which is simply cancelled. Making a unit
+   dormant (1) is deferred to the next update prelude. Callers include
+   the type-20 constructor, target attach/release (+0xc0 0x004aad90 /
+   +0xc4 0x004aadb0) and the state setter. */
+int aoe_live_unit_set_dormant_ror(AoeLiveUnit *unit,
+                                  AoePlayerUpdateState *owner,
+                                  AoeOwnedVisibilityRegistry *world,
+                                  uint8_t dormant);
+
+/* Target attach +0xc0: root 0x004aad90 (types 50..80 through 0x004152c0)
+   counts +0x4f up to 0xfa and wakes the unit. */
+int aoe_live_unit_target_attach_ror(AoeLiveUnit *unit,
+                                    AoePlayerUpdateState *owner,
+                                    AoeOwnedVisibilityRegistry *world);
+/* Target release +0xc4: root 0x004aadb0 counts +0x4f down; at zero a unit
+   in state 2 with hit points >= 0 (or NaN), or in state 6, becomes dormant
+   (deferred). Types 20..40 (0x004152e0) and 50..80 (0x00426b40) wake it
+   again at once, and 50..80 then notice 0x2bb (*notice set to 1). */
+int aoe_live_unit_target_release_ror(AoeLiveUnit *unit,
+                                     AoePlayerUpdateState *owner,
+                                     AoeOwnedVisibilityRegistry *world,
+                                     int *notice);
+
 /* Source-backed composition of the common RoR constructor: initialize core
    fields/ID/storage, create a DAT sprite manager, select template +0x18's
    standing graphic, place on map with the +0xd8/+0xdc vision hooks, then use
    player +0xe0 registration. RoR 0x004a8200 passes the initialized live
-   bytes +0x49 (positive HP) and +0x4a (type 25) as its two list selectors.
+   bytes +0x49 (dormancy, initially HP > 0) and +0x4a (type 25) as its two
+   list selectors. Types 20..80 then run the type-20 constructor tail
+   0x00415130: +0x88 is cleared and the unit is woken (0x004ac380(0)), so
+   only types 10 and 90 stay dormant.
    On failure no player/world/tile link remains. Resource effects already
    performed by the original-order core
    initializer are intentionally not rolled back. */

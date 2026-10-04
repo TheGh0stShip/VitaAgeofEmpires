@@ -626,7 +626,12 @@ int main(void) {
                                         terrain, tiles, &geometry,
                                         4, 4, &vision, &rng,
                                         2.25f, 2.25f, 0.0f));
-    live.core.registration_pending = 1;
+    /* The type-20 constructor tail woke it; a deferred dormancy is then
+       cancelled by the root middle state. */
+    assert(!live.core.positive_hit_points && live.select_2c == 0 &&
+           owner.object_list28.count == 1 && owner.object_list2c.count == 0);
+    assert(aoe_live_unit_set_dormant_ror(&live, &owner, &world, 1));
+    assert(live.core.positive_hit_points && live.core.registration_pending);
     assert(aoe_live_unit_scenario_dispatch_ror(&live, 3, 0.0f,
         &(AoeLiveUnitScenarioDispatchOps){
             .context = &derived_calls, .derived_middle_time = 1.0f,

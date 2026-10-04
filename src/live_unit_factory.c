@@ -525,6 +525,60 @@ int aoe_live_unit_update_predicate_ror(
         unit, state_ops, predicate_result);
 }
 
+int aoe_live_unit_update_type20_tail_ror(AoeLiveUnit *unit,
+                                         const AoeLiveUnitUpdateStateOps *ops,
+                                         int has_dying_graphic) {
+    if (!unit || !unit->constructed || !unit->core.unit_template || !ops)
+        return 0;
+    if (unit->core.state == 3) {
+        if (!ops->set_state ||
+            !ops->set_state(ops->context, unit, has_dying_graphic ? 4 : 5))
+            return 0;
+    } else if (unit->core.state == 4) {
+        /* 0x00415890 finds the current graphic's sprite; animated sprites
+           answer their frame (0x00416140), static ones 0 (0x004aa8b0).
+           The caller tests only AL. */
+        uint8_t frame = 0;
+        const void *g = unit->graphic.current_graphic;
+        for (size_t i = 0;; ++i) {
+            const AoeSpriteInstance *si =
+                aoe_sprite_runtime_at(&unit->sprites, i);
+            if (!si) break;
+            if (si->graphic != g) continue;
+            if (si->kind == 2) frame = (uint8_t)si->animation.frame;
+            break;
+        }
+        if (frame == 0) {
+            unit->core.state = 5;
+            unit->animation_rate = 0.0f;
+        }
+    }
+    return aoe_live_unit_tick_sprites_ror(unit, ops->world_delta);
+}
+
+int aoe_live_unit_update_action_list_ror(AoeLiveUnit *unit,
+                                         AoeActionList *list,
+                                         const AoeLiveUnitActionListOps *ops) {
+    uint8_t result = 0;
+    if (!unit || !unit->core.unit_template || !ops) return 0;
+    if (!list) return 1;
+    if (unit->core.state > 2)
+        return list->head ? aoe_action_list_clear(list) : 1;
+    if (!list->head) {
+        int16_t task = unit->core.unit_template->default_task_id;
+        if (unit->core.state != 2 || task == -1) return 1;
+        return ops->default_task &&
+               ops->default_task(ops->context, unit, task);
+    }
+    if (unit->placement.attached_unit)
+        return ops->attached_update &&
+               ops->attached_update(ops->context, unit, list);
+    if (!ops->tick || !aoe_action_list_update_ror(list, ops->tick, &result))
+        return 0;
+    if (result == 1 || result == 3) return aoe_action_list_pop(list);
+    return 1;
+}
+
 static AoeLiveUnit *live_from_update_object(
     const AoeLiveUnitPlayerUpdateBinding *binding, const void *object) {
     if (!binding || !object || (binding->unit_count && !binding->units))
@@ -534,7 +588,9 @@ static AoeLiveUnit *live_from_update_object(
         if (unit && (const void *)&unit->core.position == object)
             return unit;
     }
-    return NULL;
+    return binding->resolve_live
+               ? binding->resolve_live(binding->context, (void *)object)
+               : NULL;
 }
 
 static int bound_live_predicate(void *opaque, void *object) {
@@ -552,9 +608,13 @@ static int bound_live_predicate(void *opaque, void *object) {
         }
         return binding->other_predicate(binding->context, object);
     }
-    if (!aoe_live_unit_update_predicate_ror(
+    if ((binding->before_update &&
+         !binding->before_update(binding->context, unit)) ||
+        !aoe_live_unit_update_predicate_ror(
             unit, binding->owner, binding->world, &binding->target_ops,
-            &binding->state_ops, &result)) {
+            &binding->state_ops, &result) ||
+        (binding->after_update &&
+         !binding->after_update(binding->context, unit, &result))) {
         binding->failed = 1;
         return 0;
     }
@@ -709,10 +769,76 @@ int aoe_live_unit_construct_ror(
                                   &needs_reassign) || replaced || needs_reassign)
         goto fail;
     out->constructed = 1;
+    switch (unit_template->type) {
+    case 20: case 25: case 30: case 40: case 50: case 60: case 70: case 80:
+        /* Type-20 constructor tail 0x00415130. */
+        out->animation_rate = 0.0f;
+        if (!aoe_live_unit_set_dormant_ror(out, owner, world, 0)) goto fail;
+        break;
+    default:
+        break;
+    }
     return 1;
 fail:
     aoe_live_unit_destroy_ror(out, owner, world, vision);
     return 0;
+}
+
+typedef struct {
+    AoeLiveUnit *unit;
+    AoePlayerUpdateState *owner;
+    AoeOwnedVisibilityRegistry *world;
+    int failed;
+} DormancyContext;
+
+static void dormancy_remove(void *opaque, AoeLiveUnitCore *core,
+                            uint8_t was_dormant, uint8_t type_25,
+                            void *node) {
+    DormancyContext *c = opaque;
+    int removed = 0;
+    if (!aoe_player_unit_remove(c->owner, c->world, &core->position,
+                                core->unit_id, was_dormant, type_25, node,
+                                &removed) ||
+        !removed)
+        c->failed = 1;
+    c->unit->owner_node = NULL;
+}
+static void *dormancy_register(void *opaque, AoeLiveUnitCore *core,
+                               uint8_t dormant, uint8_t type_25) {
+    DormancyContext *c = opaque;
+    AoeObjectUpdateNode *node = NULL;
+    AoeVisibilityUnitRef *replaced = NULL;
+    int needs_reassign = 0;
+    if (c->failed ||
+        !aoe_player_unit_register(c->owner, c->world, &core->position,
+                                  core->unit_id, dormant, type_25, &node,
+                                  &replaced, &needs_reassign) ||
+        replaced || needs_reassign || !node) {
+        c->failed = 1;
+        return NULL;
+    }
+    c->unit->select_2c = dormant;
+    return node;
+}
+
+int aoe_live_unit_set_dormant_ror(AoeLiveUnit *unit,
+                                  AoePlayerUpdateState *owner,
+                                  AoeOwnedVisibilityRegistry *world,
+                                  uint8_t dormant) {
+    DormancyContext c;
+    AoeLiveUnitRegistrationHooks hooks;
+    void *node;
+    if (!unit || !unit->constructed || !owner || !world || dormant > 1)
+        return 0;
+    c = (DormancyContext){unit, owner, world, 0};
+    hooks = (AoeLiveUnitRegistrationHooks){&c, dormancy_remove,
+                                           dormancy_register};
+    node = unit->owner_node;
+    if (!aoe_live_unit_health_flag_set(&unit->core, dormant, &node, &hooks) ||
+        c.failed)
+        return 0;
+    unit->owner_node = node;
+    return 1;
 }
 
 int aoe_live_unit_bind_building_update_ror(
@@ -1400,10 +1526,6 @@ int aoe_live_unit_scenario_state_set_ror(
         (uint32_t)tile_y < vision->owner_grid->height)
         context.live_flags = &vision->owner_grid->tile_masks[
             (size_t)tile_y * vision->owner_grid->width + (uint32_t)tile_x];
-    if ((t->state_notify_mode || t->state_effect_mode) &&
-        (t->state_effect_mode != 2 || !context.live_flags ||
-         (*context.live_flags >> 16) != 0))
-        return 0;
     memset(&ops, 0, sizeof(ops));
     ops.context = &context;
     ops.owner_resources = owner_resources;
@@ -1414,7 +1536,14 @@ int aoe_live_unit_scenario_state_set_ror(
         &context, high_remove, high_register};
     ops.visibility_leave = high_visibility_leave;
     ops.visibility_enter = high_visibility_enter;
-    if (t->state_effect_mode == 2) {
+    /* The +0xa6 == 2 method and the pre-terminal +0x60 are bound only for
+       the zero high-mask case they translate; the root setter refuses a
+       transition that would reach either one unbound (leaving states 0..2
+       with mode 2, or going from below 4 to 7+ with a notify/effect mode).
+       Other transitions of such templates, e.g. a 0-hp shore fish dying
+       (2 -> 3) into its resource carcass, need neither. */
+    if (t->state_effect_mode == 2 && context.live_flags &&
+        (*context.live_flags >> 16) == 0) {
         ops.mode_two_effect = high_mode_two_effect;
         ops.pre_terminal = high_pre_terminal;
     }
@@ -1479,5 +1608,33 @@ int aoe_live_unit_scenario_high_root_ror(
     if (!aoe_live_unit_root_high_state_ror(&unit->core, &ops) ||
         context.failed)
         return 0;
+    return 1;
+}
+
+int aoe_live_unit_target_attach_ror(AoeLiveUnit *unit,
+                                    AoePlayerUpdateState *owner,
+                                    AoeOwnedVisibilityRegistry *world) {
+    if (!unit || !unit->constructed) return 0;
+    if (unit->core.target_refs < 0xfa) ++unit->core.target_refs;
+    return aoe_live_unit_set_dormant_ror(unit, owner, world, 0);
+}
+
+int aoe_live_unit_target_release_ror(AoeLiveUnit *unit,
+                                     AoePlayerUpdateState *owner,
+                                     AoeOwnedVisibilityRegistry *world,
+                                     int *notice) {
+    uint8_t type;
+    if (notice) *notice = 0;
+    if (!unit || !unit->constructed || !unit->core.unit_template) return 0;
+    type = unit->core.unit_template->type;
+    if (unit->core.target_refs) --unit->core.target_refs;
+    if (!unit->core.target_refs &&
+        ((unit->core.state == 2 && !(unit->core.hit_points < 0.0f)) ||
+         unit->core.state == 6) &&
+        !aoe_live_unit_set_dormant_ror(unit, owner, world, 1))
+        return 0;
+    if (type < 20 || type > 80) return 1;
+    if (!aoe_live_unit_set_dormant_ror(unit, owner, world, 0)) return 0;
+    if (type >= 50 && notice) *notice = 1;
     return 1;
 }

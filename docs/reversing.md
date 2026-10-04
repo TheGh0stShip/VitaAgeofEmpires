@@ -1392,6 +1392,43 @@ Occupancy and fit checks (RoR 1.0a):
   `aoe_unit_obstruction_restore/lift_ror` translate these, with tests in
   `tests/pathfinder_search_test.c`.
 
+The attack action (RoR 1.0a, vtable `0x005423f8`, action type 9) is routed
+from task action type 7 to constructors `0x00401150` (target) and
+`0x00401290` (point). Base template offsets used here are confirmed by
+loader `0x004413b0`: `+0x10` ID, `+0x14` class, `+0x30/+0x34/+0x38` size.
+- **Fields:**
+  - graphics `+0x40/+0x44/+0x48` (move, attack, idle);
+  - range `+0x4c` (default template `+0x114`, then 0.4) and minimum range
+    `+0x50`;
+  - projectile `+0x54` and fire frame `+0x56`;
+  - firing `+0x58`, friendly `+0x59`, and the point-attack approach count
+    `+0x5a` (starts at 2).
+- **Set state** `0x00401520`:
+  - 1/0xd/0xe show the idle graphic. Towers (IDs 79, 199, 69, 278) also
+    clear their group target.
+  - 4 spends an approach and pushes a quiet move sub-action.
+  - 6 checks the range, then resets the reload (`0x00426a10`) and enters 7.
+  - 7 starts firing.
+- **Range check** `0x00401b60`:
+  - The unit must be able to attack the target (`+0x1f0`).
+  - Point attacks measure via `0x004aaf50`.
+  - A target must be visible unless it is Gaia-owned or class 3/27; a
+    fogged one needs draw class `+0x65`.
+  - A target within 0.5 of the cached position counts as in range.
+  - Otherwise the distance is measured via `0x004aaeb0` against the
+    minimum range and against footprint radius + range + 0.3.
+  - Too far approaches (4), or gives up (0xd) when the unit cannot move or
+    its group holds (`0x0040f6b0() == 0x2d5`).
+- **Update** `0x004017c0`:
+  - It accumulates the tick at `+0x2c`.
+  - A gone or dead target gives result 5. A refusing owner (player vtable
+    `+0x1c`) or an attached target (`+0x20`) gives 4.
+  - State 4 follows the sub-action, and state 7 reloads and fires at the
+    fire frame (default half the sprite frames) through unit vtable
+    `+0x228` (target) or `+0x224` (point).
+- `src/action_attack.c` translates the class, and
+  `tests/action_attack_test.c` covers it.
+
 The pathfinder (vtable `0x00544cf0`, constructor `0x00458570`) works on
 255 x 255 grids (bytes at `+0x10de28`, dwords at `+0xce624`, indexed
 `[first*255 + second]`). Its distance table `0x006a18c0` holds

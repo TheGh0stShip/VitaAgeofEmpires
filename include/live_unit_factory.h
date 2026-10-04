@@ -248,7 +248,10 @@ typedef struct {
 } AoeLiveUnitUpdateStateOps;
 
 /* Normal (no attached +0x20 unit) state switch of patched RoR 1.0a
-   0x004a8f40. `predicate_result` receives the original byte result: zero for
+   0x004a8f40. States 0/2 die (state 3, dying graphic template +0x1c,
+   dying sound) below 1.0 hit points. The sound callback must reproduce the
+   original rand()/srand(that value) bracket around the local-player-only
+   sound so every player's RNG advances identically. `predicate_result` receives the original byte result: zero for
    ordinary transitions, or 1/2 in state 8 according to template +0xa4. */
 int aoe_live_unit_update_normal_state_ror(
     AoeLiveUnit *unit, const AoeLiveUnitUpdateStateOps *ops,
@@ -306,6 +309,17 @@ int aoe_live_unit_cleanup_uses_reuse_pool_ror(const AoeLiveUnit *unit);
    action list with the translated clear (patched 0x00403e50, disc 0x00403e70). Other types have no work
    here. Call before the common +0x08 cleanup adapter. */
 int aoe_live_unit_cleanup_derived_prefix_ror(AoeLiveUnit *unit);
+
+/* Root state setter 0x004aa550 (types 10..70) composed with the owned
+   scenario runtime: owner registration lists, visibility leave/enter and
+   the mode-2 visibility watch. Refuses (returns 0) type 80 (setter
+   0x004acbf0), type-70 class-1 units leaving the active states (0x004aeed0),
+   the state-3 dependency leadership handoff and other untranslated
+   per-player state effects. */
+int aoe_live_unit_scenario_state_set_ror(
+    AoeLiveUnit *unit, uint8_t new_state, AoePlayerResources *owner_resources,
+    AoePlayerUpdateState *owner, AoeOwnedVisibilityRegistry *world,
+    AoeLiveUnitVisionBinding *vision);
 
 /* Source-backed composition of the common RoR constructor: initialize core
    fields/ID/storage, create a DAT sprite manager, select template +0x18's

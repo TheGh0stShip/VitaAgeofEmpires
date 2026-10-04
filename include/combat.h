@@ -37,8 +37,20 @@ typedef struct {
                            int32_t max_hit_points);
     /* Owner player +0x4a of a unit (0 for Gaia). */
     int16_t (*owner_id)(void *context, AoeLiveUnit *unit);
-    /* Tribe kill credit: the attacker's player vtable +0x78(0x2b, 1.0, 0). */
+    /* Kill credit: the attacker's player vtable +0x78(attribute, 1.0, 0),
+       attribute 0x2b for buildings and 0x14 for type-70 units. */
     void (*credit_kill)(void *context, void *attacker_player);
+    /* Type 70 only: victim vtable +0x13c(attacker class) (nonzero keeps
+       the carried resource, e.g. a hunter's carcass), +0x84(0, 0, 1) =
+       0x004aace0 setting the carried amount (+0x44) to 0 within template
+       +0x7c, and the victim player's +0xe8(victim, -1, 0x201, attacker,
+       -1, -1) notice. */
+    int (*spares_class)(void *context, AoeLiveUnit *victim, int16_t cls);
+    void (*clear_carried)(void *context, AoeLiveUnit *victim);
+    void (*killed_notice)(void *context, AoeLiveUnit *victim,
+                          AoeLiveUnit *attacker);
+    int (*credit_kill_attribute)(void *context, void *attacker_player,
+                                 int16_t attribute);
 } AoeCombatReceiveOps;
 
 float aoe_combat_receive_ror(AoeLiveUnit *target, float terrain_multiplier,
@@ -47,18 +59,34 @@ float aoe_combat_receive_ror(AoeLiveUnit *target, float terrain_multiplier,
                              AoeLiveUnit *attacker,
                              const AoeCombatReceiveOps *ops);
 
-/* 0x004ad9b0 (tribe vtable +0x70): only a living target (hp > 0) takes
+/* 0x004ad9b0 (type-80 building vtable 0x00547fa0 +0x70; earlier notes
+   called it the tribe receive): only a living target (hp > 0) takes
    damage. After the base receive, a hit that removed less than 1.0 hit
    points removes exactly 1.0 instead, or (attackers of class 0, 23, 26 or
    36, or IDs 79, 69, 199, 383, 380) less than 0.1 removes 0.1. A non-Gaia
    target left below 1.0 credits the attacker's player with a kill. */
-float aoe_combat_receive_tribe_ror(AoeLiveUnit *target,
+float aoe_combat_receive_building_ror(AoeLiveUnit *target,
                                    float terrain_multiplier,
                                    const DatUnitAttackArmor *attacks,
                                    int32_t attack_count, float multiplier,
                                    void *attacker_player,
                                    AoeLiveUnit *attacker,
                                    const AoeCombatReceiveOps *ops);
+
+/* 0x004ae9d0 (type-70 vtable 0x0054820c +0x70): a target already below
+   1.0 takes nothing. After the base receive, a hit that leaves it below
+   1.0 empties its carried resource (+0x84(0, 0, 1)) unless +0x13c keeps
+   it for the attacker's class (dying itself follows from the state
+   switch of 0x004a8f40); any hit removes at least 1.0; a non-Gaia victim left below 1.0
+   credits the attacker's player (+0x78(0x14, 1.0, 0)) and notices 0x201.
+   The attacker must be non-NULL. */
+float aoe_combat_receive_unit_ror(AoeLiveUnit *target,
+                                  float terrain_multiplier,
+                                  const DatUnitAttackArmor *attacks,
+                                  int32_t attack_count, float multiplier,
+                                  void *attacker_player,
+                                  AoeLiveUnit *attacker,
+                                  const AoeCombatReceiveOps *ops);
 
 /* Attack multipliers (vtable +0xf0): base 0x00426270 is 1.0. Tribe
    0x004aec00: ranged units get 1.5 when vtable +0x250(target) (the
@@ -149,8 +177,9 @@ typedef struct {
                     const DatUnitAttackArmor *attacks, int32_t count,
                     float multiplier, AoeLiveUnit *source);
     int (*same_owner)(void *context, AoeLiveUnit *a, AoeLiveUnit *b);
-    /* Tribe only: a victim left below 1.0 hit points hears +0x84(0, 0, 1). */
-    void (*killed)(void *context, AoeLiveUnit *victim);
+    /* Tribe only: a victim left below 1.0 hit points has its carried
+       resource emptied (+0x84(0, 0, 1) = 0x004aace0). */
+    void (*clear_carried)(void *context, AoeLiveUnit *victim);
 } AoeCombatBlastOps;
 
 /* Blast damage, vtable +0x220: base 0x00426280 and tribe 0x004b04a0, at
@@ -162,7 +191,7 @@ typedef struct {
    attacker's blast level (+0x11c), the squared distance from the point to
    its footprint edge is below r^2, and rand() * 100 / 32767 <= accuracy.
    The tribe version also spares same-owner units for attacker classes 35
-   and 24 and reports kills. Returns 1, 0 when the radius is not positive,
+   and 24 and empties a killed victim's carried resource. Returns 1, 0 when the radius is not positive,
    -1 for missing dependencies. */
 int aoe_combat_blast_ror(AoeLiveUnit *attacker, float x, float y, float z,
                          AoeLiveUnit *source, AoeLiveUnit *excluded,

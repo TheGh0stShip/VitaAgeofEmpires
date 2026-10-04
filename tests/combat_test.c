@@ -17,6 +17,21 @@ static void damaged(void *c, AoeLiveUnit *t, AoeLiveUnit *a, int32_t hp,
 }
 static int16_t owner(void *c, AoeLiveUnit *u) { (void)c; (void)u; return 2; }
 static void credit(void *c, void *p) { (void)c; (void)p; ++kills; }
+static int dies, spared, kill_attr, killed_notices;
+static int spares(void *c, AoeLiveUnit *v, int16_t cls) {
+    (void)c; (void)v;
+    return cls == spared;
+}
+static void clear_carried(void *c, AoeLiveUnit *v) { (void)c; (void)v; ++dies; }
+static void killed_notice(void *c, AoeLiveUnit *v, AoeLiveUnit *a) {
+    (void)c; (void)v; (void)a;
+    ++killed_notices;
+}
+static int credit_attr(void *c, void *p, int16_t attribute) {
+    (void)c; (void)p;
+    kill_attr = attribute;
+    return 1;
+}
 static int32_t rnd(void *c) { (void)c; return rand_value; }
 static void attack_notice(void *c, AoeLiveUnit *a, int32_t id) {
     (void)c; (void)a; (void)id;
@@ -120,23 +135,60 @@ int main(void) {
     /* Tribe receive: dead targets are skipped; a weak hit still removes 1
        (0.1 for light attackers); dropping below 1 credits a kill. */
     target.core.hit_points = 0.0f;
-    assert(aoe_combat_receive_tribe_ror(&target, 1.0f, attacks, 2, 1.0f,
+    assert(aoe_combat_receive_building_ror(&target, 1.0f, attacks, 2, 1.0f,
                                         NULL, &attacker, &rops) == 0.0f &&
            notices == 1);
     attacks[0].amount = 2; /* 2 - 2 = 0 */
     target.core.hit_points = 10.0f;
     at.unit_class = 6;
-    assert(aoe_combat_receive_tribe_ror(&target, 1.0f, attacks, 2, 1.0f,
+    assert(aoe_combat_receive_building_ror(&target, 1.0f, attacks, 2, 1.0f,
                                         NULL, &attacker, &rops) == 9.0f);
     at.unit_class = 0x17;
-    assert(aoe_combat_receive_tribe_ror(&target, 1.0f, attacks, 2, 1.0f,
+    assert(aoe_combat_receive_building_ror(&target, 1.0f, attacks, 2, 1.0f,
                                         NULL, &attacker, &rops) ==
            (float)(9.0 - (double)0.1f));
     at.unit_class = 6;
     target.core.hit_points = 1.5f;
-    assert(aoe_combat_receive_tribe_ror(&target, 1.0f, attacks, 2, 1.0f,
+    assert(aoe_combat_receive_building_ror(&target, 1.0f, attacks, 2, 1.0f,
                                         NULL, &attacker, &rops) == 0.5f &&
            kills == 1);
+
+    /* Type-70 receive 0x004ae9d0. */
+    {
+        AoeCombatReceiveOps uops = {NULL, damaged, owner, credit, spares,
+                                    clear_carried,
+                                    killed_notice, credit_attr};
+        DatUnitAttackArmor hit5[1] = {{4, 5}};
+        tt.armors = NULL;
+        tt.armor_count = 0;
+        tt.base_armor = 0;
+        at.unit_class = 6;
+        spared = -1;
+        /* Already below 1.0: nothing happens. */
+        target.core.hit_points = 0.5f;
+        assert(aoe_combat_receive_unit_ror(&target, 1.0f, hit5, 1, 1.0f, NULL,
+                                           &attacker, &uops) == 0.5f);
+        /* Ordinary hit. */
+        target.core.hit_points = 20.0f;
+        assert(aoe_combat_receive_unit_ror(&target, 1.0f, hit5, 1, 1.0f, NULL,
+                                           &attacker, &uops) == 15.0f &&
+               !dies);
+        /* A zero-damage hit still removes 1.0. */
+        hit5[0].amount = 0;
+        assert(aoe_combat_receive_unit_ror(&target, 1.0f, hit5, 1, 1.0f, NULL,
+                                           &attacker, &uops) == 14.0f);
+        /* A killing hit dies, credits attribute 0x14 and notices 0x201. */
+        hit5[0].amount = 30;
+        assert(aoe_combat_receive_unit_ror(&target, 1.0f, hit5, 1, 1.0f, NULL,
+                                           &attacker, &uops) == 0.0f &&
+               dies == 1 && kill_attr == 0x14 && killed_notices == 1);
+        /* A spared attacker class skips only the death call. */
+        spared = 6;
+        target.core.hit_points = 20.0f;
+        aoe_combat_receive_unit_ror(&target, 1.0f, hit5, 1, 1.0f, NULL,
+                                    &attacker, &uops);
+        assert(dies == 1 && killed_notices == 2);
+    }
 
     /* Tribe multipliers. */
     at.projectile_unit_id = 3;
@@ -229,6 +281,7 @@ int main(void) {
     {
         AoeCombatBlastOps bops = {NULL, rnd, 7, 20, tile_units, multiplier,
                                   blast_receive, same, killed};
+        /* `killed` stands in for the carried-resource clear. */
         AoeLiveUnit near_u, far_u, ally;
         DatUnit nt;
         memset(&nt, 0, sizeof(nt));

@@ -1487,8 +1487,24 @@ World combat binding (`src/world_combat.c`):
 - Attack parameters follow the type-7 route (`0x00405f20`): the first
   action-type-7 task supplies the graphics (`+0x34`/`+0x38`) and range,
   and the template supplies the rest.
+- **State switch and death.** Each update runs the 0x004a8f40 state
+  switch through `aoe_live_unit_scenario_state_set_ror`, the root setter
+  0x004aa550 composed with runtime registration and vision hooks.
+  - The dying threshold is 1.0 (float `0x00542534`). Earlier code compared
+    with 0 and has been corrected.
+  - The dying sound is bracketed by `r = rand(); ...; srand(r)`, so every
+    player's RNG advances identically even though only the local player
+    hears the sound.
+  - Type 70's setter 0x004ae920 diverts only class-1 units (world byte
+    `+0x1d` clear) to untranslated 0x004aeed0.
+  - Receives follow the victim's type: 70 → `0x004ae9d0`,
+    80 → `0x004ad9b0`, otherwise the base receive.
 - Not yet bound: projectiles, blast tile scans, terrain defense bonuses,
-  visibility, owner refusal, groups and target death.
+  visibility, owner refusal, groups, the class-keeps-resource check `+0x13c`
+  and terminal cleanup `+0xb8`.
+- The real-map regression continues past the kill: the target goes
+  2 → 3 → 7 → 8 (it carries nothing and has no undead mode), and the
+  attacker's action reports result 5.
 - **Real-map regression** (`tests/world_combat_real.c`, `EXPANS_1_1.scx`):
   a player-1 villager (template 83, attack 3) walks about 4 tiles to a
   relocated enemy villager and lands 9 hits (25 → 0 hp) at a 1.51 s
@@ -1522,7 +1538,15 @@ Combat core (RoR 1.0a; type-50 vtable `0x0054324c`, tribe `0x00547fa0`):
   - the terrain bonus is world `+0x54[+0x110][terrain]`.
 - **Receive.** Base `+0x70` `0x00426890` subtracts the damage, notices
   0x1f4 with the truncated hit points and the template maximum, and clamps
-  below 1.0 to 0. The tribe override `0x004ad9b0` skips dead targets and
+  below 1.0 to 0.
+  - **Types 70 and 80.** Vtable `0x0054820c` is type 70 and `0x00547fa0`
+    is type 80 (buildings); earlier notes called the latter "tribe". They
+    differ only in `+0x5c` and `+0x70`.
+  - **Type 70** `0x004ae9d0` skips targets below 1.0. On a killing hit it
+    empties the carried resource unless `+0x13c` keeps it for the
+    attacker's class. Every hit removes at least 1.0. A non-Gaia victim
+    credits attribute 0x14 and notices 0x201.
+  - **Building receive** `0x004ad9b0` skips dead targets and
   enforces a minimum of 1.0 damage (0.1 for attacker classes 0/23/26/36
   and tower-like IDs 79/69/199/383/380). It credits the attacker's player
   with `+0x78(0x2b, 1.0, 0)` when a non-Gaia target drops below 1.0.
@@ -1538,7 +1562,8 @@ Combat core (RoR 1.0a; type-50 vtable `0x0054324c`, tribe `0x00547fa0`):
   - It hits when the squared distance to the victim's footprint edge is
     below r², subject to the accuracy roll.
   - The tribe version also spares same-owner units for attacker classes
-    35/24, and calls `+0x84(0, 0, 1)` on victims left below 1.0.
+    35/24, and empties the carried resource (`+0x84(0, 0, 1)` =
+    `0x004aace0`) of victims left below 1.0.
 - **Edge distances.** `0x004aaeb0` (unit to target) and `0x004aaf50`
   (to a point) subtract the footprints per axis and clamp at 0. The
   in-range test `0x004aadf0` is strictly `range² > edge²`.

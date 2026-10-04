@@ -26,7 +26,10 @@
      launches are counted but not simulated yet;
    - visibility is always "visible", owners never refuse, groups never
      hold, unit notices and target attach/release hooks are counted only,
-     and the instant-kill option is off. */
+     and the instant-kill option is off;
+   - victims never keep their carried resource for an attacker class
+     (+0x13c), kill credits are counted only, and terminal cleanup
+     (+0xb8) is a no-op. */
 typedef struct {
     AoeLiveUnit *unit;
     float reload_timer;
@@ -58,10 +61,19 @@ int aoe_world_combat_attack_ror(AoeWorldCombatRor *combat,
                                 AoeLiveUnit *attacker, AoeLiveUnit *target);
 
 /* Advances the world clock by `tick` seconds and updates one attacker:
-   reload countdown, then its attack action. Writes the action result
-   (attack update codes) to *result. Returns 0 on missing state. */
+   reload countdown (0x00426bf0), sprites, then the state switch of
+   0x004a8f40 whose active update is the attack action. Writes the action
+   result (attack update codes) to *result. Returns 0 on missing state. */
 int aoe_world_combat_tick_ror(AoeWorldCombatRor *combat,
                               AoeLiveUnit *attacker, float tick,
                               uint8_t *result);
+
+/* The same state switch for any unit (without advancing the clock): a
+   unit below 1.0 hit points dies (state 3 through the runtime state
+   setter, dying graphic, rand/srand-bracketed dying sound), then decays
+   per its carried resource (states 3/5 -> 6 or 7 -> 8). Terminal cleanup
+   (+0xb8) is not translated. */
+int aoe_world_combat_update_unit_ror(AoeWorldCombatRor *combat,
+                                     AoeLiveUnit *unit, float tick);
 
 #endif

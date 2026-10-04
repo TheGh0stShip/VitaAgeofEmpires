@@ -290,15 +290,38 @@ static void credit_kill(void *c, void *player) {
     (void)player;
     ++((AoeWorldCombatRor *)c)->kills;
 }
+static int spares_class(void *c, AoeLiveUnit *v, int16_t cls) {
+    (void)c; (void)v; (void)cls;
+    return 0; /* victim +0x13c: not translated yet */
+}
+/* 0x004aace0(0, 0, 1): carried amount 0, clamped to template +0x7c. */
+static void clear_carried(void *c, AoeLiveUnit *v) {
+    (void)c;
+    v->core.storage.carried_amount = 0.0f;
+}
+static void killed_notice(void *c, AoeLiveUnit *v, AoeLiveUnit *a) {
+    (void)v; (void)a;
+    ++((AoeWorldCombatRor *)c)->kills;
+}
+static int credit_attribute(void *c, void *player, int16_t attribute) {
+    (void)c; (void)player; (void)attribute;
+    return 1;
+}
 static void receive(void *c, AoeLiveUnit *t, const DatUnitAttackArmor *at,
                     int32_t n, float m, AoeLiveUnit *a) {
     AoeWorldCombatRor *w = c;
-    AoeCombatReceiveOps ro = {w, damaged, owner_id, credit_kill};
+    AoeCombatReceiveOps ro = {w,           damaged,       owner_id,
+                              credit_kill, spares_class,  clear_carried,
+                              killed_notice, credit_attribute};
     float terrain = 1.0f; /* terrain defense bonus table: not bound yet */
+    uint8_t type = t->core.unit_template ? t->core.unit_template->type : 0;
     ++w->hits;
-    if (t->core.unit_template && t->core.unit_template->type >= 70)
-        (void)aoe_combat_receive_tribe_ror(t, terrain, at, n, m, NULL, a,
-                                           &ro);
+    if (type == 70 && a)
+        (void)aoe_combat_receive_unit_ror(t, terrain, at, n, m, NULL, a,
+                                          &ro);
+    else if (type == 80)
+        (void)aoe_combat_receive_building_ror(t, terrain, at, n, m, NULL, a,
+                                              &ro);
     else
         (void)aoe_combat_receive_ror(t, terrain, at, n, m, a, &ro);
 }
@@ -461,22 +484,88 @@ int aoe_world_combat_attack_ror(AoeWorldCombatRor *c, AoeLiveUnit *attacker,
     return aoe_attack_action_activate_ror(&s->attack, &o);
 }
 
+/* State switch of 0x004a8f40 bound to the runtime. */
+typedef struct {
+    AoeWorldCombatRor *combat;
+    AoeWorldCombatUnitRor *state;
+    uint8_t *result;
+} StateContext;
+
+static int active_update(void *opaque, AoeLiveUnit *u) {
+    StateContext *sc = opaque;
+    AoeAttackActionOps o;
+    if (!sc->state || !sc->state->attacking) return 1;
+    attack_ops(sc->combat, &o);
+    return aoe_attack_action_update_ror(&sc->state->attack, &o, sc->result);
+    (void)u;
+}
+static int set_state(void *opaque, AoeLiveUnit *u, uint8_t state) {
+    StateContext *sc = opaque;
+    AoeScenarioRuntimeRor *r = sc->combat->motion->runtime;
+    int16_t o = u->runtime_owner_index;
+    if (o < 0 || o >= AOE_SCENARIO_RUNTIME_PLAYERS) return 0;
+    return aoe_live_unit_scenario_state_set_ror(
+        u, state, &r->players[o].resources, &r->players[o].owner, &r->world,
+        &r->players[o].vision_binding);
+}
+static int select_graphic_id(void *opaque, AoeLiveUnit *u, int16_t id) {
+    StateContext *sc = opaque;
+    select_graphic(sc->combat, u, graphic_by_id(sc->combat, id));
+    return 1;
+}
+/* The dying sound plays only for the local player; the original brackets
+   it with r = rand() ... srand(r) so every player's RNG matches. */
+static void dying_sound(void *opaque, AoeLiveUnit *u, int16_t sound) {
+    StateContext *sc = opaque;
+    AoeRng *rng = &sc->combat->motion->runtime->rng;
+    uint16_t r = aoe_rng_next(rng);
+    (void)u; (void)sound;
+    aoe_rng_seed(rng, r);
+}
+static int terminal_cleanup(void *opaque, AoeLiveUnit *u) {
+    (void)opaque; (void)u;
+    return 1; /* vtable +0xb8: not translated yet */
+}
+
+static int update_unit(AoeWorldCombatRor *c, AoeLiveUnit *u,
+                       AoeWorldCombatUnitRor *s, uint8_t *result) {
+    StateContext sc = {c, s, result};
+    AoeLiveUnitUpdateStateOps ops;
+    uint8_t predicate = 0;
+    memset(&ops, 0, sizeof(ops));
+    ops.context = &sc;
+    ops.active_update = active_update;
+    ops.set_state = set_state;
+    ops.select_graphic = select_graphic_id;
+    ops.play_dying_sound = dying_sound;
+    ops.terminal_cleanup = terminal_cleanup;
+    ops.world_delta = c->tick;
+    ops.comparison_epsilon = 0.0f;
+    if (s && s->reload_timer > 0.0f) {
+        /* 0x00426bf0: reload countdown before the base update. */
+        s->reload_timer = (float)((double)s->reload_timer - c->tick);
+        if (s->reload_timer < 0.0f) s->reload_timer = 0.0f;
+    }
+    (void)aoe_live_unit_tick_sprites_ror(u, c->tick);
+    return aoe_live_unit_update_normal_state_ror(u, &ops, &predicate);
+}
+
 int aoe_world_combat_tick_ror(AoeWorldCombatRor *c, AoeLiveUnit *attacker,
                               float tick, uint8_t *result) {
     AoeWorldCombatUnitRor *s;
-    AoeAttackActionOps o;
     if (!c || !attacker || !result ||
         !(s = aoe_world_combat_unit_ror(c, attacker)) || !s->attacking)
         return 0;
+    *result = 0;
     c->tick = tick;
     c->world_ms += (uint32_t)(tick * 1000.0f + 0.5f);
-    /* 0x00426bf0: reload countdown before the action update. */
-    if (s->reload_timer > 0.0f) {
-        s->reload_timer = (float)((double)s->reload_timer - tick);
-        if (s->reload_timer < 0.0f) s->reload_timer = 0.0f;
-    }
-    /* Keep the unit's sprites animating (type-20 update tail). */
-    (void)aoe_live_unit_tick_sprites_ror(attacker, tick);
-    attack_ops(c, &o);
-    return aoe_attack_action_update_ror(&s->attack, &o, result);
+    return update_unit(c, attacker, s, result);
+}
+
+int aoe_world_combat_update_unit_ror(AoeWorldCombatRor *c, AoeLiveUnit *unit,
+                                     float tick) {
+    uint8_t result = 0;
+    if (!c || !unit) return 0;
+    c->tick = tick;
+    return update_unit(c, unit, aoe_world_combat_unit_ror(c, unit), &result);
 }

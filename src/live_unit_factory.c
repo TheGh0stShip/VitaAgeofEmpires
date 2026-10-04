@@ -458,7 +458,8 @@ int aoe_live_unit_update_normal_state_ror(
         /* Original switch deliberately falls through to state zero. */
         /* fall through */
     case 0:
-        if (unit->core.hit_points < 0.0f) {
+        /* fcomp float 1.0 (0x00542534); test ah,1: below 1.0 or NaN. */
+        if (!(unit->core.hit_points >= 1.0f)) {
             if (!ops->set_state || !ops->select_graphic ||
                 (definition->dying_sound >= 0 && !ops->play_dying_sound) ||
                 !ops->set_state(ops->context, unit, 3) ||
@@ -1301,6 +1302,61 @@ static void high_pre_terminal(void *opaque, AoeLiveUnitCore *core) {
         !aoe_visibility_watch_remove(&ctx->owner->visibility_watch40,
                                      &core->position))
         ctx->failed = 1;
+}
+
+int aoe_live_unit_scenario_state_set_ror(
+    AoeLiveUnit *unit, uint8_t new_state, AoePlayerResources *owner_resources,
+    AoePlayerUpdateState *owner, AoeOwnedVisibilityRegistry *world,
+    AoeLiveUnitVisionBinding *vision) {
+    HighRootContext context;
+    AoeLiveUnitRootStateOps ops;
+    const DatUnit *t;
+    int32_t tile_x, tile_y;
+    if (!unit || !unit->constructed || !(t = unit->core.unit_template) ||
+        !owner_resources || !owner || !world || !vision ||
+        !vision->owner_grid || !vision->owner_grid->tile_masks)
+        return 0;
+    /* Type 80 has its own setter 0x004acbf0; type 70 diverts class-1
+       units leaving the active states to untranslated 0x004aeed0 (world
+       byte +0x1d is assumed clear). */
+    if (t->type == 80 ||
+        (t->type == 70 && new_state >= 3 && unit->core.state <= 2 &&
+         t->unit_class == 1))
+        return 0;
+    memset(&context, 0, sizeof(context));
+    context.live = unit;
+    context.owner = owner;
+    context.world = world;
+    context.vision = vision;
+    tile_x = (int32_t)unit->core.position.x38;
+    tile_y = (int32_t)unit->core.position.y3c;
+    if (tile_x >= 0 && tile_y >= 0 &&
+        (uint32_t)tile_x < vision->owner_grid->width &&
+        (uint32_t)tile_y < vision->owner_grid->height)
+        context.live_flags = &vision->owner_grid->tile_masks[
+            (size_t)tile_y * vision->owner_grid->width + (uint32_t)tile_x];
+    if ((t->state_notify_mode || t->state_effect_mode) &&
+        (t->state_effect_mode != 2 || !context.live_flags ||
+         (*context.live_flags >> 16) != 0))
+        return 0;
+    memset(&ops, 0, sizeof(ops));
+    ops.context = &context;
+    ops.owner_resources = owner_resources;
+    ops.edition = AOE_PLAYER_RISE_OF_ROME;
+    ops.has_map_tile = unit->placement.tile != NULL;
+    ops.registration_node = (void **)&unit->owner_node;
+    ops.registration = (AoeLiveUnitRegistrationHooks){
+        &context, high_remove, high_register};
+    ops.visibility_leave = high_visibility_leave;
+    ops.visibility_enter = high_visibility_enter;
+    if (t->state_effect_mode == 2) {
+        ops.mode_two_effect = high_mode_two_effect;
+        ops.pre_terminal = high_pre_terminal;
+    }
+    if (!aoe_live_unit_root_state_set_ror(&unit->core, new_state, &ops) ||
+        context.failed)
+        return 0;
+    return 1;
 }
 
 int aoe_live_unit_scenario_high_root_ror(

@@ -159,6 +159,33 @@ int main(int argc, char **argv) {
              !combat.misses &&
              average + 0.05f >= attacker->core.unit_template->reload_time;
     }
+    /* Death: the target's own state switch (0x004a8f40) enters dying
+       (state 3) below 1.0 hit points, and the attacker's action then drops
+       its dead target (result 5). */
+    if (ok) {
+        uint8_t states[8], n = 0, last = target->core.state;
+        int attacker_result = -1;
+        states[n++] = last;
+        for (int t = 0; t < 400 && n < 8; ++t) {
+            if (!aoe_world_combat_update_unit_ror(&combat, target, 0.05f))
+                break;
+            if (target->core.state != last) {
+                last = target->core.state;
+                states[n++] = last;
+            }
+            if (attacker_result < 0) {
+                (void)aoe_world_combat_tick_ror(&combat, attacker, 0.05f,
+                                                &result);
+                if (result) attacker_result = result;
+            }
+        }
+        printf("target states:");
+        for (uint8_t i = 0; i < n; ++i) printf(" %u", states[i]);
+        printf("; attacker result %d, kills %u\n", attacker_result,
+               combat.kills);
+        ok = n >= 2 && states[0] == 2 && states[1] == 3 &&
+             attacker_result == 5 && combat.kills == 1;
+    }
 done:
     aoe_world_combat_destroy_ror(&combat);
     aoe_world_motion_destroy_ror(&motion);

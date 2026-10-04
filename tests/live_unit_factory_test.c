@@ -457,7 +457,8 @@ int main(void) {
     memset(&update_trace, 0, sizeof(update_trace));
     unit.dying_graphic = 7;
     unit.dying_sound = 5;
-    live.core.hit_points = -1.0f;
+    /* The threshold is 1.0, not 0: 0.5 hit points dies. */
+    live.core.hit_points = 0.5f;
     assert(aoe_live_unit_update_normal_state_ror(
         &live, &update_ops, &predicate_result));
     assert(live.core.state == 3 && update_trace.count == 4 &&

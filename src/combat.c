@@ -63,7 +63,7 @@ static int light_attacker(const AoeLiveUnit *attacker) {
            id == 0x45 || id == 0xc7 || id == 0x17f || id == 0x17c;
 }
 
-float aoe_combat_receive_tribe_ror(AoeLiveUnit *target,
+float aoe_combat_receive_building_ror(AoeLiveUnit *target,
                                    float terrain_multiplier,
                                    const DatUnitAttackArmor *attacks,
                                    int32_t count, float multiplier,
@@ -85,6 +85,36 @@ float aoe_combat_receive_tribe_ror(AoeLiveUnit *target,
     if (ops && ops->owner_id && ops->owner_id(ops->context, target) > 0 &&
         !(target->core.hit_points >= 1.0f) && ops->credit_kill)
         ops->credit_kill(ops->context, attacker_player);
+    return target->core.hit_points;
+}
+
+float aoe_combat_receive_unit_ror(AoeLiveUnit *target,
+                                  float terrain_multiplier,
+                                  const DatUnitAttackArmor *attacks,
+                                  int32_t count, float multiplier,
+                                  void *attacker_player,
+                                  AoeLiveUnit *attacker,
+                                  const AoeCombatReceiveOps *ops) {
+    float old;
+    if (!target || !attacker || !attacker->core.unit_template || !ops ||
+        !ops->spares_class || !ops->clear_carried || !ops->owner_id ||
+        !ops->credit_kill_attribute || !ops->killed_notice)
+        return target ? target->core.hit_points : 0.0f;
+    old = target->core.hit_points;
+    if (!(old >= 1.0f)) return old;
+    aoe_combat_receive_ror(target, terrain_multiplier, attacks, count,
+                           multiplier, attacker, ops);
+    if (!(target->core.hit_points >= 1.0f) &&
+        !ops->spares_class(ops->context, target,
+                           attacker->core.unit_template->unit_class))
+        ops->clear_carried(ops->context, target);
+    if (!((double)old - target->core.hit_points >= 1.0))
+        target->core.hit_points = (float)((double)old - 1.0);
+    if (ops->owner_id(ops->context, target) > 0 &&
+        !(target->core.hit_points >= 1.0f)) {
+        ops->credit_kill_attribute(ops->context, attacker_player, 0x14);
+        ops->killed_notice(ops->context, target, attacker);
+    }
     return target->core.hit_points;
 }
 
@@ -153,7 +183,7 @@ int aoe_combat_blast_ror(AoeLiveUnit *attacker, float x, float y, float z,
     (void)z;
     if (!attacker || !attacker->core.unit_template || !ops || !ops->rand ||
         !ops->tile_units || !ops->multiplier || !ops->receive ||
-        (tribe && (!ops->same_owner || !ops->killed)))
+        (tribe && (!ops->same_owner || !ops->clear_carried)))
         return -1;
     t = attacker->core.unit_template;
     r = t->blast_width;
@@ -205,7 +235,7 @@ int aoe_combat_blast_ror(AoeLiveUnit *attacker, float x, float y, float z,
                              ops->multiplier(ops->context, attacker, v),
                              source);
                 if (tribe && !(v->core.hit_points >= 1.0f))
-                    ops->killed(ops->context, v);
+                    ops->clear_carried(ops->context, v);
             }
         }
     return 1;

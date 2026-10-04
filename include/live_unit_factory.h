@@ -58,6 +58,10 @@ typedef struct AoeLiveUnit {
        runs on its own copy of the template (template vtable +0x1c), which
        the unit owns and frees. */
     DatUnit *private_template;
+    /* Live +0x24: the units inside this one (garrison, transport), most
+       recent first; each has this unit as its placement.attached_unit
+       (+0x20). */
+    AoeObjectUpdateList contents;
     /* Type-25 doppelganger fields (RoR 0x00436030, live +0x8c..+0xac). */
     struct {
         struct AoeLiveUnit *source;     /* +0x8c, NULL once it died */

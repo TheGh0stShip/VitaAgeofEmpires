@@ -5,6 +5,7 @@
 
 #include "action_artifact.h"
 #include "action_attack.h"
+#include "action_base.h"
 #include "action_build.h"
 #include "action_farm.h"
 #include "action_convert.h"
@@ -14,6 +15,7 @@
 #include "action_trade.h"
 #include "action_list.h"
 #include "combat.h"
+#include "unit_garrison.h"
 #include "live_unit_owner.h"
 #include "command_production.h"
 #include "research_action.h"
@@ -157,6 +159,7 @@ typedef struct AoeWorldCombatRor {
     uint32_t wonder_victories, object_failures;
     uint8_t game_over;
     uint8_t tearing_down; /* game +0x3f4 +0x1d during destruction */
+    uint32_t garrison_records; /* type-50 0x00516a50 records (counted) */
 } AoeWorldCombatRor;
 
 int aoe_world_combat_init_ror(AoeWorldCombatRor *combat,
@@ -247,6 +250,15 @@ int aoe_world_combat_train_ror(AoeWorldCombatRor *combat,
 int aoe_world_combat_command_production_ror(AoeWorldCombatRor *combat,
                                             const uint8_t *command,
                                             size_t size);
+
+/* Unit +0xd0 bound to the runtime (aoe_unit_enter_ror): 1 entered, 0 no
+   room, -1 bad input. */
+int aoe_world_combat_enter_ror(AoeWorldCombatRor *combat, AoeLiveUnit *unit,
+                               AoeLiveUnit *container);
+/* 0x004ab280 bound to the runtime (aoe_unit_unload_ror). */
+int aoe_world_combat_unload_ror(AoeWorldCombatRor *combat,
+                                AoeLiveUnit *transport, int zone,
+                                uint8_t *count);
 
 /* Unit +0x44 (aoe_live_unit_change_owner_ror) bound to the runtime: the
    player lists, vision, storage, production queue, building research and

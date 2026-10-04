@@ -274,13 +274,26 @@ Next:
      - conversion 0x68, with unit +0x44 change of owner for root, type 70
        (private template copy) and type 80.
    - **Tests.** `ror_repair_heal_convert` runs all three on EXPANS_1_1.
-   - **Remaining action classes:**
-     - hunt 0x6e (vtable 0x548848);
-     - trade 0x6f (0x5489f0);
-     - artifact 0x6b (0x54865c), discovery 0x6c (0x548788);
-     - wonder 0x78 (0x548a68);
-     - enter 3 (0x5424d4), explore 4 (0x542538), type 10 (0x542474);
-     - transport (task 12, 0x4067d0).
+   - **All action classes, in one pass:**
+     - hunt 0x6e (live targets attacked through a nested attack with its
+       own sub-action list);
+     - trade 0x6f;
+     - artifact 0x6b, discovery 0x6c, wonder 0x78 (countdown and win
+       0x45d460);
+     - enter 3 with garrisoning (+0xd0/+0xd4, contents +0x24);
+     - explore 4;
+     - fly 10;
+     - transport 12 with unloading 0x4ab280.
+   - **Zones.** Terrain-restriction zones (0x521060, `zone_map.c`) now
+     replace the one-zone stub in movement.
+   - **Tests.**
+     - `ror_hunt_and_fell`: a Hunter kills and gathers a gazelle, and a
+       Lumberjack fells a tree.
+     - `ror_garrison_and_transport`: a villager boards a transport boat
+       and is unloaded on the shore.
+   - **Open question.** No default task starts an artifact's 107 action
+     in the data (default task id -1); it arrives only through the order
+     step. What orders artifacts in a game is unconfirmed.
    Then: the active player's view-code refresh and the type-50 visibility
    spotting.
 2. Replace placeholder bindings (diplomacy, zones, sounds, victory

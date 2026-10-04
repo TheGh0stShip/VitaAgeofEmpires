@@ -161,8 +161,10 @@ static void work_math(void) {
     o_t.id = 0x9c;
 }
 
-static void line_search(const AoeRepairActionOps *o) {
+static void line_search(const AoeRepairActionOps *ro) {
     int32_t from[2] = {2, 2}, to[2] = {10, 6}, out[2] = {-1, -1};
+    AoeLineSearchOps line = {ro->move.context, ro->terrain_at, ro->fits};
+    const AoeLineSearchOps *o = &line;
     memset(terrain_map, 0, sizeof(terrain_map));
     terrain_map[4][6] = 2; /* (6, 4) beach */
     /* 16 steps of (0.5, 0.25): tiles (2,2) (3,2) ... the beach at (6,4). */

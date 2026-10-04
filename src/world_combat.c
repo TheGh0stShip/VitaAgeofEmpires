@@ -65,6 +65,7 @@ static void heal_ops(AoeWorldCombatRor *c, AoeHealActionOps *o);
 static void convert_ops(AoeWorldCombatRor *c, AoeConvertActionOps *o);
 static void trade_ops(AoeWorldCombatRor *c, AoeTradeActionOps *o);
 static void object_ops(AoeWorldCombatRor *c, AoeObjectActionOps *o);
+static void base_ops(AoeWorldCombatRor *c, AoeBaseActionOps *o);
 
 /* The record (gather/attack/build) clears its flags; heap actions run
    their class destructor, then are freed (train actions free
@@ -1504,6 +1505,32 @@ static void *order_construct(void *c, AoeLiveUnit *u,
         s->pending = 9;
         return s;
     }
+    case 0x00402440: case 0x00402b80: case 0x004020e0: case 0x004067d0: {
+        AoeBaseActionRor *a = calloc(1, sizeof(*a));
+        AoeBaseActionOps o;
+        int ok;
+        base_ops(w, &o);
+        if (!a) return NULL;
+        switch (route->constructor) {
+        case 0x00402440:
+            ok = aoe_enter_action_init_ror(a, u, task, t, &o);
+            break;
+        case 0x00402b80:
+            ok = aoe_explore_action_init_ror(a, u, task, x, y, z);
+            break;
+        case 0x004020e0:
+            ok = aoe_fly_action_init_ror(a, u, task, x, y, z);
+            break;
+        default:
+            ok = aoe_transport_action_init_ror(a, u, task, x, y, z);
+            break;
+        }
+        if (!ok) {
+            free(a);
+            a = NULL;
+        }
+        return a;
+    }
     case 0x004b0df0: case 0x004b0e20: {
         AoeArtifactActionRor *a = calloc(1, sizeof(*a));
         if (a && !(route->constructor == 0x004b0df0
@@ -2224,6 +2251,32 @@ static void train_notify(void *ctx, uint32_t e, int16_t o, int16_t id,
 static void train_completed(void *ctx, AoeTrainAction *a, int32_t id) {
     (void)a; (void)id;
     ++((AoeWorldCombatRor *)ctx)->trained;
+}
+/* Template +0x20(owner, x, y, 0, 1, 1, 1, 0, overlap, 1): nonzero when
+   the point is refused. */
+static int placement_refused(AoeWorldCombatRor *c, const DatUnit *t,
+                             int16_t owner, float x, float y,
+                             int honor_overlap) {
+    AoeScenarioRuntimeRor *r = c->motion->runtime;
+    AoeUnitPlacementCheckContext check;
+    int32_t blocker = -1;
+    if (!t || !r->intro || t->terrain_restriction < 0 ||
+        (uint16_t)t->terrain_restriction >= r->intro->restriction_count)
+        return 1;
+    check = (AoeUnitPlacementCheckContext){
+        &r->map,
+        r->intro->terrain_restrictions +
+            (size_t)(uint16_t)t->terrain_restriction *
+                r->intro->terrain_count,
+        r->intro->terrain_count, 0, NULL, 0, 0};
+    if (owner >= 0 && owner < AOE_SCENARIO_RUNTIME_PLAYERS) {
+        const AoeVisibilityFootprintGrid *g = &r->players[owner].vision.grid;
+        check.owner_tile_masks = g->tile_masks;
+        check.owner_visible_mask = g->visible_mask;
+        check.owner_explored_mask = g->explored_mask;
+    }
+    return aoe_unit_placement_check_ror(t, &check, x, y, &blocker, 1, 1, 1, 0,
+                                        honor_overlap, 1) != AOE_PLACEMENT_OK;
 }
 /* Trained template +0x20(owner, x, y, 0, 1, 1, 1, 0, 0, 1). */
 static int train_blocked(void *ctx, AoeTrainAction *a, float x, float y) {
@@ -3387,6 +3440,155 @@ static void object_ops(AoeWorldCombatRor *c, AoeObjectActionOps *o) {
     o->game_over = &c->game_over;
 }
 
+/* ---- garrison, enter / explore / fly / transport bindings ----------- */
+
+static void ga_vision_off(void *c, AoeLiveUnit *u) {
+    co_vision(c, u, u->runtime_owner_index, 0, 0);
+}
+static void ga_leave_tile(void *c, AoeLiveUnit *u) {
+    (void)c;
+    (void)aoe_object_update_list_detach(u->placement.tile, &u->core,
+                                        u->placement.node);
+    u->placement.tile = NULL;
+    u->placement.node = NULL;
+}
+static void ga_lift(void *c, AoeLiveUnit *u) {
+    aoe_world_motion_lift_ror(((AoeWorldCombatRor *)c)->motion, u);
+}
+static void ga_record(void *c, AoeLiveUnit *u) {
+    (void)u;
+    ++((AoeWorldCombatRor *)c)->garrison_records;
+}
+static int ga_zone_at(void *c, AoeLiveUnit *u, int32_t x, int32_t y) {
+    return aoe_world_motion_zone_ror(((AoeWorldCombatRor *)c)->motion, u, x,
+                                     y);
+}
+static int ga_placement(void *c, AoeLiveUnit *u, float x, float y) {
+    return placement_refused(c, u->core.unit_template,
+                             u->runtime_owner_index, x, y, 1);
+}
+static void ga_place(void *c, AoeLiveUnit *u, float x, float y, float z) {
+    aoe_world_motion_place_ror(((AoeWorldCombatRor *)c)->motion, u, x, y, z);
+}
+static void garrison_ops(AoeWorldCombatRor *c, AoeGarrisonOps *o) {
+    memset(o, 0, sizeof(*o));
+    o->context = c;
+    o->vision_off = ga_vision_off;
+    o->leave_tile = ga_leave_tile;
+    o->lift = ga_lift;
+    o->record = ga_record;
+    o->rand = cv_rand;
+    o->map_width = ob_width;
+    o->map_height = ob_height;
+    o->zone_at = ga_zone_at;
+    o->placement = ga_placement;
+    o->fits = repair_fits;
+    o->place = ga_place;
+}
+/* Unit +0xd0 (root 0x004aa940, types 50+ 0x00426b80). */
+int aoe_world_combat_enter_ror(AoeWorldCombatRor *c, AoeLiveUnit *u,
+                               AoeLiveUnit *container) {
+    AoeGarrisonOps o;
+    if (!c || !u || !container || !u->core.unit_template) return -1;
+    garrison_ops(c, &o);
+    return aoe_unit_enter_ror(u, container,
+                              u->core.unit_template->type >= 50, &o);
+}
+/* 0x004ab280. */
+int aoe_world_combat_unload_ror(AoeWorldCombatRor *c, AoeLiveUnit *t,
+                                int zone, uint8_t *count) {
+    AoeGarrisonOps o;
+    if (!c) return 0;
+    garrison_ops(c, &o);
+    return aoe_unit_unload_ror(t, zone, &o, count);
+}
+
+static int ba_start_move(void *c, AoeMoveActionRor *base, float range,
+                         const void *graphic, int quiet) {
+    AoeWorldCombatRor *w = c;
+    AoeActionList *list = sub_list_of(w, base);
+    AoeMoveActionRor *mv;
+    const DatUnit *tt = base->unit->core.unit_template;
+    if (!list || !(mv = calloc(1, sizeof(*mv)))) return 0;
+    if (!aoe_move_action_init_point_ror(mv, base->unit, base->x, base->y,
+                                        base->z, range, graphic,
+                                        graphic_by_id(w, tt->walking_graphic))) {
+        free(mv);
+        return 0;
+    }
+    if (quiet == 1) mv->quiet = 1;
+    if (!aoe_action_list_push(list, mv)) {
+        free(mv);
+        return 0;
+    }
+    if (quiet == 0) mv->quiet = 1;
+    return 1;
+}
+static void ba_place(void *c, AoeLiveUnit *u, float x, float y, float z) {
+    aoe_world_motion_place_ror(((AoeWorldCombatRor *)c)->motion, u, x, y, z);
+}
+static double ba_dist_point(void *c, AoeLiveUnit *u, float x, float y,
+                            float z) {
+    (void)c; (void)z;
+    return aoe_combat_point_distance_ror(u, x, y);
+}
+static int32_t ba_head_secondary(void *c, AoeLiveUnit *u) {
+    void *h = head_of(u);
+    (void)c;
+    if (!h || entry_type(h) == AOE_WORLD_COMBAT_RECORD_TAG) return -1;
+    if (entry_type(h) == 0x0c) return ((AoeBaseActionRor *)h)->unload_flag;
+    return ((AoeMoveActionRor *)h)->secondary_id;
+}
+static int ba_enter(void *c, AoeLiveUnit *u, AoeLiveUnit *t) {
+    return aoe_world_combat_enter_ror(c, u, t) == 1;
+}
+static int ba_zone_near(void *c, AoeLiveUnit *u, int zone, float d) {
+    return aoe_world_motion_zone_near_ror(((AoeWorldCombatRor *)c)->motion,
+                                          u, zone, d);
+}
+static uint8_t ba_unload(void *c, AoeLiveUnit *u, int zone) {
+    uint8_t n = 0;
+    (void)aoe_world_combat_unload_ror(c, u, zone, &n);
+    return n;
+}
+static uint16_t ba_contents(void *c, AoeLiveUnit *u) {
+    (void)c;
+    return u->contents.count;
+}
+static void ba_owner_notice(void *c, AoeLiveUnit *u, int32_t code) {
+    (void)u; (void)code;
+    ++((AoeWorldCombatRor *)c)->notices;
+}
+static void base_ops(AoeWorldCombatRor *c, AoeBaseActionOps *o) {
+    memset(o, 0, sizeof(*o));
+    move_ops(c, &o->move);
+    o->graphic = graphic_id_cb;
+    o->tick_seconds = tick_seconds;
+    o->rand = cv_rand;
+    o->map_width = ob_width;
+    o->map_height = ob_height;
+    o->start_move = ba_start_move;
+    o->sub_update = heal_sub_update;
+    o->sub_clear = heal_sub_clear;
+    o->place = ba_place;
+    o->distance = repair_distance;
+    o->distance_to_point = ba_dist_point;
+    o->allied = repair_allowed;
+    o->owner_kind = owner_kind_cb;
+    o->head_state = repair_head_state;
+    o->head_secondary = ba_head_secondary;
+    o->head_destination = repair_head_destination;
+    o->move_to = unit_move_to;
+    o->enter = ba_enter;
+    o->line = (AoeLineSearchOps){c, repair_terrain, repair_fits};
+    o->zone_at = ga_zone_at;
+    o->zone_near = ba_zone_near;
+    o->terrain_at = repair_terrain;
+    o->unload = ba_unload;
+    o->contents = ba_contents;
+    o->owner_notice = ba_owner_notice;
+}
+
 /* ---- heap action classes -------------------------------------------- */
 
 static void move_activate(AoeWorldCombatRor *c, void *a, uint8_t st) {
@@ -3675,7 +3877,92 @@ static uint8_t wonder_update(AoeWorldCombatRor *c, void *a) {
     return r;
 }
 
+static void enter_activate(AoeWorldCombatRor *c, void *a, uint8_t st) {
+    AoeBaseActionOps o;
+    (void)st;
+    base_ops(c, &o);
+    if (!aoe_enter_action_activate_ror(a, &o)) ++c->object_failures;
+}
+static uint8_t enter_update(AoeWorldCombatRor *c, void *a) {
+    AoeBaseActionOps o;
+    uint8_t r = 0;
+    base_ops(c, &o);
+    if (!aoe_enter_action_update_ror(a, &o, &r)) {
+        ++c->object_failures;
+        return 0;
+    }
+    return r;
+}
+static void explore_activate(AoeWorldCombatRor *c, void *a, uint8_t st) {
+    AoeBaseActionOps o;
+    (void)st;
+    base_ops(c, &o);
+    if (!aoe_explore_action_activate_ror(a, &o)) ++c->object_failures;
+}
+static uint8_t explore_update(AoeWorldCombatRor *c, void *a) {
+    AoeBaseActionOps o;
+    uint8_t r = 0;
+    base_ops(c, &o);
+    if (!aoe_explore_action_update_ror(a, &o, &r)) {
+        ++c->object_failures;
+        return 0;
+    }
+    return r;
+}
+static int explore_retarget(AoeWorldCombatRor *c, void *a, AoeLiveUnit *t,
+                            float x, float y, float z) {
+    AoeBaseActionOps o;
+    (void)t;
+    base_ops(c, &o);
+    return aoe_explore_action_retarget_ror(a, x, y, z, &o);
+}
+static void fly_activate(AoeWorldCombatRor *c, void *a, uint8_t st) {
+    AoeBaseActionOps o;
+    base_ops(c, &o);
+    if (!aoe_fly_action_activate_ror(a, st, &o)) ++c->object_failures;
+}
+static uint8_t fly_update(AoeWorldCombatRor *c, void *a) {
+    AoeBaseActionOps o;
+    uint8_t r = 0;
+    base_ops(c, &o);
+    if (!aoe_fly_action_update_ror(a, &o, &r)) {
+        ++c->object_failures;
+        return 0;
+    }
+    return r;
+}
+static void transport_activate(AoeWorldCombatRor *c, void *a, uint8_t st) {
+    AoeBaseActionOps o;
+    base_ops(c, &o);
+    if (!aoe_transport_action_activate_ror(a, st, &o)) ++c->object_failures;
+}
+static uint8_t transport_update(AoeWorldCombatRor *c, void *a) {
+    AoeBaseActionOps o;
+    uint8_t r = 0;
+    base_ops(c, &o);
+    if (!aoe_transport_action_update_ror(a, &o, &r)) {
+        ++c->object_failures;
+        return 0;
+    }
+    return r;
+}
+static int transport_retarget(AoeWorldCombatRor *c, void *a, AoeLiveUnit *t,
+                              float x, float y, float z) {
+    AoeBaseActionOps o;
+    base_ops(c, &o);
+    return aoe_transport_action_retarget_ror(a, t, x, y, z, &o);
+}
+static const DatUnitTask *base_task(void *a) {
+    return ((AoeBaseActionRor *)a)->task;
+}
+
 static const HeapActionClass heap_classes[] = {
+    {3, NULL, enter_activate, enter_update, base_task, NULL, base_target},
+    {4, NULL, explore_activate, explore_update, base_task, explore_retarget,
+     base_target},
+    {0x0a, NULL, fly_activate, fly_update, base_task, NULL, base_target},
+    {0x0c, NULL, transport_activate, transport_update, base_task,
+     transport_retarget, base_target},
     {0x6b, artifact_destroy, artifact_activate, artifact_update,
      artifact_task, artifact_retarget, NULL},
     {0x6c, discovery_destroy, discovery_activate, discovery_update,

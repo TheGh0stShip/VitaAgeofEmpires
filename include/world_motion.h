@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#include "zone_map.h"
+
 #include "movement.h"
 #include "pathfinder_search.h"
 #include "scenario_runtime.h"
@@ -56,6 +58,12 @@ typedef struct {
     size_t unit_slots; /* grows past the initial ID_SLOTS on demand */
     float tick;
     uint32_t searches, repaths, placements;
+    /* Map +0x8dc4 terrain-restriction zones (zone_map.h), built on first
+       use from the map's terrain; the zone-map index per restriction row
+       stands for the unit's +0x7c cache. */
+    AoeZoneManagerRor zones;
+    int32_t *zone_index; /* per restriction row, -2 = not looked up */
+    uint8_t *zone_terrain;
 } AoeWorldMotionRor;
 
 /* Allocates the pathfinder for the runtime map (at most 255 x 255) and
@@ -87,6 +95,23 @@ int aoe_world_motion_tick_ror(AoeWorldMotionRor *motion, AoeLiveUnit *unit,
 /* The fit check 0x0045a4f0 against this world. */
 int aoe_world_motion_fits_ror(AoeWorldMotionRor *motion, AoeLiveUnit *unit,
                               float x, float y, int check_terrain);
+
+/* Unit 0x004ab9e0(x, y): the zone of a tile in the unit's restriction
+   zone map; -1 off the map or without a restriction row. */
+int aoe_world_motion_zone_ror(AoeWorldMotionRor *motion, AoeLiveUnit *unit,
+                              int32_t x, int32_t y);
+/* 0x004abb60(zone, distance): a tile of the zone within `distance` of the
+   unit's tile. */
+int aoe_world_motion_zone_near_ror(AoeWorldMotionRor *motion,
+                                   AoeLiveUnit *unit, int zone,
+                                   float distance);
+/* Unit +0x34 as bound for movement: place at (x, y, z) with vision and
+   the footprint following. A unit whose footprint is lifted (inside a
+   container) gets it restored. */
+void aoe_world_motion_place_ror(AoeWorldMotionRor *motion, AoeLiveUnit *unit,
+                                float x, float y, float z);
+/* 0x004ab7f0(2): lift the unit's footprint (entering a container). */
+void aoe_world_motion_lift_ror(AoeWorldMotionRor *motion, AoeLiveUnit *unit);
 
 /* Bound callback sets, for callers composing other translated systems. */
 void aoe_world_motion_path_ops_ror(AoeWorldMotionRor *motion,

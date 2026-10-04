@@ -1,5 +1,7 @@
 #include "world_motion.h"
 
+#include "aoe_ftol.h"
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -280,6 +282,23 @@ static void place(void *context, AoeLiveUnit *unit, float x, float y,
         (void)aoe_unit_obstruction_restore_ror(unit, &s->obstruction,
                                                &m->path, NULL, 0);
 }
+void aoe_world_motion_place_ror(AoeWorldMotionRor *m, AoeLiveUnit *unit,
+                                float x, float y, float z) {
+    AoeWorldMotionUnitRor *s;
+    if (!m || !unit) return;
+    place(m, unit, x, y, z);
+    s = aoe_world_motion_unit_ror(m, unit);
+    if (s && s->obstruction.placed != 1)
+        (void)aoe_unit_obstruction_restore_ror(unit, &s->obstruction,
+                                               &m->path, NULL, 0);
+}
+void aoe_world_motion_lift_ror(AoeWorldMotionRor *m, AoeLiveUnit *unit) {
+    AoeWorldMotionUnitRor *s;
+    if (!m || !unit || !(s = aoe_world_motion_unit_ror(m, unit))) return;
+    if (s->obstruction.placed == 1)
+        (void)aoe_unit_obstruction_lift_ror(unit, &s->obstruction, &m->path,
+                                            NULL, 0);
+}
 static void stop(void *context, AoeLiveUnit *unit) {
     AoeWorldMotionUnitRor *s = aoe_world_motion_unit_ror(context, unit);
     if (s) aoe_movement_waypoint_clear_ror(&s->movement, 0, NULL, NULL);
@@ -288,9 +307,53 @@ static void pop_waypoint(void *context, AoeLiveUnit *unit) {
     AoeWorldMotionUnitRor *s = aoe_world_motion_unit_ror(context, unit);
     if (s) aoe_movement_waypoint_remove_ror(&s->movement, 0);
 }
+static AoeZoneMapRor *zone_map_of(AoeWorldMotionRor *m, AoeLiveUnit *unit) {
+    const AoeRuntimeMap *map = &m->runtime->map;
+    const DatIntro *intro = m->runtime->intro;
+    int32_t count, row;
+    const float *table = restriction_row(m, unit, &count);
+    if (!table || !intro) return NULL;
+    row = unit->core.unit_template->terrain_restriction;
+    if (!m->zone_index) {
+        m->zone_index = malloc((size_t)intro->restriction_count *
+                               sizeof(*m->zone_index));
+        if (!m->zone_index) return NULL;
+        for (uint16_t i = 0; i < intro->restriction_count; ++i)
+            m->zone_index[i] = -2;
+    }
+    if (m->zone_index[row] == -2) {
+        if (!m->zone_terrain) {
+            size_t n = (size_t)map->width * map->height;
+            if (!(m->zone_terrain = malloc(n))) return NULL;
+            for (size_t i = 0; i < n; ++i)
+                m->zone_terrain[i] = map->tiles[i].terrain_id;
+        }
+        m->zone_index[row] = aoe_zone_manager_index_ror(
+            &m->zones, (int32_t)map->width, (int32_t)map->height,
+            m->zone_terrain, table, count);
+    }
+    return aoe_zone_manager_map_ror(&m->zones, m->zone_index[row]);
+}
+int aoe_world_motion_zone_ror(AoeWorldMotionRor *m, AoeLiveUnit *unit,
+                              int32_t x, int32_t y) {
+    AoeZoneMapRor *z;
+    if (!m || !unit || x < 0 || y < 0 || !(z = zone_map_of(m, unit)) ||
+        x >= z->width || y >= z->height)
+        return -1;
+    return aoe_zone_at_ror(z, x, y);
+}
+int aoe_world_motion_zone_near_ror(AoeWorldMotionRor *m, AoeLiveUnit *unit,
+                                   int zone, float distance) {
+    AoeZoneMapRor *z;
+    if (!m || !unit || zone < 0 || !(z = zone_map_of(m, unit))) return 0;
+    return aoe_zone_near_ror(z, (uint8_t)zone,
+                             aoe_ftol32(unit->core.position.x38),
+                             aoe_ftol32(unit->core.position.y3c), distance);
+}
+/* 0x004ab9e0. Without a zone map the original returns 0 too. */
 static uint8_t zone(void *context, AoeLiveUnit *unit, int32_t x, int32_t y) {
-    (void)context; (void)unit; (void)x; (void)y;
-    return 0;
+    int z = aoe_world_motion_zone_ror(context, unit, x, y);
+    return z < 0 ? 0 : (uint8_t)z;
 }
 static const AoeMovementSpriteRor *sprite(void *context, AoeLiveUnit *unit) {
     static _Thread_local AoeMovementSpriteRor info;
@@ -426,6 +489,11 @@ void aoe_world_motion_release_ror(AoeWorldMotionRor *m,
 
 void aoe_world_motion_destroy_ror(AoeWorldMotionRor *m) {
     if (!m) return;
+    aoe_zone_manager_free_ror(&m->zones);
+    free(m->zone_index);
+    free(m->zone_terrain);
+    m->zone_index = NULL;
+    m->zone_terrain = NULL;
     if (m->units) {
         for (size_t i = 0; i < m->unit_slots; ++i) {
             AoeWorldMotionUnitRor *s = m->units[i];

@@ -402,7 +402,7 @@ target_compile_options(aoe_scenario_runtime PRIVATE -Wall -Wextra)
 add_library(aoe_world_motion STATIC src/world_motion.c)
 target_include_directories(aoe_world_motion PUBLIC include)
 target_link_libraries(aoe_world_motion PUBLIC aoe_scenario_runtime
-  aoe_movement aoe_pathfinder)
+  aoe_movement aoe_pathfinder aoe_zone_map)
 target_compile_options(aoe_world_motion PRIVATE -Wall -Wextra)
 
 add_library(aoe_action_repair STATIC src/action_repair.c)
@@ -426,6 +426,22 @@ target_include_directories(aoe_action_trade PUBLIC include)
 target_link_libraries(aoe_action_trade PUBLIC aoe_action_move m)
 target_compile_options(aoe_action_trade PRIVATE -Wall -Wextra)
 
+add_library(aoe_zone_map STATIC src/zone_map.c)
+target_include_directories(aoe_zone_map PUBLIC include)
+target_link_libraries(aoe_zone_map PUBLIC m)
+target_compile_options(aoe_zone_map PRIVATE -Wall -Wextra)
+
+add_library(aoe_unit_garrison STATIC src/unit_garrison.c)
+target_include_directories(aoe_unit_garrison PUBLIC include)
+target_link_libraries(aoe_unit_garrison PUBLIC aoe_live_unit_factory m)
+target_compile_options(aoe_unit_garrison PRIVATE -Wall -Wextra)
+
+add_library(aoe_action_base STATIC src/action_base.c)
+target_include_directories(aoe_action_base PUBLIC include)
+target_link_libraries(aoe_action_base PUBLIC aoe_action_repair
+  aoe_unit_garrison m)
+target_compile_options(aoe_action_base PRIVATE -Wall -Wextra)
+
 add_library(aoe_action_artifact STATIC src/action_artifact.c)
 target_include_directories(aoe_action_artifact PUBLIC include)
 target_link_libraries(aoe_action_artifact PUBLIC aoe_action_move m)
@@ -445,7 +461,8 @@ target_link_libraries(aoe_world_combat PUBLIC aoe_world_motion
   aoe_player_costs aoe_unit_placement_check aoe_player_templates
   aoe_command_production aoe_research_action aoe_action_repair
   aoe_action_heal aoe_action_convert aoe_live_unit_owner
-  aoe_action_trade aoe_action_artifact)
+  aoe_action_trade aoe_action_artifact
+  aoe_action_base aoe_unit_garrison aoe_zone_map)
 target_compile_options(aoe_world_combat PRIVATE -Wall -Wextra)
 
 add_library(aoe_scenario_editor_catalog STATIC src/scenario_editor_catalog.c)
@@ -979,6 +996,14 @@ else()
   target_link_libraries(action_artifact_test PRIVATE aoe_action_artifact)
   target_compile_options(action_artifact_test PRIVATE -UNDEBUG)
   add_test(NAME original_ror_object_actions COMMAND action_artifact_test)
+  add_executable(zone_map_test tests/zone_map_test.c)
+  target_link_libraries(zone_map_test PRIVATE aoe_zone_map)
+  target_compile_options(zone_map_test PRIVATE -UNDEBUG)
+  add_test(NAME original_ror_terrain_zones COMMAND zone_map_test)
+  add_executable(action_base_test tests/action_base_test.c)
+  target_link_libraries(action_base_test PRIVATE aoe_action_base)
+  target_compile_options(action_base_test PRIVATE -UNDEBUG)
+  add_test(NAME original_ror_fly_explore_actions COMMAND action_base_test)
   add_executable(combat_test tests/combat_test.c)
   target_link_libraries(combat_test PRIVATE aoe_combat)
   target_compile_options(combat_test PRIVATE -UNDEBUG)
@@ -1091,6 +1116,14 @@ else()
   target_compile_options(hunt_real PRIVATE -UNDEBUG)
   if(EXISTS "${CMAKE_SOURCE_DIR}/build/ror/scenarios/EXPANS_1_1.scx")
     add_test(NAME ror_hunt_and_fell COMMAND hunt_real
+      "${CMAKE_SOURCE_DIR}/build/ror/scenarios/EXPANS_1_1.scx"
+      "${CMAKE_SOURCE_DIR}/build/ror/disc/GAME/DATA2/EMPIRES.DAT")
+  endif()
+  add_executable(transport_real tests/transport_real.c)
+  target_link_libraries(transport_real PRIVATE aoe_world_combat aoe_dat m)
+  target_compile_options(transport_real PRIVATE -UNDEBUG)
+  if(EXISTS "${CMAKE_SOURCE_DIR}/build/ror/scenarios/EXPANS_1_1.scx")
+    add_test(NAME ror_garrison_and_transport COMMAND transport_real
       "${CMAKE_SOURCE_DIR}/build/ror/scenarios/EXPANS_1_1.scx"
       "${CMAKE_SOURCE_DIR}/build/ror/disc/GAME/DATA2/EMPIRES.DAT")
   endif()

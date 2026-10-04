@@ -68,6 +68,14 @@ struct AoeRepairActionOps {
                    float z, float range, int force);
 };
 
+/* Inputs of unit +0x1b4: the terrain byte at a tile (0x00447de0) and
+   unit +0x114(x, y, 0), whether the unit fits at a point. */
+typedef struct {
+    void *context;
+    int (*terrain_at)(void *context, int32_t x, int32_t y);
+    int (*fits)(void *context, AoeLiveUnit *unit, float x, float y);
+} AoeLineSearchOps;
+
 /* Unit +0x1b4 for types 30+ (0x0044e920): steps from tile `from` towards
    `to` in 2 x max(|dx|, |dy|) equal float steps (ftol of the larger
    axis), skipping repeated tiles; the first tile whose terrain is
@@ -78,7 +86,7 @@ int aoe_unit_line_terrain_point_ror(AoeLiveUnit *unit, const int32_t from[2],
                                     const int32_t to[2], int32_t out[2],
                                     int terrain_a, int terrain_b,
                                     int require_fit,
-                                    const AoeRepairActionOps *ops);
+                                    const AoeLineSearchOps *ops);
 
 /* 0x004b55c0 (target: its position, then the boat meeting point) and
    0x004b5650 (point). */

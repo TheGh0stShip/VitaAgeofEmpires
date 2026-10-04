@@ -51,14 +51,14 @@ int aoe_unit_line_terrain_point_ror(AoeLiveUnit *unit, const int32_t from[2],
                                     const int32_t to[2], int32_t out[2],
                                     int terrain_a, int terrain_b,
                                     int require_fit,
-                                    const AoeRepairActionOps *o) {
+                                    const AoeLineSearchOps *o) {
     double dx, dy;
     int32_t steps, last_x = -999, last_y = -999;
     float step_x, step_y, px, py;
     void *c;
     if (!unit || !from || !to || !out || !o || !o->terrain_at || !o->fits)
         return -1;
-    c = o->move.context;
+    c = o->context;
     dx = (double)(to[0] - from[0]);
     dy = (double)(to[1] - from[1]);
     if (dx == 0.0 && dy == 0.0) return 0;
@@ -118,9 +118,12 @@ int aoe_repair_action_meet_boat_ror(AoeRepairActionRor *a,
     from[1] = aoe_ftol32(u->core.position.y3c);
     to[0] = aoe_ftol32(boat->core.position.x38);
     to[1] = aoe_ftol32(boat->core.position.y3c);
-    if (aoe_unit_line_terrain_point_ror(u, from, to, tile, BEACH, BEACH, 1,
-                                        o) != 1)
-        return 1;
+    {
+        AoeLineSearchOps line = {c, o->terrain_at, o->fits};
+        if (aoe_unit_line_terrain_point_ror(u, from, to, tile, BEACH, BEACH,
+                                            1, &line) != 1)
+            return 1;
+    }
     x = (float)tile[0] + 0.5f;
     y = (float)tile[1] + 0.5f;
     a->base.x = x;

@@ -263,8 +263,26 @@ Next:
    - **Test.** `ror_research_and_train_commands` researches Bronze Age at a
      real town centre in 2,800 updates (140 s, work rate 1.0), then trains a
      commanded villager.
-   Next: the active player's view-code refresh, the transport action (type
-   12) and the type-50 visibility spotting.
+   **Action-class sweep (2026-10-04).** Tracked with
+   `tools/port_worklist.py` (`docs/PORT_COVERAGE.md`):
+   - **Class table.** `world_combat` now runs heap actions through one
+     class table (`HeapActionClass`).
+   - **Translated:**
+     - repair 0x6a, with the unit +0x8c repair methods, boat meeting
+       points, unit +0x154 move-to and the +0x188 order counter;
+     - heal 0x69;
+     - conversion 0x68, with unit +0x44 change of owner for root, type 70
+       (private template copy) and type 80.
+   - **Tests.** `ror_repair_heal_convert` runs all three on EXPANS_1_1.
+   - **Remaining action classes:**
+     - hunt 0x6e (vtable 0x548848);
+     - trade 0x6f (0x5489f0);
+     - artifact 0x6b (0x54865c), discovery 0x6c (0x548788);
+     - wonder 0x78 (0x548a68);
+     - enter 3 (0x5424d4), explore 4 (0x542538), type 10 (0x542474);
+     - transport (task 12, 0x4067d0).
+   Then: the active player's view-code refresh and the type-50 visibility
+   spotting.
 2. Replace placeholder bindings (diplomacy, zones, sounds, victory
    conditions, player +0x30 lists).
 3. The remaining action classes.

@@ -30,16 +30,17 @@ int main(void) {
     memset(&path, 0, sizeof(path));
     aoe_path_set_map_ror(&path, 1, 64, 32, 0, 0);
     assert(path.width == 64 && path.height == 32 && path.generation == 0xf0);
-    path.blocked = malloc(AOE_PATH_GRID_CELLS_ROR);
-    path.visited = malloc(AOE_PATH_GRID_CELLS_ROR * sizeof(uint32_t));
-    assert(aoe_path_fill_blocked_ror(&path, 0xab) &&
-           path.blocked[0] == 0xab &&
-           path.blocked[AOE_PATH_GRID_CELLS_ROR - 1] == 0xab);
-    assert(aoe_path_set_blocked_ror(&path, 2, 3, 7) &&
-           path.blocked[2 * 255 + 3] == 7);
-    assert(!aoe_path_set_blocked_ror(&path, 255, 0, 1));
-    path.visited[100] = 9;
-    assert(aoe_path_clear_visited_ror(&path) && path.visited[100] == 0);
+    path.penalty = malloc(AOE_PATH_GRID_CELLS_ROR);
+    path.occupancy = malloc(AOE_PATH_OCCUPANCY_BYTES_ROR +
+                            AOE_PATH_OCCUPANCY_PAD_ROR);
+    assert(aoe_path_fill_penalty_ror(&path, 0xab) &&
+           path.penalty[0] == 0xab &&
+           path.penalty[AOE_PATH_GRID_CELLS_ROR - 1] == 0xab);
+    assert(aoe_path_set_penalty_ror(&path, 2, 3, 7) &&
+           path.penalty[2 * 255 + 3] == 7);
+    assert(!aoe_path_set_penalty_ror(&path, 255, 0, 1));
+    path.occupancy[100] = 9;
+    assert(aoe_path_clear_occupancy_ror(&path) && path.occupancy[100] == 0);
 
     /* Width-only bounds: y up to the width passes even beyond height 32. */
     assert(aoe_path_precheck_ror(&path, table, 1, 60, 5, 63, &unit, 0.0f, 0,
@@ -71,7 +72,7 @@ int main(void) {
     assert(aoe_path_precheck_ror(&path, table, 1, 1, 30, 1, &unit, 2.0f, 0,
                                  &distance, &ops) ==
            AOE_PATH_PRECHECK_FAIL_ROR);
-    free(path.blocked);
-    free(path.visited);
+    free(path.penalty);
+    free(path.occupancy);
     return 0;
 }

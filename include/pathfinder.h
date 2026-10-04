@@ -11,11 +11,38 @@
 enum { AOE_PATH_GRID_SIDE_ROR = 255,
        AOE_PATH_GRID_CELLS_ROR = 255 * 255 };
 
+/* Quarter-tile occupancy: 1020 rows (quarter x) of 255 bytes (tile y),
+   two bits per quarter y. Reads take overlapping dwords, so storage needs
+   AOE_PATH_OCCUPANCY_PAD_ROR bytes of padding after the last row. */
+enum { AOE_PATH_OCCUPANCY_ROWS_ROR = 1020,
+       AOE_PATH_OCCUPANCY_BYTES_ROR = 1020 * 255,
+       AOE_PATH_OCCUPANCY_PAD_ROR = 8 };
+
+typedef struct {
+    uint8_t x, y;
+    int32_t cost;
+} AoePathHeapEntryRor;
+
 typedef struct {
     int32_t width, height;      /* +0x04/+0x08 */
     uint8_t generation;         /* +0x11dcd8, starts at 0xf0 */
-    uint8_t *blocked;           /* +0x10de28, AOE_PATH_GRID_CELLS_ROR bytes */
-    uint32_t *visited;          /* +0xce624, AOE_PATH_GRID_CELLS_ROR dwords */
+    uint8_t *state;             /* +0x0c: generation | arrival direction */
+    int32_t *cost;              /* +0xfe10: f-costs */
+    AoePathHeapEntryRor *heap;  /* +0x4f614, 1-based; [0] is the sentinel */
+    uint32_t heap_capacity;
+    uint8_t *occupancy;         /* +0xce624 (see above) */
+    uint8_t *penalty;           /* +0x10de28: extra cost per cell (x16) */
+    /* +0x11dce4/+0x11dce8/+0x11dcf0: units met along the last path. */
+    int32_t *nearby_ids;
+    uint32_t nearby_count, nearby_capacity;
+    /* Search outputs. */
+    int32_t heap_size;          /* +0x11dc2c */
+    int32_t expanded;           /* +0x11dc38 */
+    uint8_t best_x, best_y;     /* +0x11dc30/+0x11dc31 */
+    int32_t best_distance;      /* +0x11dc34 */
+    int32_t closest;            /* +0x11dcc8 */
+    float offset_x, offset_y;   /* +0x11dc54/+0x11dc58 */
+    int32_t target_rect[4];     /* +0x11dc84..+0x11dc90, quarter tiles */
 } AoePathfinderRor;
 
 /* Global table 0x006a18c0, filled by the constructor: entry i is
@@ -34,11 +61,12 @@ int32_t aoe_path_octile_ror(const int32_t table[256], int32_t x1, int32_t y1,
 void aoe_path_set_map_ror(AoePathfinderRor *path, int has_map,
                           int32_t map_width, int32_t map_height,
                           int32_t width, int32_t height);
-/* 0x00458820 / 0x00458850 / 0x00458800. Return 0 for missing storage or
-   out-of-grid cells (the original writes unchecked). */
-int aoe_path_fill_blocked_ror(AoePathfinderRor *path, uint8_t value);
-int aoe_path_clear_visited_ror(AoePathfinderRor *path);
-int aoe_path_set_blocked_ror(AoePathfinderRor *path, int32_t first,
+/* 0x00458820 (penalty fill) / 0x00458850 (occupancy clear) / 0x00458800
+   (one penalty cell). Return 0 for missing storage or out-of-grid cells
+   (the original writes unchecked). */
+int aoe_path_fill_penalty_ror(AoePathfinderRor *path, uint8_t value);
+int aoe_path_clear_occupancy_ror(AoePathfinderRor *path);
+int aoe_path_set_penalty_ror(AoePathfinderRor *path, int32_t first,
                              int32_t second, uint8_t value);
 
 typedef enum {

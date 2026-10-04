@@ -1282,8 +1282,69 @@ coordinates despite Ghidra's float types:
 - A unit with speed 0 or NaN fails.
 - Mode 1 clears the unit's active path (`+0xa4`, or `+0xd8` when `+0x154`
   is set) on every early exit.
-`src/pathfinder.c` holds these exact pieces. The search body (about 2,100
-instructions) remains.
+The search body is translated from the disassembly in
+`src/pathfinder_search.c`. The decompiler typed integers as floats and
+merged registers here, so it was not usable as a source.
+
+**Layout.** The pathfinder object holds:
+- `+0x0c`: state bytes (generation tag | arrival direction);
+- `+0xfe10`: f-costs;
+- `+0x4f614`: a 1-based heap of {x, y, cost} entries, with heap[0] a
+  -2,000,000,000 sentinel;
+- `+0xce624`: the quarter-tile occupancy bitmap, 1020 rows of 255 bytes
+  with 2 bits per quarter;
+- `+0x10de28`: a per-cell penalty, scaled by 16;
+- `+0x11dce4`: IDs of units met along the path.
+
+**Setup.**
+- The target rectangle in quarter tiles comes from the target's footprint.
+- The unit's own obstruction is registered.
+- The unit's sub-tile offset is computed, or set to 0.5 when the unit is
+  centred.
+- After ten retries, moving group members are registered as obstructions.
+- The generation byte advances by 8. At 0xf0 it wraps to 0 and the state
+  grid is refilled with 0xff.
+- The goal radius is range*16, or step*16 when the step exceeds the range.
+- Footprint offsets use rounding points traced from the x87 sequence
+  (+100 and +0.00005 biases).
+- The node budget is distance*2500/10 within 10 tiles and /100 beyond,
+  capped at 100 for gaia; owner kind 1 always uses distance*25.
+
+**Main loop.**
+- It pops the head node and tests the Euclidean distance (sixteenths)
+  against the goal radius.
+- The pop's sift loop only runs while child < size/2, so small heaps are
+  not re-sifted.
+- Eight neighbours form a ring at the step stride. Each is pruned by the
+  direction mask table `0x00557b34` and checked against bounds and the
+  start cell.
+- Its f-cost is parent - h(parent) + h(neighbour) + `__ftol(dist * 16)`.
+- Its swept footprint (bounding box of parent and neighbour, plus
+  offsets) is checked against terrain first. Negative low bounds are
+  bumped by only one. Terrain is tested with byte-sized loop counters, the
+  unit's free terrains and the overlay fallback (map `+0x3928`, stride
+  0x5a0).
+- Then occupancy: dword-pair span masks for spans up to 24 quarters, else
+  per-cell checks. A footprint that touches the target rectangle ends the
+  search with cost 0.
+- Blocked cells may still be entered when unit queries (`0x00520590`) find
+  only units. A penalty is then added: +0x3c when that unit's HP is at
+  least 10, otherwise +0x10. Each cell adds its penalty grid value, and a
+  direction change adds 1.
+
+**Exits.** The search succeeds on reaching the goal or touching the target.
+When the budget or heap runs out it falls back to the best node.
+
+**Path builder** (`0x0045a970`). It walks the arrival directions back to
+the start and prepends a waypoint on each direction change. A unit path
+holds at most 1001 waypoints (`0x004581b0`). It also collects nearby unit
+IDs.
+
+The obstruction registration, footprint adjust, tile-centre check and unit
+query remain explicit callbacks. The debug overlay (`0x007bf9b8`) is not
+reproduced. Synthetic tests cover open ground, walls, a sealed goal,
+in-range, generation rollover, occupancy blocking and target touching.
+They test this translation's behaviour, not a trace of the original.
 
 The type-40–70 prefix is now composed by
 `aoe_live_unit_cleanup_derived_prefix_ror`: when semantic live `+0x184` is

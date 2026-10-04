@@ -39,26 +39,25 @@ void aoe_path_set_map_ror(AoePathfinderRor *path, int has_map,
     path->generation = 0xf0;
 }
 
-int aoe_path_fill_blocked_ror(AoePathfinderRor *path, uint8_t value) {
-    if (!path || !path->blocked) return 0;
-    memset(path->blocked, value, AOE_PATH_GRID_CELLS_ROR);
+int aoe_path_fill_penalty_ror(AoePathfinderRor *path, uint8_t value) {
+    if (!path || !path->penalty) return 0;
+    memset(path->penalty, value, AOE_PATH_GRID_CELLS_ROR);
     return 1;
 }
 
-int aoe_path_clear_visited_ror(AoePathfinderRor *path) {
-    if (!path || !path->visited) return 0;
-    memset(path->visited, 0,
-           AOE_PATH_GRID_CELLS_ROR * sizeof(*path->visited));
+int aoe_path_clear_occupancy_ror(AoePathfinderRor *path) {
+    if (!path || !path->occupancy) return 0;
+    memset(path->occupancy, 0, AOE_PATH_OCCUPANCY_BYTES_ROR);
     return 1;
 }
 
-int aoe_path_set_blocked_ror(AoePathfinderRor *path, int32_t first,
+int aoe_path_set_penalty_ror(AoePathfinderRor *path, int32_t first,
                              int32_t second, uint8_t value) {
     int32_t index;
-    if (!path || !path->blocked) return 0;
+    if (!path || !path->penalty) return 0;
     index = first * AOE_PATH_GRID_SIDE_ROR + second;
     if (index < 0 || index >= AOE_PATH_GRID_CELLS_ROR) return 0;
-    path->blocked[index] = value;
+    path->penalty[index] = value;
     return 1;
 }
 

@@ -144,7 +144,12 @@ retargeting, the action routing table and acknowledgements. Next: the
 individual action classes behind the routed constructors. The move action
 (`+0x9c`, type 1) is translated against an explicit movement interface;
 next are gather 5, attack 7 and build 0x65, and the unit movement system
-(`0x0044be90`..`0x0044c2d0`) itself. Note `0x00403e70` is the base list's
+(`0x0044be90`..`0x0044c2d0`) itself. The pathfinder search `0x00458930`
+and path builder `0x0045a970` are now translated (`src/pathfinder_search.c`).
+Next: movement start `0x0044bf00` (path budget `0x0045c180/0x0045c1c0`),
+the movement step `0x0044c2d0`, and obstruction registration
+`0x004ab7f0/0x004ab6e0` that fills the occupancy bitmap. Validating against
+original-game traces remains outstanding. Note `0x00403e70` is the base list's
 stream loader (slot 0), not the order path.
 Every base
 opcode (0-0x11; 0x0d is a no-op) is translated.

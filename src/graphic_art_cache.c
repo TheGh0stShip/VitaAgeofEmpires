@@ -4,6 +4,7 @@
 #include <string.h>
 
 struct AoeGraphicArtCacheEntry {
+    const DatGraphic *graphic;
     DrsArchive *archive;
     const DrsEntry *entry;
     uint32_t frame_index;
@@ -14,7 +15,7 @@ struct AoeGraphicArtCacheEntry {
 
 int aoe_graphic_art_cache_init(AoeGraphicArtCache *cache,
                                size_t capacity, size_t max_pixel_bytes) {
-    if (!cache || !capacity || !max_pixel_bytes ||
+    if (!cache || !capacity || !max_pixel_bytes || capacity > UINT16_MAX ||
         capacity > SIZE_MAX / sizeof(AoeGraphicArtCacheEntry))
         return 0;
     AoeGraphicArtCache next = {0};
@@ -44,6 +45,13 @@ static void evict(AoeGraphicArtCache *cache, size_t slot) {
     ++cache->evictions;
 }
 
+static size_t index_of(const DatGraphic *graphic, uint32_t frame) {
+    uintptr_t h = (uintptr_t)graphic >> 3;
+    h ^= (uintptr_t)frame * 2654435761u;
+    h ^= h >> 13;
+    return (size_t)(h % AOE_GRAPHIC_ART_CACHE_INDEX);
+}
+
 int aoe_graphic_art_cache_get(AoeGraphicArtCache *cache,
                               const DatGraphic *graphic,
                               const AoeGraphicFrame *selection,
@@ -52,6 +60,18 @@ int aoe_graphic_art_cache_get(AoeGraphicArtCache *cache,
                               const SlpFrame **out_frame) {
     if (!cache || !cache->entries || !selection || !out_frame)
         return AOE_GRAPHIC_ART_INVALID;
+    size_t hint = index_of(graphic, selection->slp_frame);
+    if (graphic && cache->index[hint]) {
+        AoeGraphicArtCacheEntry *slot =
+            &cache->entries[cache->index[hint] - 1u];
+        if (slot->frame.pixels && slot->graphic == graphic &&
+            slot->frame_index == selection->slp_frame) {
+            slot->stamp = ++cache->stamp;
+            ++cache->hits;
+            *out_frame = &slot->frame;
+            return AOE_GRAPHIC_ART_OK;
+        }
+    }
     DrsMatch match;
     int status = aoe_graphic_art_find(graphic, archives, archive_count,
                                       &match);
@@ -64,6 +84,8 @@ int aoe_graphic_art_cache_get(AoeGraphicArtCache *cache,
             slot->frame_index == selection->slp_frame) {
             slot->stamp = ++cache->stamp;
             ++cache->hits;
+            if (slot->graphic == graphic)
+                cache->index[hint] = (uint16_t)(i + 1);
             *out_frame = &slot->frame;
             return AOE_GRAPHIC_ART_OK;
         }
@@ -114,9 +136,10 @@ int aoe_graphic_art_cache_get(AoeGraphicArtCache *cache,
     }
     AoeGraphicArtCacheEntry *dest = &cache->entries[slot];
     *dest = (AoeGraphicArtCacheEntry){
-        match.archive, match.entry, selection->slp_frame, frame,
+        graphic, match.archive, match.entry, selection->slp_frame, frame,
         pixel_bytes, ++cache->stamp,
     };
+    if (graphic) cache->index[hint] = (uint16_t)(slot + 1);
     cache->used_pixel_bytes += pixel_bytes;
     *out_frame = &dest->frame;
     return AOE_GRAPHIC_ART_OK;

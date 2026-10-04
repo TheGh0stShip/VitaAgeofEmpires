@@ -1130,13 +1130,18 @@ int aoe_demo_render(AoeDemo *demo, uint32_t *fb, size_t stride) {
             AOE_DEMO_WIDTH, AOE_DEMO_HEIGHT, AOE_DEMO_WIDTH,
             0, 0, AOE_DEMO_WIDTH, AOE_DEMO_HEIGHT};
         AoeScenarioSceneDrawRor draw;
+        uint64_t t0 = now_us(demo), t1;
         int ok = update_terrain(demo, &camera);
+        t1 = now_us(demo);
+        demo->stats.terrain_ms = (float)(t1 - t0) / 1000.0f;
         memcpy(demo->pixels, demo->terrain,
                (size_t)AOE_DEMO_WIDTH * AOE_DEMO_HEIGHT);
         scene_draw_init(demo, &draw, &camera, &surface,
                         AOE_SCENE_PASS_OBJECTS);
-        if (!ok || !aoe_scenario_runtime_draw_scene_ror(&demo->runtime,
-                                                        &draw, &result))
+        ok = ok && aoe_scenario_runtime_draw_scene_ror(&demo->runtime, &draw,
+                                                       &result);
+        demo->stats.objects_ms = (float)(now_us(demo) - t1) / 1000.0f;
+        if (!ok)
             demo_status(demo, "Scene draw failed: unit %d graphic %.20s "
                         "status %d", demo->backend.last_unit_id,
                         demo->backend.last_graphic
@@ -1155,17 +1160,24 @@ int aoe_demo_render(AoeDemo *demo, uint32_t *fb, size_t stride) {
        never reads the (possibly uncached) framebuffer back. */
     {
         ExpandJob job = {demo, fb, stride, demo->hud, message, mx0, mx1};
+        uint64_t t2 = now_us(demo);
         if (demo->parallel && demo->parallel_parts > 1)
             demo->parallel(demo->parallel_context, expand_part, &job,
                            demo->parallel_parts);
         else
             expand_part(&job, 0, 1);
+        demo->stats.expand_ms = (float)(now_us(demo) - t2) / 1000.0f;
     }
     demo->stats.draw_ms = (float)(now_us(demo) - start) / 1000.0f;
     demo->stats.units_drawn = (uint32_t)result.units.drawn;
     demo->stats.terrain_tiles = (uint32_t)result.terrain_tiles;
-    demo->stats.live_units = 0;
-    if (demo->loaded) visit_units(demo, count_live, &demo->stats.live_units);
+    /* The overlay's unit count walks every unit: refresh it twice a second
+       rather than every frame. */
+    if (demo->stats.frames % 30 == 0) {
+        demo->stats.live_units = 0;
+        if (demo->loaded)
+            visit_units(demo, count_live, &demo->stats.live_units);
+    }
     demo->stats.camera_x = demo->camera_x;
     demo->stats.camera_y = demo->camera_y;
     ++demo->stats.frames;
@@ -1194,8 +1206,9 @@ int aoe_demo_render(AoeDemo *demo, uint32_t *fb, size_t stride) {
                  "FPS %.0f  SIM %.1f MS  DRAW %.1f MS", demo->stats.fps,
                  demo->stats.update_ms, demo->stats.draw_ms);
         aoe_demo_draw_text(fb, stride, 600, 30, 1, white, line);
-        snprintf(line, sizeof(line), "CAM %.1f,%.1f", demo->camera_x,
-                 demo->camera_y);
+        snprintf(line, sizeof(line), "TER %.1f  OBJ %.1f  EXP %.1f MS",
+                 demo->stats.terrain_ms, demo->stats.objects_ms,
+                 demo->stats.expand_ms);
         aoe_demo_draw_text(fb, stride, 600, 40, 1, white, line);
         aoe_demo_draw_text(fb, stride, 8, AOE_DEMO_HEIGHT - 14, 1, white,
                            "STICK/DPAD SCROLL  X TRAIN VILLAGER  [] ARMY "

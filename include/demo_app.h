@@ -92,6 +92,7 @@ typedef struct {
     float update_ms, draw_ms;
     float camera_x, camera_y;
     float fps;                       /* smoothed from update dt */
+    float terrain_ms, objects_ms, expand_ms; /* draw_ms breakdown */
     uint32_t terrain_full, terrain_shifted; /* terrain cache redraws */
 } AoeDemoStats;
 void aoe_demo_stats(const AoeDemo *demo, AoeDemoStats *stats);

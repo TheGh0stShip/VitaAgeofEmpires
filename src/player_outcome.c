@@ -1,5 +1,7 @@
 #include "player_outcome.h"
 
+#include <stdlib.h>
+
 static int valid_events(AoeOutcomeEvent *head) {
     AoeOutcomeEvent *slow = head, *fast = head;
     while (fast && fast->next) {
@@ -77,4 +79,32 @@ int aoe_outcome_manager_update(AoeOutcomeManager *manager,
     if (!aoe_outcome_recompute(manager)) return 0;
     *result = manager->outcome;
     return 1;
+}
+
+AoeOutcomeEvent *aoe_outcome_event_add_ror(AoeOutcomeManager *m, uint8_t kind,
+                                           uint8_t category, uint8_t index,
+                                           int32_t resource, int32_t field_08,
+                                           int32_t weight_0c) {
+    AoeOutcomeEvent *e;
+    if (!m || kind > 4 || !(e = calloc(1, sizeof(*e)))) return NULL;
+    e->index_02 = index;
+    e->category_03 = category;
+    e->next = m->events;
+    m->events = e;
+    ++m->event_count;
+    e->kind = kind;
+    e->resource_index_04 = resource;
+    e->divisor_08 = field_08;
+    e->weight_0c = weight_0c;
+    return e;
+}
+
+void aoe_outcome_events_free_ror(AoeOutcomeManager *m) {
+    if (!m) return;
+    while (m->events) {
+        AoeOutcomeEvent *next = m->events->next;
+        free(m->events);
+        m->events = next;
+    }
+    m->event_count = 0;
 }

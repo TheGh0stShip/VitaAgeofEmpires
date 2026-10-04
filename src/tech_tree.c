@@ -567,10 +567,22 @@ static int attribute_one(const AoeEffectTargetOps *o, DatUnit *t,
 }
 
 /* 0x0045d6a0 / 0x0045d7a0 / 0x0045d8a0. */
+int aoe_effect_attribute_ror(const AoeEffectTargetOps *o, AoeAttributeOp op,
+                             int16_t unit, int16_t cls, uint8_t attribute,
+                             float amount);
 static int attribute_command(const AoeEffectTargetOps *o, AoeAttributeOp op,
                              int16_t unit, int16_t cls, uint8_t attribute,
                              float amount) {
-    AoePlayerTemplates *ts = o->templates;
+    return aoe_effect_attribute_ror(o, op, unit, cls, attribute, amount);
+}
+
+int aoe_effect_attribute_ror(const AoeEffectTargetOps *o, AoeAttributeOp op,
+                             int16_t unit, int16_t cls, uint8_t attribute,
+                             float amount) {
+    AoePlayerTemplates *ts;
+    if (!o || !o->templates || !o->unit_count || !o->unit_at || !o->live)
+        return 0;
+    ts = o->templates;
     if (unit >= 0 && (uint16_t)unit < ts->count) {
         DatUnit *t = aoe_player_templates_get(ts, (uint16_t)unit);
         return t ? attribute_one(o, t, op, attribute, amount) : 1;
@@ -727,4 +739,79 @@ int aoe_research_set_enabled_ror(AoeResearchCompletionManagerRor *m,
         m->entries[id].state = -1;
     }
     return 1;
+}
+
+int aoe_effect_apply_disables_ror(const DatEffects *effects, int16_t effect_id,
+                                  AoeResearchCompletionManagerRor *research) {
+    const DatEffect *e;
+    if (!effects || !research) return 0;
+    if (effect_id < 0 || (uint32_t)effect_id >= effects->count) return 1;
+    e = &effects->effects[effect_id];
+    for (uint16_t i = 0; i < e->command_count; ++i)
+        if ((uint8_t)e->commands[i].type == 102)
+            (void)aoe_research_set_enabled_ror(
+                research, (int16_t)aoe_ftol32(e->commands[i].amount), 0);
+    return 1;
+}
+
+int aoe_research_complete_with_prerequisites_ror(
+    AoeResearchCompletionManagerRor *m, const DatTechs *techs, int16_t id) {
+    if (!m || !techs || !m->entries) return 0;
+    if (id < 0 || id >= m->count || (uint32_t)id >= techs->count) return 1;
+    for (int j = 0; j < 4; ++j) {
+        int16_t r = techs->techs[id].required_techs[j];
+        if (r >= 0 && r < m->count && m->entries[r].state < 3 &&
+            m->entries[r].state >= 0 &&
+            !aoe_research_complete_with_prerequisites_ror(m, techs, r))
+            return 0;
+    }
+    (void)aoe_research_complete_ror(m, id);
+    return 1;
+}
+
+int aoe_research_complete_dependents_ror(AoeResearchCompletionManagerRor *m,
+                                         const DatTechs *techs, int16_t id) {
+    if (!m || !techs || !m->entries) return 0;
+    if (id < 0 || id >= m->count) return 1;
+    (void)aoe_research_complete_ror(m, id);
+    for (int16_t t = 0; t < m->count && (uint32_t)t < techs->count; ++t)
+        for (int j = 0; j < 4; ++j)
+            if (techs->techs[t].required_techs[j] == id &&
+                !aoe_research_complete_with_prerequisites_ror(m, techs, t))
+                return 0;
+    return 1;
+}
+
+int aoe_research_advance_age_ror(AoeResearchCompletionManagerRor *m,
+                                 const DatTechs *techs,
+                                 const AoePlayerResources *r, int step) {
+    int16_t bronze, iron, tool;
+    if (!m || !techs || !r || !r->values || r->count <= 25) return 0;
+    bronze = (int16_t)aoe_ftol32(r->values[23]);
+    iron = (int16_t)aoe_ftol32(r->values[24]);
+    tool = (int16_t)aoe_ftol32(r->values[25]);
+    switch (step) {
+    case 25:
+        (void)aoe_research_complete_ror(m, tool);
+        return 1;
+    case 23:
+        aoe_research_set_enabled_ror(m, bronze, 0);
+        if (!aoe_research_complete_dependents_ror(m, techs, tool)) return 0;
+        aoe_research_set_enabled_ror(m, bronze, 1);
+        (void)aoe_research_complete_ror(m, bronze);
+        return 1;
+    case 24: case 1:
+        aoe_research_set_enabled_ror(m, bronze, 0);
+        aoe_research_set_enabled_ror(m, iron, 0);
+        if (!aoe_research_complete_dependents_ror(m, techs, tool)) return 0;
+        aoe_research_set_enabled_ror(m, bronze, 1);
+        if (!aoe_research_complete_dependents_ror(m, techs, bronze)) return 0;
+        aoe_research_set_enabled_ror(m, iron, 1);
+        if (step == 24) (void)aoe_research_complete_ror(m, iron);
+        else if (!aoe_research_complete_dependents_ror(m, techs, iron))
+            return 0;
+        return 1;
+    default:
+        return 1;
+    }
 }

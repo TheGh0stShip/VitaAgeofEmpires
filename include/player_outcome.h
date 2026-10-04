@@ -29,6 +29,8 @@ typedef struct AoeOutcomeWorldRef {
 typedef struct AoeOutcomeEvent {
     uint8_t kind;
     uint8_t status;
+    uint8_t index_02;    /* +0x02: 0x0050ea40 first argument */
+    uint8_t category_03; /* +0x03: 0x0050ea40 second argument */
     int32_t resource_index_04;
     union {
         int32_t divisor_08; /* Kinds 0/4. */
@@ -101,7 +103,21 @@ struct AoeOutcomeManager {
     uint8_t outcome;
     AoeOutcomePlayerRef *owner; /* Original manager +0xc. */
     uint32_t score_sum_1c; /* Original manager +0x1c, wraps at 32 bits. */
+    uint32_t event_count;  /* Original manager +0x18. */
 };
+
+/* Event adders 0x0050ead0/0x0050eb10/0x0050eb50/0x0050eb90/0x0050ebd0
+   (kinds 0..4) over the allocator 0x0050ea40: a zeroed 0x1c-byte event
+   (resource -1, kind 0xff) gets +2 = index and +3 = category, is pushed
+   to the front of the event list (+0x14) and counted (+0x18); the adder
+   then sets the kind, +4 resource, +8 and +0xc. Returns NULL on allocation
+   failure (the original's AL 0). */
+AoeOutcomeEvent *aoe_outcome_event_add_ror(AoeOutcomeManager *manager,
+                                           uint8_t kind, uint8_t category,
+                                           uint8_t index, int32_t resource,
+                                           int32_t field_08,
+                                           int32_t weight_0c);
+void aoe_outcome_events_free_ror(AoeOutcomeManager *manager);
 
 typedef struct {
     void *user;

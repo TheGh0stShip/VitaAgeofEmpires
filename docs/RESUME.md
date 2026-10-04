@@ -169,9 +169,33 @@ Next:
    and update, building production/training and the technology system
    (research, effects, attributes, upgrades) are translated; scenario
    buildings now load as foundations and complete like the original.
-   Next: the game-start setup (`0x0050b760`: tech trees, options, starting
-   resources and age, population limit, victory conditions), research
-   actions (103), the active player's view-code refresh, the transport
+   Scenario player load and game start are translated
+   (`src/scenario_runtime.c`, `src/game_start.c`, test
+   `ror_game_start_real`). On patched RoR 1.0a, the world's scenario loader
+   (+0x98 `0x00520170`) loads every player before any unit. A tribe player
+   (`0x004f02d0`, scenario 1.11):
+   - disables every template;
+   - takes the scenario's starting stocks (EXPANS_1_1 player 1: wood 600);
+   - clears resources 30 and 21;
+   - gets a research manager;
+   - applies its civ tech tree's tech-disables (effect 210's under option
+     +0xad9 or scenario option 2);
+   - outside the editor, applies the scenario-info settings `0x00507e50`:
+     16 tech toggles, effect 100, the starting age and resource 48.
+
+   Gaia has no research manager. The game start (`0x0050aaa0` from
+   `0x0050b7c6`) applies:
+   - effects 105/100;
+   - the civ tech trees with the civ 7/10 adjustments;
+   - the resource-level, civ 10 food and deathmatch stocks;
+   - the starting age;
+   - resources 32/33/30/45;
+   - the 23 outcome events.
+
+   Game options (game object `0x00580e38`) are `AoeGameOptionsRor`.
+   Not yet translated: the victory/relic setup before `0x0050b7c6` and the
+   +0x840 tracker (`0x004b0c00`).
+   Next: research actions (103), the active player's view-code refresh, the transport
    action (type 12) and the type-50 visibility spotting.
 2. Replace placeholder bindings (diplomacy, zones, sounds, victory
    conditions, player +0x30 lists).

@@ -13,6 +13,13 @@ static int runtime_building_init(AoeScenarioRuntimeRor *runtime,
                                  AoeLiveUnit *unit);
 static int runtime_research_init(AoeScenarioRuntimeRor *runtime,
                                  AoeScenarioRuntimePlayerRor *player);
+static void runtime_outcome_init(AoeScenarioRuntimeRor *runtime,
+                                 AoeScenarioRuntimePlayerRor *player,
+                                 const DatCiv *civ);
+static int runtime_tribe_scenario_load(AoeScenarioRuntimeRor *runtime,
+                                       AoeScenarioRuntimePlayerRor *player,
+                                       const DatCiv *civ,
+                                       const ScnMap *scenario);
 
 static void storage_free_queue(void *context, void *allocation) {
     (void)context;
@@ -53,6 +60,7 @@ void aoe_scenario_runtime_destroy_ror(AoeScenarioRuntimeRor *runtime) {
                         &runtime->world, &player->vision_binding);
         free(player->units);
         aoe_research_manager_free_ror(&player->research);
+        aoe_outcome_events_free_ror(&player->outcome);
         free(player->resource_values);
         aoe_visibility_watch_destroy(&player->owner.visibility_watch40);
         aoe_player_vision_state_destroy(&player->vision);
@@ -71,7 +79,8 @@ int aoe_scenario_runtime_build_ror(
     const DatCivilizations *civilizations, const DatGraphics *graphics,
     const DatTerrains *terrains, const DatBorders *borders,
     const DatMapGeometry *geometry, const DatTechs *techs,
-    const DatEffects *effects, uint32_t rng_seed) {
+    const DatEffects *effects, const AoeGameOptionsRor *options,
+    uint32_t rng_seed) {
     if (!runtime || !scenario || !intro || !intro->terrain_restrictions ||
         !civilizations || !graphics || !terrains || !techs || !effects ||
         !borders || !geometry || runtime->initialized || runtime->map.tiles ||
@@ -81,6 +90,13 @@ int aoe_scenario_runtime_build_ror(
     runtime->rng.state = rng_seed;
     runtime->techs = techs;
     runtime->effects = effects;
+    runtime->options = options ? *options : aoe_game_options_default_ror();
+    memcpy(runtime->scenario_options, scenario->options,
+           sizeof(runtime->scenario_options));
+    runtime->player_count = (int16_t)(scenario->player_count + 1 <
+                                              AOE_SCENARIO_RUNTIME_PLAYERS
+                                          ? scenario->player_count + 1
+                                          : AOE_SCENARIO_RUNTIME_PLAYERS);
     runtime->intro = intro;
     runtime->terrains = terrains;
     runtime->terrain_borders = borders;
@@ -102,6 +118,10 @@ int aoe_scenario_runtime_build_ror(
     /* Completing a building during load can create units (stack units)
        through the editor factory, as the original does inside its load. */
     runtime->initialized = 1;
+    runtime->outcome_world.player_count = runtime->player_count;
+    runtime->outcome_world.players = runtime->outcome_players;
+    runtime->outcome_world.player_capacity = AOE_SCENARIO_RUNTIME_PLAYERS;
+    /* World +0x98 loads every player's data (+0x68) before any unit. */
     for (unsigned p = 0; p < AOE_SCENARIO_RUNTIME_PLAYERS; ++p) {
         AoeScenarioRuntimePlayerRor *player = &runtime->players[p];
         const ScnPlayerUnits *records = &scenario->player_units[p];
@@ -134,8 +154,13 @@ int aoe_scenario_runtime_build_ror(
             &player->vision.owner_cells58;
         player->vision_binding.explored_ops.record_owner =
             aoe_explored_cells_record;
-        if (!runtime_research_init(runtime, player)) goto fail;
-
+        runtime_outcome_init(runtime, player, civ);
+        if (p && !runtime_tribe_scenario_load(runtime, player, civ, scenario))
+            goto fail;
+    }
+    for (unsigned p = 0; p < AOE_SCENARIO_RUNTIME_PLAYERS; ++p) {
+        AoeScenarioRuntimePlayerRor *player = &runtime->players[p];
+        const ScnPlayerUnits *records = &scenario->player_units[p];
         for (uint32_t i = 0; i < records->count; ++i) {
             const ScnUnit *record = &records->units[i];
             DatUnit *definition = aoe_player_templates_get(
@@ -456,9 +481,39 @@ static void live_adjacent(void *c, AoeLiveUnit *u) {
     ++((AoeScenarioRuntimeRor *)c)->adjacency_refreshes; /* 0x004ad550 */
 }
 
+typedef enum { TARGET_EFFECT, TARGET_ATTRIBUTE } TargetKind;
+typedef struct {
+    TargetKind kind;
+    int16_t effect_id;
+    AoeAttributeOp op;
+    int16_t unit, unit_class;
+    uint8_t attribute;
+    float amount;
+} TargetCall;
+static int runtime_target_call(AoeScenarioRuntimeRor *runtime,
+                               int16_t player_index, const TargetCall *call);
+
+int aoe_scenario_runtime_attribute_ror(AoeScenarioRuntimeRor *runtime,
+                                       int16_t player_index,
+                                       AoeAttributeOp op, int16_t unit,
+                                       int16_t unit_class, uint8_t attribute,
+                                       float amount) {
+    TargetCall call = {TARGET_ATTRIBUTE, -1, op, unit, unit_class, attribute,
+                       amount};
+    return runtime_target_call(runtime, player_index, &call);
+}
+
 int aoe_scenario_runtime_apply_effect_ror(AoeScenarioRuntimeRor *runtime,
                                           int16_t player_index,
                                           int16_t effect_id) {
+    TargetCall call = {TARGET_EFFECT, effect_id, AOE_ATTRIBUTE_SET, -1, -1, 0,
+                       0.0f};
+    return runtime_target_call(runtime, player_index, &call);
+}
+
+static int runtime_target_call(AoeScenarioRuntimeRor *runtime,
+                               int16_t player_index, const TargetCall *call) {
+    int16_t effect_id = call->effect_id;
     AoeScenarioRuntimePlayerRor *p;
     EffectContext e;
     AoeLiveAttributeOps live;
@@ -488,8 +543,14 @@ int aoe_scenario_runtime_apply_effect_ror(AoeScenarioRuntimeRor *runtime,
                                  live_adjacent, &p->resources};
     ops = (AoeEffectTargetOps){&e, &p->templates, &p->resources,
                                effect_unit_count, effect_unit_at,
-                               effect_resource_add, &p->research, &live};
-    ok = aoe_effect_apply_ror(runtime->effects, effect_id, &ops);
+                               effect_resource_add,
+                               p->research.entries ? &p->research : NULL,
+                               &live};
+    ok = call->kind == TARGET_EFFECT
+             ? aoe_effect_apply_ror(runtime->effects, effect_id, &ops)
+             : aoe_effect_attribute_ror(&ops, call->op, call->unit,
+                                        call->unit_class, call->attribute,
+                                        call->amount);
     free(e.units);
     return ok;
 }
@@ -523,6 +584,95 @@ static int runtime_research_init(AoeScenarioRuntimeRor *runtime,
     player->research.apply_effect = research_apply;
     player->research.rebuild = research_rebuild;
     player->research.wonder_complete = research_wonder;
+    return 1;
+}
+
+static void runtime_outcome_init(AoeScenarioRuntimeRor *runtime,
+                                 AoeScenarioRuntimePlayerRor *player,
+                                 const DatCiv *civ) {
+    AoeOutcomePlayerRef *ref = &player->outcome_player;
+    (void)civ;
+    memset(ref, 0, sizeof(*ref));
+    ref->index4a = (int16_t)player->player_index;
+    ref->world3c = &runtime->outcome_world;
+    ref->resources50 = player->resource_values;
+    ref->resource_capacity = (size_t)player->resources.count;
+    ref->outcome34 = &player->outcome;
+    player->outcome.owner = ref;
+    player->owner.outcome_manager = &player->outcome;
+    runtime->outcome_players[player->player_index] = ref;
+}
+
+/* Scenario-info 0x00507e50 for one tribe player (index = player - 1). */
+static int runtime_scenario_player_settings(
+    AoeScenarioRuntimeRor *runtime, AoeScenarioRuntimePlayerRor *player,
+    const ScnMap *scenario) {
+    static const int16_t techs[16] = {0x58, 0x59, 0x5a, 0x5b, 0x5e, 0x5f,
+                                      0x61, 0x62, 0x5d, 0x60, 0x5c, 0x65,
+                                      0x66, 0x67, 0x73, 0x74};
+    int slot = player->player_index - 1;
+    AoeResearchCompletionManagerRor *m = &player->research;
+    if (slot < 0) return 1;
+    for (int k = 0; k < 16; ++k) /* 0x004f1870(tech, flag byte) */
+        (void)aoe_research_set_enabled_ror(
+            m, techs[k], (uint8_t)scenario->tech_toggles[slot][k] != 0);
+    if (!aoe_research_rebuild_ror(m, runtime->techs, &player->resources))
+        return 0;
+    if (scenario->options[0] &&
+        !aoe_scenario_runtime_apply_effect_ror(
+            runtime, (int16_t)player->player_index, 100))
+        return 0;
+    if (runtime->options.mode_1b0 != 7) {
+        static const int steps[4] = {25, 23, 24, 1};
+        int32_t age = scenario->starting_age[slot];
+        if (age >= 1 && age <= 4 &&
+            !aoe_research_advance_age_ror(m, runtime->techs,
+                                          &player->resources,
+                                          steps[age - 1]))
+            return 0;
+    }
+    /* fild toggle 14; fcomp 0.0; equal -> resource 48 = 1.0. */
+    if (scenario->tech_toggles[slot][14] == 0 &&
+        player->resources.count > 48)
+        player->resource_values[48] = 1.0f;
+    return 1;
+}
+
+/* Tribe player scenario load 0x004f02d0 after the base load: every
+   template disabled, the scenario's starting stocks (version 1.11 > 1.06),
+   resources 30 and 21 cleared, a research manager without rebuild (1.11 >
+   1.03), the civ tech tree's tech-disable commands (effect 210's when the
+   tree is missing or option +0xad9 / scenario option 2 is set), the
+   scenario player settings (0x00507e50, outside the editor) and a
+   rebuild. */
+static int runtime_tribe_scenario_load(AoeScenarioRuntimeRor *runtime,
+                                       AoeScenarioRuntimePlayerRor *player,
+                                       const DatCiv *civ,
+                                       const ScnMap *scenario) {
+    const ScnPlayerResources *start = &scenario->resources[player->player_index - 1];
+    float *r = player->resource_values;
+    int16_t tree = civ->tech_tree_id;
+    player->tech_tree_id = tree;
+    for (uint16_t i = 0; i < player->templates.count; ++i) {
+        DatUnit *t = aoe_player_templates_get(&player->templates, i);
+        if (t) t->enabled = 0;
+    }
+    if (player->resources.count <= 30) return 0;
+    r[0] = start->food;
+    r[1] = start->wood;
+    r[3] = start->gold;
+    r[2] = start->stone;
+    r[30] = 0.0f;
+    r[21] = 0.0f;
+    if (!runtime_research_init(runtime, player)) return 0;
+    if (tree < 0 || runtime->options.option_ad9 || scenario->options[2])
+        tree = 210;
+    if (!aoe_effect_apply_disables_ror(runtime->effects, tree,
+                                       &player->research))
+        return 0;
+    if (runtime->options.mode_1b4 != 7 &&
+        !runtime_scenario_player_settings(runtime, player, scenario))
+        return 0;
     return aoe_research_rebuild_ror(&player->research, runtime->techs,
                                     &player->resources);
 }

@@ -120,6 +120,35 @@ typedef struct {
 int aoe_effect_apply_ror(const DatEffects *effects, int16_t effect_id,
                          const AoeEffectTargetOps *ops);
 
+/* Effects vtable +0x0c (0x004ebb90): only the tech-disable commands (102)
+   of the effect. Used for civ tech trees during scenario player load. */
+int aoe_effect_apply_disables_ror(const DatEffects *effects, int16_t effect_id,
+                                  AoeResearchCompletionManagerRor *research);
+
+/* One attribute command as player 0x0045d6a0/0x0045d7a0/0x0045d8a0. */
+int aoe_effect_attribute_ror(const AoeEffectTargetOps *ops, AoeAttributeOp op,
+                             int16_t unit, int16_t unit_class,
+                             uint8_t attribute, float amount);
+
+/* 0x004eb7a8: completes the unfinished (state 0..2) prerequisites of a
+   tech recursively, then the tech itself (0x004eaa3d). */
+int aoe_research_complete_with_prerequisites_ror(
+    AoeResearchCompletionManagerRor *manager, const DatTechs *techs,
+    int16_t research_id);
+/* 0x004eb849: completes a tech, then every tech listing it as a
+   prerequisite (with their prerequisites), once per matching slot. */
+int aoe_research_complete_dependents_ror(
+    AoeResearchCompletionManagerRor *manager, const DatTechs *techs,
+    int16_t research_id);
+/* Player 0x004f18a0(step) with the age techs in owner resources 23, 24 and
+   25 (Bronze, Iron, Tool): 25 completes Tool; 23 advances to Bronze; 24 to
+   Iron; 1 completes Iron with its dependents. Later ages are disabled
+   while earlier ones complete their dependents. Other steps do nothing. */
+int aoe_research_advance_age_ror(AoeResearchCompletionManagerRor *manager,
+                                 const DatTechs *techs,
+                                 const AoePlayerResources *owner,
+                                 int step);
+
 /* New-game research manager 0x004ea91c: one zeroed entry per tech. */
 int aoe_research_manager_init_ror(AoeResearchCompletionManagerRor *manager,
                                   const DatTechs *techs);

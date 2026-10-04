@@ -7,6 +7,8 @@
 #include "terrain_transition.h"
 #include "tile_object_draw.h"
 #include "tech_tree.h"
+#include "game_options.h"
+#include "player_outcome.h"
 
 enum { AOE_SCENARIO_RUNTIME_PLAYERS = 9 };
 
@@ -22,8 +24,14 @@ typedef struct {
     uint8_t player_index;
     uint32_t civilization_id;
     int32_t field_104; /* derived player +0x104, used by +0x78 */
-    /* Player +0x224 (new-game constructor 0x004ea91c with rebuild). */
+    int16_t tech_tree_id; /* player +0x110, the civ's tech tree effect */
+    /* Player +0x224 for tribe players (1..8). Gaia is taken to be a base
+       player (factory default branch 0x0051cb00, a 0x224-byte object
+       without this field) and has none. */
     AoeResearchCompletionManagerRor research;
+    /* Player +0x34 outcome manager and its player view. */
+    AoeOutcomeManager outcome;
+    AoeOutcomePlayerRef outcome_player;
 } AoeScenarioRuntimePlayerRor;
 
 /* Owned type-80 storage: the building view (+0x1c0..+0x1f8) with its +0x184
@@ -59,6 +67,12 @@ typedef struct {
     uint64_t constructed_units;
     uint64_t low_state_units;
     uint64_t high_state_units;
+    AoeGameOptionsRor options;
+    int16_t player_count;      /* world +0x3c: scenario players + Gaia */
+    int32_t scenario_options[3]; /* scenario-info +0x50f4 (0x005076a0) */
+    AoeOutcomeWorldRef outcome_world;
+    AoeOutcomePlayerRef *outcome_players[AOE_SCENARIO_RUNTIME_PLAYERS];
+    uint32_t tracker_updates;  /* player +0x840 0x004b0c00 (not modelled) */
     const DatTechs *techs;     /* tech tree (world +0x104 object) */
     const DatEffects *effects; /* world +0x4c effects */
     /* Optional world hook for upgrades: the +0x184 list's +0x14 retask. */
@@ -86,7 +100,26 @@ int aoe_scenario_runtime_build_ror(
     const DatCivilizations *civilizations, const DatGraphics *graphics,
     const DatTerrains *terrains, const DatBorders *borders,
     const DatMapGeometry *geometry, const DatTechs *techs,
-    const DatEffects *effects, uint32_t rng_seed);
+    const DatEffects *effects, const AoeGameOptionsRor *options,
+    uint32_t rng_seed);
+
+/* World game start 0x0050aaa0 from 0x0050b7c6 (victory and relic setup
+   before it are not translated): effects 105 (option +0xad6 clear) and 100
+   (+0xad7 == 1); the civ tech trees with the civ 7 villager work-rate
+   (-0.15) and civ 10 template 83 cost (40) adjustments, or effect 210 when
+   +0xad9 or scenario option 2 is set; the resource level stocks, civ 10's
+   40 food deduction, the deathmatch stocks, the starting age (3/4/5 ->
+   0x004f18a0 steps 25/23/24); then per player resources 32 (population
+   limit), 33 (0), 30 (500) and 45 (1), the 23 outcome events of player
+   +0x34 and the +0x840 tracker refresh (0x004f1aa0, counted only). */
+int aoe_scenario_runtime_start_game_ror(AoeScenarioRuntimeRor *runtime);
+
+/* One attribute command (0x0045d6a0 family) for a player of the runtime. */
+int aoe_scenario_runtime_attribute_ror(AoeScenarioRuntimeRor *runtime,
+                                       int16_t player_index,
+                                       AoeAttributeOp op, int16_t unit,
+                                       int16_t unit_class, uint8_t attribute,
+                                       float amount);
 
 /* Applies effect `effect_id` (0x004ebb10) to a player of the runtime: its
    templates, resources, research and awake (+0x28) units. */

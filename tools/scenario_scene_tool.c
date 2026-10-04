@@ -173,7 +173,7 @@ int main(int argc, char **argv) {
             &intro, interface_archives, 2, &color_tables) ||
         !aoe_graphic_art_cache_init(&graphic_cache, 128, 64u * 1024u * 1024u) ||
         !aoe_scenario_runtime_build_ror(&runtime, &scenario, &intro, &civs, &graphics,
-            &terrains, &borders, &geometry, &techs, &effects, 1) ||
+            &terrains, &borders, &geometry, &techs, &effects, NULL, 1) ||
         !aoe_scenario_runtime_set_active_player_ror(&runtime, 1)) goto done;
     palette_bytes = malloc(palette_match.entry->size);
     edge_bytes = read_file(argv[9], &edge_size);

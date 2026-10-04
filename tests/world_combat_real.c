@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
         !scn_load_map(argv[1], (uint8_t)intro.terrain_count, &scenario) ||
         !aoe_scenario_runtime_build_ror(&runtime, &scenario, &intro, &civs,
                                         &graphics, &terrains, &borders,
-                                        &geometry, &techs, &effects, 1) ||
+                                        &geometry, &techs, &effects, NULL, 1) ||
         !aoe_scenario_runtime_set_active_player_ror(&runtime, 1))
         return 1;
     if (!aoe_world_motion_init_ror(&motion, &runtime) ||

@@ -382,7 +382,8 @@ target_link_libraries(aoe_runtime_viewport PUBLIC aoe_runtime_map
   aoe_terrain_draw aoe_live_unit_viewport)
 target_compile_options(aoe_runtime_viewport PRIVATE -Wall -Wextra)
 
-add_library(aoe_scenario_runtime STATIC src/scenario_runtime.c)
+add_library(aoe_scenario_runtime STATIC src/scenario_runtime.c
+  src/game_start.c)
 target_include_directories(aoe_scenario_runtime PUBLIC include)
 target_link_libraries(aoe_scenario_runtime PUBLIC aoe_runtime_map
   aoe_live_unit_factory aoe_player_templates aoe_unit_placement_check
@@ -959,6 +960,9 @@ else()
   add_executable(world_motion_real tests/world_motion_real.c)
   target_link_libraries(world_motion_real PRIVATE aoe_world_motion aoe_dat m)
   target_compile_options(world_motion_real PRIVATE -UNDEBUG)
+  add_executable(game_start_real tests/game_start_real.c)
+  target_link_libraries(game_start_real PRIVATE aoe_scenario_runtime aoe_dat)
+  target_compile_options(game_start_real PRIVATE -UNDEBUG)
   add_executable(runtime_full_units_real tests/runtime_full_units_real.c)
   target_link_libraries(runtime_full_units_real PRIVATE aoe_scenario_runtime
     aoe_scenario_editor_runtime aoe_dat)
@@ -972,6 +976,9 @@ else()
       "${CMAKE_SOURCE_DIR}/build/ror/scenarios/EXPANS_1_0.scx"
       "${CMAKE_SOURCE_DIR}/build/ror/disc/GAME/DATA2/EMPIRES.DAT")
     add_test(NAME ror_world_combat_real COMMAND world_combat_real
+      "${CMAKE_SOURCE_DIR}/build/ror/scenarios/EXPANS_1_1.scx"
+      "${CMAKE_SOURCE_DIR}/build/ror/disc/GAME/DATA2/EMPIRES.DAT")
+    add_test(NAME ror_game_start_real COMMAND game_start_real
       "${CMAKE_SOURCE_DIR}/build/ror/scenarios/EXPANS_1_1.scx"
       "${CMAKE_SOURCE_DIR}/build/ror/disc/GAME/DATA2/EMPIRES.DAT")
     add_test(NAME ror_world_motion_real COMMAND world_motion_real

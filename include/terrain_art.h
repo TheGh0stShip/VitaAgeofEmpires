@@ -9,6 +9,10 @@ typedef struct {
     int32_t slp_id;
     uint32_t frame_count;
     SlpFrame *frames;
+    /* Optional per-frame flag computed at load: 1 when the frame holds only
+       color/transparent pixels, the precondition the terrain blitters
+       otherwise re-check on every call. NULL means "not computed". */
+    uint8_t *plain_frames;
 } TerrainArtEntry;
 
 typedef struct {

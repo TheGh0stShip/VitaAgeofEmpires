@@ -4,9 +4,11 @@ The objective is a faithful native PS Vita port of PC *Age of Empires I*,
 with the original *Rise of Rome* expansion as primary target and the base
 game retained. The user explicitly disallowed diagnostic prototypes. The
 invented skirmish and asset-browser Vita executable were removed from source;
-no VPK is produced. Any old `build/vita/VitaAgeofEmpires.vpk` or installed
-`VAOE00001` from earlier experiments is obsolete and must not be presented as
-the port. The emulator profile contains test copies of six original data
+Since 2026-10-04 the user-requested tech demo (`docs/VITA_DEMO.md`,
+`build/vita/VitaAoE.vpk`, title `VAOE00001`) runs only the reconstruction:
+original data through the translated runtime, world update and renderer.
+Older `VAOE00001` builds were obsolete prototypes (the emulator copy is
+kept as `VAOE00001.backup-20261004`). The emulator profile contains test copies of six original data
 files and one `.scn` under `ux0:data/VitaAgeofEmpires/`.
 
 Completeness correction (2026-09-26): earlier counts of functions found by

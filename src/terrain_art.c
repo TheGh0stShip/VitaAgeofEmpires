@@ -35,6 +35,17 @@ static int load_one(TerrainArtEntry *art, int32_t slp_id,
             return -1;
         }
     free(bytes);
+    art->plain_frames = malloc(frame_count);
+    if (art->plain_frames)
+        for (uint32_t j = 0; j < frame_count; ++j) {
+            const SlpFrame *f = &art->frames[j];
+            size_t n = (size_t)f->width * f->height;
+            uint8_t plain = f->pixels != NULL;
+            for (size_t k = 0; plain && k < n; ++k)
+                plain = f->pixels[k].kind == SLP_COLOR ||
+                        f->pixels[k].kind == SLP_TRANSPARENT;
+            art->plain_frames[j] = plain;
+        }
     return 1;
 }
 
@@ -45,6 +56,7 @@ void terrain_art_free(TerrainArtCache *cache) {
         for (uint32_t j = 0; j < entry->frame_count; ++j)
             slp_free_frame(&entry->frames[j]);
         free(entry->frames);
+        free(entry->plain_frames);
     }
     free(cache->entries);
     memset(cache, 0, sizeof(*cache));

@@ -87,6 +87,7 @@ typedef struct {
 typedef struct AoeWorldCombatRor {
     AoeWorldMotionRor *motion;
     AoeWorldCombatUnitRor **units; /* by unit ID + 1000 */
+    size_t unit_slots;
     AoeWorldProjectileRor *flights;
     size_t flight_count, flight_capacity;
     uint32_t world_ms;

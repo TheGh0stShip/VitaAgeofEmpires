@@ -15,12 +15,42 @@ static AoeLiveUnit *resolve(void *context, int32_t unit_id) {
                : NULL;
 }
 
+int aoe_world_id_table_reserve(void *table_field, size_t *slots,
+                               int64_t slot) {
+    /* table_field holds a T** (object pointers share one representation
+       on every supported target); it is read and written via memcpy so no
+       T** is accessed through a void**. New entries are zero (NULL), as
+       the initial calloc assumes. */
+    unsigned char *table;
+    unsigned char *grown;
+    size_t next;
+    if (!table_field || !slots || slot < 0 ||
+        slot >= AOE_WORLD_MOTION_ID_SLOTS_MAX)
+        return 0;
+    if ((size_t)slot < *slots) return 1;
+    memcpy(&table, table_field, sizeof(table));
+    if (!table) return 0;
+    next = *slots ? *slots : AOE_WORLD_MOTION_ID_SLOTS;
+    while (next <= (size_t)slot) next *= 2;
+    if (next > AOE_WORLD_MOTION_ID_SLOTS_MAX)
+        next = AOE_WORLD_MOTION_ID_SLOTS_MAX;
+    grown = realloc(table, next * sizeof(void *));
+    if (!grown) return 0;
+    memset(grown + *slots * sizeof(void *), 0,
+           (next - *slots) * sizeof(void *));
+    memcpy(table_field, &grown, sizeof(grown));
+    *slots = next;
+    return 1;
+}
+
 AoeWorldMotionUnitRor *aoe_world_motion_unit_ror(AoeWorldMotionRor *m,
                                                  AoeLiveUnit *unit) {
     int64_t slot;
     if (!m || !m->units || !unit) return NULL;
     slot = (int64_t)unit->core.unit_id + AOE_WORLD_MOTION_ID_OFFSET;
-    if (slot < 0 || slot >= AOE_WORLD_MOTION_ID_SLOTS) return NULL;
+    if (!aoe_world_id_table_reserve(&m->units, &m->unit_slots,
+                                    slot))
+        return NULL;
     if (!m->units[slot] || m->units[slot]->unit != unit) {
         AoeWorldMotionUnitRor *s = m->units[slot];
         if (!s) {
@@ -361,6 +391,7 @@ int aoe_world_motion_init_ror(AoeWorldMotionRor *m,
                                       AOE_PATH_OCCUPANCY_PAD_ROR);
     m->path.penalty = calloc(1, AOE_PATH_GRID_CELLS_ROR);
     m->units = calloc(AOE_WORLD_MOTION_ID_SLOTS, sizeof(*m->units));
+    m->unit_slots = m->units ? AOE_WORLD_MOTION_ID_SLOTS : 0;
     if (!m->path.state || !m->path.cost || !m->path.heap ||
         !m->path.occupancy || !m->path.penalty || !m->units)
         goto fail;
@@ -383,7 +414,7 @@ void aoe_world_motion_release_ror(AoeWorldMotionRor *m,
     AoeWorldMotionUnitRor *s;
     if (!m || !m->units || !unit) return;
     slot = (int64_t)unit->core.unit_id + AOE_WORLD_MOTION_ID_OFFSET;
-    if (slot < 0 || slot >= AOE_WORLD_MOTION_ID_SLOTS) return;
+    if (slot < 0 || slot >= (int64_t)m->unit_slots) return;
     s = m->units[slot];
     if (!s || s->unit != unit) return;
     aoe_unit_path_free_ror(&s->movement.path);
@@ -396,7 +427,7 @@ void aoe_world_motion_release_ror(AoeWorldMotionRor *m,
 void aoe_world_motion_destroy_ror(AoeWorldMotionRor *m) {
     if (!m) return;
     if (m->units) {
-        for (size_t i = 0; i < AOE_WORLD_MOTION_ID_SLOTS; ++i) {
+        for (size_t i = 0; i < m->unit_slots; ++i) {
             AoeWorldMotionUnitRor *s = m->units[i];
             if (!s) continue;
             aoe_unit_path_free_ror(&s->movement.path);

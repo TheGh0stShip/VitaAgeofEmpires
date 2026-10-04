@@ -36,7 +36,16 @@ typedef struct {
     int32_t footprint_low[2], footprint_high[2];
 } AoeWorldMotionUnitRor;
 
-enum { AOE_WORLD_MOTION_ID_OFFSET = 1000, AOE_WORLD_MOTION_ID_SLOTS = 11000 };
+/* Per-unit records are indexed by unit ID + OFFSET. Tables start with
+   ID_SLOTS entries and grow on demand (200x200 campaign maps use IDs past
+   13,000) up to ID_SLOTS_MAX. */
+enum { AOE_WORLD_MOTION_ID_OFFSET = 1000, AOE_WORLD_MOTION_ID_SLOTS = 11000,
+       AOE_WORLD_MOTION_ID_SLOTS_MAX = 1 << 20 };
+
+/* Grows the zero-initialised pointer table whose T** field is at
+   `table_field` so `slot` is valid. */
+int aoe_world_id_table_reserve(void *table_field, size_t *slots,
+                               int64_t slot);
 
 typedef struct {
     AoeScenarioRuntimeRor *runtime;
@@ -44,6 +53,7 @@ typedef struct {
     int32_t distance_table[256];
     AoePathBudgetRor budgets[AOE_SCENARIO_RUNTIME_PLAYERS];
     AoeWorldMotionUnitRor **units; /* by unit ID + 1000 */
+    size_t unit_slots; /* grows past the initial ID_SLOTS on demand */
     float tick;
     uint32_t searches, repaths, placements;
 } AoeWorldMotionRor;

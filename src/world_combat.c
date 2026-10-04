@@ -66,7 +66,9 @@ AoeWorldCombatUnitRor *aoe_world_combat_unit_ror(AoeWorldCombatRor *c,
     AoeWorldCombatUnitRor *s;
     if (!c || !c->units || !unit) return NULL;
     slot = (int64_t)unit->core.unit_id + AOE_WORLD_MOTION_ID_OFFSET;
-    if (slot < 0 || slot >= AOE_WORLD_MOTION_ID_SLOTS) return NULL;
+    if (!aoe_world_id_table_reserve(&c->units, &c->unit_slots,
+                                    slot))
+        return NULL;
     s = c->units[slot];
     if (s && s->unit == unit) return s;
     if (!s) {
@@ -104,7 +106,7 @@ static AoeWorldCombatUnitRor *peek_unit(AoeWorldCombatRor *c,
     AoeWorldCombatUnitRor *s;
     if (!c || !c->units || !unit) return NULL;
     slot = (int64_t)unit->core.unit_id + AOE_WORLD_MOTION_ID_OFFSET;
-    if (slot < 0 || slot >= AOE_WORLD_MOTION_ID_SLOTS) return NULL;
+    if (slot < 0 || slot >= (int64_t)c->unit_slots) return NULL;
     s = c->units[slot];
     return s && s->unit == unit ? s : NULL;
 }
@@ -742,6 +744,7 @@ int aoe_world_combat_init_ror(AoeWorldCombatRor *c, AoeWorldMotionRor *m) {
     memset(c, 0, sizeof(*c));
     c->motion = m;
     c->units = calloc(AOE_WORLD_MOTION_ID_SLOTS, sizeof(*c->units));
+    c->unit_slots = c->units ? AOE_WORLD_MOTION_ID_SLOTS : 0;
     train_ops(c);
     return c->units != NULL;
 }
@@ -758,7 +761,7 @@ void aoe_world_combat_destroy_ror(AoeWorldCombatRor *c) {
     }
     free(c->flights);
     if (c->units) {
-        for (size_t i = 0; i < AOE_WORLD_MOTION_ID_SLOTS; ++i)
+        for (size_t i = 0; i < c->unit_slots; ++i)
             if (c->units[i]) {
                 AoeWorldCombatUnitRor *s = c->units[i];
                 release_building(s);

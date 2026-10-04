@@ -431,6 +431,12 @@ target_include_directories(aoe_live_unit_sprite_backend PUBLIC include)
 target_link_libraries(aoe_live_unit_sprite_backend PUBLIC aoe_live_unit_draw aoe_sprite_draw)
 target_compile_options(aoe_live_unit_sprite_backend PRIVATE -Wall -Wextra)
 
+add_library(aoe_demo_app STATIC src/demo_app.c)
+target_include_directories(aoe_demo_app PUBLIC include)
+target_link_libraries(aoe_demo_app PUBLIC aoe_scenario_scene aoe_world_combat
+  aoe_live_unit_sprite_backend aoe_color_table aoe_palette aoe_cpx aoe_dat m)
+target_compile_options(aoe_demo_app PRIVATE -Wall -Wextra)
+
 add_library(aoe_rng STATIC src/aoe_rng.c)
 target_include_directories(aoe_rng PUBLIC include)
 target_compile_options(aoe_rng PRIVATE -Wall -Wextra)
@@ -510,6 +516,15 @@ else()
   add_executable(scenario_scene_tool tools/scenario_scene_tool.c)
   target_link_libraries(scenario_scene_tool PRIVATE aoe_scenario_scene
     aoe_live_unit_sprite_backend aoe_color_table aoe_palette aoe_dat)
+  add_executable(demo_host tools/demo_host.c)
+  target_link_libraries(demo_host PRIVATE aoe_demo_app)
+  # The Vita tech demo loop on user-supplied data laid out as on the Vita
+  # (data/, data2/, campaign/ under build/demo_root; see docs/VITA_DEMO.md).
+  if(EXISTS "${CMAKE_SOURCE_DIR}/build/demo_root/data2")
+    add_test(NAME ror_vita_demo_loop_real COMMAND demo_host
+      "${CMAKE_SOURCE_DIR}/build/demo_root" 120
+      "${CMAKE_BINARY_DIR}/demo_host_frame.ppm" 1)
+  endif()
   add_executable(unit_refs_tool tools/unit_refs_tool.c)
   target_link_libraries(unit_refs_tool PRIVATE aoe_scn aoe_dat)
   add_executable(terrain_test tests/terrain_test.c)
@@ -605,6 +620,10 @@ else()
   target_link_libraries(slp_decode_test PRIVATE aoe_slp)
   target_compile_options(slp_decode_test PRIVATE -UNDEBUG)
   add_test(NAME slp_format_decode COMMAND slp_decode_test)
+  add_executable(blit_fastpath_test tests/blit_fastpath_test.c)
+  target_link_libraries(blit_fastpath_test PRIVATE aoe_terrain_draw aoe_slp)
+  target_compile_options(blit_fastpath_test PRIVATE -UNDEBUG)
+  add_test(NAME blit_fast_paths_match_per_pixel COMMAND blit_fastpath_test)
   add_executable(graphic_blit_test tests/graphic_blit_test.c)
   target_link_libraries(graphic_blit_test PRIVATE aoe_graphic_effects aoe_palette)
   target_compile_options(graphic_blit_test PRIVATE -UNDEBUG)
@@ -1032,4 +1051,28 @@ else()
   add_executable(cdtrack_tool tools/cdtrack_tool.c)
   add_executable(cpx_tool tools/cpx_tool.c)
   target_link_libraries(cpx_tool PRIVATE aoe_cpx)
+endif()
+
+# PS Vita tech demo: the portable demo shell over the reconstructed runtime,
+# packaged as an installable VPK. Game data is never packaged; the app reads
+# the user's own files from ux0:data/VitaAoE at run time.
+if(VITA)
+  set(VITA_APP_NAME "AoE RoR Tech Demo")
+  set(VITA_TITLEID "VAOE00001")
+  set(VITA_VERSION "00.10")
+  add_executable(aoe_vita_demo src/platform/vita_main.c)
+  target_link_libraries(aoe_vita_demo PRIVATE aoe_demo_app
+    SceDisplay_stub SceCtrl_stub ScePower_stub)
+  target_compile_options(aoe_vita_demo PRIVATE -Wall -Wextra)
+  vita_create_self(eboot.bin aoe_vita_demo)
+  vita_create_vpk(VitaAoE.vpk ${VITA_TITLEID} eboot.bin
+    VERSION ${VITA_VERSION}
+    NAME ${VITA_APP_NAME}
+    FILE ${CMAKE_SOURCE_DIR}/assets/vita/sce_sys/icon0.png sce_sys/icon0.png
+    FILE ${CMAKE_SOURCE_DIR}/assets/vita/sce_sys/livearea/contents/bg.png
+         sce_sys/livearea/contents/bg.png
+    FILE ${CMAKE_SOURCE_DIR}/assets/vita/sce_sys/livearea/contents/startup.png
+         sce_sys/livearea/contents/startup.png
+    FILE ${CMAKE_SOURCE_DIR}/assets/vita/sce_sys/livearea/contents/template.xml
+         sce_sys/livearea/contents/template.xml)
 endif()

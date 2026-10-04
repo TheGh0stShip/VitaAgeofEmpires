@@ -274,6 +274,16 @@ int terrain_blit_draw_plan_passes_rgba(const TerrainDrawPlan *plan,
     return 1;
 }
 
+/* Only color/transparent pixels: the load-time flag when present. */
+static int frame_plain(const TerrainArtEntry *art, uint32_t index) {
+    const SlpFrame *frame = &art->frames[index];
+    if (art->plain_frames) return art->plain_frames[index];
+    for (size_t j = 0; j < (size_t)frame->width * frame->height; ++j)
+        if (frame->pixels[j].kind != SLP_COLOR &&
+            frame->pixels[j].kind != SLP_TRANSPARENT) return 0;
+    return 1;
+}
+
 int terrain_blit_draw_plan_passes_indexed(const TerrainDrawPlan *plan,
                                           const TerrainArtCache *terrain_art,
                                           const BorderArtCache *border_art,
@@ -322,45 +332,81 @@ int terrain_blit_draw_plan_passes_indexed(const TerrainDrawPlan *plan,
         frame = &art->frames[layer->frame];
         if (!frame->pixels || !frame->width || !frame->height ||
             frame->width > SIZE_MAX / frame->height) return 0;
-        for (size_t j = 0; j < (size_t)frame->width * frame->height; ++j)
-            if (frame->pixels[j].kind != SLP_COLOR &&
-                frame->pixels[j].kind != SLP_TRANSPARENT) return 0;
+        if (!frame_plain(art, layer->frame)) return 0;
         draw_x[i] = (int64_t)anchor_x - frame->hotspot_x;
         draw_y[i] = (int64_t)anchor_y - frame->hotspot_y;
         frames[i] = frame;
     }
+    /* Same pixel order and results as a per-pixel bounds test: the visible
+       column range is clipped once per layer and the dither selectors once
+       per row. Frame and viewport sizes are bounded far below 2^31, so the
+       clipped coordinates fit 32-bit arithmetic (cheap on 32-bit ARM). */
     for (uint8_t i = 0; i < plan->layer_count; ++i) {
         const SlpFrame *frame = frames[i];
+        int64_t x_lo = draw_x[i] < 0 ? -draw_x[i] : 0;
+        int64_t x_hi = (int64_t)width - draw_x[i];
+        int64_t y_lo = draw_y[i] < 0 ? -draw_y[i] : 0;
+        int64_t y_hi = (int64_t)height - draw_y[i];
+        uint32_t sx0, sx1, sy0, sy1;
+        if (x_hi > frame->width) x_hi = frame->width;
+        if (y_hi > frame->height) y_hi = frame->height;
+        if (x_lo >= x_hi || y_lo >= y_hi) continue;
+        sx0 = (uint32_t)x_lo;
+        sx1 = (uint32_t)x_hi;
+        sy0 = (uint32_t)y_lo;
+        sy1 = (uint32_t)y_hi;
         for (uint8_t p = 0; p < passes->count; ++p) {
             const TerrainSpritePass *pass = &passes->passes[p];
             TerrainClipMask clip = pass->clip == TERRAIN_SPRITE_CLIP_FIRST ?
                                    first : second;
-            for (uint32_t sy = 0; sy < frame->height; ++sy) {
-                int64_t dy = draw_y[i] + sy;
-                if (dy < 0 || dy >= height) continue;
-                for (uint32_t sx = 0; sx < frame->width; ++sx) {
-                    int64_t dx = draw_x[i] + sx;
-                    const SlpPixel *pixel;
-                    uint8_t index;
-                    if (dx < 0 || dx >= width) continue;
-                    pixel = &frame->pixels[(size_t)sy * frame->width + sx];
-                    if (pixel->kind == SLP_TRANSPARENT) continue;
-                    if (pass->clip != TERRAIN_SPRITE_CLIP_DEFAULT &&
-                        !clip.bytes[(size_t)dy * clip.stride + (size_t)dx])
-                        continue;
-                    index = pixel->index;
-                    if (pass->dither_mode) {
-                        int64_t screen_x = (int64_t)screen_origin_x + dx;
-                        int64_t screen_y = (int64_t)screen_origin_y + dy;
-                        uint32_t bit = (uint32_t)((screen_x & 3) * 8);
-                        uint32_t mask = screen_y & 1 ? passes->odd_mask :
-                                                        passes->even_mask;
-                        uint32_t fill = screen_y & 1 ? passes->odd_fill :
-                                                        passes->even_fill;
-                        index = (uint8_t)((index & (mask >> bit)) |
-                                          (fill >> bit));
+            int clipped = pass->clip != TERRAIN_SPRITE_CLIP_DEFAULT;
+            for (uint32_t sy = sy0; sy < sy1; ++sy) {
+                size_t dy = (size_t)(draw_y[i] + sy);
+                size_t dx0 = (size_t)(draw_x[i] + sx0);
+                const SlpPixel *src =
+                    &frame->pixels[(size_t)sy * frame->width + sx0];
+                uint8_t *dst = indices + dy * stride + dx0;
+                const uint8_t *mask_row =
+                    clipped ? clip.bytes + dy * clip.stride + dx0 : NULL;
+                uint32_t n = sx1 - sx0;
+                if (!pass->dither_mode && frame->row_spans &&
+                    frame->row_spans[2 * sy] != SLP_ROW_MIXED) {
+                    /* Transparent outside one color run. */
+                    uint32_t lo = frame->row_spans[2 * sy];
+                    uint32_t hi = frame->row_spans[2 * sy + 1];
+                    if (lo < sx0) lo = sx0;
+                    if (hi > sx1) hi = sx1;
+                    if (!clipped) {
+                        for (uint32_t x = lo; x < hi; ++x)
+                            dst[x - sx0] = src[x - sx0].index;
+                    } else {
+                        for (uint32_t x = lo; x < hi; ++x) {
+                            uint32_t k = x - sx0;
+                            dst[k] = mask_row[k] ? src[k].index : dst[k];
+                        }
                     }
-                    indices[(size_t)dy * stride + (size_t)dx] = index;
+                } else if (!pass->dither_mode) {
+                    for (uint32_t k = 0; k < n; ++k) {
+                        if (src[k].kind == SLP_TRANSPARENT) continue;
+                        if (clipped && !mask_row[k]) continue;
+                        dst[k] = src[k].index;
+                    }
+                } else {
+                    int64_t screen_y = (int64_t)screen_origin_y + (int64_t)dy;
+                    uint32_t mask = screen_y & 1 ? passes->odd_mask :
+                                                    passes->even_mask;
+                    uint32_t fill = screen_y & 1 ? passes->odd_fill :
+                                                    passes->even_fill;
+                    uint32_t phase =
+                        (uint32_t)(((int64_t)screen_origin_x + (int64_t)dx0) &
+                                   3);
+                    for (uint32_t k = 0; k < n; ++k) {
+                        uint32_t bit = ((phase + k) & 3) * 8;
+                        if (src[k].kind == SLP_TRANSPARENT) continue;
+                        if (clipped && !mask_row[k]) continue;
+                        dst[k] = (uint8_t)((src[k].index & (mask >> bit)) |
+                                           (fill >> bit));
+                    }
                 }
             }
         }

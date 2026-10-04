@@ -1,0 +1,86 @@
+#ifndef VITA_AOE_DEMO_APP_H
+#define VITA_AOE_DEMO_APP_H
+
+#include <stddef.h>
+#include <stdint.h>
+
+/* Portable tech-demo application: loads user-supplied original Rise of Rome
+   data from a root directory, builds the reconstructed scenario runtime,
+   runs the translated world update and draws the original-art scene into a
+   32-bit framebuffer. The platform layer (Vita or host) owns the display,
+   input and clock. This is a demonstration shell around the reconstruction,
+   not a reconstruction of the original game's interface.
+
+   Expected layout below the root (names are matched case-insensitively
+   where the filesystem is case-sensitive):
+     data/   base Age of Empires: graphics.drs, Terrain.drs, Border.drs,
+             Interfac.drs, TILEEDGE.DAT and the *.col color tables
+     data2/  Rise of Rome: EMPIRES.DAT, GRAPHICS.DRS, INTERFAC.DRS
+     scenario/  optional *.scx / *.scn files
+     campaign/  optional Rise of Rome *.cpx campaign files */
+
+enum {
+    AOE_DEMO_WIDTH = 960,
+    AOE_DEMO_HEIGHT = 544
+};
+
+enum {
+    AOE_DEMO_BUTTON_PREV = 1u << 0,      /* L: previous scenario */
+    AOE_DEMO_BUTTON_NEXT = 1u << 1,      /* R: next scenario */
+    AOE_DEMO_BUTTON_TRAIN = 1u << 2,     /* Cross: train a villager */
+    AOE_DEMO_BUTTON_ATTACK = 1u << 3,    /* Square: army attacks */
+    AOE_DEMO_BUTTON_CAMERA = 1u << 4,    /* Circle: next point of interest */
+    AOE_DEMO_BUTTON_HUD = 1u << 5,       /* Triangle: toggle overlay */
+    AOE_DEMO_BUTTON_PAUSE = 1u << 6,     /* Select: pause simulation */
+    AOE_DEMO_BUTTON_QUIT = 1u << 7       /* Start */
+};
+
+typedef struct {
+    float scroll_x, scroll_y; /* -1..1 screen-space scroll request */
+    uint32_t pressed;         /* buttons newly pressed this frame */
+} AoeDemoInput;
+
+typedef struct AoeDemo AoeDemo;
+
+/* Monotonic microsecond clock supplied by the platform. */
+typedef uint64_t (*AoeDemoClock)(void);
+
+/* Allocates the demo and loads the shared DAT/DRS data and scenario list.
+   On failure returns NULL and writes a human-readable reason. */
+AoeDemo *aoe_demo_open(const char *root, AoeDemoClock clock, char *error,
+                       size_t error_size);
+void aoe_demo_close(AoeDemo *demo);
+
+size_t aoe_demo_scenario_count(const AoeDemo *demo);
+/* Builds and starts scenario `index` (wrapping). Returns 0 on failure,
+   leaving the reason in aoe_demo_status. */
+int aoe_demo_load_scenario(AoeDemo *demo, size_t index);
+
+/* Applies input, scrolls the camera and advances the simulation by `dt`
+   seconds of real time. Returns 0 when the user asked to quit. */
+int aoe_demo_update(AoeDemo *demo, const AoeDemoInput *input, float dt);
+
+/* Draws the scene and overlay into an A8B8G8R8 (little-endian: R in the
+   low byte) framebuffer of AOE_DEMO_WIDTH x AOE_DEMO_HEIGHT pixels with a
+   row stride of `stride` pixels. Returns 0 on failure. */
+int aoe_demo_render(AoeDemo *demo, uint32_t *framebuffer, size_t stride);
+
+const char *aoe_demo_status(const AoeDemo *demo);
+
+typedef struct {
+    uint64_t frames, world_updates;
+    uint32_t live_units, units_drawn, terrain_tiles;
+    uint32_t trained, attack_orders;
+    float update_ms, draw_ms;
+    float camera_x, camera_y;
+} AoeDemoStats;
+void aoe_demo_stats(const AoeDemo *demo, AoeDemoStats *stats);
+
+/* Overlay text with the demo's own 5x7 font into the same framebuffer
+   format; exposed for the platform's error screen. */
+void aoe_demo_draw_text(uint32_t *framebuffer, size_t stride, int x, int y,
+                        int scale, uint32_t color, const char *text);
+void aoe_demo_fill_rect(uint32_t *framebuffer, size_t stride, int x, int y,
+                        int w, int h, uint32_t color, int blend_half);
+
+#endif

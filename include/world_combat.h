@@ -7,6 +7,7 @@
 #include "action_build.h"
 #include "action_farm.h"
 #include "action_gather.h"
+#include "action_heal.h"
 #include "action_repair.h"
 #include "action_list.h"
 #include "combat.h"
@@ -135,6 +136,8 @@ typedef struct AoeWorldCombatRor {
     /* Repair actions (0x6a): unpaid repairs (event 0x6b) and portable
        dependency failures; completed repairs count in `repairs`. */
     uint32_t repair_unpaid, repair_failures;
+    /* Heal actions (0x69): fully healed targets and dependency failures. */
+    uint32_t heals, heal_failures;
 } AoeWorldCombatRor;
 
 int aoe_world_combat_init_ror(AoeWorldCombatRor *combat,

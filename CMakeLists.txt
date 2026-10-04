@@ -410,6 +410,11 @@ target_include_directories(aoe_action_repair PUBLIC include)
 target_link_libraries(aoe_action_repair PUBLIC aoe_action_move m)
 target_compile_options(aoe_action_repair PRIVATE -Wall -Wextra)
 
+add_library(aoe_action_heal STATIC src/action_heal.c)
+target_include_directories(aoe_action_heal PUBLIC include)
+target_link_libraries(aoe_action_heal PUBLIC aoe_action_move m)
+target_compile_options(aoe_action_heal PRIVATE -Wall -Wextra)
+
 add_library(aoe_world_combat STATIC src/world_combat.c)
 target_include_directories(aoe_world_combat PUBLIC include)
 target_link_libraries(aoe_world_combat PUBLIC aoe_world_motion
@@ -417,7 +422,8 @@ target_link_libraries(aoe_world_combat PUBLIC aoe_world_motion
   aoe_projectile aoe_unit_sprite_binding aoe_unit_task aoe_player_resources
   aoe_unit_order aoe_train_action_adapter aoe_train_action aoe_building_update
   aoe_player_costs aoe_unit_placement_check aoe_player_templates
-  aoe_command_production aoe_research_action aoe_action_repair)
+  aoe_command_production aoe_research_action aoe_action_repair
+  aoe_action_heal)
 target_compile_options(aoe_world_combat PRIVATE -Wall -Wextra)
 
 add_library(aoe_scenario_editor_catalog STATIC src/scenario_editor_catalog.c)
@@ -935,6 +941,10 @@ else()
   target_link_libraries(action_repair_test PRIVATE aoe_action_repair)
   target_compile_options(action_repair_test PRIVATE -UNDEBUG)
   add_test(NAME original_ror_repair_action COMMAND action_repair_test)
+  add_executable(action_heal_test tests/action_heal_test.c)
+  target_link_libraries(action_heal_test PRIVATE aoe_action_heal aoe_action_repair)
+  target_compile_options(action_heal_test PRIVATE -UNDEBUG)
+  add_test(NAME original_ror_heal_action COMMAND action_heal_test)
   add_executable(combat_test tests/combat_test.c)
   target_link_libraries(combat_test PRIVATE aoe_combat)
   target_compile_options(combat_test PRIVATE -UNDEBUG)
@@ -1038,7 +1048,7 @@ else()
   target_link_libraries(repair_real PRIVATE aoe_world_combat aoe_dat m)
   target_compile_options(repair_real PRIVATE -UNDEBUG)
   if(EXISTS "${CMAKE_SOURCE_DIR}/build/ror/scenarios/EXPANS_1_1.scx")
-    add_test(NAME ror_villager_repairs_building COMMAND repair_real
+    add_test(NAME ror_repair_and_heal COMMAND repair_real
       "${CMAKE_SOURCE_DIR}/build/ror/scenarios/EXPANS_1_1.scx"
       "${CMAKE_SOURCE_DIR}/build/ror/disc/GAME/DATA2/EMPIRES.DAT")
   endif()

@@ -136,7 +136,9 @@ typedef int (*AoeRepairPayFn)(void *context, AoeLiveUnit *unit,
    Paying units gain g = maximum x amount / train time (rounded to float,
    capped at the missing hit points) for multiplier g / (2 x maximum)
    (population flag 1 for boats, 0 for buildings); refusal returns 2.
-   Returns 0 still damaged, 1 repaired, 2 unpaid; -1 for bad input. */
+   Returns 0 still damaged, 1 repaired, 2 unpaid; -1 for bad input, a
+   paying unit without `pay`, or a zero train time (the original divides
+   by it). */
 int aoe_live_unit_repair_ror(AoeLiveUnit *unit, float amount,
                              AoeRepairPayFn pay, void *context);
 

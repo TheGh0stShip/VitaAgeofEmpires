@@ -391,6 +391,7 @@ static int repair_tribe(AoeLiveUnit *u, float amount, AoeRepairPayFn pay,
                         void *context) {
     float gain;
     if (!is_boat(u)) return repair_root(u, amount);
+    if (!pay || u->core.unit_template->train_time == 0) return -1;
     if (!repair_paid(u, amount, 1, pay, context, &gain)) return 2;
     return repair_root(u, gain);
 }
@@ -401,8 +402,9 @@ int aoe_live_unit_repair_ror(AoeLiveUnit *u, float amount, AoeRepairPayFn pay,
     float gain;
     if (!u || !(t = u->core.unit_template)) return -1;
     if (t->type < 70) return repair_root(u, amount);
-    if (!pay || t->train_time == 0) return -1;
     if (t->type == 70) return repair_tribe(u, amount, pay, context);
+    /* The original divides by a zero train time; refuse instead. */
+    if (!pay || t->train_time == 0) return -1;
     if (!repair_paid(u, amount, 0, pay, context, &gain)) return 2;
     return repair_tribe(u, gain, pay, context);
 }

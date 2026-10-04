@@ -12,7 +12,9 @@
    the task swap of the order step 0x00405f20), builds the repair action
    (0x004b55c0), walks, faces and repairs it to full hit points through
    the building +0x8c (0x004acb70), which charges the owner
-   (0x004f1750). */
+   (0x004f1750). A priest (template 125) created for player 1 and ordered
+   onto a wounded friendly unit takes the heal task (0x004b2c00) and heals
+   it to full through the same +0x8c method (free for land units). */
 static int16_t head_type(const AoeLiveUnit *u) {
     const AoeActionList *l = u->derived_action_list;
     int16_t t;
@@ -95,5 +97,31 @@ int main(int argc, char **argv) {
     assert(combat.repairs >= 1 && combat.repair_failures == 0);
     assert(p->resources.values[1] < 1000.0f ||
            p->resources.values[2] < 1000.0f);
+
+    /* Heal: a new priest next to the villager. */
+    {
+        AoeLiveUnit *priest = NULL, *patient = villager;
+        int hmax;
+        assert(aoe_scenario_runtime_editor_create_ror(
+            &runtime, 1, 125, villager->core.position.x38 + 1.5f,
+            villager->core.position.y3c, villager->core.position.z40,
+            &priest) && priest);
+        hmax = patient->core.unit_template->hit_points;
+        patient->core.hit_points = 3.0f;
+        assert(aoe_world_combat_order_ror(&combat, priest, patient,
+                                          patient->core.position.x38,
+                                          patient->core.position.y3c, 0.0f,
+                                          &code));
+        assert(head_type(priest) == 0x69);
+        for (ticks = 0;
+             ticks < 4000 && patient->core.hit_points < (float)hmax; ++ticks)
+            assert(aoe_world_combat_update_world_ror(&combat, 0.05f));
+        printf("priest healed %s to %g/%d in %d updates\n",
+               patient->core.unit_template->name
+                   ? patient->core.unit_template->name : "?",
+               patient->core.hit_points, hmax, ticks);
+        assert(patient->core.hit_points == (float)hmax);
+        assert(combat.heals == 1 && combat.heal_failures == 0);
+    }
     return 0;
 }

@@ -60,6 +60,7 @@ typedef struct {
 } HeapActionClass;
 static const HeapActionClass *heap_class(int16_t type);
 static void repair_ops(AoeWorldCombatRor *c, AoeRepairActionOps *o);
+static void heal_ops(AoeWorldCombatRor *c, AoeHealActionOps *o);
 
 /* The record (gather/attack/build) clears its flags; heap actions run
    their class destructor, then are freed (train actions free
@@ -1402,6 +1403,20 @@ static void *order_construct(void *c, AoeLiveUnit *u,
             return NULL;
         s->pending = 9;
         return s;
+    }
+    case 0x004b2c00: case 0x004b2c80: {
+        AoeHealActionRor *a = calloc(1, sizeof(*a));
+        AoeMoveActionOps o;
+        move_ops(w, &o);
+        if (a && !(route->constructor == 0x004b2c00
+                       ? t && aoe_heal_action_init_target_ror(a, u, task, t,
+                                                              &o)
+                       : aoe_heal_action_init_point_ror(a, u, task, x, y,
+                                                        z))) {
+            free(a);
+            a = NULL;
+        }
+        return a;
     }
     case 0x004b55c0: case 0x004b5650: {
         AoeRepairActionRor *a = calloc(1, sizeof(*a));
@@ -2834,6 +2849,51 @@ static void repair_ops(AoeWorldCombatRor *c, AoeRepairActionOps *o) {
     o->move_to = unit_move_to;
 }
 
+/* ---- heal action (0x69) bindings ------------------------------------ */
+
+static int heal_start_move(void *c, AoeMoveActionRor *a, AoeLiveUnit *t,
+                           float range, const void *graphic,
+                           int quiet_first) {
+    return heap_start_move(c, a, t, range, graphic, quiet_first);
+}
+static uint8_t heal_sub_update(void *c, AoeMoveActionRor *a) {
+    return heap_sub_update(c, a->unit);
+}
+static void heal_sub_clear(void *c, AoeMoveActionRor *a) {
+    heap_sub_clear(c, a->unit);
+}
+static uint8_t heal_work(void *c, AoeLiveUnit *t, float amount) {
+    AoeWorldCombatRor *w = c;
+    int r = aoe_live_unit_repair_ror(t, amount, repair_pay, c);
+    if (r < 0) {
+        ++w->heal_failures;
+        return 0;
+    }
+    if (r == 1) ++w->heals;
+    return (uint8_t)r;
+}
+static float heal_rate(void *c, AoeLiveUnit *u) {
+    AoeScenarioRuntimePlayerRor *p = owner_of(c, u);
+    return p && p->resources.values && p->resources.count > 56
+               ? p->resources.values[56]
+               : 0.0f;
+}
+static void heal_ops(AoeWorldCombatRor *c, AoeHealActionOps *o) {
+    memset(o, 0, sizeof(*o));
+    move_ops(c, &o->move);
+    o->graphic = graphic_id_cb;
+    o->tick_seconds = tick_seconds;
+    o->distance = repair_distance;
+    o->face = face_target;
+    o->allowed = repair_allowed;
+    o->heal = heal_work;
+    o->heal_rate = heal_rate;
+    o->play_sound = play_sound_cb;
+    o->start_move = heal_start_move;
+    o->sub_update = heal_sub_update;
+    o->sub_clear = heal_sub_clear;
+}
+
 /* ---- heap action classes -------------------------------------------- */
 
 static void move_activate(AoeWorldCombatRor *c, void *a, uint8_t st) {
@@ -2924,7 +2984,37 @@ static int repair_retarget(AoeWorldCombatRor *c, void *a, AoeLiveUnit *t,
     return aoe_repair_action_retarget_ror(a, t, x, y, z, &o);
 }
 
+static void heal_activate(AoeWorldCombatRor *c, void *a, uint8_t st) {
+    AoeHealActionOps o;
+    (void)st;
+    heal_ops(c, &o);
+    if (!aoe_heal_action_activate_ror(a, &o)) ++c->heal_failures;
+}
+static uint8_t heal_update(AoeWorldCombatRor *c, void *a) {
+    AoeHealActionOps o;
+    uint8_t r = 0;
+    heal_ops(c, &o);
+    if (!aoe_heal_action_update_ror(a, &o, &r)) {
+        ++c->heal_failures;
+        return 0;
+    }
+    return r;
+}
+static const DatUnitTask *heal_task(void *a) {
+    return ((AoeHealActionRor *)a)->task;
+}
+static int heal_retarget(AoeWorldCombatRor *c, void *a, AoeLiveUnit *t,
+                         float x, float y, float z) {
+    AoeHealActionOps o;
+    int accepted = 0;
+    (void)x; (void)y; (void)z;
+    heal_ops(c, &o);
+    return aoe_heal_action_retarget_ror(a, t, &o, &accepted) && accepted;
+}
+
 static const HeapActionClass heap_classes[] = {
+    {0x69, NULL, heal_activate, heal_update, heal_task, heal_retarget,
+     base_target},
     {1, NULL, move_activate, move_update, NULL, NULL, base_target},
     {0x15, NULL, farm_activate, farm_update, farm_task, NULL, base_target},
     {0x66, train_destroy, train_activate, train_update, NULL, NULL, NULL},

@@ -146,10 +146,22 @@ individual action classes behind the routed constructors. The move action
 next are gather 5, attack 7 and build 0x65, and the unit movement system
 (`0x0044be90`..`0x0044c2d0`) itself. The pathfinder search `0x00458930`
 and path builder `0x0045a970` are now translated (`src/pathfinder_search.c`).
-Next: movement start `0x0044bf00` (path budget `0x0045c180/0x0045c1c0`),
-the movement step `0x0044c2d0`, and obstruction registration
-`0x004ab7f0/0x004ab6e0` that fills the occupancy bitmap. Validating against
-original-game traces remains outstanding. Note `0x00403e70` is the base list's
+The unit movement system is now translated in `src/movement.c`:
+- movement start `0x0044bf00` with the player path budget;
+- the per-tick update `0x0044c2d0`;
+- the tick toward a point `0x0044cde0`, with facet turning, blocked waits
+  and slope and terrain speed;
+- `aoe_movement_tick_ror` binding them together.
+
+The fit check `0x0045a4f0` and the unit footprint restore/lift
+`0x004ab6e0/0x004ab7f0` are also translated (`src/pathfinder_search.c`).
+Next:
+1. Bind these into the move action's movement interface and a live world.
+2. Translate the remaining callbacks: vtables `+0x1c0`/`+0x1c4`
+   (intermediate waypoints) and zone lookup `0x004ab9e0`.
+3. Translate gather 5, attack 7 and build 0x65.
+
+Validating against original-game traces remains outstanding. Note `0x00403e70` is the base list's
 stream loader (slot 0), not the order path.
 Every base
 opcode (0-0x11; 0x0d is a no-op) is translated.

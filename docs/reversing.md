@@ -1354,6 +1354,29 @@ The tick toward a point `0x0044cde0` (RoR 1.0a):
   and `tests/movement_step_test.c` covers it. Host libm atan2/sin/cos may
   differ from x87 in the last bit.
 
+Occupancy and fit checks (RoR 1.0a):
+- **Saturating counts.** The occupancy bitmap holds a saturating 2-bit
+  count per quarter cell. `0x00458870` increments it up to 3, and
+  `0x004588d0` decrements it while positive (clear masks `0x00557b2c`).
+- **Restore and lift.** Unit restore `0x004ab6e0` adds its footprint and
+  lift `0x004ab7f0` removes it. The footprint is
+  `[ftol((x - sx) * 4) >= 0, ftol((x + sx) * 4))` on each axis. Only units
+  with template height `+0x38` > 0 take part, and live `+0x84` and `+0x85`
+  track the current and previous state. Selector `+0x11dcf4` chooses the
+  main pathfinder (0), the secondary one at `0x00583bc8` (1), or both.
+- **Callback names.** The pathfinder callbacks previously named
+  register/unregister are `lift_obstruction`/`restore_obstruction`: the
+  search lifts its own unit's footprint and restores it afterwards.
+- **Fit check.** `0x0045a4f0(unit, x, y, check_terrain)` computes the
+  quarter footprint with negative low edges nudged up by one. It runs the
+  terrain sweep with no start-tile exemption, then the occupancy sweep
+  with the unit lifted. Touching the last search's target rectangle (target
+  `+0x11dc4c`, now kept in `AoePathfinderRor.target_id`) counts as not
+  fitting.
+- `aoe_path_fits_ror`, `aoe_path_occupancy_add/remove_ror` and
+  `aoe_unit_obstruction_restore/lift_ror` translate these, with tests in
+  `tests/pathfinder_search_test.c`.
+
 The pathfinder (vtable `0x00544cf0`, constructor `0x00458570`) works on
 255 x 255 grids (bytes at `+0x10de28`, dwords at `+0xce624`, indexed
 `[first*255 + second]`). Its distance table `0x006a18c0` holds

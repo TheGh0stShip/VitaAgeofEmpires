@@ -43,6 +43,9 @@ typedef struct {
     int32_t closest;            /* +0x11dcc8 */
     float offset_x, offset_y;   /* +0x11dc54/+0x11dc58 */
     int32_t target_rect[4];     /* +0x11dc84..+0x11dc90, quarter tiles */
+    /* +0x11dc4c: the last search's target ID (-1 when it did not resolve),
+       left for later fit checks. */
+    int32_t target_id;
 } AoePathfinderRor;
 
 /* Global table 0x006a18c0, filled by the constructor: entry i is
@@ -68,6 +71,15 @@ int aoe_path_fill_penalty_ror(AoePathfinderRor *path, uint8_t value);
 int aoe_path_clear_occupancy_ror(AoePathfinderRor *path);
 int aoe_path_set_penalty_ror(AoePathfinderRor *path, int32_t first,
                              int32_t second, uint8_t value);
+
+/* 0x00458870 / 0x004588d0: the 2-bit occupancy fields are saturating
+   counts. Add raises quarter cell (qx, qy) by one up to 3; remove lowers
+   it by one when positive. Return 0 for missing storage or cells outside
+   the bitmap (the original writes unchecked). */
+int aoe_path_occupancy_add_ror(AoePathfinderRor *path, int32_t qx,
+                               int32_t qy);
+int aoe_path_occupancy_remove_ror(AoePathfinderRor *path, int32_t qx,
+                                  int32_t qy);
 
 typedef enum {
     AOE_PATH_PRECHECK_FAIL_ROR = 0,     /* return 0 */

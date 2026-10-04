@@ -60,10 +60,11 @@ typedef struct {
                 uint8_t *byte6);
     /* Map +0x3928 + overlay * 0x5a0 (a short terrain ID). */
     int16_t (*overlay_terrain)(void *context, uint8_t overlay);
-    /* Obstruction manager +0x11dcf4: register 0x004ab7f0 (result stored at
-       +0x11dc48), unregister 0x004ab6e0. */
-    int32_t (*register_obstruction)(void *context, AoeLiveUnit *unit);
-    void (*unregister_obstruction)(void *context, AoeLiveUnit *unit);
+    /* The unit's lift 0x004ab7f0 (result stored at +0x11dc48) and restore
+       0x004ab6e0 of its own occupancy footprint, with the map selector
+       +0x11dcf4 (see aoe_unit_obstruction_lift_ror). */
+    int32_t (*lift_obstruction)(void *context, AoeLiveUnit *unit);
+    void (*restore_obstruction)(void *context, AoeLiveUnit *unit);
     int (*centered)(void *context, AoeLiveUnit *unit, float x,
                     float y);                          /* 0x0045a4f0(.., 1) */
     int32_t (*retry_count)(void *context, AoeLiveUnit *unit);  /* +0x144 */
@@ -99,5 +100,43 @@ AoePathResultRor aoe_path_find_ror(AoePathfinderRor *path,
                                    const AoePathRequestRor *request,
                                    const AoePathWorldOps *ops,
                                    int32_t *returned, float *distance);
+
+/* Live unit +0x84 (footprint currently counted) and +0x85 (its value
+   before the last lift or restore). */
+typedef struct {
+    uint8_t placed, previous;
+} AoeObstructionStateRor;
+
+/* 0x004ab6e0 (restore) / 0x004ab7f0 (lift): add or remove one count per
+   quarter cell of the unit's footprint, [ftol((x - sx) * 4) clamped at 0,
+   ftol((x + sx) * 4)) by the same on y, in the main pathfinder (map
+   selector 0), the secondary one at 0x00583bc8 (1) or both (any other
+   value). Units with template height +0x38 <= 0, or already in the target
+   state, return 0 unchanged; otherwise `previous` takes the old state and
+   1 is returned. -1 reports a missing dependency or a cell outside the
+   bitmap (host-only; earlier cells stay updated). */
+int aoe_unit_obstruction_restore_ror(const AoeLiveUnit *unit,
+                                     AoeObstructionStateRor *state,
+                                     AoePathfinderRor *main_map,
+                                     AoePathfinderRor *secondary_map,
+                                     int32_t selector);
+int aoe_unit_obstruction_lift_ror(const AoeLiveUnit *unit,
+                                  AoeObstructionStateRor *state,
+                                  AoePathfinderRor *main_map,
+                                  AoePathfinderRor *secondary_map,
+                                  int32_t selector);
+
+/* 0x0045a4f0: whether `unit` fits at (x, y). The footprint (template
+   +0x30/+0x34 around the point, in quarter tiles, with negative low edges
+   nudged up by one) must pass the terrain sweep when `check_terrain` is
+   set (no start-tile exemption), then the occupancy sweep with the unit's
+   own obstruction lifted. Touching the last search's target rectangle
+   counts as not fitting. ops->terrain_costs must be the unit's terrain
+   restriction table (the original loads world +0x54[template +0x66]). The
+   unit pointer and cache fields it stores (+0x11dc44, +0x11dc50,
+   +0x11dc94..+0x11dca0) are not modelled. Returns 1, 0, or -1 for missing
+   dependencies or out-of-bounds storage (host-only). */
+int aoe_path_fits_ror(AoePathfinderRor *path, const AoePathWorldOps *ops,
+                      AoeLiveUnit *unit, float x, float y, int check_terrain);
 
 #endif

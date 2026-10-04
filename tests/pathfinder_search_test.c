@@ -109,7 +109,7 @@ int main(void) {
     ops.free_terrain_a = ops.free_terrain_b = -1;
     ops.map_width = W; ops.map_height = H;
     ops.tile = tile; ops.overlay_terrain = overlay;
-    ops.register_obstruction = reg; ops.unregister_obstruction = unreg;
+    ops.lift_obstruction = reg; ops.restore_obstruction = unreg;
     ops.centered = centered; ops.retry_count = retries;
     ops.member_busy = busy; ops.member_rate = rate;
     ops.member_field_130 = field130; ops.member_flag_85 = flag85;
@@ -220,6 +220,96 @@ int main(void) {
         assert(big.count == 1001 && !aoe_unit_path_prepend_ror(&big, &w));
         aoe_unit_path_free_ror(&big);
     }
+    /* 0x0045a4f0 fit checks. A 0.2-tile unit at (3.5, 3.5) covers quarter
+       cells [13, 14) on both axes. */
+    memset(terrain, 0, sizeof(terrain));
+    memset(p.occupancy, 0, AOE_PATH_OCCUPANCY_BYTES_ROR);
+    p.target_id = -1;
+    registers = unregisters = 0;
+    assert(aoe_path_fits_ror(&p, &ops, &unit, 3.5f, 3.5f, 1) == 1 &&
+           registers == 1 && unregisters == 1);
+    occupy(&p, 14, 13); /* just outside the exclusive high edge */
+    assert(aoe_path_fits_ror(&p, &ops, &unit, 3.5f, 3.5f, 1) == 1);
+    occupy(&p, 13, 13);
+    assert(aoe_path_fits_ror(&p, &ops, &unit, 3.5f, 3.5f, 1) == 0 &&
+           registers == 3 && unregisters == 3);
+    /* Inside the last search's target rectangle the slow sweep runs, and a
+       touch still means "does not fit". */
+    p.target_id = 9;
+    p.target_rect[0] = p.target_rect[1] = 12;
+    p.target_rect[2] = p.target_rect[3] = 15;
+    assert(aoe_path_fits_ror(&p, &ops, &unit, 3.5f, 3.5f, 1) == 0);
+    memset(p.occupancy, 0, AOE_PATH_OCCUPANCY_BYTES_ROR);
+    assert(aoe_path_fits_ror(&p, &ops, &unit, 3.5f, 3.5f, 1) == 1);
+    p.target_id = -1;
+    /* Terrain is only checked when asked, with no start-tile exemption. */
+    terrain[3][3] = 1;
+    assert(aoe_path_fits_ror(&p, &ops, &unit, 3.5f, 3.5f, 1) == 0 &&
+           registers == 5);
+    assert(aoe_path_fits_ror(&p, &ops, &unit, 3.5f, 3.5f, 0) == 1);
+    terrain[3][3] = 0;
+    /* At x = 0.1 the low quarter edge is -1, nudged up to 0. */
+    occupy(&p, 0, 13);
+    assert(aoe_path_fits_ror(&p, &ops, &unit, 0.1f, 3.5f, 1) == 0);
+    memset(p.occupancy, 0, AOE_PATH_OCCUPANCY_BYTES_ROR);
+    assert(aoe_path_fits_ror(&p, &ops, &unit, 0.1f, 3.5f, 1) == 1);
+    /* Beyond the map edge the terrain sweep fails. */
+    assert(aoe_path_fits_ror(&p, &ops, &unit, 23.9f, 3.5f, 1) == 0);
+    assert(aoe_path_fits_ror(&p, NULL, &unit, 3.5f, 3.5f, 1) == -1);
+
+    /* Occupancy counts saturate at 3 and floor at 0. */
+    memset(p.occupancy, 0, AOE_PATH_OCCUPANCY_BYTES_ROR);
+    for (int i = 0; i < 4; ++i) assert(aoe_path_occupancy_add_ror(&p, 2, 7));
+    assert(p.occupancy[2 * 255 + 1] == 0xc0);
+    assert(aoe_path_occupancy_remove_ror(&p, 2, 7) &&
+           p.occupancy[2 * 255 + 1] == 0x80);
+    assert(aoe_path_occupancy_remove_ror(&p, 2, 7) &&
+           aoe_path_occupancy_remove_ror(&p, 2, 7) &&
+           aoe_path_occupancy_remove_ror(&p, 2, 7) &&
+           p.occupancy[2 * 255 + 1] == 0);
+    assert(!aoe_path_occupancy_add_ror(&p, 1020, 0) &&
+           !aoe_path_occupancy_add_ror(&p, 0, 1020) &&
+           !aoe_path_occupancy_add_ror(&p, -1, 0));
+
+    /* Footprint lift/restore 0x004ab7f0/0x004ab6e0: a 0.2-tile unit at
+       (3.5, 3.5) counts quarter cell 13 on both axes: [ftol(13.2),
+       ftol(14.8)) = [13, 14). */
+    {
+        AoePathfinderRor second = make_pathfinder();
+        AoeObstructionStateRor st = {0, 7};
+        unit.core.position.x38 = unit.core.position.y3c = 3.5f;
+        unit_t.size[2] = 1.0f;
+        assert(aoe_unit_obstruction_lift_ror(&unit, &st, &p, &second, 0) == 0 &&
+               st.previous == 7);
+        assert(aoe_unit_obstruction_restore_ror(&unit, &st, &p, &second, 0) ==
+                   1 && st.placed == 1 && st.previous == 0);
+        assert(p.occupancy[13 * 255 + 3] == 0x04 &&
+               p.occupancy[12 * 255 + 3] == 0 &&
+               p.occupancy[14 * 255 + 3] == 0 &&
+               second.occupancy[13 * 255 + 3] == 0);
+        /* Already placed: unchanged. */
+        assert(aoe_unit_obstruction_restore_ror(&unit, &st, &p, &second, 0) ==
+                   0 && p.occupancy[13 * 255 + 3] == 0x04);
+        /* The fit check sees the count unless the unit's own footprint is
+           lifted (the test's lift callback does not touch the map). */
+        assert(aoe_path_fits_ror(&p, &ops, &unit, 3.5f, 3.5f, 1) == 0);
+        /* Selector 2 lifts from both maps (the second one is empty and
+           stays 0); selector 1 places in the second only. */
+        assert(aoe_unit_obstruction_lift_ror(&unit, &st, &p, &second, 2) == 1 &&
+               st.placed == 0 && st.previous == 1 &&
+               p.occupancy[13 * 255 + 3] == 0 &&
+               second.occupancy[13 * 255 + 3] == 0);
+        assert(aoe_unit_obstruction_restore_ror(&unit, &st, &p, &second, 1) == 1 &&
+               p.occupancy[13 * 255 + 3] == 0 &&
+               second.occupancy[13 * 255 + 3] == 0x04);
+        /* A flat (height 0) template never counts. */
+        unit_t.size[2] = 0.0f;
+        st.placed = 0;
+        assert(aoe_unit_obstruction_restore_ror(&unit, &st, &p, &second, 0) == 0);
+        assert(aoe_unit_obstruction_restore_ror(NULL, &st, &p, &second, 0) == -1);
+        free_pathfinder(&second);
+    }
+
     aoe_unit_path_free_ror(&upath);
     free_pathfinder(&p);
     return 0;

@@ -51,6 +51,43 @@ int aoe_path_clear_occupancy_ror(AoePathfinderRor *path) {
     return 1;
 }
 
+/* Byte index and shift of quarter cell (qx, qy); -1 outside the bitmap. */
+static int32_t occupancy_cell(const AoePathfinderRor *path, int32_t qx,
+                              int32_t qy, uint8_t *shift) {
+    int32_t index;
+    if (!path || !path->occupancy || qx < 0 ||
+        qx >= AOE_PATH_OCCUPANCY_ROWS_ROR || qy < 0 ||
+        (qy >> 2) >= AOE_PATH_GRID_SIDE_ROR)
+        return -1;
+    index = qx * AOE_PATH_GRID_SIDE_ROR + (qy >> 2);
+    *shift = (uint8_t)(2 * (qy & 3)); /* table 0x00557b30 */
+    return index;
+}
+
+int aoe_path_occupancy_add_ror(AoePathfinderRor *path, int32_t qx,
+                               int32_t qy) {
+    uint8_t shift, count;
+    int32_t index = occupancy_cell(path, qx, qy, &shift);
+    if (index < 0) return 0;
+    count = (uint8_t)((path->occupancy[index] >> shift) & 3);
+    if (count < 3)
+        path->occupancy[index] = (uint8_t)(
+            (path->occupancy[index] & ~(3u << shift)) | (count + 1u) << shift);
+    return 1;
+}
+
+int aoe_path_occupancy_remove_ror(AoePathfinderRor *path, int32_t qx,
+                                  int32_t qy) {
+    uint8_t shift, count;
+    int32_t index = occupancy_cell(path, qx, qy, &shift);
+    if (index < 0) return 0;
+    count = (uint8_t)((path->occupancy[index] >> shift) & 3);
+    if (count)
+        path->occupancy[index] = (uint8_t)(
+            (path->occupancy[index] & ~(3u << shift)) | (count - 1u) << shift);
+    return 1;
+}
+
 int aoe_path_set_penalty_ror(AoePathfinderRor *path, int32_t first,
                              int32_t second, uint8_t value) {
     int32_t index;

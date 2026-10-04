@@ -47,7 +47,7 @@ typedef struct {
     const AoePathRequestRor *r;
     const AoePathWorldOps *ops;
     AoeLiveUnit *unit;
-    int32_t self_registered;
+    int32_t self_lifted;
     int32_t target_id;     /* +0x11dc4c: -1 when the target did not resolve */
     int32_t goal_radius;
     int32_t e[4], q[4]; /* tile and quarter footprint offsets */
@@ -220,13 +220,13 @@ static void cleanup_group(Search *s) {
         if (m && m->core.unit_id != s->unit->core.unit_id &&
             ops->member_flag_85(ops->context, m) == 1 &&
             !ops->attached(ops->context, m))
-            ops->unregister_obstruction(ops->context, m);
+            ops->restore_obstruction(ops->context, m);
     }
 }
 
 static void finish_self(Search *s) {
-    if (s->self_registered == 1 && !s->ops->attached(s->ops->context, s->unit))
-        s->ops->unregister_obstruction(s->ops->context, s->unit);
+    if (s->self_lifted == 1 && !s->ops->attached(s->ops->context, s->unit))
+        s->ops->restore_obstruction(s->ops->context, s->unit);
 }
 
 static void collect_nearby(Search *s, int32_t x, int32_t y) {
@@ -350,8 +350,8 @@ static void setup_offsets(Search *s) {
 
 static int ops_valid(const AoePathWorldOps *o) {
     return o && o->resolve && o->speed && o->unit_path && o->terrain_costs &&
-           o->tile && o->overlay_terrain && o->register_obstruction &&
-           o->unregister_obstruction && o->centered && o->retry_count &&
+           o->tile && o->overlay_terrain && o->lift_obstruction &&
+           o->restore_obstruction && o->centered && o->retry_count &&
            o->member_busy && o->member_rate && o->member_field_130 &&
            o->member_flag_85 && o->attached && o->footprint_adjust &&
            o->query && o->owner_id && o->owner_kind;
@@ -433,7 +433,8 @@ AoePathResultRor aoe_path_find_ror(AoePathfinderRor *p,
             p->target_rect[3] = aoe_ftol32(((double)ts[1] + tp->y3c) * 4.0);
         }
     }
-    s.self_registered = ops->register_obstruction(ops->context, unit);
+    p->target_id = s.target_id;
+    s.self_lifted = ops->lift_obstruction(ops->context, unit);
 
     /* Sub-tile offset: tile centre when the unit sits centred there. */
     floor_y = (float)(floor((double)unit->core.position.y3c) + 0.5f);
@@ -461,7 +462,7 @@ AoePathResultRor aoe_path_find_ror(AoePathfinderRor *p,
             rate = ops->member_rate(ops->context, m);
             if (busy || (!isnan(rate) && rate != 0.0f) ||
                 ops->member_field_130(ops->context, m) > 0.0f)
-                ops->register_obstruction(ops->context, m);
+                ops->lift_obstruction(ops->context, m);
         }
 
     /* Unit footprint box in quarter tiles. */
@@ -673,4 +674,106 @@ AoePathResultRor aoe_path_find_ror(AoePathfinderRor *p,
     cleanup_group(&s);
     finish_self(&s);
     return AOE_PATH_RESULT_PARTIAL_ROR;
+}
+
+int aoe_path_fits_ror(AoePathfinderRor *p, const AoePathWorldOps *ops,
+                      AoeLiveUnit *unit, float x, float y, int check_terrain) {
+    AoePathRequestRor none;
+    Search s;
+    const DatUnit *t;
+    double fy, sx, sy;
+    float fx;
+    int32_t ix, iy, qx_lo, qx_hi, qy_lo, qy_hi, registered, r;
+    if (!p || !p->occupancy || !unit || !unit->core.unit_template ||
+        !ops_valid(ops))
+        return -1;
+    t = unit->core.unit_template;
+    memset(&none, 0, sizeof(none));
+    none.x1 = none.y1 = -1; /* +0x11dc7c/+0x11dc80 reset: no start skip */
+    memset(&s, 0, sizeof(s));
+    s.p = p;
+    s.r = &none;
+    s.ops = ops;
+    s.unit = unit;
+    s.target_id = p->target_id;
+
+    /* Quarter-tile footprint. */
+    fx = (float)((double)x - floor((double)x));
+    fy = (double)y - floor((double)y);
+    sx = t->size[0];
+    sy = t->size[1];
+    ix = aoe_ftol32(x);
+    iy = aoe_ftol32(y);
+    qx_lo = 4 * ix - 400 - aoe_ftol32(((double)fx + 100.0 - sx) * -4.0);
+    qy_lo = 4 * iy - 400 - aoe_ftol32((fy + 100.0 - sy) * -4.0);
+    qx_hi = 4 * ix - 400 - aoe_ftol32((sx + fx + 100.0) * -4.0);
+    qy_hi = 4 * iy - 400 - aoe_ftol32((sy + fy + 100.0) * -4.0);
+    if (qx_lo < 0) ++qx_lo;
+    if (qy_lo < 0) ++qy_lo;
+
+    if (check_terrain &&
+        terrain_sweep(&s, qx_lo >> 2, qx_hi >> 2, qy_lo >> 2, qy_hi >> 2) !=
+            1)
+        return s.host_error ? -1 : 0;
+    registered = ops->lift_obstruction(ops->context, unit);
+    r = occupancy_sweep(&s, qx_lo, qx_hi, qy_lo, qy_hi);
+    if (registered && !ops->attached(ops->context, unit))
+        ops->restore_obstruction(ops->context, unit);
+    if (s.host_error) return -1;
+    return r == 1;
+}
+
+static int obstruction_update(const AoeLiveUnit *unit,
+                              AoeObstructionStateRor *state,
+                              AoePathfinderRor *main_map,
+                              AoePathfinderRor *secondary_map,
+                              int32_t selector, int add) {
+    const DatUnit *t;
+    const AoeVisibilityUnitRef *pos;
+    int32_t x_lo, y_lo, x_hi, y_hi;
+    if (!unit || !unit->core.unit_template || !state) return -1;
+    t = unit->core.unit_template;
+    if (!(t->size[2] > 0.0f)) return 0;
+    if (add ? state->placed == 1 : state->placed == 0) return 0;
+    if ((selector != 1 && !main_map) || (selector != 0 && !secondary_map))
+        return -1;
+    pos = &unit->core.position;
+    x_lo = aoe_ftol32(((double)pos->x38 - t->size[0]) * 4.0);
+    if (x_lo < 0) x_lo = 0;
+    y_lo = aoe_ftol32(((double)pos->y3c - t->size[1]) * 4.0);
+    if (y_lo < 0) y_lo = 0;
+    x_hi = aoe_ftol32(((double)pos->x38 + t->size[0]) * 4.0);
+    y_hi = aoe_ftol32(((double)t->size[1] + pos->y3c) * 4.0);
+    for (int32_t qx = x_lo; qx < x_hi; ++qx)
+        for (int32_t qy = y_lo; qy < y_hi; ++qy) {
+            if (selector != 1 &&
+                !(add ? aoe_path_occupancy_add_ror(main_map, qx, qy)
+                      : aoe_path_occupancy_remove_ror(main_map, qx, qy)))
+                return -1;
+            if (selector != 0 &&
+                !(add ? aoe_path_occupancy_add_ror(secondary_map, qx, qy)
+                      : aoe_path_occupancy_remove_ror(secondary_map, qx, qy)))
+                return -1;
+        }
+    state->previous = state->placed;
+    state->placed = (uint8_t)(add ? 1 : 0);
+    return 1;
+}
+
+int aoe_unit_obstruction_restore_ror(const AoeLiveUnit *unit,
+                                     AoeObstructionStateRor *state,
+                                     AoePathfinderRor *main_map,
+                                     AoePathfinderRor *secondary_map,
+                                     int32_t selector) {
+    return obstruction_update(unit, state, main_map, secondary_map, selector,
+                              1);
+}
+
+int aoe_unit_obstruction_lift_ror(const AoeLiveUnit *unit,
+                                  AoeObstructionStateRor *state,
+                                  AoePathfinderRor *main_map,
+                                  AoePathfinderRor *secondary_map,
+                                  int32_t selector) {
+    return obstruction_update(unit, state, main_map, secondary_map, selector,
+                              0);
 }

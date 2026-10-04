@@ -9,6 +9,34 @@
 #include <stdlib.h>
 #include <string.h>
 
+static int relocate_near(AoeWorldMotionRor *motion,
+                         AoeScenarioRuntimeRor *runtime, AoeLiveUnit *target,
+                         const AoeLiveUnit *anchor, int r_min, int r_max) {
+    AoeWorldMotionUnitRor *ts = aoe_world_motion_unit_ror(motion, target);
+    int placed = 0;
+    (void)aoe_unit_obstruction_lift_ror(target, &ts->obstruction,
+                                        &motion->path, NULL, 0);
+    for (int r = r_min; r <= r_max && !placed; ++r)
+        for (int dy = -r; dy <= r && !placed; ++dy)
+            for (int dx = -r; dx <= r && !placed; ++dx) {
+                float x = floorf(anchor->core.position.x38) + dx + 0.5f;
+                float y = floorf(anchor->core.position.y3c) + dy + 0.5f;
+                if (abs(dx) != r && abs(dy) != r) continue;
+                if (aoe_world_motion_fits_ror(motion, target, x, y, 1) != 1)
+                    continue;
+                placed = aoe_live_unit_place_ror_with_vision(
+                    &target->core, &target->placement, runtime->map.tiles,
+                    runtime->map.objects, runtime->geometry,
+                    runtime->map.width, runtime->map.height, x, y,
+                    target->core.position.z40,
+                    &runtime->players[target->runtime_owner_index]
+                         .vision_binding);
+            }
+    (void)aoe_unit_obstruction_restore_ror(target, &ts->obstruction,
+                                           &motion->path, NULL, 0);
+    return placed;
+}
+
 /* A player-1 melee unit attacks a player-2 unit on a real Rise of Rome
    map through the translated attack action, move sub-action, movement,
    A* search, turn-to-face, reload, melee hit roll and tribe damage. The
@@ -79,30 +107,7 @@ int main(int argc, char **argv) {
         goto done;
     }
     /* Relocate the target near the attacker, keeping its footprint count. */
-    {
-        AoeWorldMotionUnitRor *ts = aoe_world_motion_unit_ror(&motion, target);
-        (void)aoe_unit_obstruction_lift_ror(target, &ts->obstruction,
-                                            &motion.path, NULL, 0);
-        for (int r = 3; r <= 6 && !placed; ++r)
-            for (int dy = -r; dy <= r && !placed; ++dy)
-                for (int dx = -r; dx <= r && !placed; ++dx) {
-                    float x = floorf(attacker->core.position.x38) + dx + 0.5f;
-                    float y = floorf(attacker->core.position.y3c) + dy + 0.5f;
-                    if (abs(dx) != r && abs(dy) != r) continue;
-                    if (aoe_world_motion_fits_ror(&motion, target, x, y, 1) !=
-                        1)
-                        continue;
-                    placed = aoe_live_unit_place_ror_with_vision(
-                        &target->core, &target->placement, runtime.map.tiles,
-                        runtime.map.objects, runtime.geometry,
-                        runtime.map.width, runtime.map.height, x, y,
-                        target->core.position.z40,
-                        &runtime.players[target->runtime_owner_index]
-                             .vision_binding);
-                }
-        (void)aoe_unit_obstruction_restore_ror(target, &ts->obstruction,
-                                               &motion.path, NULL, 0);
-    }
+    placed = relocate_near(&motion, &runtime, target, attacker, 3, 6);
     if (!placed) goto done;
     start_hp = target->core.hit_points;
     printf("attacker %d (template %d, attack %d) vs target %d (template %d, "
@@ -185,6 +190,64 @@ int main(int argc, char **argv) {
                combat.kills);
         ok = n >= 2 && states[0] == 2 && states[1] == 3 &&
              attacker_result == 5 && combat.kills == 1;
+    }
+    /* Ranged: a player-1 projectile unit shoots another enemy placed 4..7
+       tiles away. Arrows are projectile units flying under 0x00404db0;
+       the launcher strikes on impact (hit mode), so the target loses hit
+       points only after a flight. */
+    if (ok) {
+        AoeLiveUnit *archer = NULL, *mark = NULL;
+        uint32_t hits0 = combat.hits;
+        float mark_hp;
+        int flights_seen = 0;
+        for (uint32_t i = 0; i < runtime.players[1].unit_count && !archer;
+             ++i) {
+            AoeLiveUnit *u = &runtime.players[1].units[i];
+            const DatUnit *t = u->core.unit_template;
+            if (u->constructed && u->core.state == 2 && t && t->type == 70 &&
+                t->projectile_unit_id >= 0 && t->attack_count > 0 &&
+                t->max_range >= 4.0f)
+                archer = u;
+        }
+        for (int p = 2; p < AOE_SCENARIO_RUNTIME_PLAYERS && !mark; ++p)
+            for (uint32_t i = 0; i < runtime.players[p].unit_count && !mark;
+                 ++i) {
+                AoeLiveUnit *u = &runtime.players[p].units[i];
+                if (u != target && u->constructed && u->core.state == 2 &&
+                    u->core.unit_template &&
+                    u->core.unit_template->type == 70)
+                    mark = u;
+            }
+        ok = archer && mark &&
+             relocate_near(&motion, &runtime, mark, archer, 4, 7) &&
+             aoe_world_combat_attack_ror(&combat, archer, mark);
+        if (!ok) {
+            fprintf(stderr, "ranged setup failed\n");
+            goto done;
+        }
+        mark_hp = mark->core.hit_points;
+        printf("archer %d (template %d, range %.1f, projectile %d) vs %d "
+               "(%.1f hp) %.2f tiles apart\n",
+               archer->core.unit_id, archer->core.unit_template->id,
+               archer->core.unit_template->max_range,
+               archer->core.unit_template->projectile_unit_id,
+               mark->core.unit_id, mark_hp,
+               hypotf(mark->core.position.x38 - archer->core.position.x38,
+                      mark->core.position.y3c - archer->core.position.y3c));
+        for (int t = 0; t < 2000; ++t) {
+            if (!aoe_world_combat_tick_ror(&combat, archer, 0.05f, &result) ||
+                !aoe_world_combat_update_projectiles_ror(&combat))
+                break;
+            for (size_t k = 0; k < combat.flight_count; ++k)
+                flights_seen |= combat.flights[k].active;
+            if (mark->core.hit_points < mark_hp) break;
+        }
+        printf("ranged: %u projectiles launched, target hp %.2f -> %.2f, "
+               "%u hits\n",
+               combat.projectiles, mark_hp, mark->core.hit_points,
+               combat.hits - hits0);
+        ok = combat.projectiles > 0 && flights_seen &&
+             mark->core.hit_points < mark_hp && combat.hits > hits0;
     }
 done:
     aoe_world_combat_destroy_ror(&combat);

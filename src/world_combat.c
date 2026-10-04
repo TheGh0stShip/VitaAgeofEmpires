@@ -4,6 +4,8 @@
 #include <string.h>
 
 #include "sprite_runtime.h"
+#include "aoe_ftol.h"
+#include "terrain.h"
 #include "unit_sprite_binding.h"
 
 /* Every callback context is the AoeWorldCombatRor. */
@@ -270,11 +272,7 @@ static void attack_notice(void *c, AoeLiveUnit *a, int32_t id) {
     ++((AoeWorldCombatRor *)c)->notices;
 }
 static void blast(void *c, AoeLiveUnit *a, float x, float y, float z,
-                  AoeLiveUnit *source, AoeLiveUnit *excluded) {
-    (void)c; (void)a; (void)x; (void)y; (void)z; (void)source;
-    (void)excluded;
-    /* Blast damage needs the tile scan binding (next step). */
-}
+                  AoeLiveUnit *source, AoeLiveUnit *excluded);
 static float hit_multiplier(void *c, AoeLiveUnit *a, AoeLiveUnit *t) {
     (void)c;
     if (a->core.unit_template && a->core.unit_template->type >= 70)
@@ -327,25 +325,245 @@ static void receive(void *c, AoeLiveUnit *t, const DatUnitAttackArmor *at,
 }
 static void destroy_target(void *c, AoeLiveUnit *t) { (void)c; (void)t; }
 
-static void fire_target(void *c, AoeLiveUnit *u, AoeLiveUnit *t) {
+static float tick_seconds(void *c);
+
+/* Units on a map tile, in tile-list order (map +0x8d8c rows). */
+static size_t tile_units(void *c, int32_t x, int32_t y, AoeLiveUnit **out,
+                         size_t capacity) {
+    const AoeRuntimeMap *map = &motion_of(c)->runtime->map;
+    size_t n = 0;
+    if (x < 0 || y < 0 || (uint32_t)x >= map->width ||
+        (uint32_t)y >= map->height)
+        return 0;
+    for (AoeObjectUpdateNode *node =
+             map->objects[(size_t)y * map->width + (size_t)x].head;
+         node && n < capacity; node = node->next)
+        if (node->object) out[n++] = (AoeLiveUnit *)node->object;
+    return n;
+}
+static int same_owner(void *c, AoeLiveUnit *a, AoeLiveUnit *b) {
+    (void)c;
+    return a->runtime_owner_index == b->runtime_owner_index;
+}
+static int is_tribe(const AoeLiveUnit *u) {
+    return u->core.unit_template && u->core.unit_template->type >= 70;
+}
+static void blast(void *c, AoeLiveUnit *a, float x, float y, float z,
+                  AoeLiveUnit *source, AoeLiveUnit *excluded) {
     AoeWorldCombatRor *w = c;
+    const AoeRuntimeMap *map = &w->motion->runtime->map;
+    AoeCombatBlastOps b = {w,          crt_rand,  (int32_t)map->width,
+                           (int32_t)map->height, tile_units, hit_multiplier,
+                           receive,    same_owner, clear_carried};
+    ++w->blasts;
+    (void)aoe_combat_blast_ror(a, x, y, z, source, excluded, is_tribe(a), &b);
+}
+
+/* Striker vtable +0x22c: tribe 0x004aeca0 or base 0x004267b0. */
+static void melee_hit(AoeWorldCombatRor *w, AoeLiveUnit *striker,
+                      AoeLiveUnit *victim, float x, float y, float z) {
     AoeCombatHitOps h = {w, crt_rand, attack_notice, blast, hit_multiplier,
                          receive, 0, destroy_target};
+    int r = is_tribe(striker)
+                ? aoe_combat_melee_hit_tribe_ror(striker, victim, x, y, z, &h)
+                : aoe_combat_melee_hit_ror(striker, victim, x, y, z, &h);
+    if (r != 1) ++w->misses;
+}
+
+/* Projectile flight callbacks. */
+static AoeWorldProjectileRor *flight_of(AoeWorldCombatRor *w,
+                                        const AoeLiveUnit *p) {
+    for (size_t i = 0; i < w->flight_count; ++i)
+        if (w->flights[i].unit == p) return &w->flights[i];
+    return NULL;
+}
+static float target_speed(void *c, AoeLiveUnit *t) {
+    AoeWorldMotionUnitRor *s = aoe_world_motion_unit_ror(motion_of(c), t);
+    return s ? s->movement.current_speed : 0.0f; /* +0xf4 = +0x88 */
+}
+static float target_heading(void *c, AoeLiveUnit *t) {
+    AoeWorldMotionUnitRor *s = aoe_world_motion_unit_ror(motion_of(c), t);
+    return s ? s->movement.facing : 0.0f; /* +0xf8 = +0x9c */
+}
+/* 0x004495b0: keep the launcher's attack data in a private template. */
+static void capture_launcher(void *c, AoeLiveUnit *p, AoeLiveUnit *l) {
+    AoeWorldProjectileRor *f = flight_of(c, p);
+    const DatUnit *lt = l->core.unit_template;
+    DatUnit *copy;
+    if (!f || f->captured || !p->core.unit_template || !lt) return;
+    copy = malloc(sizeof(*copy));
+    if (!copy) return;
+    *copy = *p->core.unit_template;
+    copy->attack_count = lt->attack_count;
+    copy->attacks = NULL;
+    if (lt->attack_count) {
+        f->captured_attacks = malloc(lt->attack_count * sizeof(*lt->attacks));
+        if (!f->captured_attacks) {
+            free(copy);
+            return;
+        }
+        memcpy(f->captured_attacks, lt->attacks,
+               lt->attack_count * sizeof(*lt->attacks));
+        copy->attacks = f->captured_attacks;
+    }
+    copy->blast_width = lt->blast_width;
+    copy->blast_level = lt->blast_level;
+    copy->terrain_defense_bonus = lt->terrain_defense_bonus;
+    f->captured = copy;
+    f->original = p->core.unit_template;
+    p->core.unit_template = copy;
+}
+/* Projectile +0x6c = 0x004aa320: the hit points drop to 0 (its health flag
+   follows at the next state change) and the state switch retires it. */
+static void destroy_projectile(void *c, AoeLiveUnit *p) {
+    (void)c;
+    p->core.hit_points = 0.0f;
+}
+static void set_facing(void *c, AoeLiveUnit *p, float angle) {
+    AoeMovementRor *m = movement_of(c, p);
+    const DatGraphic *g = p->graphic.current_graphic;
+    if (!m) return;
+    m->facing = angle; /* +0xb4 = 0x0044be40 */
+    if (g) {
+        AoeMovementSpriteRor sp = {g->speed_multiplier,
+                                   (int16_t)g->angle_count, g->sequence_type};
+        aoe_movement_update_facet_ror(p, m, &sp);
+    }
+}
+/* 0x0044be10 + 0x004491d0 + placement 0x004a98c0: move by the velocity,
+   destroy off-map, land when the placed z equals the terrain surface. */
+static int fly(void *c, AoeLiveUnit *p, float vx, float vy, float vz) {
+    AoeWorldCombatRor *w = c;
+    AoeScenarioRuntimeRor *r = w->motion->runtime;
+    AoeMovementRor *m = movement_of(c, p);
+    float x, y, z, surface;
+    int16_t o = p->runtime_owner_index;
+    if (m) {
+        m->velocity_x = vx;
+        m->velocity_y = vy;
+        m->velocity_z = vz;
+    }
+    x = (float)((double)vx + p->core.position.x38);
+    y = (float)((double)vy + p->core.position.y3c);
+    z = (float)((double)vz + p->core.position.z40);
+    if (x < 0.0f || !((float)r->map.width > x) || y < 0.0f ||
+        !((float)r->map.height > y)) {
+        destroy_projectile(c, p);
+        return 0;
+    }
+    if (o < 0 || o >= AOE_SCENARIO_RUNTIME_PLAYERS ||
+        !aoe_live_unit_place_ror_with_vision(
+            &p->core, &p->placement, r->map.tiles, r->map.objects, r->geometry,
+            r->map.width, r->map.height, x, y, z,
+            &r->players[o].vision_binding) ||
+        !terrain_surface_height_at(r->map.tiles, r->map.width, r->map.height,
+                                   p->core.position.x38,
+                                   p->core.position.y3c, &surface))
+        return 0;
+    return surface == p->core.position.z40;
+}
+/* 0x00449280: tiles ftol(x -/+ 3) by ftol(y -/+ 3), clamped. */
+static size_t hit_query(void *c, AoeLiveUnit *p, float step,
+                        AoeLiveUnit **out, size_t capacity) {
+    const AoeRuntimeMap *map = &motion_of(c)->runtime->map;
+    int32_t x0 = aoe_ftol32((double)p->core.position.x38 - 3.0);
+    int32_t y0 = aoe_ftol32((double)p->core.position.y3c - 3.0);
+    int32_t x1 = aoe_ftol32((double)p->core.position.x38 + 3.0);
+    int32_t y1 = aoe_ftol32((double)p->core.position.y3c + 3.0);
+    size_t n = 0;
+    if (x0 < 0) x0 = 0;
+    if (y0 < 0) y0 = 0;
+    if (x1 >= (int32_t)map->width) x1 = (int32_t)map->width - 1;
+    if (y1 >= (int32_t)map->height) y1 = (int32_t)map->height - 1;
+    for (int32_t y = y0; y <= y1; ++y)
+        for (int32_t x = x0; x <= x1; ++x) {
+            AoeLiveUnit *units[64];
+            size_t k = tile_units(c, x, y, units, 64);
+            for (size_t i = 0; i < k && n < capacity; ++i)
+                if (aoe_projectile_overlaps_ror(p, units[i], step))
+                    out[n++] = units[i];
+        }
+    return n;
+}
+static void projectile_hit(void *c, AoeLiveUnit *striker,
+                           AoeLiveUnit *victim, float x, float y, float z) {
+    melee_hit(c, striker, victim, x, y, z);
+}
+static void projectile_blast(void *c, AoeLiveUnit *striker, float x, float y,
+                             float z) {
+    blast(c, striker, x, y, z, striker, NULL);
+}
+
+static void projectile_ops(AoeWorldCombatRor *c, AoeProjectileOps *o) {
+    memset(o, 0, sizeof(*o));
+    move_ops(c, &o->move);
+    o->tick_seconds = tick_seconds;
+    o->target_speed = target_speed;
+    o->target_heading = target_heading;
+    o->capture_launcher = capture_launcher;
+    o->destroy = destroy_projectile;
+    o->set_facing = set_facing;
+    o->fly = fly;
+    o->hit_query = hit_query;
+    o->hit = projectile_hit;
+    o->blast = projectile_blast;
+    o->owner_id = owner_id;
+    o->same_owner = same_owner;
+}
+
+/* 0x00426520 for a ranged unit: launch a projectile unit at the rotated
+   spawn offsets (0x00449070 at a target). */
+static int launch(AoeWorldCombatRor *w, AoeLiveUnit *u, AoeLiveUnit *t) {
+    AoeScenarioRuntimeRor *r = w->motion->runtime;
+    const DatUnit *tmpl = u->core.unit_template;
+    AoeMovementRor *m = movement_of(w, u);
+    AoeLiveUnit *p = NULL;
+    AoeWorldProjectileRor *f;
+    AoeProjectileOps o;
+    float x, y, z, radius;
+    int16_t owner = u->runtime_owner_index;
+    if (!m || owner < 0 || owner >= AOE_SCENARIO_RUNTIME_PLAYERS) return 0;
+    aoe_combat_projectile_origin_ror(u, m->facing, &x, &y, &z, &radius);
+    if (!aoe_scenario_runtime_editor_create_ror(
+            r, (uint8_t)owner, (uint16_t)tmpl->projectile_unit_id, x, y, z,
+            &p) || !p)
+        return 0;
+    if (w->flight_count == w->flight_capacity) {
+        size_t cap = w->flight_capacity ? w->flight_capacity * 2 : 16;
+        AoeWorldProjectileRor *grown =
+            realloc(w->flights, cap * sizeof(*grown));
+        if (!grown) return 0;
+        w->flights = grown;
+        w->flight_capacity = cap;
+    }
+    f = &w->flights[w->flight_count++];
+    memset(f, 0, sizeof(*f));
+    f->unit = p;
+    f->active = 1;
+    projectile_ops(w, &o);
+    if (!aoe_projectile_init_ror(&f->flight, p, u, t, t->core.position.x38,
+                                 t->core.position.y3c, t->core.position.z40,
+                                 radius, &o) ||
+        !aoe_projectile_activate_ror(&f->flight, 1, &o)) {
+        f->active = 0;
+        return 0;
+    }
+    ++w->projectiles;
+    ++w->notices; /* attacker +0x148(.., 0x200, 0x258, -1, 0) */
+    return 1;
+}
+
+static void fire_target(void *c, AoeLiveUnit *u, AoeLiveUnit *t) {
+    AoeWorldCombatRor *w = c;
     const DatUnit *tmpl = u->core.unit_template;
     if (tmpl->projectile_unit_id >= 0) {
-        ++w->projectiles; /* projectile flight: next step */
+        /* 0x004aec50: alert a non-Gaia target owner first (counted). */
+        if (is_tribe(u) && t && t->runtime_owner_index > 0) ++w->alerts;
+        (void)launch(w, u, t);
         return;
     }
-    if (tmpl->type >= 70) {
-        if (aoe_combat_melee_hit_tribe_ror(u, t, u->core.position.x38,
-                                           u->core.position.y3c,
-                                           u->core.position.z40, &h) != 1)
-            ++w->misses;
-    } else if (aoe_combat_melee_hit_ror(u, t, u->core.position.x38,
-                                        u->core.position.y3c,
-                                        u->core.position.z40, &h) != 1) {
-        ++w->misses;
-    }
+    melee_hit(w, u, t, u->core.position.x38, u->core.position.y3c,
+              u->core.position.z40);
 }
 static void fire_point(void *c, AoeLiveUnit *u, float x, float y, float z) {
     (void)u; (void)x; (void)y; (void)z;
@@ -440,6 +658,15 @@ int aoe_world_combat_init_ror(AoeWorldCombatRor *c, AoeWorldMotionRor *m) {
 
 void aoe_world_combat_destroy_ror(AoeWorldCombatRor *c) {
     if (!c) return;
+    for (size_t i = 0; i < c->flight_count; ++i) {
+        AoeWorldProjectileRor *f = &c->flights[i];
+        if (f->captured && f->unit &&
+            f->unit->core.unit_template == f->captured)
+            f->unit->core.unit_template = f->original;
+        free(f->captured_attacks);
+        free(f->captured);
+    }
+    free(c->flights);
     if (c->units) {
         for (size_t i = 0; i < AOE_WORLD_MOTION_ID_SLOTS; ++i)
             if (c->units[i]) {
@@ -489,11 +716,17 @@ typedef struct {
     AoeWorldCombatRor *combat;
     AoeWorldCombatUnitRor *state;
     uint8_t *result;
+    AoeWorldProjectileRor *flight;
 } StateContext;
 
 static int active_update(void *opaque, AoeLiveUnit *u) {
     StateContext *sc = opaque;
     AoeAttackActionOps o;
+    if (sc->flight) {
+        AoeProjectileOps po;
+        projectile_ops(sc->combat, &po);
+        return aoe_projectile_update_ror(&sc->flight->flight, &po) >= 0;
+    }
     if (!sc->state || !sc->state->attacking) return 1;
     attack_ops(sc->combat, &o);
     return aoe_attack_action_update_ror(&sc->state->attack, &o, sc->result);
@@ -529,7 +762,8 @@ static int terminal_cleanup(void *opaque, AoeLiveUnit *u) {
 
 static int update_unit(AoeWorldCombatRor *c, AoeLiveUnit *u,
                        AoeWorldCombatUnitRor *s, uint8_t *result) {
-    StateContext sc = {c, s, result};
+    StateContext sc = {c, s, result, NULL};
+    if (!s) sc.flight = flight_of(c, u);
     AoeLiveUnitUpdateStateOps ops;
     uint8_t predicate = 0;
     memset(&ops, 0, sizeof(ops));
@@ -560,6 +794,36 @@ int aoe_world_combat_tick_ror(AoeWorldCombatRor *c, AoeLiveUnit *attacker,
     c->tick = tick;
     c->world_ms += (uint32_t)(tick * 1000.0f + 0.5f);
     return update_unit(c, attacker, s, result);
+}
+
+int aoe_world_combat_update_projectiles_ror(AoeWorldCombatRor *c) {
+    if (!c) return 0;
+    for (size_t i = 0; i < c->flight_count; ++i) {
+        AoeWorldProjectileRor *f = &c->flights[i];
+        uint8_t result = 0;
+        StateContext sc;
+        if (!f->active) continue;
+        sc = (StateContext){c, NULL, &result, f};
+        {
+            AoeLiveUnitUpdateStateOps ops;
+            uint8_t predicate = 0;
+            memset(&ops, 0, sizeof(ops));
+            ops.context = &sc;
+            ops.active_update = active_update;
+            ops.set_state = set_state;
+            ops.select_graphic = select_graphic_id;
+            ops.play_dying_sound = dying_sound;
+            ops.terminal_cleanup = terminal_cleanup;
+            ops.world_delta = c->tick;
+            if (!aoe_live_unit_update_normal_state_ror(f->unit, &ops,
+                                                       &predicate))
+                return 0;
+        }
+        /* The flights array may have grown during the update. */
+        f = &c->flights[i];
+        if (f->unit->core.state >= 7) f->active = 0;
+    }
+    return 1;
 }
 
 int aoe_world_combat_update_unit_ror(AoeWorldCombatRor *c, AoeLiveUnit *unit,

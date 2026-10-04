@@ -6,6 +6,7 @@
 #include "action_attack.h"
 #include "action_list.h"
 #include "combat.h"
+#include "projectile.h"
 #include "world_motion.h"
 
 /* Binds the translated RoR 1.0a attack action, its move sub-action and the
@@ -22,8 +23,9 @@
      (+0x38) graphics and range (work range), template min range,
      projectile and frame delay the rest;
    - firing at a target uses the tribe fire 0x004aec50 / melee hit
-     0x004aeca0 for type >= 70 and the base ones otherwise; projectile
-     launches are counted but not simulated yet;
+     0x004aeca0 for type >= 70 and the base ones otherwise; ranged units
+     launch real projectile units (0x00426520 / 0x00449070) whose flights
+     use src/projectile.c; the trail units of 0x0044bc40 are not spawned;
    - visibility is always "visible", owners never refuse, groups never
      hold, unit notices and target attach/release hooks are counted only,
      and the instant-kill option is off;
@@ -39,12 +41,25 @@ typedef struct {
     AoeActionList sub_actions;
 } AoeWorldCombatUnitRor;
 
+/* One launched projectile: the projectile unit, its type-8 flight action
+   and, once its launcher died, its private template copy (0x004495b0). */
+typedef struct {
+    AoeLiveUnit *unit;
+    AoeProjectileRor flight;
+    DatUnit *captured;
+    const DatUnit *original;
+    DatUnitAttackArmor *captured_attacks;
+    uint8_t active;
+} AoeWorldProjectileRor;
+
 typedef struct {
     AoeWorldMotionRor *motion;
     AoeWorldCombatUnitRor **units; /* by unit ID + 1000 */
+    AoeWorldProjectileRor *flights;
+    size_t flight_count, flight_capacity;
     uint32_t world_ms;
     float tick;
-    uint32_t notices, hits, misses, projectiles, kills;
+    uint32_t notices, hits, misses, projectiles, kills, blasts, alerts;
 } AoeWorldCombatRor;
 
 int aoe_world_combat_init_ror(AoeWorldCombatRor *combat,
@@ -75,5 +90,11 @@ int aoe_world_combat_tick_ror(AoeWorldCombatRor *combat,
    (+0xb8) is not translated. */
 int aoe_world_combat_update_unit_ror(AoeWorldCombatRor *combat,
                                      AoeLiveUnit *unit, float tick);
+
+/* Updates every active projectile with the current tick (call after the
+   attackers' ticks): the 0x004a8f40 state switch whose active update is
+   the flight action 0x00404db0. Finished projectiles (state >= 7) are
+   retired. Returns 0 on failure. */
+int aoe_world_combat_update_projectiles_ror(AoeWorldCombatRor *combat);
 
 #endif

@@ -380,7 +380,8 @@ target_compile_options(aoe_world_motion PRIVATE -Wall -Wextra)
 add_library(aoe_world_combat STATIC src/world_combat.c)
 target_include_directories(aoe_world_combat PUBLIC include)
 target_link_libraries(aoe_world_combat PUBLIC aoe_world_motion
-  aoe_action_attack aoe_action_list aoe_combat aoe_unit_sprite_binding)
+  aoe_action_attack aoe_action_list aoe_combat aoe_projectile
+  aoe_unit_sprite_binding)
 target_compile_options(aoe_world_combat PRIVATE -Wall -Wextra)
 
 add_library(aoe_scenario_editor_catalog STATIC src/scenario_editor_catalog.c)

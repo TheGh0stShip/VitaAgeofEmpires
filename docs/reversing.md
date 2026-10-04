@@ -1499,12 +1499,35 @@ World combat binding (`src/world_combat.c`):
     `+0x1d` clear) to untranslated 0x004aeed0.
   - Receives follow the victim's type: 70 → `0x004ae9d0`,
     80 → `0x004ad9b0`, otherwise the base receive.
-- Not yet bound: projectiles, blast tile scans, terrain defense bonuses,
-  visibility, owner refusal, groups, the class-keeps-resource check `+0x13c`
-  and terminal cleanup `+0xb8`.
+- **Projectiles.**
+  - **Launch.** A ranged unit creates its projectile unit from the owner's
+    template list at the rotated spawn offsets (`0x00426520`), then
+    attaches and activates the type-8 flight (`0x00449070`).
+  - **Flight.** The flight action runs as the projectile's active update.
+    It moves through the patched placement `0x004a98c0`, which lifts and
+    restores footprints with selector 2 and returns the terrain surface
+    height plus elevation. The flight lands when the placed z equals that
+    surface.
+  - **Hits.** The overlap query scans ±3 tiles of the map's object lists.
+  - **Dead launcher.** It hands its attacks, blast and terrain fields to
+    the projectile's private template copy (`0x004495b0`).
+  - **Speed and facing.** Unit `+0xf4`/`+0xf8` are `+0x88`/`+0x9c`
+    (`0x00405a10`/`0x00405a20`).
+  - **Removal.** `+0x6c` on a projectile (`0x004aa320`) zeroes its hit
+    points so the state switch retires it.
+- **Blasts** scan the runtime map's tile object lists.
+- **Not yet bound:**
+  - terrain defense bonuses;
+  - visibility, owner refusal and groups;
+  - the class-keeps-resource check `+0x13c`;
+  - terminal cleanup `+0xb8`;
+  - projectile trail units (`0x0044bc40`, template `+0xca/+0xcc/+0xd0`).
 - The real-map regression continues past the kill: the target goes
   2 → 3 → 7 → 8 (it carries nothing and has no undead mode), and the
   attacker's action reports result 5.
+- **Ranged shot.** A player-1 war boat (template 19, range 5) then shoots
+  an enemy villager placed 4.35 tiles away. Its projectile unit (template 9)
+  flies and the launcher's attack lands for 5 damage on impact.
 - **Real-map regression** (`tests/world_combat_real.c`, `EXPANS_1_1.scx`):
   a player-1 villager (template 83, attack 3) walks about 4 tiles to a
   relocated enemy villager and lands 9 hits (25 → 0 hp) at a 1.51 s

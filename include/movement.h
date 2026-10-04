@@ -18,6 +18,10 @@ typedef struct {
     int32_t target_id;             /* +0x138 */
     float target_size_x, target_size_y; /* +0x13c/+0x140 */
     float current_speed;           /* live +0x88 (0 when stopped) */
+    float velocity_x, velocity_y, velocity_z; /* live +0x90/+0x94/+0x98 */
+    float facing;                  /* live +0x9c, radians */
+    float turn_timer;              /* +0x12c */
+    float blocked_wait;            /* +0x130: >0 waiting, -1 expired */
     int32_t retry_baseline;        /* +0x144, read by the pathfinder */
     int32_t status;                /* +0x148: 1 stopped, 2 moving */
     uint8_t use_alternate_path;    /* +0x154 */
@@ -27,6 +31,7 @@ typedef struct {
     int32_t waypoint_count;        /* +0x16c */
     uint8_t explored;              /* +0x174 (0x0044edd0 sets it) */
     float best;                    /* +0x178 */
+    uint8_t facet_history[2];      /* +0x17c/+0x17d: last two facets */
 } AoeMovementRor;
 
 /* Owner player path budget (+0x08 max per tick, +0x0c retry override,
@@ -118,5 +123,59 @@ typedef struct {
 int aoe_movement_update_ror(AoeLiveUnit *unit, AoeMovementRor *movement,
                             AoePathBudgetRor *budget,
                             const AoeMovementStepOps *ops);
+
+/* 0x0044ef90: wrap an angle into [0, 2pi] (2pi itself is kept); with
+   `facets` != -1 also snap it to a multiple of pi/4 (8 facets) or pi/8
+   (any other count). The search over 0..facets multiplies each candidate
+   by the best difference so far (the original reuses one stack slot),
+   stopping once that difference is under 0.1; exact multiples snap to
+   themselves. NaN (an endless loop in the original) is left unchanged. */
+void aoe_movement_snap_angle_ror(float *angle, int32_t facets);
+
+typedef struct {
+    float speed_multiplier; /* sprite +0x64 */
+    int16_t facets;         /* sprite +0x60 */
+    uint8_t flags;          /* sprite +0x70; bit 1 selects facet frames */
+} AoeMovementSpriteRor;
+
+/* 0x0044bbd0: with a facet sprite, unit +0x35 becomes
+   ftol((facing - pi/4) * facets / 2pi + 0.5), wrapped up by facets. */
+void aoe_movement_update_facet_ror(AoeLiveUnit *unit, const AoeMovementRor *m,
+                                   const AoeMovementSpriteRor *sprite);
+
+typedef struct {
+    AoeMovementStepOps step;
+    /* Unit +0x10, or NULL without a sprite. */
+    const AoeMovementSpriteRor *(*sprite)(void *context, AoeLiveUnit *unit);
+    float (*tick_seconds)(void *context);                 /* world +0x84 */
+    /* 0x005206d0 on the target ID: its position, 0 when absent. */
+    int (*target_position)(void *context, int32_t id, float *x, float *y);
+    /* 0x004aa880 for the terrain under unit +0x1c; 0 without a tile. */
+    int (*terrain_multiplier)(void *context, AoeLiveUnit *unit, float *out);
+    int32_t (*rand)(void *context);                       /* 0x0052605d */
+} AoeMovementTickOps;
+
+/* 0x0044cde0: one tick toward (x, y). Returns
+   - 0 after moving, turning or starting a blocked wait;
+   - 1 when a blocked re-path lacks budget;
+   - 2 when the goal (or the snapped waypoint) is occupied;
+   - 4 when the retry baseline runs out, the re-path fails, or a
+     kind-1 owner is still blocked;
+   - 5 when blocked within reach of the target.
+   Turning steps one facet (2pi / facets) per rotation-speed delay;
+   speed scales by 0.9 uphill, 1.03 downhill (resetting to the template
+   speed on flat ground) and by the terrain multiplier. The atan2, sin and
+   cos come from the host libm, whose last-bit results can differ from x87
+   fpatan/fsin/fcos. Returns -1 for missing dependencies (host-only). */
+int32_t aoe_movement_step_to_ror(AoeLiveUnit *unit, AoeMovementRor *movement,
+                                 AoePathBudgetRor *budget,
+                                 const AoeMovementTickOps *ops, float x,
+                                 float y);
+
+/* aoe_movement_update_ror with 0x0044cde0 bound to the translation above
+   (ops->step.step_to is ignored). */
+int aoe_movement_tick_ror(AoeLiveUnit *unit, AoeMovementRor *movement,
+                          AoePathBudgetRor *budget,
+                          const AoeMovementTickOps *ops);
 
 #endif

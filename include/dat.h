@@ -286,6 +286,9 @@ typedef struct {
     int16_t selection_sound;
     int16_t dying_sound;    /* resolves to original template +0x44 */
     float speed;
+    /* Type >= 30: per-facet turn delay, original template +0xc4 (after
+       the two walking-graphic slots); 0x0044cde0 adds it to live +0x12c. */
+    float rotation_speed;
     char *name;
     DatUnitStorage storage[3];
     int16_t default_task_id;

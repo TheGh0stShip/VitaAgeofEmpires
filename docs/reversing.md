@@ -1320,6 +1320,40 @@ The movement update `0x0044c2d0` (RoR 1.0a) runs once per tick:
 - `aoe_movement_update_ror` translates this, with `0x0044cde0` as a callback,
   and `tests/movement_update_test.c` covers it.
 
+The tick toward a point `0x0044cde0` (RoR 1.0a):
+- **Speed.** A zero speed `+0x88` restarts at template speed `+0xb8`
+  times a positive sprite multiplier (sprite `+0x64`), and the heading is
+  then aimed from the tile centre. The move distance is speed times world
+  `+0x84`.
+- **Blocked wait.** A wait `+0x130` drains by the move distance, and while
+  it is positive the speed stays 0. On expiry it becomes −1.
+- **Turning.** With template `+0xc4` > 0 (the DAT moving-unit float after
+  the two walking graphics, a per-facet turn delay), the turn timer
+  `+0x12c` drains by the tick. The facing `+0x9c` turns one facet
+  (`6.2831853 / facets`, sprite `+0x60` or 8) per delay while the facet
+  fraction exceeds 0.8 (0.9 after a re-path).
+- **Facet helpers.** `0x0044ef90` wraps angles and snaps them to facets,
+  reusing one stack slot for both the facet step and the best difference.
+  `0x0044bbd0` writes the facet frame to unit `+0x35`.
+- **Blocked step.** When the next step does not fit (template height
+  `+0x38` > 0) and no wait is running, a wait of
+  `rand() % 6 * 0.1 + 0.5 / speed` starts. After an expired wait the unit
+  re-centres and returns 5 if the target is within footprint radius +
+  range + 0.3. It returns 2 if the goal is occupied. Otherwise it spends
+  `+0x144` (4 at zero) and the player budget (1 without), then re-paths
+  (4 on failure).
+- **Moving.** The unit snaps onto its waypoint when overshooting it at
+  distance 0, or when within 0.5 tiles while oscillating between two
+  facets (`+0x17c/+0x17d`). Constant `0x00544a78` is a denormal double
+  holding the float bits of 0.25, so the overshoot test means distance 0.
+  `+0x178` records the pre-move distance to the waypoint.
+- **Slope speed.** Speed is multiplied by 0.9 when climbing more than 0.02
+  and by 1.03 when descending. Within that band it resets to the base
+  speed. Either way it then takes the terrain multiplier `0x004aa880`.
+- `aoe_movement_step_to_ror` and `aoe_movement_tick_ror` translate this,
+  and `tests/movement_step_test.c` covers it. Host libm atan2/sin/cos may
+  differ from x87 in the last bit.
+
 The pathfinder (vtable `0x00544cf0`, constructor `0x00458570`) works on
 255 x 255 grids (bytes at `+0x10de28`, dwords at `+0xce624`, indexed
 `[first*255 + second]`). Its distance table `0x006a18c0` holds

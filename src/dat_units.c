@@ -139,7 +139,9 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
     unit->speed = f32(cursor);
     if (unit->type >= 30) {
         unit->walking_graphic = (int16_t)u16(cursor);
-        take(cursor, 15); /* remaining AoE moving fields */
+        take(cursor, 2); /* second walking graphic */
+        unit->rotation_speed = f32(cursor);
+        take(cursor, 9); /* remaining AoE moving fields */
     }
     if (unit->type >= 40) {
         unit->default_task_id = (int16_t)u16(cursor);

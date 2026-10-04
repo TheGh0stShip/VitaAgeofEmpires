@@ -2,7 +2,9 @@
 
 #include <psp2/ctrl.h>
 #include <psp2/display.h>
+#include <psp2/kernel/cpu.h>
 #include <psp2/kernel/processmgr.h>
+#include <psp2/kernel/threadmgr.h>
 #include <psp2/kernel/sysmem.h>
 #include <psp2/power.h>
 
@@ -35,7 +37,8 @@ typedef struct {
     void *base;
 } DisplayBuffer;
 
-static DisplayBuffer buffers[2];
+enum { BUFFER_COUNT = 3 };
+static DisplayBuffer buffers[BUFFER_COUNT];
 static int back;
 
 static uint64_t clock_us(void) {
@@ -43,7 +46,7 @@ static uint64_t clock_us(void) {
 }
 
 static int display_init(void) {
-    for (int i = 0; i < 2; ++i) {
+    for (int i = 0; i < BUFFER_COUNT; ++i) {
         buffers[i].block = sceKernelAllocMemBlock(
             "aoe_fb", SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, FB_BLOCK, NULL);
         if (buffers[i].block < 0 ||
@@ -55,8 +58,32 @@ static int display_init(void) {
     return 1;
 }
 
-/* Shows the back buffer from the next vblank and waits for the switch, so
-   the following frame never draws into the buffer being scanned out. */
+/* Triple buffering: draw into a buffer that is neither on screen nor
+   queued for the next vblank. If the last queued frame has not been shown
+   yet the renderer is ahead of the display, so wait one vblank (a 60 Hz
+   cap without snapping slower frames to 30). */
+static void *display_acquire(void) {
+    SceDisplayFrameBuf shown, queued;
+    memset(&shown, 0, sizeof(shown));
+    memset(&queued, 0, sizeof(queued));
+    shown.size = queued.size = sizeof(shown);
+    sceDisplayGetFrameBuf(&shown, SCE_DISPLAY_SETBUF_IMMEDIATE);
+    sceDisplayGetFrameBuf(&queued, SCE_DISPLAY_SETBUF_NEXTFRAME);
+    if (queued.base && queued.base != shown.base) {
+        sceDisplayWaitVblankStart();
+        shown.base = queued.base;
+    }
+    for (int i = 0; i < BUFFER_COUNT; ++i) {
+        int candidate = (back + i) % BUFFER_COUNT;
+        if (buffers[candidate].base != shown.base &&
+            buffers[candidate].base != queued.base) {
+            back = candidate;
+            break;
+        }
+    }
+    return buffers[back].base;
+}
+
 static void display_flip(void) {
     SceDisplayFrameBuf fb;
     memset(&fb, 0, sizeof(fb));
@@ -67,13 +94,63 @@ static void display_flip(void) {
     fb.width = AOE_DEMO_WIDTH;
     fb.height = AOE_DEMO_HEIGHT;
     sceDisplaySetFrameBuf(&fb, SCE_DISPLAY_SETBUF_NEXTFRAME);
-    sceDisplayWaitSetFrameBuf();
-    back ^= 1;
+    back = (back + 1) % BUFFER_COUNT;
+}
+
+/* Second-core worker for the demo's parallel parts: the main thread runs
+   part 0, the worker (pinned to user core 1) part 1. */
+typedef struct {
+    SceUID thread, start, done;
+    AoeDemoTask task;
+    void *arg;
+    int parts;
+    volatile int quit;
+} Worker;
+
+static Worker worker;
+
+static int worker_main(SceSize args, void *argp) {
+    (void)args; (void)argp;
+    for (;;) {
+        sceKernelWaitSema(worker.start, 1, NULL);
+        if (worker.quit) break;
+        worker.task(worker.arg, 1, worker.parts);
+        sceKernelSignalSema(worker.done, 1);
+    }
+    return sceKernelExitDeleteThread(0);
+}
+
+static void worker_run(void *context, AoeDemoTask task, void *arg,
+                       int parts) {
+    (void)context;
+    worker.task = task;
+    worker.arg = arg;
+    worker.parts = parts;
+    sceKernelSignalSema(worker.start, 1);
+    task(arg, 0, parts);
+    sceKernelWaitSema(worker.done, 1, NULL);
+}
+
+static int worker_init(void) {
+    worker.start = sceKernelCreateSema("aoe_job", 0, 0, 1, NULL);
+    worker.done = sceKernelCreateSema("aoe_done", 0, 0, 1, NULL);
+    worker.thread = sceKernelCreateThread("aoe_worker", worker_main, 0x10000100,
+                                          0x10000, 0,
+                                          SCE_KERNEL_CPU_MASK_USER_1, NULL);
+    if (worker.start < 0 || worker.done < 0 || worker.thread < 0) return 0;
+    return sceKernelStartThread(worker.thread, 0, NULL) >= 0;
+}
+
+static void worker_stop(void) {
+    if (worker.thread < 0) return;
+    worker.quit = 1;
+    sceKernelSignalSema(worker.start, 1);
+    sceKernelWaitThreadEnd(worker.thread, NULL, NULL);
 }
 
 static void display_present(const uint32_t *frame) {
     SceDisplayFrameBuf fb;
-    memcpy(buffers[back].base, frame, FB_BYTES);
+    memcpy(display_acquire(), frame, FB_BYTES);
     memset(&fb, 0, sizeof(fb));
     fb.size = sizeof(fb);
     fb.base = buffers[back].base;
@@ -82,11 +159,11 @@ static void display_present(const uint32_t *frame) {
     fb.width = AOE_DEMO_WIDTH;
     fb.height = AOE_DEMO_HEIGHT;
     sceDisplaySetFrameBuf(&fb, SCE_DISPLAY_SETBUF_NEXTFRAME);
-    back ^= 1;
+    back = (back + 1) % BUFFER_COUNT;
 }
 
 static void display_free(void) {
-    for (int i = 0; i < 2; ++i)
+    for (int i = 0; i < BUFFER_COUNT; ++i)
         if (buffers[i].block >= 0) sceKernelFreeMemBlock(buffers[i].block);
 }
 
@@ -146,6 +223,8 @@ int main(void) {
         sceKernelExitProcess(0);
         return 0;
     }
+    if (worker_init()) aoe_demo_set_parallel(demo, worker_run, NULL, 2);
+    else worker.thread = -1;
     text_screen(frame, "BUILDING SCENARIO...", aoe_demo_status(demo));
     aoe_demo_load_scenario(demo, 0);
     last = clock_us();
@@ -180,9 +259,10 @@ int main(void) {
         last = now;
         if (dt > 0.25f) dt = 0.25f;
         if (!aoe_demo_update(demo, &in, dt)) break;
-        aoe_demo_render(demo, buffers[back].base, FB_STRIDE);
+        aoe_demo_render(demo, display_acquire(), FB_STRIDE);
         display_flip();
     }
+    worker_stop();
     aoe_demo_close(demo);
     display_free();
     free(frame);

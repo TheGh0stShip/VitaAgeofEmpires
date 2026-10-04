@@ -78,6 +78,9 @@ struct AoeDemo {
     int32_t terrain_cam_x, terrain_cam_y;
     uint64_t terrain_hash;
     uint32_t palette_half[256]; /* overlay backgrounds (halved colours) */
+    AoeDemoParallel parallel;
+    void *parallel_context;
+    int parallel_parts;
 
     DemoScenario *scenarios;
     size_t scenario_count;
@@ -1063,28 +1066,45 @@ size_t aoe_demo_verify_terrain_cache(AoeDemo *demo) {
     return mismatches;
 }
 
-/* Expands indexed rows [y0, y1) into the framebuffer; columns [hx0, hx1)
-   of rows [hy0, hy1) use the halved overlay palette. */
-static void expand_rows(const AoeDemo *demo, uint32_t *fb, size_t stride,
-                        uint32_t y0, uint32_t y1, int half_all,
-                        int box, uint32_t bx0, uint32_t bx1, uint32_t by0,
-                        uint32_t by1) {
+/* One frame's colour conversion: overlay bands (HUD rows, message box)
+   use the halved palette. Parts are disjoint row bands. */
+typedef struct {
+    const AoeDemo *demo;
+    uint32_t *fb;
+    size_t stride;
+    int hud, message;
+    uint32_t mx0, mx1;
+} ExpandJob;
+
+static void expand_part(void *arg, int part, int parts) {
+    const ExpandJob *job = arg;
+    const AoeDemo *demo = job->demo;
+    uint32_t y0 = (uint32_t)(AOE_DEMO_HEIGHT * part / parts);
+    uint32_t y1 = (uint32_t)(AOE_DEMO_HEIGHT * (part + 1) / parts);
     for (uint32_t y = y0; y < y1; ++y) {
         const uint8_t *src = demo->pixels + (size_t)y * AOE_DEMO_WIDTH;
-        uint32_t *dst = fb + (size_t)y * stride;
-        const uint32_t *lut = half_all ? demo->palette_half
-                                       : demo->palette_abgr;
-        if (box && y >= by0 && y < by1) {
-            for (uint32_t x = 0; x < bx0; ++x) dst[x] = lut[src[x]];
-            for (uint32_t x = bx0; x < bx1; ++x)
+        uint32_t *dst = job->fb + (size_t)y * job->stride;
+        int band = job->hud && (y < 52 || y >= AOE_DEMO_HEIGHT - 20);
+        const uint32_t *lut = band ? demo->palette_half : demo->palette_abgr;
+        if (!band && job->message && y >= 70 && y < 100) {
+            for (uint32_t x = 0; x < job->mx0; ++x) dst[x] = lut[src[x]];
+            for (uint32_t x = job->mx0; x < job->mx1; ++x)
                 dst[x] = demo->palette_half[src[x]];
-            for (uint32_t x = bx1; x < AOE_DEMO_WIDTH; ++x)
+            for (uint32_t x = job->mx1; x < AOE_DEMO_WIDTH; ++x)
                 dst[x] = lut[src[x]];
         } else {
             for (uint32_t x = 0; x < AOE_DEMO_WIDTH; ++x)
                 dst[x] = lut[src[x]];
         }
     }
+}
+
+void aoe_demo_set_parallel(AoeDemo *demo, AoeDemoParallel run, void *context,
+                           int parts) {
+    if (!demo) return;
+    demo->parallel = run;
+    demo->parallel_context = context;
+    demo->parallel_parts = parts > 0 ? parts : 1;
 }
 
 int aoe_demo_render(AoeDemo *demo, uint32_t *fb, size_t stride) {
@@ -1133,15 +1153,13 @@ int aoe_demo_render(AoeDemo *demo, uint32_t *fb, size_t stride) {
     }
     /* Overlay backgrounds are halved through the palette, so the overlay
        never reads the (possibly uncached) framebuffer back. */
-    if (demo->hud) {
-        expand_rows(demo, fb, stride, 0, 52, 1, 0, 0, 0, 0, 0);
-        expand_rows(demo, fb, stride, 52, AOE_DEMO_HEIGHT - 20, 0, message,
-                    mx0, mx1, 70, 100);
-        expand_rows(demo, fb, stride, AOE_DEMO_HEIGHT - 20, AOE_DEMO_HEIGHT,
-                    1, 0, 0, 0, 0, 0);
-    } else {
-        expand_rows(demo, fb, stride, 0, AOE_DEMO_HEIGHT, 0, message, mx0,
-                    mx1, 70, 100);
+    {
+        ExpandJob job = {demo, fb, stride, demo->hud, message, mx0, mx1};
+        if (demo->parallel && demo->parallel_parts > 1)
+            demo->parallel(demo->parallel_context, expand_part, &job,
+                           demo->parallel_parts);
+        else
+            expand_part(&job, 0, 1);
     }
     demo->stats.draw_ms = (float)(now_us(demo) - start) / 1000.0f;
     demo->stats.units_drawn = (uint32_t)result.units.drawn;

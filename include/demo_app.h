@@ -67,6 +67,16 @@ int aoe_demo_render(AoeDemo *demo, uint32_t *framebuffer, size_t stride);
 
 const char *aoe_demo_status(const AoeDemo *demo);
 
+/* Optional parallel runner for per-frame work split into independent
+   parts (the 32-bit colour conversion, by row bands): it must call
+   task(arg, part, parts) once for every part in [0, parts) and return when
+   all have finished. Without one, parts run in turn on the caller. */
+typedef void (*AoeDemoTask)(void *arg, int part, int parts);
+typedef void (*AoeDemoParallel)(void *context, AoeDemoTask task, void *arg,
+                                int parts);
+void aoe_demo_set_parallel(AoeDemo *demo, AoeDemoParallel run, void *context,
+                           int parts);
+
 /* Diagnostics: redraws the full terrain layer for the current camera and
    returns how many pixels differ from the cached layer (0 when the cache
    is exact or not yet built). */

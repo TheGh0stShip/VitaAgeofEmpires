@@ -459,6 +459,12 @@ static int queue_order(const void *a, const void *b) {
     return x->sequence < y->sequence ? -1 : x->sequence > y->sequence;
 }
 
+void aoe_sprite_draw_queue_sort(AoeSpriteDrawQueue *queue) {
+    if (queue && queue->count > 1)
+        qsort(queue->entries, queue->count, sizeof(*queue->entries),
+              queue_order);
+}
+
 int aoe_sprite_draw_queue_flush(AoeSpriteDrawQueue *queue,
                                 const AoeSpriteIndexSurface *surface) {
     int first_error = AOE_GRAPHIC_ART_OK;
@@ -466,9 +472,7 @@ int aoe_sprite_draw_queue_flush(AoeSpriteDrawQueue *queue,
     if (queue->failed) first_error = AOE_GRAPHIC_ART_INVALID;
     if (queue->count && (!queue->archives || !queue->archive_count))
         return AOE_GRAPHIC_ART_INVALID;
-    if (queue->count > 1)
-        qsort(queue->entries, queue->count, sizeof(*queue->entries),
-              queue_order);
+    aoe_sprite_draw_queue_sort(queue);
     for (size_t i = 0; i < queue->count; ++i) {
         const AoeSpriteDrawQueueEntry *e = &queue->entries[i];
         SlpFrame owned = {0};

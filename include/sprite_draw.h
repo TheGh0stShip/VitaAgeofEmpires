@@ -80,6 +80,9 @@ struct AoeSpriteDrawQueue {
 void aoe_sprite_draw_queue_reset(AoeSpriteDrawQueue *queue,
                                  int32_t row_min, int32_t row_max);
 void aoe_sprite_draw_queue_free(AoeSpriteDrawQueue *queue);
+/* Puts queued parts in the original draw order: layer, then row, then
+   queue order (the flush calls this first). */
+void aoe_sprite_draw_queue_sort(AoeSpriteDrawQueue *queue);
 /* Draws every queued part in original order into `surface` (whose own
    queue pointer is ignored) and empties the queue. Returns the first
    AOE_GRAPHIC_ART_* error, honouring skip_missing_art. */

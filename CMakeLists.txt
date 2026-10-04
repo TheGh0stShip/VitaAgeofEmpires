@@ -387,7 +387,7 @@ add_library(aoe_scenario_runtime STATIC src/scenario_runtime.c
 target_include_directories(aoe_scenario_runtime PUBLIC include)
 target_link_libraries(aoe_scenario_runtime PUBLIC aoe_runtime_map
   aoe_live_unit_factory aoe_player_templates aoe_unit_placement_check
-  aoe_terrain_transition aoe_tech_tree)
+  aoe_terrain_transition aoe_tech_tree aoe_sprite_draw)
 target_compile_options(aoe_scenario_runtime PRIVATE -Wall -Wextra)
 
 add_library(aoe_world_motion STATIC src/world_motion.c)
@@ -620,6 +620,10 @@ else()
   target_link_libraries(slp_decode_test PRIVATE aoe_slp)
   target_compile_options(slp_decode_test PRIVATE -UNDEBUG)
   add_test(NAME slp_format_decode COMMAND slp_decode_test)
+  add_executable(palette_water_cycle_test tests/palette_water_cycle_test.c)
+  target_link_libraries(palette_water_cycle_test PRIVATE aoe_palette)
+  target_compile_options(palette_water_cycle_test PRIVATE -UNDEBUG)
+  add_test(NAME ror_water_palette_cycle COMMAND palette_water_cycle_test)
   add_executable(blit_fastpath_test tests/blit_fastpath_test.c)
   target_link_libraries(blit_fastpath_test PRIVATE aoe_terrain_draw aoe_slp)
   target_compile_options(blit_fastpath_test PRIVATE -UNDEBUG)

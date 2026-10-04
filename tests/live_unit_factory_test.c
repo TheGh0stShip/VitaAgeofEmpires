@@ -611,8 +611,9 @@ int main(void) {
                                         2.25f, 2.25f, 0.0f));
     assert(aoe_live_unit_scenario_dispatch_ror(
         &live, 0, 258.75f, &(AoeLiveUnitScenarioDispatchOps){0}));
+    /* One angle: (258.75 - pi/4) / 2pi + 0.5 truncates to 41. */
     assert(live.core.scenario_rotation == 258.75f &&
-           live.core.scenario_frame == 2);
+           live.core.scenario_frame == 41);
     live.animation_rate = 1.0f;
     assert(aoe_live_unit_tick_sprites_ror(&live, 1.0f));
     assert(aoe_sprite_runtime_at(&live.sprites, 0)->animation.frame == 1);

@@ -40,7 +40,8 @@ int main(int argc, char **argv) {
     size_t start_scenario = 0;
     double draw_total = 0.0, update_total = 0.0;
     if (argc < 4) {
-        fprintf(stderr, "usage: demo_host ROOT FRAMES OUT.ppm [SCENARIO]\n");
+        fprintf(stderr, "usage: demo_host ROOT FRAMES OUT.ppm [SCENARIO "
+                "[CAMERA_X CAMERA_Y]]\n");
         return 2;
     }
     frames = atoi(argv[2]);
@@ -55,15 +56,22 @@ int main(int argc, char **argv) {
         fprintf(stderr, "scenario load failed: %s\n", aoe_demo_status(demo));
         return 1;
     }
+    /* A fixed camera disables the scripted input (a still view). */
+    int still = argc > 6;
+    if (still)
+        aoe_demo_set_camera(demo, strtof(argv[5], NULL),
+                            strtof(argv[6], NULL));
     for (int i = 0; ok && i < frames; ++i) {
         AoeDemoInput in;
         memset(&in, 0, sizeof(in));
+        if (still) goto step;
         /* Script: train, order the army, cycle views, scroll. */
         if (i == 2) in.pressed = AOE_DEMO_BUTTON_TRAIN;
         if (i == 4) in.pressed = AOE_DEMO_BUTTON_CAMERA;
         if (i == 6) in.pressed = AOE_DEMO_BUTTON_ATTACK;
         if (i > 10 && i < 30) in.scroll_x = 1.0f;
         if (i > 30 && i < 50) in.scroll_y = 1.0f;
+    step:
         if (!aoe_demo_update(demo, &in, 1.0f / 30.0f) ||
             !aoe_demo_render(demo, fb, AOE_DEMO_WIDTH))
             ok = 0;

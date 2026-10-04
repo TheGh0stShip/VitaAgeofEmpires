@@ -63,6 +63,8 @@ struct AoeDemo {
     AoeColorTableSet color_tables;
     Palette palette;
     uint32_t palette_abgr[256];
+    int water_start;          /* palette_water_cycle_* state */
+    float water_elapsed_ms;
     uint8_t shadow[256];
     uint8_t *edge_bytes;
     TileEdgeIndex edges;
@@ -243,6 +245,14 @@ static int resolve_color(void *opaque, const void *selected,
 /* ------------------------------------------------------------------ */
 /* Open / close */
 
+static void update_palette_lut(AoeDemo *demo, int first, int count) {
+    for (int i = first; i < first + count; ++i) {
+        PaletteColor c = demo->palette.colors[i];
+        demo->palette_abgr[i] = 0xff000000u | (uint32_t)c.b << 16 |
+                                (uint32_t)c.g << 8 | c.r;
+    }
+}
+
 static int open_drs(AoeDemo *demo, DrsArchive *archive, const char *dir,
                     const char *name) {
     char path[DEMO_PATH * 2];
@@ -336,11 +346,8 @@ AoeDemo *aoe_demo_open(const char *root, AoeDemoClock clock, char *error,
     }
     free(palette_bytes);
     palette_bytes = NULL;
-    for (int i = 0; i < 256; ++i) {
-        PaletteColor c = demo->palette.colors[i];
-        demo->palette_abgr[i] = 0xff000000u | (uint32_t)c.b << 16 |
-                                (uint32_t)c.g << 8 | c.r;
-    }
+    palette_water_cycle_apply(&demo->palette, 0);
+    update_palette_lut(demo, 0, 256);
     if (!aoe_color_table_set_load_directory(&demo->intro, base,
                                             &demo->color_tables) ||
         !aoe_color_table_set_load_drs_fallback(&demo->intro,
@@ -753,6 +760,15 @@ int aoe_demo_update(AoeDemo *demo, const AoeDemoInput *input, float dt) {
         }
     }
     if (demo->message_time > 0.0f) demo->message_time -= dt;
+    /* The water colour cycle runs on wall time (0x004843d0). */
+    demo->water_elapsed_ms += dt * 1000.0f;
+    if (demo->water_elapsed_ms >= AOE_WATER_CYCLE_INTERVAL_MS) {
+        demo->water_elapsed_ms = 0.0f;
+        demo->water_start = palette_water_cycle_next(demo->water_start);
+        palette_water_cycle_apply(&demo->palette, demo->water_start);
+        update_palette_lut(demo, AOE_WATER_CYCLE_FIRST,
+                           AOE_WATER_CYCLE_COUNT);
+    }
     start = now_us(demo);
     if (!demo->paused) {
         int steps = 0;
@@ -999,6 +1015,13 @@ int aoe_demo_render(AoeDemo *demo, uint32_t *fb, size_t stride) {
         aoe_demo_draw_text(fb, stride, x + 12, 78, 2, white, demo->message);
     }
     return 1;
+}
+
+void aoe_demo_set_camera(AoeDemo *demo, float x, float y) {
+    if (!demo || !demo->loaded) return;
+    demo->camera_x = x;
+    demo->camera_y = y;
+    clamp_camera(demo);
 }
 
 void aoe_demo_stats(const AoeDemo *demo, AoeDemoStats *stats) {

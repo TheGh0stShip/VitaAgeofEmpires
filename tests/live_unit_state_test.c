@@ -156,9 +156,27 @@ int main(void) {
     unit.unit_template = &definition;
     assert(aoe_live_unit_low_state_ror(&unit, NULL, 8.0f));
     definition.type = 30;
-    DatGraphic animated = {.sequence_type = 2, .frame_count = 8};
+    /* 0x0044c7b0: facet = (rotation - pi/4) * angles / 2pi + 0.5, wrapped
+       by +angles below zero, truncated. */
+    DatGraphic animated = {.sequence_type = 2, .frame_count = 8,
+                           .angle_count = 8};
     assert(aoe_live_unit_low_state_ror(&unit, &animated, 1.25f));
     assert(unit.scenario_rotation == 1.25f && unit.scenario_frame == 1);
+    assert(aoe_live_unit_low_state_ror(&unit, &animated, 0.0f));
+    assert(unit.scenario_frame == 7); /* -0.5 + 8 */
+    /* Three-angle wall graphics: scenario rotations 0, 2pi/3, 4pi/3. */
+    animated.angle_count = 3;
+    assert(aoe_live_unit_low_state_ror(&unit, &animated, 0.0f) &&
+           unit.scenario_frame == 0);
+    assert(aoe_live_unit_low_state_ror(&unit, &animated, 2.0944f) &&
+           unit.scenario_frame == 1);
+    assert(aoe_live_unit_low_state_ror(&unit, &animated, 4.18879f) &&
+           unit.scenario_frame == 2);
+    /* No angles: facet 0. */
+    animated.angle_count = 0;
+    assert(aoe_live_unit_low_state_ror(&unit, &animated, 4.0f) &&
+           unit.scenario_frame == 0);
+    animated.angle_count = 8;
     animated.sequence_type = 0;
     assert(aoe_live_unit_low_state_ror(&unit, &animated, 7.0f));
     assert(unit.scenario_frame == 0);

@@ -72,18 +72,33 @@ headless with scripted input. `ror_vita_demo_loop_real` runs it when
   yet. The demo skips those scenarios.
 - **Fog.** Scenario fog history is not reconstructed, so the whole map is
   shown (the original's exploration-gate bypass).
-- **Known rendering defects** (reported from Vita3K, under investigation):
-  - wall pieces do not join (the adjacency refresh `0x004ad550` is not
-    bound);
-  - cliffs show one angle;
-  - one transport sprite is clipped;
-  - a skeleton decoration is reported in the water.
-- **Fixed during bring-up:**
-  - **Slope shapes.** The terrain elevation shape's diagonal rules were
-    permuted against RoR `0x004493a0` / patched `0x004484f0`, leaving
-    black triangles on hills.
-  - **printf.** VitaSDK's newlib printf does not consume `%zu`/`%llu`,
-    which crashed the overlay after about 38 seconds.
+- **Rendering fixes from Vita3K testing** (each against patched RoR 1.0a
+  or the disc build):
+  - **Sprite draw order.** Sprites were drawn during the terrain tile walk,
+    so later terrain cut through large sprites (half transports, broken
+    cliff faces). The original queues them in the view's sprite list
+    (`0x00518d90`) and draws them after all terrain, ordered by layer, then
+    screen row, then queue order (`0x00515844`, `0x0051606f`);
+    `AoeSpriteDrawQueue` reconstructs this.
+  - **Gaia spawn.** A new game builds Gaia as a computer player
+    (`0x0050a470` -> `0x004f7290`), so Gaia objects use the tribe spawn
+    `0x004efe70` and store `ftol(rotation)` as their facet. Before this fix
+    every cliff piece showed angle 0.
+  - **Facet formula.** The type-30+ facet formula (`0x0044c7b0`) is
+    `(rotation - pi/4) * angles / 2pi + 0.5`, wrapped; it was a plain
+    truncation.
+  - **Wall adjacency.** Wall adjacency (`0x004ad550` / `0x004ad620` /
+    `0x004ad380` / `0x0044f090`) now runs on completion and on upgrades, so
+    wall pieces join into corners and runs.
+  - **Water palette.** Water uses palette 248..254, which palette 50500
+    leaves black. The game fills them with a 7-entry ramp and rotates it
+    every 200 ms (`0x0047e8a3`, `0x004843d0`).
+  - **Skeletons.** The bones reported in the water are scenario objects on
+    beach tiles (terrain 2) at the waterline; all 69 skeletons on
+    EXPANS_1_1 are on beach (10) or terrain 6 (59).
+- **Not translated yet.** Gaia's tribe scenario load (`0x004f02d0`) reads
+  per-player stream data our parser does not expose yet, so Gaia has no
+  research manager.
 - **Unverified on hardware.** Vita3K runs it at about 27 FPS. That is not
   a hardware measurement, and nothing here has yet been run on a physical
   Vita or PSTV.

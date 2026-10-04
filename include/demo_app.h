@@ -67,6 +67,9 @@ int aoe_demo_render(AoeDemo *demo, uint32_t *framebuffer, size_t stride);
 
 const char *aoe_demo_status(const AoeDemo *demo);
 
+/* Moves the camera to map tile coordinates (clamped to the map). */
+void aoe_demo_set_camera(AoeDemo *demo, float x, float y);
+
 typedef struct {
     uint64_t frames, world_updates;
     uint32_t live_units, units_drawn, terrain_tiles;

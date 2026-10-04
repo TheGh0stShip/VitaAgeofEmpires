@@ -57,6 +57,13 @@ int aoe_scenario_runtime_draw_scene_ror(
     sprite_surface.width = draw->surface->width;
     sprite_surface.height = draw->surface->height;
     sprite_surface.stride = draw->surface->stride;
+    sprite_surface.queue = NULL;
+    if (!draw->immediate_sprites) {
+        /* View sprite list rows -200 .. height + 249 (0x00512536). */
+        aoe_sprite_draw_queue_reset(&runtime->sprite_queue, -200,
+                                    (int32_t)draw->surface->height + 249);
+        sprite_surface.queue = &runtime->sprite_queue;
+    }
     viewport.map = &runtime->map;
     viewport.scratch = runtime->draw_scratch;
     viewport.scratch_capacity = runtime->draw_scratch_capacity;
@@ -73,6 +80,13 @@ int aoe_scenario_runtime_draw_scene_ror(
             &visibility, aoe_runtime_viewport_draw_tile_ror, &viewport,
             &next.terrain_tiles, &next.object_tiles))
         return 0;
+    if (sprite_surface.queue) {
+        AoeSpriteIndexSurface target = sprite_surface;
+        target.queue = NULL;
+        if (aoe_sprite_draw_queue_flush(&runtime->sprite_queue, &target) !=
+            AOE_GRAPHIC_ART_OK)
+            return 0;
+    }
     next.units = viewport.result;
     if (result) *result = next;
     return 1;

@@ -6,6 +6,7 @@
 #include "runtime_map.h"
 #include "terrain_transition.h"
 #include "tile_object_draw.h"
+#include "sprite_draw.h"
 #include "tech_tree.h"
 #include "game_options.h"
 #include "player_outcome.h"
@@ -25,9 +26,10 @@ typedef struct {
     uint32_t civilization_id;
     int32_t field_104; /* derived player +0x104, used by +0x78 */
     int16_t tech_tree_id; /* player +0x110, the civ's tech tree effect */
-    /* Player +0x224 for tribe players (1..8). Gaia is taken to be a base
-       player (factory default branch 0x0051cb00, a 0x224-byte object
-       without this field) and has none. */
+    /* Player +0x224 for players 1..8. In a new game Gaia is a computer
+       player (0x0050a470 -> 0x004f7290), which runs the tribe scenario load
+       0x004f02d0 and so has one too; that load's per-player stream data
+       for Gaia is not parsed yet, so Gaia has no manager here (open). */
     AoeResearchCompletionManagerRor research;
     /* Player +0x34 outcome manager and its player view. */
     AoeOutcomeManager outcome;
@@ -53,6 +55,7 @@ typedef struct {
     AoeScenarioRuntimePlayerRor players[AOE_SCENARIO_RUNTIME_PLAYERS];
     AoeRng rng;
     AoeTileObjectDrawEntry *draw_scratch;
+    AoeSpriteDrawQueue sprite_queue; /* view +0x338 sprite list */
     size_t draw_scratch_capacity;
     AoeLiveUnit **editor_units;
     size_t editor_unit_count;

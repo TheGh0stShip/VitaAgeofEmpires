@@ -2,6 +2,7 @@
 #include "unit_placement_check.h"
 #include "player_resources.h"
 #include "aoe_ftol.h"
+#include "live_unit_state.h"
 
 #include <stddef.h>
 
@@ -27,6 +28,7 @@ static void storage_free_queue(void *context, void *allocation) {
 }
 
 void aoe_scenario_runtime_destroy_ror(AoeScenarioRuntimeRor *runtime) {
+    if (runtime) aoe_sprite_draw_queue_free(&runtime->sprite_queue);
     if (!runtime) return;
     for (size_t i = 0; i < runtime->building_count; ++i) {
         AoeScenarioBuildingStorageRor *st = runtime->buildings[i];
@@ -186,11 +188,13 @@ int aoe_scenario_runtime_build_ror(
                 goto fail;
             if (record->state <= 2) {
                 uint8_t type = definition->type;
-                /* Tribe players (1..8, spawn 0x004efe70) call +0xb4 with
-                   the rotation only for 30 < type < 90 and otherwise store
-                   ftol(rotation) in +0x35; Gaia keeps the base spawn's
-                   +0xb4 call (its player class is not established). */
-                if (p && (type <= 30 || type >= 90)) {
+                /* Every player uses the tribe spawn 0x004efe70: Gaia is a
+                   computer player (RoR world +0x5c 0x0050a470 builds it
+                   with 0x004f7290, vtable 0x00549b80, which inherits
+                   spawn +0x60). It calls +0xb4 with the rotation only for
+                   30 < type < 90 and otherwise stores ftol(rotation) in
+                   +0x35 (cliff and other Gaia object facets). */
+                if (type <= 30 || type >= 90) {
                     player->units[i].core.scenario_frame =
                         (uint8_t)aoe_ftol32(record->rotation);
                 } else if (!aoe_live_unit_scenario_dispatch_ror(
@@ -202,7 +206,7 @@ int aoe_scenario_runtime_build_ror(
                 ++runtime->low_state_units;
                 /* 0x004eff01: a finished building record gets 10000 build
                    work (0x004ad7b0), completing it. */
-                if (p && type == 80 && record->state == 2) {
+                if (type == 80 && record->state == 2) {
                     int completed = 0;
                     if (!aoe_scenario_runtime_add_build_work_ror(
                             runtime, &player->units[i], 10000.0f,
@@ -338,8 +342,96 @@ static void complete_storage(void *context, AoeLiveUnit *unit) {
 static void complete_local(void *context, AoeLiveUnit *unit, int value) {
     (void)context; (void)unit; (void)value;
 }
+
+/* Wall adjacency (patched RoR 1.0a). Only units whose current graphic
+   (+0x10) has exactly three angles take part; others get facet 0. */
+
+/* 0x00451370(template ID, -1, -1, 0, 0, 0) over one tile's object list,
+   then the 0x004ad380 owner test. */
+static AoeLiveUnit *wall_neighbor(AoeScenarioRuntimeRor *r,
+                                  const AoeLiveUnit *u, int32_t x, int32_t y) {
+    const AoeObjectUpdateNode *node;
+    int16_t id = u->core.unit_template->id;
+    for (node = r->map.objects[(size_t)y * r->map.width + (uint32_t)x].head;
+         node; node = node->next) {
+        AoeLiveUnit *o = node->object;
+        if (!o || !o->constructed || !o->core.unit_template ||
+            o->core.unit_template->id != id)
+            continue;
+        return o->runtime_owner_index == u->runtime_owner_index ? o : NULL;
+    }
+    return NULL;
+}
+
+/* 0x004ad380: n[0] (x, y-1), n[1] (x-1, y), n[2] (x+1, y), n[3] (x, y+1),
+   each only inside the map. */
+static void wall_neighbors(AoeScenarioRuntimeRor *r, const AoeLiveUnit *u,
+                           AoeLiveUnit *n[4]) {
+    int32_t x = aoe_ftol32(u->core.position.x38);
+    int32_t y = aoe_ftol32(u->core.position.y3c);
+    int32_t w = (int32_t)r->map.width, h = (int32_t)r->map.height;
+    n[0] = n[1] = n[2] = n[3] = NULL;
+    if (x < 0 || y < 0 || x >= w || y >= h) return;
+    if (y > 0) n[0] = wall_neighbor(r, u, x, y - 1);
+    if (x > 0) n[1] = wall_neighbor(r, u, x - 1, y);
+    if (x < w - 1) n[2] = wall_neighbor(r, u, x + 1, y);
+    if (y < h - 1) n[3] = wall_neighbor(r, u, x, y + 1);
+}
+
+/* 0x0044f090(delta): rotation += delta * 2pi / angles (double 2pi at
+   0x00544a38), wrapped into [0, 2pi) with the float 2pi at 0x00544a30,
+   then the unit's +0xb4 low-state method with the new rotation. */
+static void wall_turn(AoeLiveUnit *u, const DatGraphic *g, int32_t delta) {
+    double v = (double)delta * 6.2831853 / (double)g->angle_count +
+               (double)u->core.scenario_rotation;
+    if (v < 0.0)
+        do v += (double)6.2831854820251465f; while (v < 0.0);
+    while (!(v < 6.2831853)) v -= (double)6.2831854820251465f;
+    (void)aoe_live_unit_low_state_ror(&u->core, g, (float)v);
+}
+
+/* 0x004ad620 (and the tail of 0x004ad550): facet 1 between walls at
+   n[0] and n[3] only, facet 0 between n[1] and n[2] only, else 2. */
+static void wall_refresh(AoeScenarioRuntimeRor *r, AoeLiveUnit *u,
+                         AoeLiveUnit *n[4]) {
+    const DatGraphic *g = u->graphic.current_graphic;
+    uint8_t facet = u->core.scenario_frame;
+    if (!g) return;
+    if (g->angle_count != 3) {
+        u->core.scenario_frame = 0;
+        return;
+    }
+    wall_neighbors(r, u, n);
+    if (n[0] && n[3] && !n[1] && !n[2])
+        wall_turn(u, g, 1 - facet);
+    else if (n[1] && n[2] && !n[0] && !n[3])
+        wall_turn(u, g, -(int32_t)facet);
+    else
+        wall_turn(u, g, 2 - facet);
+}
+
+/* 0x004ad550: recompute the unit's facet from its rotation (0x0044bbd0),
+   refresh it, then refresh each neighbour wall found (0x004ad620). */
+static void wall_adjacency(AoeScenarioRuntimeRor *r, AoeLiveUnit *u) {
+    AoeLiveUnit *n[4], *m[4];
+    const DatGraphic *g;
+    if (!r || !u || !u->constructed || !u->core.unit_template) return;
+    g = u->graphic.current_graphic;
+    if (!g) return;
+    if (g->angle_count != 3) {
+        u->core.scenario_frame = 0;
+        return;
+    }
+    (void)aoe_live_unit_low_state_ror(&u->core, g,
+                                      u->core.scenario_rotation);
+    wall_refresh(r, u, n);
+    for (int i = 0; i < 4; ++i)
+        if (n[i]) wall_refresh(r, n[i], m);
+    ++r->adjacency_refreshes;
+}
+
 static void complete_adjacent(void *context, AoeLiveUnit *unit) {
-    (void)context; (void)unit;
+    wall_adjacency(context, unit);
 }
 static void complete_disappear(void *context, AoeLiveUnit *unit) {
     (void)context;
@@ -477,8 +569,7 @@ static void live_retask(void *c, AoeLiveUnit *u, const DatUnit *t) {
     if (r->retask) r->retask(r->retask_context, u, t);
 }
 static void live_adjacent(void *c, AoeLiveUnit *u) {
-    (void)u;
-    ++((AoeScenarioRuntimeRor *)c)->adjacency_refreshes; /* 0x004ad550 */
+    wall_adjacency(c, u); /* 0x004ad550 */
 }
 
 typedef enum { TARGET_EFFECT, TARGET_ATTRIBUTE } TargetKind;

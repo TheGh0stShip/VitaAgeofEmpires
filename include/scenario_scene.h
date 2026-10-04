@@ -28,6 +28,9 @@ typedef struct {
     AoeRuntimeViewportEntryResolveRor resolve_entry;
     void *resolve_entry_context;
     const AoeLiveUnitDrawRorOps *draw_ops;
+    /* Nonzero draws sprites during the tile walk instead of through the
+       original deferred sprite list (diagnostics only). */
+    int immediate_sprites;
 } AoeScenarioSceneDrawRor;
 
 typedef struct {
@@ -36,8 +39,10 @@ typedef struct {
     AoeLiveUnitViewportResult units;
 } AoeScenarioSceneResultRor;
 
-/* Draws one authentic indexed scene in the recovered per-tile order:
-   terrain/borders first, then that tile's linked live objects. */
+/* Draws one authentic indexed scene: the recovered viewport tile walk draws
+   each tile's terrain/borders and visits that tile's linked live objects,
+   whose sprites are queued in the view's sprite list and drawn after all
+   terrain in layer/row/queue order (see AoeSpriteDrawQueue). */
 int aoe_scenario_runtime_draw_scene_ror(
     AoeScenarioRuntimeRor *runtime, const AoeScenarioSceneDrawRor *draw,
     AoeScenarioSceneResultRor *result);

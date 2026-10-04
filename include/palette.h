@@ -19,4 +19,17 @@ int palette_expand_indexed_rgba(const Palette *palette,
                                 uint8_t *rgba, size_t rgba_size,
                                 size_t rgba_stride);
 
+/* Patched RoR 1.0a water colour cycle. Palette 50500 leaves indices
+   248..254 black; the game fills them with a 7-entry ramp (screen
+   constructor 0x0047e8a3 stores it at +0x69e; 0x004fee50 also sets it) and
+   rotates it every 200 ms (+0x690 = 0xc8): 0x004843d0 writes entry i =
+   ramp[(start + i) % 7] then steps start down (0 wraps to 6, 0x00484462). */
+enum {
+    AOE_WATER_CYCLE_FIRST = 248,
+    AOE_WATER_CYCLE_COUNT = 7,
+    AOE_WATER_CYCLE_INTERVAL_MS = 200
+};
+void palette_water_cycle_apply(Palette *palette, int start);
+int palette_water_cycle_next(int start);
+
 #endif

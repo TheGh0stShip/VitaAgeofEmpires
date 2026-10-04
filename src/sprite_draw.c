@@ -2,6 +2,7 @@
 
 #include <limits.h>
 #include <stdlib.h>
+#include <string.h>
 
 static int add_i32(int32_t value, int32_t offset, int32_t *out) {
     int64_t sum = (int64_t)value + offset;
@@ -313,6 +314,43 @@ int aoe_sprite_draw_instance_bounds_cached_indexed_ror(
         if (parts != stack_parts) free(parts);
         return AOE_GRAPHIC_ART_INVALID;
     }
+    if (surface->queue) {
+        AoeSpriteDrawQueue *q = surface->queue;
+        q->archives = archives;
+        q->archive_count = archive_count;
+        q->cache = cache;
+        for (size_t i = 0; i < count; ++i) {
+            AoeSpriteDrawQueueEntry *e;
+            if (q->row_key < q->row_min || q->row_key > q->row_max)
+                continue;
+            if (q->count == q->capacity) {
+                size_t next = q->capacity ? q->capacity * 2 : 256;
+                AoeSpriteDrawQueueEntry *grown =
+                    realloc(q->entries, next * sizeof(*grown));
+                if (!grown) {
+                    q->failed = 1;
+                    first_error = AOE_GRAPHIC_ART_INVALID;
+                    break;
+                }
+                q->entries = grown;
+                q->capacity = next;
+            }
+            e = &q->entries[q->count++];
+            e->graphic = parts[i].graphic;
+            e->frame = parts[i].frame;
+            e->anchor_x = parts[i].anchor_x;
+            e->anchor_y = parts[i].anchor_y;
+            e->player_color = parts[i].graphic->player_color >= 0 ?
+                (uint8_t)parts[i].graphic->player_color : player_color;
+            e->table = aoe_sprite_draw_transform_table_ror(
+                parts[i].graphic, selected_table, fixed_table, fixed_context);
+            e->layer = parts[i].graphic->layer; /* minimum 0 (0x00416190) */
+            e->row = q->row_key;
+            e->sequence = q->next_sequence++;
+        }
+        if (parts != stack_parts) free(parts);
+        return first_error;
+    }
     for (size_t i = 0; i < count; ++i) {
         SlpFrame owned = {0};
         const SlpFrame *frame = NULL;
@@ -394,5 +432,69 @@ int aoe_sprite_draw_runtime_bounds_cached_indexed_ror(
         if (status != AOE_GRAPHIC_ART_OK &&
             first_error == AOE_GRAPHIC_ART_OK) first_error = status;
     }
+    return first_error;
+}
+
+void aoe_sprite_draw_queue_reset(AoeSpriteDrawQueue *queue,
+                                 int32_t row_min, int32_t row_max) {
+    if (!queue) return;
+    queue->count = 0;
+    queue->row_key = 0;
+    queue->row_min = row_min;
+    queue->row_max = row_max;
+    queue->next_sequence = 0;
+    queue->failed = 0;
+}
+
+void aoe_sprite_draw_queue_free(AoeSpriteDrawQueue *queue) {
+    if (!queue) return;
+    free(queue->entries);
+    memset(queue, 0, sizeof(*queue));
+}
+
+static int queue_order(const void *a, const void *b) {
+    const AoeSpriteDrawQueueEntry *x = a, *y = b;
+    if (x->layer != y->layer) return x->layer < y->layer ? -1 : 1;
+    if (x->row != y->row) return x->row < y->row ? -1 : 1;
+    return x->sequence < y->sequence ? -1 : x->sequence > y->sequence;
+}
+
+int aoe_sprite_draw_queue_flush(AoeSpriteDrawQueue *queue,
+                                const AoeSpriteIndexSurface *surface) {
+    int first_error = AOE_GRAPHIC_ART_OK;
+    if (!queue || !surface || !surface->indices) return AOE_GRAPHIC_ART_INVALID;
+    if (queue->failed) first_error = AOE_GRAPHIC_ART_INVALID;
+    if (queue->count && (!queue->archives || !queue->archive_count))
+        return AOE_GRAPHIC_ART_INVALID;
+    if (queue->count > 1)
+        qsort(queue->entries, queue->count, sizeof(*queue->entries),
+              queue_order);
+    for (size_t i = 0; i < queue->count; ++i) {
+        const AoeSpriteDrawQueueEntry *e = &queue->entries[i];
+        SlpFrame owned = {0};
+        const SlpFrame *frame = NULL;
+        int status = queue->cache ? aoe_graphic_art_cache_get(
+            queue->cache, e->graphic, &e->frame, queue->archives,
+            queue->archive_count, &frame) : AOE_GRAPHIC_ART_CACHE_LIMIT;
+        if (status == AOE_GRAPHIC_ART_CACHE_LIMIT) {
+            status = aoe_graphic_art_load_frame(e->graphic, &e->frame,
+                queue->archives, queue->archive_count, &owned);
+            frame = &owned;
+        }
+        if (status == AOE_GRAPHIC_ART_OK &&
+            !slp_blit_graphic_indexed(frame, surface->indices, surface->size,
+                surface->width, surface->height, surface->stride,
+                e->anchor_x, e->anchor_y, e->frame.mirror_horizontal,
+                e->player_color, e->table))
+            status = AOE_GRAPHIC_ART_INVALID;
+        slp_free_frame(&owned);
+        if (status == AOE_GRAPHIC_ART_MISSING && queue->skip_missing_art) {
+            ++queue->missing_skipped;
+            continue;
+        }
+        if (status != AOE_GRAPHIC_ART_OK && first_error == AOE_GRAPHIC_ART_OK)
+            first_error = status;
+    }
+    queue->count = 0;
     return first_error;
 }

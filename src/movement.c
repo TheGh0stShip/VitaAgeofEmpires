@@ -846,3 +846,47 @@ int aoe_movement_tick_ror(AoeLiveUnit *unit, AoeMovementRor *m,
     if (!ops) return -1;
     return update_impl(unit, m, budget, &ops->step, bound_step, &b);
 }
+
+double aoe_movement_facet_offset_ror(const AoeLiveUnit *unit,
+                                     const AoeMovementRor *m,
+                                     const AoeMovementSpriteRor *sp,
+                                     float x, float y) {
+    double a;
+    if (!unit || !m || !sp || !(sp->flags & 2) || sp->facets <= 0)
+        return 0.0;
+    a = atan2((double)y - unit->core.position.y3c,
+              (double)x - unit->core.position.x38);
+    if (a < 0.0 || isnan(a)) a += TWO_PI_F;
+    a -= m->facing;
+    if (a > PI_D) a -= TWO_PI_F;
+    if (a < -PI_D || isnan(a)) a += TWO_PI_F;
+    return a * ((double)sp->facets * INV_TWO_PI_F);
+}
+
+int aoe_movement_face_ror(AoeLiveUnit *unit, AoeMovementRor *m,
+                          const AoeMovementSpriteRor *sp, float x, float y,
+                          uint32_t world_ms, float *last_turn) {
+    float f;
+    double step, now;
+    if (!unit || !unit->core.unit_template || !m || !last_turn) return 0;
+    f = (float)aoe_movement_facet_offset_ror(unit, m, sp, x, y);
+    if (!(f > 0.5f) && !(f < -0.5f || isnan(f))) return 1;
+    /* The comparison uses the unrounded product; +0xa0 keeps the float. */
+    now = (double)world_ms * (double)0.001f;
+    if (!(now - *last_turn >= unit->core.unit_template->rotation_speed))
+        return 0;
+    /* A facet offset needs a facet sprite, so facets > 0 here. */
+    step = TWO_PI_D / sp->facets;
+    if (f < 0.0f || isnan(f))
+        m->facing = (float)((double)m->facing - step);
+    else
+        m->facing = (float)(step + m->facing);
+    if (m->facing < 0.0f || isnan(m->facing))
+        m->facing = (float)((double)m->facing + TWO_PI_F);
+    else if (m->facing > TWO_PI_F)
+        m->facing = (float)((double)m->facing - TWO_PI_F);
+    aoe_movement_update_facet_ror(unit, m, sp);
+    *last_turn = (float)now;
+    f = (float)aoe_movement_facet_offset_ror(unit, m, sp, x, y);
+    return !(f > 0.5f) && !(f < -0.5f || isnan(f));
+}

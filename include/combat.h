@@ -104,6 +104,21 @@ int aoe_combat_melee_hit_ror(AoeLiveUnit *attacker, AoeLiveUnit *target,
                              float x, float y, float z,
                              const AoeCombatHitOps *ops);
 
+/* Edge distances between footprints (template +0x30/+0x34), per axis
+   |delta| minus the sizes and clamped at 0 (the x term is rounded to
+   float):
+   - 0x004aaeb0: unit to target, sqrt(ey^2 + ex^2);
+   - 0x004aadf0: that edge vector is strictly within `range`
+     (range * range > ey^2 + ex^2);
+   - 0x004aaf50(x, y, z): unit to a point, subtracting only the unit's
+     size (z is unused). */
+double aoe_combat_distance_ror(const AoeLiveUnit *unit,
+                               const AoeLiveUnit *target);
+int aoe_combat_in_range_ror(const AoeLiveUnit *unit,
+                            const AoeLiveUnit *target, float range);
+double aoe_combat_point_distance_ror(const AoeLiveUnit *unit, float x,
+                                     float y);
+
 typedef struct {
     void *context;
     int32_t (*rand)(void *context);                           /* 0x0052605d */

@@ -1502,6 +1502,18 @@ Combat core (RoR 1.0a; type-50 vtable `0x0054324c`, tribe `0x00547fa0`):
     below r², subject to the accuracy roll.
   - The tribe version also spares same-owner units for attacker classes
     35/24, and calls `+0x84(0, 0, 1)` on victims left below 1.0.
+- **Edge distances.** `0x004aaeb0` (unit to target) and `0x004aaf50`
+  (to a point) subtract the footprints per axis and clamp at 0. The
+  in-range test `0x004aadf0` is strictly `range² > edge²`.
+- **Reload countdown.** The type-50 update `0x00426bf0` counts the reload
+  timer down by the world tick and clamps it at 0, before the base update
+  `0x00406500`.
+- **Facing the target.** The attack action's "can attack" (`+0x1f0`,
+  `0x0044ba60`) is a turn-to-face step. The facet offset `0x0044b9b0` is
+  (atan2 − facing) wrapped into ±π, times facets / 2π. Within ±0.5 the unit
+  is facing the target. Otherwise it turns one facet once template `+0xc4`
+  seconds have passed since live `+0xa0` (world `+0x04` ms × 0.001), then
+  re-checks.
 - `src/combat.c` translates these, and `tests/combat_test.c` covers them.
 
 Projectiles (RoR 1.0a). The fire methods create the projectile unit and

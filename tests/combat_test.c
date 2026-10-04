@@ -173,6 +173,28 @@ int main(void) {
     assert(aoe_combat_melee_hit_ror(&attacker, NULL, 0, 0, 0, &hops) == 0);
     assert(aoe_combat_melee_hit_ror(&attacker, &target, 0, 0, 0, NULL) == -1);
 
+    /* Edge distances: centres 3 apart on x, sizes 0.3 + 0.25. */
+    {
+        AoeLiveUnit a2, b2;
+        DatUnit ta, tb;
+        memset(&a2, 0, sizeof(a2));
+        memset(&b2, 0, sizeof(b2));
+        memset(&ta, 0, sizeof(ta));
+        memset(&tb, 0, sizeof(tb));
+        ta.size[0] = ta.size[1] = 0.25f;
+        tb.size[0] = tb.size[1] = 0.25f;
+        a2.core.unit_template = &ta;
+        b2.core.unit_template = &tb;
+        b2.core.position.x38 = 3.0f;
+        assert(aoe_combat_distance_ror(&a2, &b2) == 2.5);
+        assert(aoe_combat_in_range_ror(&a2, &b2, 2.6f) &&
+               !aoe_combat_in_range_ror(&a2, &b2, 2.5f));
+        b2.core.position.y3c = 4.5f; /* ey = 4.0 */
+        assert(aoe_combat_distance_ror(&a2, &b2) == sqrt(2.5 * 2.5 + 16.0));
+        assert(aoe_combat_point_distance_ror(&a2, 3.0f, 0.0f) == 2.75);
+        assert(aoe_combat_point_distance_ror(&a2, 0.1f, 0.1f) == 0.0);
+    }
+
     /* Blast at (5.5, 5.5) with radius 1: tiles 2..8 (exclusive) on both
        axes in y-major order, clamped to a 7-wide map. */
     {

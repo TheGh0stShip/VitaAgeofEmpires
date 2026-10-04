@@ -210,3 +210,55 @@ int aoe_combat_blast_ror(AoeLiveUnit *attacker, float x, float y, float z,
         }
     return 1;
 }
+
+/* Shared prologue of 0x004aadf0 / 0x004aaeb0: ex (float) and ey. */
+static int edges(const AoeLiveUnit *u, const AoeLiveUnit *t, float *ex,
+                 double *ey) {
+    const DatUnit *ut, *tt;
+    float dxf;
+    double dy;
+    if (!u || !t || !(ut = u->core.unit_template) ||
+        !(tt = t->core.unit_template))
+        return 0;
+    dxf = (float)((double)t->core.position.x38 - u->core.position.x38);
+    dy = (double)t->core.position.y3c - u->core.position.y3c;
+    if (dxf < 0.0f || isnan(dxf)) dxf = -dxf;
+    if (dy < 0.0 || isnan(dy)) dy = -dy;
+    *ex = (float)(((double)dxf - ut->size[0]) - tt->size[0]);
+    *ey = (dy - ut->size[1]) - tt->size[1];
+    if (*ex < 0.0f || isnan(*ex)) *ex = 0.0f;
+    if (*ey < 0.0 || isnan(*ey)) *ey = 0.0;
+    return 1;
+}
+
+double aoe_combat_distance_ror(const AoeLiveUnit *u, const AoeLiveUnit *t) {
+    float ex;
+    double ey;
+    if (!edges(u, t, &ex, &ey)) return 0.0;
+    return sqrt(ey * ey + (double)ex * ex);
+}
+
+int aoe_combat_in_range_ror(const AoeLiveUnit *u, const AoeLiveUnit *t,
+                            float range) {
+    float ex;
+    double ey;
+    if (!edges(u, t, &ex, &ey)) return 0;
+    return (double)range * range > ey * ey + (double)ex * ex;
+}
+
+double aoe_combat_point_distance_ror(const AoeLiveUnit *u, float x,
+                                     float y) {
+    const DatUnit *ut;
+    float dxf, ex;
+    double dy, ey;
+    if (!u || !(ut = u->core.unit_template)) return 0.0;
+    dxf = (float)((double)u->core.position.x38 - x);
+    dy = (double)u->core.position.y3c - y;
+    if (dxf < 0.0f || isnan(dxf)) dxf = -dxf;
+    if (dy < 0.0 || isnan(dy)) dy = -dy;
+    ex = (float)((double)dxf - ut->size[0]);
+    ey = dy - ut->size[1];
+    if (ex < 0.0f || isnan(ex)) ex = 0.0f;
+    if (ey < 0.0 || isnan(ey)) ey = 0.0;
+    return sqrt(ey * ey + (double)ex * ex);
+}

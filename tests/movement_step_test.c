@@ -227,6 +227,36 @@ int main(void) {
                m.best == 5.0f); /* pre-move distance to the waypoint */
     }
 
+    /* Facing a target (0x0044b9b0 / 0x0044ba60): 8 facets, facing 0,
+       target north (pi/2): offset +2 facets; one turn per 1 s delay. */
+    {
+        AoeMovementSpriteRor sp8 = {1.0f, 8, 2};
+        float last = 0.0f;
+        tmpl.rotation_speed = 1.0f;
+        m.facing = 0.0f;
+        unit.core.position.x38 = 10.5f;
+        unit.core.position.y3c = 10.5f;
+        assert(aoe_movement_facet_offset_ror(&unit, &m, &sp8, 10.5f, 20.5f) ==
+               (double)(float)(1.5707963267948966) * 8 *
+                   0.15915493667125702 ||
+               fabs(aoe_movement_facet_offset_ror(&unit, &m, &sp8, 10.5f,
+                                                  20.5f) - 2.0) < 1e-6);
+        assert(!aoe_movement_face_ror(&unit, &m, &sp8, 10.5f, 20.5f, 500,
+                                      &last) && m.facing == 0.0f);
+        assert(!aoe_movement_face_ror(&unit, &m, &sp8, 10.5f, 20.5f, 1000,
+                                      &last) &&
+               m.facing == 0.7853981852531433f && last == 1.0f);
+        assert(!aoe_movement_face_ror(&unit, &m, &sp8, 10.5f, 20.5f, 1500,
+                                      &last));
+        assert(aoe_movement_face_ror(&unit, &m, &sp8, 10.5f, 20.5f, 2000,
+                                     &last) &&
+               fabsf(m.facing - 1.5707963f) < 1e-6f);
+        assert(aoe_movement_face_ror(&unit, &m, &sp8, 10.5f, 20.5f, 2000,
+                                     &last));
+        /* Without a facet sprite there is nothing to face. */
+        assert(aoe_movement_face_ror(&unit, &m, NULL, 0.0f, 0.0f, 0, &last));
+    }
+
     assert(aoe_movement_step_to_ror(&unit, &m, &budget, NULL, 0, 0) == -1);
     aoe_unit_path_free_ror(&m.path);
     return 0;

@@ -177,6 +177,25 @@ typedef struct {
 void aoe_movement_update_facet_ror(AoeLiveUnit *unit, const AoeMovementRor *m,
                                    const AoeMovementSpriteRor *sprite);
 
+/* 0x0044b9b0: facet offset to (x, y) (a target's position when it has
+   one): atan2 heading (+2pi when negative) minus the facing, wrapped once
+   into [-pi, pi], times facets / 2pi; 0 without a facet sprite (flags bit
+   1, facets > 0). */
+double aoe_movement_facet_offset_ror(const AoeLiveUnit *unit,
+                                     const AoeMovementRor *m,
+                                     const AoeMovementSpriteRor *sprite,
+                                     float x, float y);
+
+/* 0x0044ba60 (vtable +0x1f0, the attack action's "can attack"): 1 when
+   the offset is within +-0.5 facets. Otherwise, once template +0xc4
+   (rotation_speed) seconds have passed since `*last_turn` (live +0xa0;
+   now = world +0x04 milliseconds * 0.001f), turn one facet toward it,
+   wrap the facing once, refresh the facet frame, record the time and
+   re-check. */
+int aoe_movement_face_ror(AoeLiveUnit *unit, AoeMovementRor *m,
+                          const AoeMovementSpriteRor *sprite, float x,
+                          float y, uint32_t world_ms, float *last_turn);
+
 typedef struct {
     AoeMovementStepOps step;
     /* Unit +0x10, or NULL without a sprite. */

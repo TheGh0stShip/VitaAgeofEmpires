@@ -42,24 +42,39 @@ AoeWorldCombatUnitRor *aoe_world_combat_unit_ror(AoeWorldCombatRor *c,
 static int16_t entry_type(const void *action);
 static int research_ops(AoeWorldCombatRor *c, int16_t owner,
                         AoeResearchActionOps *o);
-/* Type-80 heads may also be command-started training (0x66, 0x004b4f10)
-   and research (0x67, 0x004b60b0) actions; their destructors run first. */
+
+/* Heap action classes on +0x184 lists, by action type (the first int16):
+   the original's per-class vtable slots +0x00 (destructor), +0x1c
+   (activate), +0x28 (update), +0x30 (task), +0x34 (retarget) and the
+   target +0x4c. A NULL slot is the base behaviour: destroy only frees,
+   no task, retarget refuses (0x004072b0), no target. */
+typedef struct {
+    int16_t type;
+    void (*destroy)(AoeWorldCombatRor *c, void *action);
+    void (*activate)(AoeWorldCombatRor *c, void *action, uint8_t state);
+    uint8_t (*update)(AoeWorldCombatRor *c, void *action);
+    const DatUnitTask *(*task)(void *action);
+    int (*retarget)(AoeWorldCombatRor *c, void *action, AoeLiveUnit *t,
+                    float x, float y, float z);
+    AoeLiveUnit *(*target)(void *action);
+} HeapActionClass;
+static const HeapActionClass *heap_class(int16_t type);
+static void repair_ops(AoeWorldCombatRor *c, AoeRepairActionOps *o);
+
+/* The record (gather/attack/build) clears its flags; heap actions run
+   their class destructor, then are freed (train actions free
+   themselves). */
 static void head_destroy(void *context, void *action) {
     AoeWorldCombatUnitRor *s = context;
+    const HeapActionClass *k;
     if (action == s) {
         s->attacking = s->gathering = s->constructing = 0;
         return;
     }
-    if (entry_type(action) == 0x66) {
-        aoe_train_action_adapter_destroy(&s->world->train, action);
+    k = heap_class(entry_type(action));
+    if (k && k->destroy) {
+        k->destroy(s->world, action);
         return;
-    }
-    if (entry_type(action) == 0x67) {
-        AoeResearchAction *a = action;
-        AoeResearchActionOps o;
-        if (!research_ops(s->world, a->owner_index, &o) ||
-            !aoe_research_action_destroy_ror(a, &o))
-            ++s->world->research_failures;
     }
     free(action);
 }
@@ -269,30 +284,8 @@ static int16_t entry_type(const void *action) {
 static void farm_ops(AoeWorldCombatRor *c, AoeFarmActionOps *o);
 static void head_activate(void *context, void *action, uint8_t state) {
     AoeWorldCombatUnitRor *s = context;
-    switch (entry_type(action)) {
-    case 1:
-        sub_activate(s->world, action, state);
-        break;
-    case 0x15: {
-        AoeFarmActionOps o;
-        farm_ops(s->world, &o);
-        (void)aoe_farm_action_activate_ror(action, &o);
-        break;
-    }
-    case 0x66:
-        aoe_train_action_adapter_state(&s->world->train, action, state);
-        break;
-    case 0x67: {
-        AoeResearchAction *a = action;
-        AoeResearchActionOps o;
-        if (!research_ops(s->world, a->owner_index, &o) ||
-            !aoe_research_action_activate_ror(a, state, &o))
-            ++s->world->research_failures;
-        break;
-    }
-    default:
-        break;
-    }
+    const HeapActionClass *k = heap_class(entry_type(action));
+    if (k && k->activate) k->activate(s->world, action, state);
 }
 
 /* Sprite queries on the unit's current graphic (0x004158f0/0x00415920). */
@@ -1287,23 +1280,24 @@ static void order_change_template(void *c, AoeLiveUnit *u, const DatUnit *t) {
     (void)aoe_world_combat_change_template_ror(c, u, t);
 }
 /* The head action is the unit's gather or attack action. */
-/* Heads other than the record are move (type 1) or farm (0x15) actions:
-   their task is +0x30 (farm), +0x34 retarget is the base 0x004072b0
-   (refuses), and their target is the base +0x4c. */
+/* Heads other than the record are heap actions (HeapActionClass). */
 static const DatUnitTask *order_action_task(void *c, void *action) {
     AoeWorldCombatUnitRor *s = action;
     (void)c;
-    if (entry_type(action) != AOE_WORLD_COMBAT_RECORD_TAG)
-        return entry_type(action) == 0x15
-                   ? ((AoeFarmActionRor *)action)->task
-                   : NULL;
+    if (entry_type(action) != AOE_WORLD_COMBAT_RECORD_TAG) {
+        const HeapActionClass *k = heap_class(entry_type(action));
+        return k && k->task ? k->task(action) : NULL;
+    }
     return s->constructing ? s->build.task
                            : s->gathering ? s->gather.task : NULL;
 }
 static int order_action_retarget(void *c, void *action, AoeLiveUnit *t,
                                  float x, float y, float z) {
     AoeWorldCombatUnitRor *s = action;
-    if (entry_type(action) != AOE_WORLD_COMBAT_RECORD_TAG) return 0;
+    if (entry_type(action) != AOE_WORLD_COMBAT_RECORD_TAG) {
+        const HeapActionClass *k = heap_class(entry_type(action));
+        return k && k->retarget ? k->retarget(c, action, t, x, y, z) : 0;
+    }
     if (s->constructing) {
         AoeBuildActionOps o;
         build_ops(c, &o);
@@ -1336,8 +1330,10 @@ static int16_t order_action_type(void *c, void *action) {
 static AoeLiveUnit *order_action_target(void *c, void *action) {
     AoeWorldCombatUnitRor *s = action;
     (void)c;
-    if (entry_type(action) != AOE_WORLD_COMBAT_RECORD_TAG)
-        return ((AoeMoveActionRor *)action)->target;
+    if (entry_type(action) != AOE_WORLD_COMBAT_RECORD_TAG) {
+        const HeapActionClass *k = heap_class(entry_type(action));
+        return k && k->target ? k->target(action) : NULL;
+    }
     if (s->constructing) return s->build.base.target;
     return s->gathering ? s->gather.base.target
                         : s->attacking ? s->attack.base.target : NULL;
@@ -1406,6 +1402,19 @@ static void *order_construct(void *c, AoeLiveUnit *u,
             return NULL;
         s->pending = 9;
         return s;
+    }
+    case 0x004b55c0: case 0x004b5650: {
+        AoeRepairActionRor *a = calloc(1, sizeof(*a));
+        AoeRepairActionOps o;
+        repair_ops(w, &o);
+        if (a && !(route->constructor == 0x004b55c0
+                       ? aoe_repair_action_init_target_ror(a, u, task, t, &o)
+                       : aoe_repair_action_init_point_ror(a, u, task, x, y,
+                                                          z))) {
+            free(a);
+            a = NULL;
+        }
+        return a;
     }
     case 0x00404750: {
         AoeFarmActionRor *f = calloc(1, sizeof(*f));
@@ -1528,6 +1537,7 @@ int aoe_world_combat_order_ror(AoeWorldCombatRor *c, AoeLiveUnit *u,
                                int16_t *code) {
     AoeWorldCombatUnitRor *s;
     AoeUnitOrderOps o;
+    int ok;
     if (!c || !u || !code || !(s = aoe_world_combat_unit_ror(c, u))) return 0;
     memset(&o, 0, sizeof(o));
     o.task = (AoeUnitTaskOps){c, task_owner, task_accepts, task_hostile,
@@ -1546,7 +1556,11 @@ int aoe_world_combat_order_ror(AoeWorldCombatRor *c, AoeLiveUnit *u,
     o.move = order_move;
     o.has_group_object = order_has_group;
     o.acknowledge = order_acknowledge;
-    return aoe_unit_order_ror(u, t, x, y, z, &o, code);
+    ok = aoe_unit_order_ror(u, t, x, y, z, &o, code);
+    /* The order entry points (+0x98/+0xa0 around +0x1f8) count orders
+       in unit byte +0x188. */
+    if ((s = peek_unit(c, u))) ++s->order_serial;
+    return ok;
 }
 
 /* Per-unit update chain bound to the runtime. */
@@ -1577,24 +1591,9 @@ static uint8_t unit_update_head(void *context, void *action) {
     r = 0;
     if (action == s) {
         r = record_update(s);
-    } else if (entry_type(action) == 0x15) {
-        AoeFarmActionOps o;
-        farm_ops(s->world, &o);
-        if (!aoe_farm_action_update_ror(action, &o, &r)) r = 0;
-    } else if (entry_type(action) == 0x66) {
-        r = aoe_train_action_adapter_head(&s->world->train, action);
-    } else if (entry_type(action) == 0x67) {
-        AoeResearchActionOps o;
-        AoeResearchAction *a = action;
-        if (!research_ops(s->world, a->owner_index, &o) ||
-            !aoe_research_action_update_ror(a, &o, &r)) {
-            ++s->world->research_failures;
-            r = 0;
-        }
     } else {
-        AoeMoveActionOps o;
-        move_ops(s->world, &o);
-        if (!aoe_move_action_update_ror(action, &o, &r)) r = 0;
+        const HeapActionClass *k = heap_class(entry_type(action));
+        r = k && k->update ? k->update(s->world, action) : 0;
     }
     s->last_result = r;
     return r;
@@ -2618,4 +2617,325 @@ int aoe_world_combat_update_world_ror(AoeWorldCombatRor *c, float tick) {
         aoe_rng_seed(&r->rng, reseed);
     }
     return 1;
+}
+
+/* ---- repair action (0x6a) bindings ---------------------------------- */
+
+/* Sub-action walks for heap actions, as build_start_move. */
+static int heap_start_move(AoeWorldCombatRor *w, AoeMoveActionRor *base,
+                           AoeLiveUnit *t, float range, const void *graphic,
+                           int quiet_first) {
+    AoeWorldCombatUnitRor *s = aoe_world_combat_unit_ror(w, base->unit);
+    AoeMoveActionOps o;
+    AoeMoveActionRor *mv;
+    const DatUnit *tt = base->unit->core.unit_template;
+    int ok;
+    if (!s || !(mv = calloc(1, sizeof(*mv)))) return 0;
+    move_ops(w, &o);
+    ok = t ? aoe_move_action_init_target_ror(
+                 mv, base->unit, t, range, graphic,
+                 graphic_by_id(w, tt->walking_graphic), &o)
+           : aoe_move_action_init_point_ror(
+                 mv, base->unit, base->x, base->y, base->z, range, graphic,
+                 graphic_by_id(w, tt->walking_graphic));
+    if (!ok) {
+        free(mv);
+        return 0;
+    }
+    if (quiet_first) mv->quiet = 1;
+    if (!aoe_action_list_push(&s->sub_actions, mv)) {
+        free(mv);
+        return 0;
+    }
+    mv->quiet = 1;
+    return 1;
+}
+static uint8_t heap_sub_update(AoeWorldCombatRor *w, AoeLiveUnit *u) {
+    AoeWorldCombatUnitRor *s = aoe_world_combat_unit_ror(w, u);
+    AoeActionTickOps t = {w, update_head, update_waiting};
+    uint8_t r = 0;
+    if (!s || !aoe_action_list_update_ror(&s->sub_actions, &t, &r)) return 0;
+    return r;
+}
+static void heap_sub_clear(AoeWorldCombatRor *w, AoeLiveUnit *u) {
+    AoeWorldCombatUnitRor *s = aoe_world_combat_unit_ror(w, u);
+    if (s) (void)aoe_action_list_clear(&s->sub_actions);
+}
+static int repair_start_move(void *c, AoeRepairActionRor *a, AoeLiveUnit *t,
+                             float range, const void *graphic,
+                             int quiet_first) {
+    return heap_start_move(c, &a->base, t, range, graphic, quiet_first);
+}
+static uint8_t repair_sub_update(void *c, AoeRepairActionRor *a) {
+    return heap_sub_update(c, a->base.unit);
+}
+static void repair_sub_clear(void *c, AoeRepairActionRor *a) {
+    heap_sub_clear(c, a->base.unit);
+}
+static double repair_distance(void *c, AoeLiveUnit *u, AoeLiveUnit *t) {
+    (void)c;
+    return aoe_combat_distance_ror(u, t);
+}
+/* Owner +0x1c = 0x0045bd90: the owner itself, or a player 1..n-1 whose
+   stance byte (+0x84) is 0. */
+static int repair_allowed(void *c, AoeLiveUnit *u, AoeLiveUnit *t) {
+    AoeScenarioRuntimeRor *r = ((AoeWorldCombatRor *)c)->motion->runtime;
+    int16_t o = u->runtime_owner_index, k = t->runtime_owner_index;
+    if (k == o) return 1;
+    return o >= 0 && o < AOE_SCENARIO_RUNTIME_PLAYERS && k > 0 &&
+           k < r->player_count && r->diplomacy[o][k] == 0;
+}
+/* Owner 0x004f1750(template ID, multiplier, population flag). */
+static int repair_pay(void *c, AoeLiveUnit *u, float mult, int pop_flag) {
+    AoeScenarioRuntimePlayerRor *p = owner_of(c, u);
+    const DatUnit *t;
+    int paid = 0;
+    if (!p || !(t = aoe_player_templates_get(
+                    &p->templates, (uint16_t)u->core.unit_template->id)))
+        return 0;
+    return aoe_player_cost_pay_ror(&p->resources, t, mult, pop_flag, &paid) &&
+           paid;
+}
+static uint8_t repair_work(void *c, AoeLiveUnit *t, float amount) {
+    int r = aoe_live_unit_repair_ror(t, amount, repair_pay, c);
+    if (r < 0) {
+        ++((AoeWorldCombatRor *)c)->repair_failures;
+        return 0;
+    }
+    if (r == 1) ++((AoeWorldCombatRor *)c)->repairs;
+    return (uint8_t)r;
+}
+static void repair_event(void *c, uint32_t e, int16_t o, int32_t id) {
+    (void)e; (void)o; (void)id;
+    ++((AoeWorldCombatRor *)c)->repair_unpaid;
+}
+static uint8_t repair_order_serial(void *c, AoeLiveUnit *u) {
+    AoeWorldCombatUnitRor *s = peek_unit(c, u);
+    return s ? s->order_serial : 0;
+}
+/* Owner list +0x28: the player's scenario units, then the units created
+   since (editor list), as the runtime keeps them. */
+static AoeLiveUnit *repair_owner_unit(void *c, AoeLiveUnit *u, uint32_t i) {
+    AoeScenarioRuntimeRor *r = ((AoeWorldCombatRor *)c)->motion->runtime;
+    AoeScenarioRuntimePlayerRor *p = owner_of(c, u);
+    if (!p) return NULL;
+    for (uint32_t k = 0; k < p->unit_count; ++k) {
+        AoeLiveUnit *x = &p->units[k];
+        if (x->constructed && x->core.state <= 2 && i-- == 0) return x;
+    }
+    for (size_t k = 0; k < r->editor_unit_count; ++k) {
+        AoeLiveUnit *x = r->editor_units[k];
+        if (x && x->constructed && x->core.state <= 2 &&
+            x->runtime_owner_index == u->runtime_owner_index && i-- == 0)
+            return x;
+    }
+    return NULL;
+}
+static void *head_of(AoeLiveUnit *u) {
+    const AoeActionList *l = u->derived_action_list;
+    return l && l->head ? l->head->action : NULL;
+}
+/* +0xcc = 0x00406650: the head action's +0x4c target. */
+static AoeLiveUnit *repair_head_target(void *c, AoeLiveUnit *u) {
+    void *h = head_of(u);
+    return h ? order_action_target(c, h) : NULL;
+}
+/* +0x134 = 0x00406740: the head action's state, 0 without one. */
+static uint8_t repair_head_state(void *c, AoeLiveUnit *u) {
+    void *h = head_of(u);
+    AoeWorldCombatUnitRor *s;
+    (void)c;
+    if (!h) return 0;
+    if (entry_type(h) != AOE_WORLD_COMBAT_RECORD_TAG)
+        return ((AoeMoveActionRor *)h)->state;
+    s = h;
+    return s->constructing ? s->build.base.state
+           : s->gathering  ? s->gather.base.state
+           : s->attacking  ? s->attack.base.state : 0;
+}
+/* 0x00407670 / 0x00407680: the head action's +0x20/+0x24. */
+static void repair_head_destination(void *c, AoeLiveUnit *u, float *x,
+                                    float *y) {
+    void *h = head_of(u);
+    (void)c;
+    if (h && entry_type(h) != AOE_WORLD_COMBAT_RECORD_TAG) {
+        *x = ((AoeMoveActionRor *)h)->x;
+        *y = ((AoeMoveActionRor *)h)->y;
+    }
+}
+/* 0x00447de0; off-map tiles match no terrain. */
+static int repair_terrain(void *c, int32_t x, int32_t y) {
+    uint8_t t = 0;
+    if (x < INT16_MIN || x > INT16_MAX || y < INT16_MIN || y > INT16_MAX ||
+        !task_terrain(c, NULL, (int16_t)x, (int16_t)y, &t))
+        return -1;
+    return t;
+}
+/* Unit +0x114 = 0x0044da60(x, y, 0): 0x0045a4f0(unit, x, y, 1). */
+static int repair_fits(void *c, AoeLiveUnit *u, float x, float y) {
+    return aoe_world_motion_fits_ror(((AoeWorldCombatRor *)c)->motion, u, x,
+                                     y, 1) == 1;
+}
+/* Unit +0x154 = 0x004272b0 (types 50..80; root 0x00405a00 refuses).
+   Unforced, a head move (type 1) already bound for (x, y, z) is kept;
+   a head that accepts the walk (+0x30) is kept; otherwise a new move
+   action (0x00405250, graphic template +0xc0 or +0xbc) replaces the list
+   (+0x208). */
+static int unit_move_to(void *c, AoeLiveUnit *u, float x, float y, float z,
+                        float range, int force) {
+    AoeWorldCombatRor *w = c;
+    const DatUnit *t = u->core.unit_template;
+    void *h = head_of(u);
+    AoeMoveActionRor *mv;
+    int16_t g;
+    if (!t || t->type < 50) return 0;
+    if (!force && h && entry_type(h) == 1 &&
+        ((AoeMoveActionRor *)h)->x == x && ((AoeMoveActionRor *)h)->y == y &&
+        ((AoeMoveActionRor *)h)->z == z)
+        return 1;
+    if (h && entry_type(h) == 0x6a) {
+        AoeRepairActionOps o;
+        repair_ops(w, &o);
+        if (aoe_repair_action_walk_ror(h, x, y, z, &o)) return 1;
+    }
+    g = t->walking_graphic2 >= 0 ? t->walking_graphic2 : t->walking_graphic;
+    if (!(mv = calloc(1, sizeof(*mv)))) return 0;
+    if (!aoe_move_action_init_point_ror(mv, u, x, y, z, range,
+                                        graphic_by_id(w, g),
+                                        graphic_by_id(w, t->walking_graphic))) {
+        free(mv);
+        return 0;
+    }
+    order_adopt(w, u, mv);
+    if ((h = peek_unit(w, u))) ++((AoeWorldCombatUnitRor *)h)->order_serial;
+    return 1;
+}
+static void repair_ops(AoeWorldCombatRor *c, AoeRepairActionOps *o) {
+    memset(o, 0, sizeof(*o));
+    move_ops(c, &o->move);
+    o->graphic = graphic_id_cb;
+    o->tick_seconds = tick_seconds;
+    o->distance = repair_distance;
+    o->face = face_target;
+    o->may_repair = repair_allowed;
+    o->repair = repair_work;
+    o->event = repair_event;
+    o->play_sound = play_sound_cb;
+    o->start_move = repair_start_move;
+    o->sub_update = repair_sub_update;
+    o->sub_clear = repair_sub_clear;
+    o->order_serial = repair_order_serial;
+    o->owner_unit_at = repair_owner_unit;
+    o->head_target = repair_head_target;
+    o->head_state = repair_head_state;
+    o->head_destination = repair_head_destination;
+    o->terrain_at = repair_terrain;
+    o->fits = repair_fits;
+    o->move_to = unit_move_to;
+}
+
+/* ---- heap action classes -------------------------------------------- */
+
+static void move_activate(AoeWorldCombatRor *c, void *a, uint8_t st) {
+    sub_activate(c, a, st);
+}
+static uint8_t move_update(AoeWorldCombatRor *c, void *a) {
+    AoeMoveActionOps o;
+    uint8_t r = 0;
+    move_ops(c, &o);
+    return aoe_move_action_update_ror(a, &o, &r) ? r : 0;
+}
+static AoeLiveUnit *base_target(void *a) {
+    return ((AoeMoveActionRor *)a)->target;
+}
+static void farm_activate(AoeWorldCombatRor *c, void *a, uint8_t st) {
+    AoeFarmActionOps o;
+    (void)st;
+    farm_ops(c, &o);
+    (void)aoe_farm_action_activate_ror(a, &o);
+}
+static uint8_t farm_update(AoeWorldCombatRor *c, void *a) {
+    AoeFarmActionOps o;
+    uint8_t r = 0;
+    farm_ops(c, &o);
+    return aoe_farm_action_update_ror(a, &o, &r) ? r : 0;
+}
+static const DatUnitTask *farm_task(void *a) {
+    return ((AoeFarmActionRor *)a)->task;
+}
+static void train_destroy(AoeWorldCombatRor *c, void *a) {
+    aoe_train_action_adapter_destroy(&c->train, a);
+}
+static void train_activate(AoeWorldCombatRor *c, void *a, uint8_t st) {
+    aoe_train_action_adapter_state(&c->train, a, st);
+}
+static uint8_t train_update(AoeWorldCombatRor *c, void *a) {
+    return aoe_train_action_adapter_head(&c->train, a);
+}
+static void research_destroy(AoeWorldCombatRor *c, void *action) {
+    AoeResearchAction *a = action;
+    AoeResearchActionOps o;
+    if (!research_ops(c, a->owner_index, &o) ||
+        !aoe_research_action_destroy_ror(a, &o))
+        ++c->research_failures;
+    free(a);
+}
+static void research_activate(AoeWorldCombatRor *c, void *action,
+                              uint8_t st) {
+    AoeResearchAction *a = action;
+    AoeResearchActionOps o;
+    if (!research_ops(c, a->owner_index, &o) ||
+        !aoe_research_action_activate_ror(a, st, &o))
+        ++c->research_failures;
+}
+static uint8_t research_update(AoeWorldCombatRor *c, void *action) {
+    AoeResearchAction *a = action;
+    AoeResearchActionOps o;
+    uint8_t r = 0;
+    if (!research_ops(c, a->owner_index, &o) ||
+        !aoe_research_action_update_ror(a, &o, &r)) {
+        ++c->research_failures;
+        return 0;
+    }
+    return r;
+}
+static void repair_activate(AoeWorldCombatRor *c, void *a, uint8_t st) {
+    AoeRepairActionOps o;
+    repair_ops(c, &o);
+    if (!aoe_repair_action_activate_ror(a, st, &o)) ++c->repair_failures;
+}
+static uint8_t repair_update(AoeWorldCombatRor *c, void *a) {
+    AoeRepairActionOps o;
+    uint8_t r = 0;
+    repair_ops(c, &o);
+    if (!aoe_repair_action_update_ror(a, &o, &r)) {
+        ++c->repair_failures;
+        return 0;
+    }
+    return r;
+}
+static const DatUnitTask *repair_task(void *a) {
+    return ((AoeRepairActionRor *)a)->task;
+}
+static int repair_retarget(AoeWorldCombatRor *c, void *a, AoeLiveUnit *t,
+                           float x, float y, float z) {
+    AoeRepairActionOps o;
+    repair_ops(c, &o);
+    return aoe_repair_action_retarget_ror(a, t, x, y, z, &o);
+}
+
+static const HeapActionClass heap_classes[] = {
+    {1, NULL, move_activate, move_update, NULL, NULL, base_target},
+    {0x15, NULL, farm_activate, farm_update, farm_task, NULL, base_target},
+    {0x66, train_destroy, train_activate, train_update, NULL, NULL, NULL},
+    {0x67, research_destroy, research_activate, research_update, NULL, NULL,
+     NULL},
+    {0x6a, NULL, repair_activate, repair_update, repair_task,
+     repair_retarget, base_target},
+};
+static const HeapActionClass *heap_class(int16_t type) {
+    for (size_t i = 0; i < sizeof(heap_classes) / sizeof(heap_classes[0]);
+         ++i)
+        if (heap_classes[i].type == type) return &heap_classes[i];
+    return NULL;
 }

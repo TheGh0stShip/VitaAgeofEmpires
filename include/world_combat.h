@@ -7,6 +7,7 @@
 #include "action_build.h"
 #include "action_farm.h"
 #include "action_gather.h"
+#include "action_repair.h"
 #include "action_list.h"
 #include "combat.h"
 #include "command_production.h"
@@ -72,6 +73,7 @@ typedef struct {
        list instead, with the same entries. */
     AoeActionList unit_actions;
     uint8_t last_result; /* head update result of the latest unit update */
+    uint8_t order_serial; /* unit byte +0x188: orders received */
     AoeActionList sub_actions;
 } AoeWorldCombatUnitRor;
 
@@ -130,6 +132,9 @@ typedef struct AoeWorldCombatRor {
     /* Production commands answered by the player fallback (busy or
        missing building: owner +0x10c / +0x118). */
     uint32_t production_fallbacks;
+    /* Repair actions (0x6a): unpaid repairs (event 0x6b) and portable
+       dependency failures; completed repairs count in `repairs`. */
+    uint32_t repair_unpaid, repair_failures;
 } AoeWorldCombatRor;
 
 int aoe_world_combat_init_ror(AoeWorldCombatRor *combat,

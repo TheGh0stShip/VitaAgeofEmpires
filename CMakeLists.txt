@@ -405,6 +405,11 @@ target_link_libraries(aoe_world_motion PUBLIC aoe_scenario_runtime
   aoe_movement aoe_pathfinder)
 target_compile_options(aoe_world_motion PRIVATE -Wall -Wextra)
 
+add_library(aoe_action_repair STATIC src/action_repair.c)
+target_include_directories(aoe_action_repair PUBLIC include)
+target_link_libraries(aoe_action_repair PUBLIC aoe_action_move m)
+target_compile_options(aoe_action_repair PRIVATE -Wall -Wextra)
+
 add_library(aoe_world_combat STATIC src/world_combat.c)
 target_include_directories(aoe_world_combat PUBLIC include)
 target_link_libraries(aoe_world_combat PUBLIC aoe_world_motion
@@ -412,7 +417,7 @@ target_link_libraries(aoe_world_combat PUBLIC aoe_world_motion
   aoe_projectile aoe_unit_sprite_binding aoe_unit_task aoe_player_resources
   aoe_unit_order aoe_train_action_adapter aoe_train_action aoe_building_update
   aoe_player_costs aoe_unit_placement_check aoe_player_templates
-  aoe_command_production aoe_research_action)
+  aoe_command_production aoe_research_action aoe_action_repair)
 target_compile_options(aoe_world_combat PRIVATE -Wall -Wextra)
 
 add_library(aoe_scenario_editor_catalog STATIC src/scenario_editor_catalog.c)
@@ -926,6 +931,10 @@ else()
   target_link_libraries(action_build_test PRIVATE aoe_action_build)
   target_compile_options(action_build_test PRIVATE -UNDEBUG)
   add_test(NAME original_ror_build_action COMMAND action_build_test)
+  add_executable(action_repair_test tests/action_repair_test.c)
+  target_link_libraries(action_repair_test PRIVATE aoe_action_repair)
+  target_compile_options(action_repair_test PRIVATE -UNDEBUG)
+  add_test(NAME original_ror_repair_action COMMAND action_repair_test)
   add_executable(combat_test tests/combat_test.c)
   target_link_libraries(combat_test PRIVATE aoe_combat)
   target_compile_options(combat_test PRIVATE -UNDEBUG)
@@ -1022,6 +1031,14 @@ else()
   target_compile_options(research_command_real PRIVATE -UNDEBUG)
   if(EXISTS "${CMAKE_SOURCE_DIR}/build/ror/scenarios/EXPANS_1_1.scx")
     add_test(NAME ror_research_and_train_commands COMMAND research_command_real
+      "${CMAKE_SOURCE_DIR}/build/ror/scenarios/EXPANS_1_1.scx"
+      "${CMAKE_SOURCE_DIR}/build/ror/disc/GAME/DATA2/EMPIRES.DAT")
+  endif()
+  add_executable(repair_real tests/repair_real.c)
+  target_link_libraries(repair_real PRIVATE aoe_world_combat aoe_dat m)
+  target_compile_options(repair_real PRIVATE -UNDEBUG)
+  if(EXISTS "${CMAKE_SOURCE_DIR}/build/ror/scenarios/EXPANS_1_1.scx")
+    add_test(NAME ror_villager_repairs_building COMMAND repair_real
       "${CMAKE_SOURCE_DIR}/build/ror/scenarios/EXPANS_1_1.scx"
       "${CMAKE_SOURCE_DIR}/build/ror/disc/GAME/DATA2/EMPIRES.DAT")
   endif()

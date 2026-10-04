@@ -64,6 +64,7 @@ static void repair_ops(AoeWorldCombatRor *c, AoeRepairActionOps *o);
 static void heal_ops(AoeWorldCombatRor *c, AoeHealActionOps *o);
 static void convert_ops(AoeWorldCombatRor *c, AoeConvertActionOps *o);
 static void trade_ops(AoeWorldCombatRor *c, AoeTradeActionOps *o);
+static void object_ops(AoeWorldCombatRor *c, AoeObjectActionOps *o);
 
 /* The record (gather/attack/build) clears its flags; heap actions run
    their class destructor, then are freed (train actions free
@@ -819,6 +820,7 @@ int aoe_world_combat_init_ror(AoeWorldCombatRor *c, AoeWorldMotionRor *m) {
 
 void aoe_world_combat_destroy_ror(AoeWorldCombatRor *c) {
     if (!c) return;
+    c->tearing_down = 1; /* game +0x3f4 +0x1d: destructors stay quiet */
     for (size_t i = 0; i < c->flight_count; ++i) {
         AoeWorldProjectileRor *f = &c->flights[i];
         if (f->captured && f->unit &&
@@ -1501,6 +1503,43 @@ static void *order_construct(void *c, AoeLiveUnit *u,
             return NULL;
         s->pending = 9;
         return s;
+    }
+    case 0x004b0df0: case 0x004b0e20: {
+        AoeArtifactActionRor *a = calloc(1, sizeof(*a));
+        if (a && !(route->constructor == 0x004b0df0
+                       ? aoe_artifact_action_init_ror(a, u, task, t)
+                       : aoe_artifact_action_init_point_ror(a, u, task, x, y,
+                                                            z))) {
+            free(a);
+            a = NULL;
+        }
+        return a;
+    }
+    case 0x004b2880: case 0x004b2900: {
+        AoeDiscoveryActionRor *a = calloc(1, sizeof(*a));
+        AoeObjectActionOps o;
+        object_ops(w, &o);
+        if (a && !aoe_discovery_action_init_ror(
+                     a, u, task, route->constructor == 0x004b2880 ? t : NULL,
+                     &o)) {
+            aoe_discovery_action_free_ror(a);
+            free(a);
+            a = NULL;
+        }
+        if (a && route->constructor == 0x004b2900) {
+            a->base.x = x;
+            a->base.y = y;
+            a->base.z = z;
+        }
+        return a;
+    }
+    case 0x004b7220: {
+        AoeWonderActionRor *a = calloc(1, sizeof(*a));
+        if (a && !aoe_wonder_action_init_ror(a, u)) {
+            free(a);
+            a = NULL;
+        }
+        return a;
     }
     case 0x004b6520: case 0x004b65b0: {
         AoeTradeActionRor *a = calloc(1, sizeof(*a));
@@ -3241,6 +3280,113 @@ static void trade_ops(AoeWorldCombatRor *c, AoeTradeActionOps *o) {
     o->sub_clear = heal_sub_clear;
 }
 
+/* ---- artifact / discovery / wonder bindings ------------------------- */
+
+static int16_t ob_players(void *c) {
+    return ((AoeWorldCombatRor *)c)->motion->runtime->player_count;
+}
+static int32_t ob_width(void *c) {
+    return (int32_t)((AoeWorldCombatRor *)c)->motion->runtime->map.width;
+}
+static int32_t ob_height(void *c) {
+    return (int32_t)((AoeWorldCombatRor *)c)->motion->runtime->map.height;
+}
+static AoeLiveUnit *ob_tile_object(void *c, int32_t x, int32_t y,
+                                   uint32_t i) {
+    const AoeRuntimeMap *m = &((AoeWorldCombatRor *)c)->motion->runtime->map;
+    const AoeObjectUpdateNode *n;
+    if (x < 0 || y < 0 || (uint32_t)x >= m->width || (uint32_t)y >= m->height)
+        return NULL;
+    n = m->objects ? m->objects[(size_t)y * m->width + (size_t)x].head
+                   : NULL;
+    for (; n; n = n->next)
+        if (n->object && i-- == 0) return (AoeLiveUnit *)n->object;
+    return NULL;
+}
+/* Artifact walks: 0x00405250 at the point, range 0, pushed as is. */
+static int ob_start_move(void *c, AoeMoveActionRor *base, const void *g) {
+    AoeWorldCombatRor *w = c;
+    AoeActionList *list = sub_list_of(w, base);
+    AoeMoveActionRor *mv;
+    const DatUnit *tt = base->unit->core.unit_template;
+    if (!list || !(mv = calloc(1, sizeof(*mv)))) return 0;
+    if (!aoe_move_action_init_point_ror(mv, base->unit, base->x, base->y,
+                                        base->z, 0.0f, g,
+                                        graphic_by_id(w, tt->walking_graphic)) ||
+        !aoe_action_list_push(list, mv)) {
+        free(mv);
+        return 0;
+    }
+    return 1;
+}
+static int ob_change_owner(void *c, AoeLiveUnit *u, int16_t owner) {
+    return aoe_world_combat_change_owner_ror(c, u, owner);
+}
+static void ob_event(void *c, uint32_t e, int16_t o, int32_t x, int32_t y) {
+    (void)e; (void)o; (void)x; (void)y;
+    ++((AoeWorldCombatRor *)c)->production_events;
+}
+static void ob_countdown_set(void *c, int16_t owner, int32_t years) {
+    if (owner >= 0 && owner < AOE_SCENARIO_RUNTIME_PLAYERS)
+        ((AoeWorldCombatRor *)c)->wonder_countdown[owner] = years;
+}
+static void ob_countdown_clear(void *c, int16_t owner) {
+    ob_countdown_set(c, owner, -1);
+}
+static void ob_no_event(void *user, int code, int16_t player) {
+    (void)user; (void)code; (void)player;
+}
+/* Player 0x0045d460: the owner wins (0x0045d420, state 1 unless its
+   state is locked by an earlier outcome); every other player wins too when
+   both have team victory (+0x108) and are mutual allies (stance 0, the
+   scenario diplomacy here), else loses (0x0045d440, state 2). */
+static void ob_win(void *c, int16_t owner) {
+    AoeWorldCombatRor *w = c;
+    AoeScenarioRuntimeRor *r = w->motion->runtime;
+    AoePlayerUpdateOps po;
+    memset(&po, 0, sizeof(po));
+    po.user = c;
+    po.emit_state_event = ob_no_event;
+    if (owner < 0 || owner >= AOE_SCENARIO_RUNTIME_PLAYERS) return;
+    if (!w->outcome_player[owner].state80)
+        (void)aoe_player_state_set(&w->outcome_player[owner], 1, &po);
+    for (int16_t j = 1; j < r->player_count && j < AOE_SCENARIO_RUNTIME_PLAYERS;
+         ++j) {
+        int team;
+        if (j == owner) continue;
+        team = w->outcome_player[owner].team_mode &&
+               r->diplomacy[owner][j] == 0 && r->diplomacy[j][owner] == 0 &&
+               w->outcome_player[j].team_mode;
+        if (!w->outcome_player[j].state80)
+            (void)aoe_player_state_set(&w->outcome_player[j], team ? 1 : 2,
+                                       &po);
+    }
+    ++w->wonder_victories;
+}
+static void object_ops(AoeWorldCombatRor *c, AoeObjectActionOps *o) {
+    memset(o, 0, sizeof(*o));
+    move_ops(c, &o->move);
+    o->tick_seconds = tick_seconds;
+    o->player_count = ob_players;
+    o->map_width = ob_width;
+    o->map_height = ob_height;
+    o->tile_object = ob_tile_object;
+    o->start_move = ob_start_move;
+    o->sub_update = heal_sub_update;
+    o->sub_clear = heal_sub_clear;
+    o->graphic = graphic_id_cb;
+    o->change_owner = ob_change_owner;
+    o->create = co_create;
+    o->vision = co_vision;
+    o->event = ob_event;
+    o->countdown_set = ob_countdown_set;
+    o->countdown_clear = ob_countdown_clear;
+    o->win = ob_win;
+    o->countdown_disabled = c->wonder_countdown_hidden;
+    o->tearing_down = c->tearing_down;
+    o->game_over = &c->game_over;
+}
+
 /* ---- heap action classes -------------------------------------------- */
 
 static void move_activate(AoeWorldCombatRor *c, void *a, uint8_t st) {
@@ -3437,7 +3583,104 @@ static int trade_retarget(AoeWorldCombatRor *c, void *a, AoeLiveUnit *t,
     return aoe_trade_action_retarget_ror(a, t, x, y, z, &o);
 }
 
+static void artifact_destroy(AoeWorldCombatRor *c, void *action) {
+    AoeArtifactActionRor *a = action;
+    a->base.target = NULL; /* stored raw, never attached */
+    base_destroy(c, &a->base);
+    free(a);
+}
+static void artifact_activate(AoeWorldCombatRor *c, void *a, uint8_t st) {
+    AoeObjectActionOps o;
+    object_ops(c, &o);
+    if (!aoe_artifact_action_activate_ror(a, st, &o)) ++c->object_failures;
+}
+static uint8_t artifact_update(AoeWorldCombatRor *c, void *a) {
+    AoeObjectActionOps o;
+    uint8_t r = 0;
+    object_ops(c, &o);
+    if (!aoe_artifact_action_update_ror(a, &o, &r)) {
+        ++c->object_failures;
+        return 0;
+    }
+    return r;
+}
+static const DatUnitTask *artifact_task(void *a) {
+    return ((AoeArtifactActionRor *)a)->task;
+}
+static int artifact_retarget(AoeWorldCombatRor *c, void *a, AoeLiveUnit *t,
+                             float x, float y, float z) {
+    AoeObjectActionOps o;
+    object_ops(c, &o);
+    return aoe_artifact_action_retarget_ror(a, t, x, y, z, &o);
+}
+static void discovery_destroy(AoeWorldCombatRor *c, void *action) {
+    AoeDiscoveryActionRor *a = action;
+    base_destroy(c, &a->base);
+    aoe_discovery_action_free_ror(a);
+    free(a);
+}
+static void discovery_activate(AoeWorldCombatRor *c, void *a, uint8_t st) {
+    (void)c;
+    (void)aoe_discovery_action_activate_ror(a, st);
+}
+static uint8_t discovery_update(AoeWorldCombatRor *c, void *a) {
+    AoeObjectActionOps o;
+    uint8_t r = 0;
+    object_ops(c, &o);
+    if (!aoe_discovery_action_update_ror(a, &o, &r)) {
+        ++c->object_failures;
+        return 0;
+    }
+    return r;
+}
+static const DatUnitTask *discovery_task(void *a) {
+    return ((AoeDiscoveryActionRor *)a)->task;
+}
+/* Another standing (state >= 2) wonder, template 276, of the owner. */
+static int other_wonder(AoeWorldCombatRor *c, AoeLiveUnit *u) {
+    AoeScenarioRuntimePlayerRor *p = owner_of(c, u);
+    const AoeObjectUpdateNode *n;
+    if (!p) return 0;
+    for (n = p->owner.object_list28.head; n; n = n->next) {
+        AoeLiveUnit *x = (AoeLiveUnit *)((char *)n->object -
+                                         offsetof(AoeLiveUnitCore, position));
+        if (n->object && x != u && x->core.unit_template &&
+            x->core.unit_template->id == 0x114 && x->core.state >= 2)
+            return 1;
+    }
+    return 0;
+}
+static void wonder_destroy(AoeWorldCombatRor *c, void *action) {
+    AoeWonderActionRor *a = action;
+    AoeObjectActionOps o;
+    object_ops(c, &o);
+    if (!aoe_wonder_action_destroy_ror(a, &o, other_wonder(c, a->base.unit)))
+        ++c->object_failures;
+    base_destroy(c, &a->base);
+    free(a);
+}
+static void wonder_activate(AoeWorldCombatRor *c, void *a, uint8_t st) {
+    AoeObjectActionOps o;
+    object_ops(c, &o);
+    if (!aoe_wonder_action_activate_ror(a, st, &o)) ++c->object_failures;
+}
+static uint8_t wonder_update(AoeWorldCombatRor *c, void *a) {
+    AoeObjectActionOps o;
+    uint8_t r = 0;
+    object_ops(c, &o);
+    if (!aoe_wonder_action_update_ror(a, &o, &r)) {
+        ++c->object_failures;
+        return 0;
+    }
+    return r;
+}
+
 static const HeapActionClass heap_classes[] = {
+    {0x6b, artifact_destroy, artifact_activate, artifact_update,
+     artifact_task, artifact_retarget, NULL},
+    {0x6c, discovery_destroy, discovery_activate, discovery_update,
+     discovery_task, NULL, base_target},
+    {0x78, wonder_destroy, wonder_activate, wonder_update, NULL, NULL, NULL},
     {0x6f, NULL, trade_activate, trade_update, trade_task, trade_retarget,
      base_target},
     {0x6e, NULL, hunt_activate, hunt_update, hunt_task, hunt_retarget,

@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 
+#include "action_artifact.h"
 #include "action_attack.h"
 #include "action_build.h"
 #include "action_farm.h"
@@ -146,6 +147,16 @@ typedef struct AoeWorldCombatRor {
     uint32_t conversions, convert_failures;
     uint32_t hunt_failures; /* hunting action dependency failures */
     uint32_t trade_payouts, trade_failures; /* gold paid at home docks */
+    /* Wonders: the countdown per player (game 0x0041c0d0, -1 cleared by
+       0x0041c0b0, 0 when never set), whether it is hidden (game +0x3f4
+       +0x108), wins (0x0045d460) and the game-over byte (+0x3f4 +0x1e,
+       100 after a wonder win). Artifact/discovery/wonder dependency
+       failures. */
+    int32_t wonder_countdown[AOE_SCENARIO_RUNTIME_PLAYERS];
+    int wonder_countdown_hidden;
+    uint32_t wonder_victories, object_failures;
+    uint8_t game_over;
+    uint8_t tearing_down; /* game +0x3f4 +0x1d during destruction */
 } AoeWorldCombatRor;
 
 int aoe_world_combat_init_ror(AoeWorldCombatRor *combat,

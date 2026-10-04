@@ -67,6 +67,30 @@ int aoe_demo_render(AoeDemo *demo, uint32_t *framebuffer, size_t stride);
 
 const char *aoe_demo_status(const AoeDemo *demo);
 
+/* GPU-composited platforms: draws only the indexed scene into `dst` (row
+   stride in bytes); the current 256-entry A8B8G8R8 palette (including the
+   cycling water entries) and the overlay description are fetched
+   separately. */
+int aoe_demo_render_indexed(AoeDemo *demo, uint8_t *dst, size_t stride);
+const uint32_t *aoe_demo_palette_abgr(const AoeDemo *demo);
+
+enum { AOE_DEMO_OVERLAY_TEXTS = 8, AOE_DEMO_OVERLAY_RECTS = 4 };
+typedef struct {
+    int x, y, scale;       /* top-left; scale 1 = 7 px tall glyphs */
+    uint32_t color;        /* A8B8G8R8 */
+    char text[192];
+} AoeDemoText;
+typedef struct {
+    int x, y, w, h;        /* drawn at half brightness behind the text */
+} AoeDemoRect;
+typedef struct {
+    AoeDemoText texts[AOE_DEMO_OVERLAY_TEXTS];
+    size_t text_count;
+    AoeDemoRect rects[AOE_DEMO_OVERLAY_RECTS];
+    size_t rect_count;
+} AoeDemoOverlay;
+void aoe_demo_overlay(const AoeDemo *demo, AoeDemoOverlay *overlay);
+
 /* Optional parallel runner for per-frame work split into independent
    parts (the 32-bit colour conversion, by row bands): it must call
    task(arg, part, parts) once for every part in [0, parts) and return when

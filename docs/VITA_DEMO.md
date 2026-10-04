@@ -99,6 +99,13 @@ headless with scripted input. `ror_vita_demo_loop_real` runs it when
 - **Not translated yet.** Gaia's tribe scenario load (`0x004f02d0`) reads
   per-player stream data our parser does not expose yet, so Gaia has no
   research manager.
+- **Hardware performance (2026-10-04).** About 45 fps on a Vita.
+  - Breakdown: terrain 2.1 ms (cached layer), objects 8.9 ms, colour
+    conversion 8.2 ms on two cores. The conversion is limited by writing
+    2 MB per frame into uncached video memory.
+  - Deferred: `aoe_demo_render_indexed` / `aoe_demo_palette_abgr` /
+    `aoe_demo_overlay` exist so a GPU path (P8 texture via vita2d) can take
+    the conversion off the CPU.
 - **Unverified on hardware.** Vita3K runs it at about 27 FPS. That is not
   a hardware measurement, and nothing here has yet been run on a physical
   Vita or PSTV.

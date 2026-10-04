@@ -1107,16 +1107,10 @@ void aoe_demo_set_parallel(AoeDemo *demo, AoeDemoParallel run, void *context,
     demo->parallel_parts = parts > 0 ? parts : 1;
 }
 
-int aoe_demo_render(AoeDemo *demo, uint32_t *fb, size_t stride) {
+/* Draws the indexed scene into demo->pixels and updates draw stats. */
+static void render_scene(AoeDemo *demo) {
     TerrainViewCamera camera;
     AoeScenarioSceneResultRor result;
-    uint64_t start;
-    char line[192];
-    const uint32_t white = 0xffffffffu, gold = 0xff40d0ffu;
-    int message = demo && demo->message_time > 0.0f && demo->message[0];
-    uint32_t mx0 = 0, mx1 = 0;
-    if (!demo || !fb || stride < AOE_DEMO_WIDTH) return 0;
-    start = now_us(demo);
     memset(&result, 0, sizeof(result));
     if (demo->loaded &&
         terrain_compute_view_camera(demo->runtime.map.tiles,
@@ -1150,11 +1144,112 @@ int aoe_demo_render(AoeDemo *demo, uint32_t *fb, size_t stride) {
     } else {
         memset(demo->pixels, 0, (size_t)AOE_DEMO_WIDTH * AOE_DEMO_HEIGHT);
     }
-    if (message) {
+    demo->stats.units_drawn = (uint32_t)result.units.drawn;
+    demo->stats.terrain_tiles = (uint32_t)result.terrain_tiles;
+    /* The overlay's unit count walks every unit: refresh it twice a second
+       rather than every frame. */
+    if (demo->stats.frames % 30 == 0) {
+        demo->stats.live_units = 0;
+        if (demo->loaded)
+            visit_units(demo, count_live, &demo->stats.live_units);
+    }
+    demo->stats.camera_x = demo->camera_x;
+    demo->stats.camera_y = demo->camera_y;
+    ++demo->stats.frames;
+}
+
+int aoe_demo_render_indexed(AoeDemo *demo, uint8_t *dst, size_t stride) {
+    uint64_t start;
+    if (!demo || !dst || stride < AOE_DEMO_WIDTH) return 0;
+    start = now_us(demo);
+    render_scene(demo);
+    for (uint32_t y = 0; y < AOE_DEMO_HEIGHT; ++y)
+        memcpy(dst + (size_t)y * stride,
+               demo->pixels + (size_t)y * AOE_DEMO_WIDTH, AOE_DEMO_WIDTH);
+    demo->stats.expand_ms = 0.0f;
+    demo->stats.draw_ms = (float)(now_us(demo) - start) / 1000.0f;
+    return 1;
+}
+
+const uint32_t *aoe_demo_palette_abgr(const AoeDemo *demo) {
+    return demo ? demo->palette_abgr : NULL;
+}
+
+static void add_text(AoeDemoOverlay *o, int x, int y, int scale,
+                     uint32_t color, const char *format, ...) {
+    va_list args;
+    AoeDemoText *t;
+    if (o->text_count >= AOE_DEMO_OVERLAY_TEXTS) return;
+    t = &o->texts[o->text_count++];
+    t->x = x;
+    t->y = y;
+    t->scale = scale;
+    t->color = color;
+    va_start(args, format);
+    vsnprintf(t->text, sizeof(t->text), format, args);
+    va_end(args);
+}
+
+void aoe_demo_overlay(const AoeDemo *demo, AoeDemoOverlay *o) {
+    const uint32_t white = 0xffffffffu, gold = 0xff40d0ffu;
+    if (!o) return;
+    memset(o, 0, sizeof(*o));
+    if (!demo) return;
+    if (demo->hud) {
+        const float *r = demo->loaded ? demo->runtime.players[1].resource_values
+                                      : NULL;
+        o->rects[o->rect_count++] = (AoeDemoRect){0, 0, AOE_DEMO_WIDTH, 52};
+        o->rects[o->rect_count++] =
+            (AoeDemoRect){0, AOE_DEMO_HEIGHT - 20, AOE_DEMO_WIDTH, 20};
+        add_text(o, 8, 6, 2, gold, "%s",
+                 "AGE OF EMPIRES: RISE OF ROME - VITA PORT TECH DEMO");
+        add_text(o, 8, 30, 1, white,
+                 "%.60s  [%u/%u]  units %u drawn %u  tick %lu%s",
+                 demo->status, (unsigned)(demo->current + 1),
+                 (unsigned)demo->scenario_count, demo->stats.live_units,
+                 demo->stats.units_drawn,
+                 (unsigned long)demo->stats.world_updates,
+                 demo->paused ? "  PAUSED" : "");
+        if (r && demo->runtime.players[1].resources.count > 33)
+            add_text(o, 8, 40, 1, white,
+                     "P1 FOOD %.0f  WOOD %.0f  GOLD %.0f  STONE %.0f  "
+                     "POP %.0f/%.0f",
+                     r[0], r[1], r[3], r[2], r[11], r[32]);
+        add_text(o, 600, 30, 1, white, "FPS %.0f  SIM %.1f MS  DRAW %.1f MS",
+                 demo->stats.fps, demo->stats.update_ms,
+                 demo->stats.draw_ms);
+        add_text(o, 600, 40, 1, white, "TER %.1f  OBJ %.1f  EXP %.1f MS",
+                 demo->stats.terrain_ms, demo->stats.objects_ms,
+                 demo->stats.expand_ms);
+        add_text(o, 8, AOE_DEMO_HEIGHT - 14, 1, white, "%s",
+                 "STICK/DPAD SCROLL  X TRAIN VILLAGER  [] ARMY ATTACK  "
+                 "O NEXT VIEW  L/R SCENARIO  SELECT PAUSE  TRIANGLE HUD  "
+                 "START QUIT");
+    }
+    if (demo->message_time > 0.0f && demo->message[0]) {
         int w = (int)strlen(demo->message) * 12 + 24;
         if (w > AOE_DEMO_WIDTH) w = AOE_DEMO_WIDTH;
-        mx0 = (uint32_t)((AOE_DEMO_WIDTH - w) / 2);
-        mx1 = mx0 + (uint32_t)w;
+        o->rects[o->rect_count++] =
+            (AoeDemoRect){(AOE_DEMO_WIDTH - w) / 2, 70, w, 30};
+        add_text(o, (AOE_DEMO_WIDTH - w) / 2 + 12, 78, 2, white, "%s",
+                 demo->message);
+    }
+}
+
+int aoe_demo_render(AoeDemo *demo, uint32_t *fb, size_t stride) {
+    AoeDemoOverlay overlay;
+    uint64_t start;
+    int message;
+    uint32_t mx0 = 0, mx1 = 0;
+    if (!demo || !fb || stride < AOE_DEMO_WIDTH) return 0;
+    start = now_us(demo);
+    render_scene(demo);
+    aoe_demo_overlay(demo, &overlay);
+    message = demo->message_time > 0.0f && demo->message[0];
+    if (message) {
+        const AoeDemoRect *box = &overlay.rects[overlay.rect_count - 1];
+        mx0 = (uint32_t)box->x;
+        mx1 = (uint32_t)(box->x + box->w);
     }
     /* Overlay backgrounds are halved through the palette, so the overlay
        never reads the (possibly uncached) framebuffer back. */
@@ -1169,55 +1264,10 @@ int aoe_demo_render(AoeDemo *demo, uint32_t *fb, size_t stride) {
         demo->stats.expand_ms = (float)(now_us(demo) - t2) / 1000.0f;
     }
     demo->stats.draw_ms = (float)(now_us(demo) - start) / 1000.0f;
-    demo->stats.units_drawn = (uint32_t)result.units.drawn;
-    demo->stats.terrain_tiles = (uint32_t)result.terrain_tiles;
-    /* The overlay's unit count walks every unit: refresh it twice a second
-       rather than every frame. */
-    if (demo->stats.frames % 30 == 0) {
-        demo->stats.live_units = 0;
-        if (demo->loaded)
-            visit_units(demo, count_live, &demo->stats.live_units);
-    }
-    demo->stats.camera_x = demo->camera_x;
-    demo->stats.camera_y = demo->camera_y;
-    ++demo->stats.frames;
-
-    if (demo->hud) {
-        const float *r = demo->loaded ? demo->runtime.players[1].resource_values
-                                      : NULL;
-        aoe_demo_draw_text(fb, stride, 8, 6, 2, gold,
-                           "AGE OF EMPIRES: RISE OF ROME - VITA PORT TECH DEMO");
-        snprintf(line, sizeof(line),
-                 "%.60s  [%u/%u]  units %u drawn %u  tick %lu%s",
-                 demo->status, (unsigned)(demo->current + 1),
-                 (unsigned)demo->scenario_count, demo->stats.live_units,
-                 demo->stats.units_drawn,
-                 (unsigned long)demo->stats.world_updates,
-                 demo->paused ? "  PAUSED" : "");
-        aoe_demo_draw_text(fb, stride, 8, 30, 1, white, line);
-        if (r && demo->runtime.players[1].resources.count > 33) {
-            snprintf(line, sizeof(line),
-                     "P1 FOOD %.0f  WOOD %.0f  GOLD %.0f  STONE %.0f  "
-                     "POP %.0f/%.0f",
-                     r[0], r[1], r[3], r[2], r[11], r[32]);
-            aoe_demo_draw_text(fb, stride, 8, 40, 1, white, line);
-        }
-        snprintf(line, sizeof(line),
-                 "FPS %.0f  SIM %.1f MS  DRAW %.1f MS", demo->stats.fps,
-                 demo->stats.update_ms, demo->stats.draw_ms);
-        aoe_demo_draw_text(fb, stride, 600, 30, 1, white, line);
-        snprintf(line, sizeof(line), "TER %.1f  OBJ %.1f  EXP %.1f MS",
-                 demo->stats.terrain_ms, demo->stats.objects_ms,
-                 demo->stats.expand_ms);
-        aoe_demo_draw_text(fb, stride, 600, 40, 1, white, line);
-        aoe_demo_draw_text(fb, stride, 8, AOE_DEMO_HEIGHT - 14, 1, white,
-                           "STICK/DPAD SCROLL  X TRAIN VILLAGER  [] ARMY "
-                           "ATTACK  O NEXT VIEW  L/R SCENARIO  SELECT PAUSE  "
-                           "TRIANGLE HUD  START QUIT");
-    }
-    if (message)
-        aoe_demo_draw_text(fb, stride, (int)mx0 + 12, 78, 2, white,
-                           demo->message);
+    for (size_t i = 0; i < overlay.text_count; ++i)
+        aoe_demo_draw_text(fb, stride, overlay.texts[i].x,
+                           overlay.texts[i].y, overlay.texts[i].scale,
+                           overlay.texts[i].color, overlay.texts[i].text);
     return 1;
 }
 

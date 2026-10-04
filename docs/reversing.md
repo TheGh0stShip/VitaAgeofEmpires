@@ -1629,6 +1629,93 @@ routed from task action 0x65 to `0x004b13c0` (target) / `0x004b1450`
   - the order reports 0x65 and switches it to template 118;
   - it walks, faces and builds until the house completes at 75/75 hp.
 
+Unit update chain and world loop (RoR 1.0a). Translated in
+`src/live_unit_factory.c` and bound in `src/world_combat.c`
+(`aoe_world_combat_update_world_ror`).
+- **World loop.** The world update calls each player's `+0x7c`
+  (`0x0045d040`; the tribe players' `0x004f0030` calls it). That traverses
+  only list `+0x28` through `0x00451270`, calling each object's `+0x24`
+  predicate and its `+0x08` cleanup when the predicate is nonzero. A
+  second loop (around `0x0051daae`) traverses the players' `+0x30` lists,
+  bracketed by `r = rand()` … `srand(r)`. List `+0x2c` is never updated.
+- **Dormancy.**
+  - `+0x49` selects `+0x2c` in the register/remove pair `+0xdc`/`+0xe0`
+    (`0x0045e880`/`0x0045e8d0`). The root constructor sets it to
+    "HP > 0" (`0x004a6830`).
+  - `0x004ac380(0)` wakes a unit: remove, then register in `+0x28`.
+    `0x004ac380(1)` defers dormancy through `+0x4b` to the next update
+    prelude.
+  - The type-20 constructor `0x00415130` (and `0x00415170`) clears `+0x88`
+    and wakes the unit. Every type 20–80 unit therefore updates, while
+    root/type-90 objects with hit points (trees, rocks, clumps) stay
+    dormant.
+  - The state setter wakes units leaving states 2 and 6.
+  - Target attach `+0xc0` (root `0x004aad90`; `0x004152c0` for 50–80)
+    counts `+0x4f` (capped at 0xfa) and wakes.
+  - Target release `+0xc4` (root `0x004aadb0`) counts down. At zero, in
+    state 2 with HP >= 0 or in state 6, it defers dormancy. Types 20–40
+    (`0x004152e0`) and 50–80 (`0x00426b40`) wake again at once, and 50–80
+    also notice 0x2bb.
+  - On EXPANS_1_1 this leaves 3,046 of Gaia's 3,358 objects dormant and
+    every player-1/2 unit awake.
+- **Class chain (`+0x24`).**
+  - Type 70 (`0x004ae7d0`): class-18 units in state 2 add owner attribute
+    35 × tick to `+0x44`. A sum >= 100 is set to 100 (NaN is kept), and
+    `+0x4c` is set to 34.
+  - Then type 50 (`0x00426bf0`) counts the reload down.
+  - Then type 40 (`0x00406500`) runs `0x00415200`, which calls the root
+    switch `0x004a8f40` and then the type-20 tail.
+  - Type 50 then does visibility spotting (`+0x1b0`, `0x00516a50`), which
+    is not translated.
+  - Type 60 is type 50's update. Type 80 (`0x004acf80`) adds construction
+    frames and history shifts, calls the type-70 update, then runs
+    production `0x004adf50` (or `0x004adfc0` above state 2). That part is
+    not yet bound.
+- **Root state 2** calls `+0x28 = 0x004a9240`, the damage graphics by HP
+  percentage (template `+0x93/+0x94`; it also draws rand()). It is not
+  translated yet.
+- **Type-20 tail** (`0x00415200` after the root switch):
+  - State 3 goes through the setter to 4 if template `+0x1c` (dying
+    graphic) is set, else to 5.
+  - State 4 asks sprite manager `+0x18` (`0x00415890`), which returns the
+    current graphic's sprite `+0x20` (animated `0x00416140`: the frame;
+    static `0x004aa8b0`: 0). Only AL is tested: at 0 the state byte
+    becomes 5 directly and `+0x88` is cleared.
+  - Then the sprites tick.
+  - Because the root switch moves a dying unit to 3 in the same update,
+    the observed death sequence is 2, 4, 5, 7, 8.
+- **Action list** (`0x00406500` after `0x00415200`):
+  - Above state 2, a non-empty `+0x184` list is cleared.
+  - An empty list in state 2 builds the default task through `+0x1fc`
+    (`0x004063d0`). Template `+0xdc` (type-40 loader `0x0043e230`) is an
+    index into the task list (`0x0043e670`); the task goes through the
+    list factory `+0x04` and is adopted with `+0x208`.
+  - With an attached unit (`+0x20`), the list's `+0x08` runs instead.
+  - Otherwise the list updates (`0x004043b0`, which pops on result 1), and
+    the head is popped again on 1 or 3, so result 1 pops two actions.
+- **Adopt and move.**
+  - `+0x208` (`0x00406490`) clears the list, then pushes.
+  - The move fallback `+0x9c` (`0x00405db0`) first offers the move to the
+    head's `+0x30`. The base `0x004072b0` refuses; gather `0x00403b80` and
+    build `0x004b5db0` absorb it. Otherwise it adopts a move action.
+- **Placeholders in the binding.** Default tasks and attached-unit list
+  updates are counted only. Empty outcome managers stand in for unloaded
+  victory conditions, and the map update is a no-op. Removal runs the
+  portable destroy.
+- **Setter refusal narrowed.** `aoe_live_unit_scenario_state_set_ror` no
+  longer refuses every template with `+0xa5/+0xa6` set. The root setter
+  already refuses the transitions that would reach the untranslated
+  `+0xa6 == 2` or pre-terminal methods. A 0-hp shore fish (modes 1/1)
+  therefore dies 2→3→5 into its state-5 food carcass, as in the original.
+- **Real-map regression** (EXPANS_1_1):
+  - the melee victim's death runs 2, 4, 5, 7, 8;
+  - a villager given a point order gets a move action and walks there
+    while the whole map updates;
+  - its 46 world updates remove 40 objects, among them scenario records
+    saved in state 7 (rocks, bones, clumps), 0-hp flares, finished arrows
+    and the victim;
+  - no list object fails to resolve to a runtime unit.
+
 Combat core (RoR 1.0a; type-50 vtable `0x0054324c`, tribe `0x00547fa0`):
 - **Reload.** `+0x7c` `0x004269f0` reports ready when the reload timer
   `+0x1b4` is <= 0. `0x00426a10` resets it from template `+0x120`.
@@ -1896,7 +1983,9 @@ portable live object. The original placement-only audit stops before state
 dispatch; the full-constructor audit now invokes only the source-complete
 0–2 branch and reports 7+ records separately.
 One directly recoverable dependency is now in `aoe_live_unit_core`:
-RoR `0x004adc70` changes the unit's positive-health registration category.
+RoR `0x004adc70` (patched `0x004ac380`) changes the unit's registration
+category. The byte `+0x49` it toggles is a dormancy flag (see "Unit update
+chain and world loop" below), initialised to "HP > 0".
 A zero-to-one change sets byte `+0x4b` and defers reclassification; a
 one-to-zero change with that byte set clears both bytes without player
 calls. Otherwise it calls player `+0xe0` to remove the old category,

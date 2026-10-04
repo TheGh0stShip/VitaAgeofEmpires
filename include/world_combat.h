@@ -10,15 +10,17 @@
 #include "combat.h"
 #include "projectile.h"
 #include "unit_order.h"
+#include "player_outcome.h"
 #include "world_motion.h"
 
 /* Binds the translated RoR 1.0a attack action, its move sub-action and the
    combat core (melee hits, damage, receive) to a world_motion world.
 
-   Per attacking unit this owns the reload timer (+0x1b4), the last-turn
-   time (+0xa0), the attack action and its sub-action list (+0x34). Each
-   tick advances the world clock (world +0x04 ms, +0x84 seconds), counts the
-   reload down (0x00426bf0) and updates the attack action (0x004017c0).
+   Per ordered unit this owns the reload timer (+0x1b4), the last-turn
+   time (+0xa0), the adopted action, its sub-action list (+0x34) and, when
+   the unit has none, its +0x184 action list. Each tick advances the world
+   clock (world +0x04 ms, +0x84 seconds) and runs units through their class
+   update chain (see aoe_world_combat_update_world_ror).
 
    Inferences and placeholders (see docs/reversing.md):
    - the attack parameters follow the type-7 route of 0x00405f20: the
@@ -30,14 +32,18 @@
      launch real projectile units (0x00426520 / 0x00449070) whose flights
      use src/projectile.c; the trail units of 0x0044bc40 are not spawned;
    - visibility is always "visible", owners never refuse, groups never
-     hold, unit notices and target attach/release hooks are counted only,
-     and the instant-kill option is off;
+     hold, unit notices are counted only, and the instant-kill option is
+     off; target attach/release (+0xc0/+0xc4) keep the reference count and
+     dormancy;
    - victims never keep their carried resource for an attacker class
      (+0x13c) and kill credits are counted only;
-   - terminal cleanup (+0xb8) spawns the corpse, but removing the dead
-     unit (state 8, predicate 1/2) is left to the player update list. */
+   - terminal cleanup (+0xb8) spawns the corpse; the world update removes
+     units reaching state 8 (predicate 1/2, then +0x08). */
+struct AoeWorldCombatRor;
+
 typedef struct {
     AoeLiveUnit *unit;
+    struct AoeWorldCombatRor *world;
     float reload_timer;
     float last_turn;
     AoeAttackActionRor attack;
@@ -51,9 +57,11 @@ typedef struct {
        live and queue action lists). */
     AoeBuildingUpdate building_storage;
     AoeActionList building_live, building_queue;
-    /* The unit's +0x184 action list when it had none: its head entry is
-       this record while a gather/attack action is adopted. */
+    /* The unit's +0x184 action list when it had none. Its entries are this
+       record (while a gather, attack or build action is adopted) or move
+       actions (0x00405db0); the list context is this record. */
     AoeActionList unit_actions;
+    uint8_t last_result; /* head update result of the latest unit update */
     AoeActionList sub_actions;
 } AoeWorldCombatUnitRor;
 
@@ -68,7 +76,7 @@ typedef struct {
     uint8_t active;
 } AoeWorldProjectileRor;
 
-typedef struct {
+typedef struct AoeWorldCombatRor {
     AoeWorldMotionRor *motion;
     AoeWorldCombatUnitRor **units; /* by unit ID + 1000 */
     AoeWorldProjectileRor *flights;
@@ -78,6 +86,16 @@ typedef struct {
     uint32_t notices, hits, misses, projectiles, kills, blasts, alerts,
         corpses, deposits, repairs, completions;
     int32_t player_field_104[AOE_SCENARIO_RUNTIME_PLAYERS];
+    /* World update placeholders: default tasks (+0x1fc) and attached-unit
+       list updates are counted only; list objects that are not runtime
+       units are counted and skipped. */
+    uint32_t default_tasks, attached_updates, foreign_objects, removed;
+    /* Empty outcome managers for players without one (no victory
+       conditions are loaded yet) and the type-80 status-4 counters
+       (global +0xa34). */
+    AoeOutcomeManager outcome[AOE_SCENARIO_RUNTIME_PLAYERS];
+    AoeOutcomePlayerRef outcome_player[AOE_SCENARIO_RUNTIME_PLAYERS];
+    uint32_t queue_status_four[AOE_SCENARIO_RUNTIME_PLAYERS];
 } AoeWorldCombatRor;
 
 int aoe_world_combat_init_ror(AoeWorldCombatRor *combat,
@@ -127,26 +145,43 @@ int aoe_world_combat_change_template_ror(AoeWorldCombatRor *combat,
                                          AoeLiveUnit *unit,
                                          const DatUnit *unit_template);
 
-/* Advances the world clock by `tick` seconds and updates one attacker:
-   reload countdown (0x00426bf0), sprites, then the state switch of
-   0x004a8f40 whose active update is the attack action. Writes the action
-   result (attack update codes) to *result. Returns 0 on missing state. */
+/* One world update (0x0051da66 loop) bound to this world: advances the
+   clock by `tick` and runs every player's +0x7c list update (0x0045d040
+   traversal of list +0x28 through 0x00451270) with each unit's class
+   chain:
+   - type 70/80 class-18 faith regeneration (0x004ae7d0), type 50..80
+     reload countdown (0x00426bf0);
+   - the common predicate (prelude, attached unit, 0x004a8f40 state
+     switch; the state-2 damage-graphic update +0x28 = 0x004a9240 is not
+     translated);
+   - the 0x00415200 tail (dying states, sprites) and the 0x00406500 action
+     list (projectiles update their flight there);
+   - units reaching state 8 are cleaned up (+0x08) and removed.
+   Not run yet: player +0x30 lists, the type-50 visibility spotting after
+   0x00406500, the type-80 construction frame/history/production steps
+   (0x004acf80) and the player map update. Returns 0 on failure. */
+int aoe_world_combat_update_world_ror(AoeWorldCombatRor *combat, float tick);
+
+/* Advances the world clock by `tick` seconds and runs one unit (which must
+   have a record, e.g. from an order) through the same class chain as the
+   world update, outside its player list. *result receives the latest head
+   action update result (attack/gather/build/move codes). Returns 0 on
+   failure. */
 int aoe_world_combat_tick_ror(AoeWorldCombatRor *combat,
                               AoeLiveUnit *attacker, float tick,
                               uint8_t *result);
 
-/* The same state switch for any unit (without advancing the clock): a
-   unit below 1.0 hit points dies (state 3 through the runtime state
-   setter, dying graphic, rand/srand-bracketed dying sound), then decays
-   per its carried resource (states 3/5 -> 6 or 7 -> 8); entering 7 spawns
-   its corpse. */
+/* The same chain for any unit without advancing the clock. A unit below
+   1.0 hit points dies (state 3, dying graphic, rand/srand-bracketed dying
+   sound), moves on to 4 (dying animation, until its frame wraps) or 5,
+   then decays per its carried resource; entering 7 spawns its corpse. */
 int aoe_world_combat_update_unit_ror(AoeWorldCombatRor *combat,
                                      AoeLiveUnit *unit, float tick);
 
-/* Updates every active projectile with the current tick (call after the
-   attackers' ticks): the 0x004a8f40 state switch whose active update is
-   the flight action 0x00404db0. Finished projectiles (state >= 7) are
-   retired. Returns 0 on failure. */
+/* Runs every active projectile unit through the chain with the current
+   tick (call after the attackers' ticks); a flight ends when its update
+   (0x00404db0) reports done or the projectile leaves the active states.
+   Returns 0 on failure. */
 int aoe_world_combat_update_projectiles_ror(AoeWorldCombatRor *combat);
 
 #endif

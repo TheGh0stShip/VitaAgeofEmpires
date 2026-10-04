@@ -377,6 +377,22 @@ fail:
     return 0;
 }
 
+void aoe_world_motion_release_ror(AoeWorldMotionRor *m,
+                                  const AoeLiveUnit *unit) {
+    int64_t slot;
+    AoeWorldMotionUnitRor *s;
+    if (!m || !m->units || !unit) return;
+    slot = (int64_t)unit->core.unit_id + AOE_WORLD_MOTION_ID_OFFSET;
+    if (slot < 0 || slot >= AOE_WORLD_MOTION_ID_SLOTS) return;
+    s = m->units[slot];
+    if (!s || s->unit != unit) return;
+    aoe_unit_path_free_ror(&s->movement.path);
+    aoe_unit_path_free_ror(&s->movement.alternate_path);
+    aoe_movement_waypoint_free_ror(&s->movement);
+    free(s);
+    m->units[slot] = NULL;
+}
+
 void aoe_world_motion_destroy_ror(AoeWorldMotionRor *m) {
     if (!m) return;
     if (m->units) {

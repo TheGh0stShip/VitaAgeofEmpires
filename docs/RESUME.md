@@ -160,9 +160,15 @@ These are bound into a live world (`src/world_motion.c`,
 translated and pass real-map regressions on EXPANS_1_1. The build test
 exposed a movement translation bug: the overshoot snap at `0x0044d8af`
 compares against the float 0.25, not distance 0.
+A world update loop now runs every player's +0x28 list with the class
+update chain (`aoe_world_combat_update_world_ror`). It also corrected live
+`+0x49`: it is a dormancy flag, and the type-20 constructor wakes every
+type 20-80 unit into the updated list.
 Next:
-1. A player update loop that ticks every unit together.
-2. Replace placeholder bindings (diplomacy, zones, sounds).
+1. The default-task action factory (`0x00403e70` via `+0x1fc`), the
+   damage graphics `0x004a9240` and the type-80 production update.
+2. Replace placeholder bindings (diplomacy, zones, sounds, victory
+   conditions, player +0x30 lists).
 3. The remaining action classes.
 
 Validating against original-game traces remains outstanding. Note `0x00403e70` is the base list's

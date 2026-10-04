@@ -53,6 +53,9 @@ typedef struct {
 int aoe_world_motion_init_ror(AoeWorldMotionRor *motion,
                               AoeScenarioRuntimeRor *runtime);
 void aoe_world_motion_destroy_ror(AoeWorldMotionRor *motion);
+/* Frees the unit's movement record, if any (before the unit is removed). */
+void aoe_world_motion_release_ror(AoeWorldMotionRor *motion,
+                                  const AoeLiveUnit *unit);
 
 /* The unit's movement record, created on first use (NULL for IDs outside
    the registry range or allocation failure). */

@@ -165,8 +165,10 @@ int main(int argc, char **argv) {
              average + 0.05f >= attacker->core.unit_template->reload_time;
     }
     /* Death: the target's own state switch (0x004a8f40) enters dying
-       (state 3) below 1.0 hit points, and the attacker's action then drops
-       its dead target (result 5). */
+       (state 3) below 1.0 hit points and the 0x00415200 tail moves it on to
+       4 in the same update (it has a dying graphic). When the dying
+       animation wraps to frame 0 it is 5, then 7 (corpse) and 8. The
+       attacker's action drops its dead target (result 5). */
     if (ok) {
         uint8_t states[8], n = 0, last = target->core.state;
         int attacker_result = -1;
@@ -189,7 +191,8 @@ int main(int argc, char **argv) {
         printf("; attacker result %d, kills %u, corpses %u (dead unit %d)\n",
                attacker_result, combat.kills, combat.corpses,
                target->core.unit_template->dead_unit_id);
-        ok = n >= 2 && states[0] == 2 && states[1] == 3 &&
+        ok = n == 5 && states[0] == 2 && states[1] == 4 &&
+             states[2] == 5 && states[3] == 7 && states[4] == 8 &&
              attacker_result == 5 && combat.kills == 1 &&
              combat.corpses ==
                  (target->core.unit_template->dead_unit_id >= 0 ? 1u : 0u);
@@ -389,6 +392,71 @@ int main(int argc, char **argv) {
              combat.completions == 1 &&
              house->core.hit_points ==
                  (float)house->core.unit_template->hit_points;
+    }
+    /* World loop: every player's +0x28 list updates together. A villager
+       without a task for the point gets the +0x9c move fallback (a type-1
+       move action on its +0x184 list) and walks there while the rest of
+       the map ticks; the melee victim, left in state 8, is cleaned up and
+       removed from its owner's list by the first world update (so are the
+       scenario's records saved in state 7, which the state setter wakes). */
+    if (ok) {
+        AoeLiveUnit *walker = NULL;
+        int16_t code = -1;
+        uint16_t list_before = runtime.players[2].owner.object_list28.count;
+        float gx = 0.0f, gy = 0.0f, d = 0.0f;
+        int ticks = 0;
+        for (uint32_t i = 0; i < runtime.players[1].unit_count && !walker;
+             ++i) {
+            AoeLiveUnit *u = &runtime.players[1].units[i];
+            if (u->constructed && u->core.state == 2 &&
+                u->core.unit_template && u->core.unit_template->id == 83 &&
+                !combat.units[u->core.unit_id + 1000])
+                walker = u;
+        }
+        if (!walker || target->runtime_owner_index != 2 ||
+            target->core.state != 8) {
+            fprintf(stderr, "world loop setup failed\n");
+            ok = 0;
+            goto done;
+        }
+        for (int r = 3; r <= 6 && !gx; ++r)
+            for (int k = 0; k < 4 && !gx; ++k) {
+                float x = floorf(walker->core.position.x38) + 0.5f +
+                          (k == 0 ? r : k == 1 ? -r : 0);
+                float y = floorf(walker->core.position.y3c) + 0.5f +
+                          (k == 2 ? r : k == 3 ? -r : 0);
+                if (aoe_world_motion_fits_ror(&motion, walker, x, y, 1)) {
+                    gx = x;
+                    gy = y;
+                }
+            }
+        if (!gx || !aoe_world_combat_order_ror(&combat, walker, NULL, gx, gy,
+                                               0.0f, &code)) {
+            fprintf(stderr, "no move order\n");
+            ok = 0;
+            goto done;
+        }
+        for (; ticks < 2000; ++ticks) {
+            float dx, dy;
+            if (!aoe_world_combat_update_world_ror(&combat, 0.05f)) break;
+            dx = walker->core.position.x38 - gx;
+            dy = walker->core.position.y3c - gy;
+            d = sqrtf(dx * dx + dy * dy);
+            if (walker->derived_action_list &&
+                !walker->derived_action_list->head)
+                break;
+        }
+        printf("world loop: move code %d, %d ticks, walker %.2f from goal, "
+               "removed %u (victim constructed %u, player-2 list %u -> %u), "
+               "foreign %u, default tasks %u\n",
+               code, ticks, d, combat.removed, target->constructed,
+               list_before, runtime.players[2].owner.object_list28.count,
+               combat.foreign_objects, combat.default_tasks);
+        /* The move action ends within its 0.4 range of the point, measured
+           from the walker's footprint edge. */
+        ok = code == 1 && ticks < 2000 && d < 1.0f && combat.removed >= 1 &&
+             !target->constructed && !combat.foreign_objects &&
+             runtime.players[2].owner.object_list28.count < list_before;
     }
 done:
     aoe_world_combat_destroy_ror(&combat);

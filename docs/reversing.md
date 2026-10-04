@@ -1542,6 +1542,55 @@ World combat binding (`src/world_combat.c`):
     shot starts, while the hit lands at the fire frame of an animation
     that is not restarted.
 
+Gather action (RoR 1.0a; vtable `0x00542598`, action type 5). It is
+routed from task action 5 to `0x00402ef0` (target) / `0x00402f80`
+(point), with the tribe activation `0x004b33a0`; `src/action_gather.c`
+translates it.
+- **Task layout** (loader `0x004e74f0`):
+  - `+0x14` resource in, `+0x16` capacity attribute, `+0x18` resource out;
+  - `+0x1c` work value 1, `+0x24` work range;
+  - `+0x34`/`+0x38`/`+0x3c`/`+0x40` moving, proceeding, working and
+    carrying graphics;
+  - `+0x44`/`+0x48` gather and deposit sounds.
+- **States:**
+  - 3 searches: every 10 s it notices 0x202 with the target template.
+  - 4 walks to the resource (quiet move, work range). 6 faces it
+    (`+0x1f0`). 7 shows the proceeding graphic and plays the gather sound.
+  - 8 finds a drop site (`0x004514d0`: nearest state-2 owner unit of
+    template `+0xe8/+0xea`, zone-matched) and walks there.
+  - 11/15 walk to a point. 13 fails (notice 0x1f9, result 3).
+- **Work** (state 7) gathers `tick × template work rate (+0xe4) × task
+  work value 1`, never more than the target holds (the option at
+  `+0x9a8` takes everything at once).
+  - The unit's capacity is template `+0x7c` scaled by the task's player
+    attribute, and an overflow is handed back to the target.
+  - It leaves (state 8) when full, or when the target is empty and not
+    template 45/50 (`+0x138`).
+- **Deposit** happens within 1.0 of the drop site (otherwise it waits 3 s
+  and zeroes `+0x88`). It calls player `+0x78(type, amount, 1)` and
+  `+0x5c`, clears the load (`+0x80(-1, 0)`), and returns to the target or
+  point, else idles.
+- **Unit methods:**
+  - `+0x80` sets the carried type and amount;
+  - `+0x84` (`0x004aace0`) sets or adds and clamps to `+0x7c`, including
+    on the target;
+  - `+0x13c` (`0x004afb90`) keeps a class-9/10 victim's resource only for
+    class-4/11 attackers. This is now used by the type-70 receive.
+- **New DAT fields:** resource capacity `+0x7c` (placement chunk bytes
+  5–6) and drop sites `+0xe8`/`+0xea`.
+- **Template change** `0x004aa160` (root `+0x54`) keeps the hit-point
+  ratio. It moves vision and the footprint across the swap, selects the
+  new standing graphic and re-enters state 2.
+- **Order step.** `aoe_world_combat_order_ror` binds the translated
+  0x00405f20 with that template change and a world-owned `+0x184` list.
+- **Real-map regression** (EXPANS_1_1):
+  - a villager (template 83, which has no gather tasks) is ordered onto
+    the nearest berry bush;
+  - the order switches it to template 120 (forager) and builds the gather
+    action;
+  - it fills 10 food, walks to a drop site and deposits, taking the
+    player's food from 200 to 210 and the bush from 150 to 140.
+
 Combat core (RoR 1.0a; type-50 vtable `0x0054324c`, tribe `0x00547fa0`):
 - **Reload.** `+0x7c` `0x004269f0` reports ready when the reload timer
   `+0x1b4` is <= 0. `0x00426a10` resets it from template `+0x120`.

@@ -252,6 +252,83 @@ int main(int argc, char **argv) {
         ok = combat.projectiles > 0 && flights_seen &&
              mark->core.hit_points < mark_hp && combat.hits > hits0;
     }
+    /* Gathering: a player-1 villager works the nearest Gaia object it has
+       a gather task for (translated tribe selector), carries the load to a
+       drop site and deposits it into the player's stockpile. */
+    if (ok) {
+        AoeLiveUnit *worker = NULL, *source = NULL;
+        float before = 0.0f, after = 0.0f, best = 1e30f;
+        int16_t type = -1;
+        for (uint32_t i = 0; i < runtime.players[1].unit_count && !worker;
+             ++i) {
+            AoeLiveUnit *u = &runtime.players[1].units[i];
+            if (u != attacker && u->constructed && u->core.state == 2 &&
+                u->core.unit_template && u->core.unit_template->id == 83)
+                worker = u;
+        }
+        if (!worker) {
+            fprintf(stderr, "no villager\n");
+            ok = 0;
+            goto done;
+        }
+        /* The nearest live Gaia object holding a resource. */
+        for (uint32_t i = 0; i < runtime.players[0].unit_count; ++i) {
+            AoeLiveUnit *g = &runtime.players[0].units[i];
+            float d;
+            if (!g->constructed || g->core.state > 2 || !g->core.unit_template ||
+                !(g->core.storage.carried_amount > 0.0f))
+                continue;
+            d = hypotf(g->core.position.x38 - worker->core.position.x38,
+                       g->core.position.y3c - worker->core.position.y3c);
+            if (d < best) {
+                best = d;
+                source = g;
+            }
+        }
+        {
+            int16_t code = -1;
+            const DatUnit *before_t = worker->core.unit_template;
+            if (!source ||
+                !aoe_world_combat_order_ror(&combat, worker, source, -1.0f,
+                                            -1.0f, -1.0f, &code) ||
+                !combat.units[worker->core.unit_id + 1000]->gathering) {
+                fprintf(stderr, "no gather order (code %d)\n", code);
+                ok = 0;
+                goto done;
+            }
+            printf("order code %d; template %d -> %d (job switch)\n", code,
+                   before_t->id, worker->core.unit_template->id);
+        }
+        if (0) {
+            fprintf(stderr, "no gatherable source near the villager\n");
+            ok = 0;
+            goto done;
+        }
+        {
+            const DatUnitTask *gt =
+                combat.units[worker->core.unit_id + 1000]->gather.task;
+            /* Deposits use resource_out, else the carried type. */
+            type = gt->resource_out != -1 ? gt->resource_out
+                                          : gt->resource_in;
+        }
+        before = runtime.players[1].resources.values[type];
+        printf("villager %d gathers template %d (resource %d, %.0f left) "
+               "%.2f tiles away; stockpile %.1f\n",
+               worker->core.unit_id, source->core.unit_template->id, type,
+               source->core.storage.carried_amount, best, before);
+        for (int t = 0; t < 8000 && combat.deposits == 0; ++t)
+            if (!aoe_world_combat_tick_ror(&combat, worker, 0.05f, &result))
+                break;
+        after = runtime.players[1].resources.values[type];
+        printf("after %u deposit(s): stockpile %.1f, carried %.1f, "
+               "source %.1f, state %u\n",
+               combat.deposits, after,
+               worker->core.storage.carried_amount,
+               source->core.storage.carried_amount,
+               combat.units[worker->core.unit_id + 1000]->gather.base.state);
+        ok = combat.deposits == 1 && after > before &&
+             worker->core.unit_template->id != 83;
+    }
 done:
     aoe_world_combat_destroy_ror(&combat);
     aoe_world_motion_destroy_ror(&motion);

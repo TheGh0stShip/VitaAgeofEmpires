@@ -99,6 +99,7 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
     unit->draw_class = p[1]; /* viewport object-list filtering */
     unit->terrain_restriction = (int16_t)at16(p + 2);
     unit->elevation_mode = p[4]; /* live placement vtable +0x34 */
+    unit->resource_capacity = (int16_t)at16(p + 5); /* template +0x7c */
     unit->decay_rate = atfloat(p + 7); /* runtime template +0x80 */
     unit->blast_defense_level = p[11]; /* +0x8b, blast 0x00426280 */
     unit->field_8c = p[12]; /* loader 0x004413b0 order: +0x8b,+0x8c,... */
@@ -149,7 +150,8 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
         unit->default_task_id = (int16_t)u16(cursor);
         unit->search_radius = f32(cursor);
         unit->work_rate = f32(cursor);
-        take(cursor, 4); /* two drop sites */
+        unit->drop_sites[0] = (int16_t)u16(cursor); /* template +0xe8 */
+        unit->drop_sites[1] = (int16_t)u16(cursor); /* template +0xea */
         p = take(cursor, 5); /* task-swap group, attack and move sounds */
         if (!p) return 0;
         unit->task_swap_group = p[0]; /* template +0xec, 0x0043e810 order */

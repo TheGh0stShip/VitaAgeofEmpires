@@ -4,9 +4,11 @@
 #include <stdint.h>
 
 #include "action_attack.h"
+#include "action_gather.h"
 #include "action_list.h"
 #include "combat.h"
 #include "projectile.h"
+#include "unit_order.h"
 #include "world_motion.h"
 
 /* Binds the translated RoR 1.0a attack action, its move sub-action and the
@@ -39,6 +41,12 @@ typedef struct {
     float last_turn;
     AoeAttackActionRor attack;
     uint8_t attacking;
+    AoeGatherActionRor gather;
+    uint8_t gathering;
+    uint8_t pending; /* action built by the order step, not yet adopted */
+    /* The unit's +0x184 action list when it had none: its head entry is
+       this record while a gather/attack action is adopted. */
+    AoeActionList unit_actions;
     AoeActionList sub_actions;
 } AoeWorldCombatUnitRor;
 
@@ -61,7 +69,8 @@ typedef struct {
     uint32_t world_ms;
     float tick;
     uint32_t notices, hits, misses, projectiles, kills, blasts, alerts,
-        corpses;
+        corpses, deposits;
+    int32_t player_field_104[AOE_SCENARIO_RUNTIME_PLAYERS];
 } AoeWorldCombatRor;
 
 int aoe_world_combat_init_ror(AoeWorldCombatRor *combat,
@@ -76,6 +85,34 @@ AoeWorldCombatUnitRor *aoe_world_combat_unit_ror(AoeWorldCombatRor *combat,
    (type < 50) or on failure. */
 int aoe_world_combat_attack_ror(AoeWorldCombatRor *combat,
                                 AoeLiveUnit *attacker, AoeLiveUnit *target);
+
+/* Selects the actor's task for `target` with the translated tribe selector
+   0x00508010 (owners: same player accepts, other non-Gaia players are
+   hostile; the villager job switch of 0x00405f20 is not applied) and, for
+   an action-type-5 task, constructs and activates the gather action
+   (0x00402ef0 + 0x004b33a0). Deposits go through the derived player +0x78
+   0x004f6c60. Returns 0 if no gather task applies. */
+int aoe_world_combat_gather_ror(AoeWorldCombatRor *combat, AoeLiveUnit *unit,
+                                AoeLiveUnit *target);
+
+/* The order step 0x00405f20 (unit vtable +0x1f8) bound to this world: task
+   selection with the tribe selector (and the villager job switch, which
+   changes the unit's template through 0x004aa160), retargeting of the head
+   action, and construction of the routed action. Gather (0x00402ef0 /
+   0x00402f80) and attack (0x00401150 / 0x00401290) actions are built and
+   adopted; other routes, or no task, fall back to a plain move. *code
+   receives the order result. Returns 0 on failure. */
+int aoe_world_combat_order_ror(AoeWorldCombatRor *combat, AoeLiveUnit *unit,
+                               AoeLiveUnit *target, float x, float y,
+                               float z, int16_t *code);
+
+/* 0x004aa160 (root +0x54 via 0x004152b0 / 0x004ae8e0): for states 0..2,
+   swap the unit's template keeping its hit-point ratio, moving vision and
+   the footprint across the swap, selecting the new standing graphic and
+   re-entering state 2. */
+int aoe_world_combat_change_template_ror(AoeWorldCombatRor *combat,
+                                         AoeLiveUnit *unit,
+                                         const DatUnit *unit_template);
 
 /* Advances the world clock by `tick` seconds and updates one attacker:
    reload countdown (0x00426bf0), sprites, then the state switch of

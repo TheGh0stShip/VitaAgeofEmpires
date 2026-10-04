@@ -281,6 +281,9 @@ typedef struct {
     uint8_t draw_class; /* template +0x65, RoR tile draw 0x00451fd0 */
     int16_t terrain_restriction; /* original template +0x66 */
     uint8_t elevation_mode; /* original template +0x68 */
+    /* Original template +0x7c: carried-resource capacity (0x004aace0
+       clamps to it; gathering scales it by the task's attribute). */
+    int16_t resource_capacity;
     /* Original template +0x8c/+0x8f bytes, read by the RoR task selectors
        0x004e7dc0/0x004e7f90/0x00508010. Their meaning beyond those uses is
        not yet established. */
@@ -299,7 +302,8 @@ typedef struct {
     DatUnitStorage storage[3];
     int16_t default_task_id;
     uint8_t task_swap_group; /* original template +0xec (type >= 40) */
-    float search_radius, work_rate;
+    float search_radius, work_rate; /* work rate: template +0xe4 */
+    int16_t drop_sites[2];          /* type >= 40, template +0xe8/+0xea */
     uint16_t task_count;
     DatUnitTask *tasks;
     uint8_t base_armor;

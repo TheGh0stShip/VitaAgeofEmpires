@@ -28,7 +28,9 @@ static void synthetic(void) {
     graphic.sequence_type = 5;
     AoeRng rng;
     aoe_rng_seed(&rng, 1);
-    AoeSpriteInstance before = sprite;
+    /* memcpy, not assignment: assignment leaves padding unspecified. */
+    AoeSpriteInstance before;
+    memcpy(&before, &sprite, sizeof(before));
     assert(!aoe_sprite_instance_init(&sprite, &graphic, NULL, 0, 0));
     assert(memcmp(&sprite, &before, sizeof(sprite)) == 0);
     assert(aoe_sprite_instance_init(&sprite, &graphic, &rng, 0, 0));

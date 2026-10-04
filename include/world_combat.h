@@ -6,11 +6,13 @@
 #include "action_attack.h"
 #include "action_build.h"
 #include "action_farm.h"
+#include "action_convert.h"
 #include "action_gather.h"
 #include "action_heal.h"
 #include "action_repair.h"
 #include "action_list.h"
 #include "combat.h"
+#include "live_unit_owner.h"
 #include "command_production.h"
 #include "research_action.h"
 #include "projectile.h"
@@ -138,6 +140,9 @@ typedef struct AoeWorldCombatRor {
     uint32_t repair_unpaid, repair_failures;
     /* Heal actions (0x69): fully healed targets and dependency failures. */
     uint32_t heals, heal_failures;
+    /* Changes of owner (unit +0x44 notices 0x20b) and conversion action
+       dependency failures. */
+    uint32_t conversions, convert_failures;
 } AoeWorldCombatRor;
 
 int aoe_world_combat_init_ror(AoeWorldCombatRor *combat,
@@ -228,6 +233,12 @@ int aoe_world_combat_train_ror(AoeWorldCombatRor *combat,
 int aoe_world_combat_command_production_ror(AoeWorldCombatRor *combat,
                                             const uint8_t *command,
                                             size_t size);
+
+/* Unit +0x44 (aoe_live_unit_change_owner_ror) bound to the runtime: the
+   player lists, vision, storage, production queue, building research and
+   stack unit move to `owner`. Returns 0 on failure. */
+int aoe_world_combat_change_owner_ror(AoeWorldCombatRor *combat,
+                                      AoeLiveUnit *unit, int16_t owner);
 
 /* Advances the world clock by `tick` seconds and runs one unit (which must
    have a record, e.g. from an order) through the same class chain as the

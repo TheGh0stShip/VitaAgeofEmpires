@@ -106,3 +106,11 @@ DatUnit *aoe_player_templates_get(const AoePlayerTemplates *templates,
         return NULL;
     return templates->slots[unit_id];
 }
+
+DatUnit *aoe_template_clone_ror(const DatUnit *source) {
+    return source ? clone_unit(source) : NULL;
+}
+
+void aoe_template_free_ror(DatUnit *unit) {
+    free_unit(unit);
+}

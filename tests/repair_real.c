@@ -14,7 +14,11 @@
    the building +0x8c (0x004acb70), which charges the owner
    (0x004f1750). A priest (template 125) created for player 1 and ordered
    onto a wounded friendly unit takes the heal task (0x004b2c00) and heals
-   it to full through the same +0x8c method (free for land units). */
+   it to full through the same +0x8c method (free for land units). The
+   priest, given 100 faith and ordered onto a player-2 unit, takes the
+   conversion task (0x004b1cb0) and converts it within a few 3-second
+   attempts (0x004b2280): the unit changes owner (unit +0x44) into player
+   1's lists, player 1's resource 41 counts it and the faith is spent. */
 static int16_t head_type(const AoeLiveUnit *u) {
     const AoeActionList *l = u->derived_action_list;
     int16_t t;
@@ -122,6 +126,56 @@ int main(int argc, char **argv) {
                patient->core.hit_points, hmax, ticks);
         assert(patient->core.hit_points == (float)hmax);
         assert(combat.heals == 1 && combat.heal_failures == 0);
+
+        /* Conversion. */
+        {
+            AoeScenarioRuntimePlayerRor *enemy = &runtime.players[2];
+            AoeLiveUnit *victim = NULL;
+            float before41 = p->resources.values[41];
+            int in_list = 0;
+            for (uint32_t i = 0; i < enemy->unit_count && !victim; ++i) {
+                AoeLiveUnit *u = &enemy->units[i];
+                if (u->constructed && u->core.state == 2 &&
+                    u->core.unit_template->type == 70 &&
+                    u->core.unit_template->unit_class != 0x12 &&
+                    u->core.unit_template->unit_class != 0x1e)
+                    victim = u;
+            }
+            assert(victim);
+            /* Next to the victim, with full faith. */
+            priest->core.position.x38 = victim->core.position.x38 + 1.0f;
+            priest->core.position.y3c = victim->core.position.y3c;
+            priest->core.storage.carried_resource_type = 0x22;
+            priest->core.storage.carried_amount = 100.0f;
+            assert(aoe_world_combat_order_ror(&combat, priest, victim,
+                                              victim->core.position.x38,
+                                              victim->core.position.y3c,
+                                              0.0f, &code));
+            assert(head_type(priest) == 0x68);
+            for (ticks = 0; ticks < 6000 && victim->runtime_owner_index != 1;
+                 ++ticks)
+                assert(aoe_world_combat_update_world_ror(&combat, 0.05f));
+            printf("priest converted %s in %d updates\n",
+                   victim->core.unit_template->name
+                       ? victim->core.unit_template->name : "?", ticks);
+            assert(victim->runtime_owner_index == 1);
+            assert(combat.conversions == 1 && combat.convert_failures == 0);
+            assert(p->resources.values[41] == before41 + 1.0f);
+            assert(priest->core.storage.carried_amount < 100.0f);
+            assert(victim->private_template &&
+                   victim->core.unit_template == victim->private_template);
+            for (const AoeObjectUpdateNode *n = p->owner.object_list28.head;
+                 n; n = n->next)
+                if (n->object == &victim->core.position) in_list = 1;
+            assert(in_list);
+            for (const AoeObjectUpdateNode *n =
+                     enemy->owner.object_list28.head;
+                 n; n = n->next)
+                assert(n->object != &victim->core.position);
+            /* The world keeps running with the converted unit. */
+            for (int i = 0; i < 100; ++i)
+                assert(aoe_world_combat_update_world_ror(&combat, 0.05f));
+        }
     }
     return 0;
 }

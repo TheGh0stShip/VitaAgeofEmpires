@@ -57,12 +57,20 @@ void aoe_scenario_runtime_destroy_ror(AoeScenarioRuntimeRor *runtime) {
     free(runtime->editor_units);
     for (int p = AOE_SCENARIO_RUNTIME_PLAYERS - 1; p >= 0; --p) {
         AoeScenarioRuntimePlayerRor *player = &runtime->players[p];
+        /* A converted unit (unit +0x44) stays in this storage array but
+           belongs to its current owner's lists. */
         if (player->units)
-            for (uint32_t i = player->unit_count; i > 0; --i)
-                if (player->units[i - 1].constructed)
-                    aoe_live_unit_destroy_ror(
-                        &player->units[i - 1], &player->owner,
-                        &runtime->world, &player->vision_binding);
+            for (uint32_t i = player->unit_count; i > 0; --i) {
+                AoeLiveUnit *unit = &player->units[i - 1];
+                int16_t o = unit->runtime_owner_index;
+                AoeScenarioRuntimePlayerRor *owner =
+                    o >= 0 && o < AOE_SCENARIO_RUNTIME_PLAYERS
+                        ? &runtime->players[o] : player;
+                if (unit->constructed)
+                    aoe_live_unit_destroy_ror(unit, &owner->owner,
+                                              &runtime->world,
+                                              &owner->vision_binding);
+            }
         free(player->units);
         aoe_research_manager_free_ror(&player->research);
         aoe_outcome_events_free_ror(&player->outcome);

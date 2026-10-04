@@ -239,7 +239,7 @@ target_compile_options(aoe_live_unit_state PRIVATE -Wall -Wextra)
 
 add_library(aoe_live_unit_factory STATIC src/live_unit_factory.c)
 target_include_directories(aoe_live_unit_factory PUBLIC include)
-target_link_libraries(aoe_live_unit_factory PUBLIC aoe_live_unit_vision
+target_link_libraries(aoe_live_unit_factory PUBLIC aoe_live_unit_vision aoe_player_templates
   aoe_player_update aoe_unit_sprite_binding aoe_live_unit_state
   aoe_action_list aoe_building_update aoe_research_action)
 target_compile_options(aoe_live_unit_factory PRIVATE -Wall -Wextra)
@@ -410,6 +410,17 @@ target_include_directories(aoe_action_repair PUBLIC include)
 target_link_libraries(aoe_action_repair PUBLIC aoe_action_move m)
 target_compile_options(aoe_action_repair PRIVATE -Wall -Wextra)
 
+add_library(aoe_live_unit_owner STATIC src/live_unit_owner.c)
+target_include_directories(aoe_live_unit_owner PUBLIC include)
+target_link_libraries(aoe_live_unit_owner PUBLIC aoe_live_unit_factory
+  aoe_player_templates)
+target_compile_options(aoe_live_unit_owner PRIVATE -Wall -Wextra)
+
+add_library(aoe_action_convert STATIC src/action_convert.c)
+target_include_directories(aoe_action_convert PUBLIC include)
+target_link_libraries(aoe_action_convert PUBLIC aoe_action_move m)
+target_compile_options(aoe_action_convert PRIVATE -Wall -Wextra)
+
 add_library(aoe_action_heal STATIC src/action_heal.c)
 target_include_directories(aoe_action_heal PUBLIC include)
 target_link_libraries(aoe_action_heal PUBLIC aoe_action_move m)
@@ -423,7 +434,7 @@ target_link_libraries(aoe_world_combat PUBLIC aoe_world_motion
   aoe_unit_order aoe_train_action_adapter aoe_train_action aoe_building_update
   aoe_player_costs aoe_unit_placement_check aoe_player_templates
   aoe_command_production aoe_research_action aoe_action_repair
-  aoe_action_heal)
+  aoe_action_heal aoe_action_convert aoe_live_unit_owner)
 target_compile_options(aoe_world_combat PRIVATE -Wall -Wextra)
 
 add_library(aoe_scenario_editor_catalog STATIC src/scenario_editor_catalog.c)
@@ -945,6 +956,10 @@ else()
   target_link_libraries(action_heal_test PRIVATE aoe_action_heal aoe_action_repair)
   target_compile_options(action_heal_test PRIVATE -UNDEBUG)
   add_test(NAME original_ror_heal_action COMMAND action_heal_test)
+  add_executable(action_convert_test tests/action_convert_test.c)
+  target_link_libraries(action_convert_test PRIVATE aoe_action_convert)
+  target_compile_options(action_convert_test PRIVATE -UNDEBUG)
+  add_test(NAME original_ror_convert_action COMMAND action_convert_test)
   add_executable(combat_test tests/combat_test.c)
   target_link_libraries(combat_test PRIVATE aoe_combat)
   target_compile_options(combat_test PRIVATE -UNDEBUG)
@@ -1048,7 +1063,7 @@ else()
   target_link_libraries(repair_real PRIVATE aoe_world_combat aoe_dat m)
   target_compile_options(repair_real PRIVATE -UNDEBUG)
   if(EXISTS "${CMAKE_SOURCE_DIR}/build/ror/scenarios/EXPANS_1_1.scx")
-    add_test(NAME ror_repair_and_heal COMMAND repair_real
+    add_test(NAME ror_repair_heal_convert COMMAND repair_real
       "${CMAKE_SOURCE_DIR}/build/ror/scenarios/EXPANS_1_1.scx"
       "${CMAKE_SOURCE_DIR}/build/ror/disc/GAME/DATA2/EMPIRES.DAT")
   endif()
@@ -1148,6 +1163,8 @@ if(VITA)
   target_link_libraries(aoe_vita_demo PRIVATE aoe_demo_app
     SceDisplay_stub SceCtrl_stub ScePower_stub)
   target_compile_options(aoe_vita_demo PRIVATE -Wall -Wextra)
+  target_link_options(aoe_vita_demo PRIVATE
+    "-Wl,-T,${CMAKE_SOURCE_DIR}/cmake/vita_sce_gap.ld")
   vita_create_self(eboot.bin aoe_vita_demo)
   vita_create_vpk(VitaAoE.vpk ${VITA_TITLEID} eboot.bin
     VERSION ${VITA_VERSION}

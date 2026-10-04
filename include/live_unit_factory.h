@@ -54,6 +54,10 @@ typedef struct AoeLiveUnit {
     uint8_t select_2c;
     uint8_t select_30; /* Constructor argument: live +0x4a (type 25). */
     uint8_t constructed;
+    /* Type 70 live +0x1bc set by a change of owner (0x004aeac0): the unit
+       runs on its own copy of the template (template vtable +0x1c), which
+       the unit owns and frees. */
+    DatUnit *private_template;
     /* Type-25 doppelganger fields (RoR 0x00436030, live +0x8c..+0xac). */
     struct {
         struct AoeLiveUnit *source;     /* +0x8c, NULL once it died */

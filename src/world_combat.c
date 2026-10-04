@@ -61,6 +61,7 @@ typedef struct {
 static const HeapActionClass *heap_class(int16_t type);
 static void repair_ops(AoeWorldCombatRor *c, AoeRepairActionOps *o);
 static void heal_ops(AoeWorldCombatRor *c, AoeHealActionOps *o);
+static void convert_ops(AoeWorldCombatRor *c, AoeConvertActionOps *o);
 
 /* The record (gather/attack/build) clears its flags; heap actions run
    their class destructor, then are freed (train actions free
@@ -1404,6 +1405,20 @@ static void *order_construct(void *c, AoeLiveUnit *u,
         s->pending = 9;
         return s;
     }
+    case 0x004b1cb0: case 0x004b1d40: {
+        AoeConvertActionRor *a = calloc(1, sizeof(*a));
+        AoeMoveActionOps o;
+        move_ops(w, &o);
+        if (a && !(route->constructor == 0x004b1cb0
+                       ? aoe_convert_action_init_target_ror(a, u, task, t,
+                                                            &o)
+                       : aoe_convert_action_init_point_ror(a, u, task, x, y,
+                                                           z))) {
+            free(a);
+            a = NULL;
+        }
+        return a;
+    }
     case 0x004b2c00: case 0x004b2c80: {
         AoeHealActionRor *a = calloc(1, sizeof(*a));
         AoeMoveActionOps o;
@@ -2728,22 +2743,17 @@ static uint8_t repair_order_serial(void *c, AoeLiveUnit *u) {
     AoeWorldCombatUnitRor *s = peek_unit(c, u);
     return s ? s->order_serial : 0;
 }
-/* Owner list +0x28: the player's scenario units, then the units created
-   since (editor list), as the runtime keeps them. */
+/* Owner list +0x28 (the player's primary object list) in order; its
+   objects are unit position references (see resolve). */
 static AoeLiveUnit *repair_owner_unit(void *c, AoeLiveUnit *u, uint32_t i) {
-    AoeScenarioRuntimeRor *r = ((AoeWorldCombatRor *)c)->motion->runtime;
     AoeScenarioRuntimePlayerRor *p = owner_of(c, u);
+    const AoeObjectUpdateNode *n;
     if (!p) return NULL;
-    for (uint32_t k = 0; k < p->unit_count; ++k) {
-        AoeLiveUnit *x = &p->units[k];
-        if (x->constructed && x->core.state <= 2 && i-- == 0) return x;
-    }
-    for (size_t k = 0; k < r->editor_unit_count; ++k) {
-        AoeLiveUnit *x = r->editor_units[k];
-        if (x && x->constructed && x->core.state <= 2 &&
-            x->runtime_owner_index == u->runtime_owner_index && i-- == 0)
-            return x;
-    }
+    for (n = p->owner.object_list28.head; n; n = n->next)
+        if (n->object && i-- == 0)
+            return (AoeLiveUnit *)((char *)n->object -
+                                   offsetof(AoeLiveUnit, core) -
+                                   offsetof(AoeLiveUnitCore, position));
     return NULL;
 }
 static void *head_of(AoeLiveUnit *u) {
@@ -2894,6 +2904,182 @@ static void heal_ops(AoeWorldCombatRor *c, AoeHealActionOps *o) {
     o->sub_clear = heal_sub_clear;
 }
 
+/* ---- change of owner (unit +0x44) ----------------------------------- */
+
+static AoeScenarioRuntimePlayerRor *player_at(AoeWorldCombatRor *c,
+                                              int16_t o) {
+    return o >= 0 && o < AOE_SCENARIO_RUNTIME_PLAYERS
+               ? &c->motion->runtime->players[o]
+               : NULL;
+}
+static const DatUnit *co_template(void *c, int16_t owner, int16_t id) {
+    AoeScenarioRuntimePlayerRor *p = player_at(c, owner);
+    return p && id >= 0 ? aoe_player_templates_get(&p->templates,
+                                                   (uint16_t)id)
+                        : NULL;
+}
+/* Old owner +0xe0, new owner +0xdc (0x0045f860 / 0x0045f810). */
+static int co_move_lists(void *c, AoeLiveUnit *u, int16_t from,
+                         int16_t to) {
+    AoeScenarioRuntimeRor *r = ((AoeWorldCombatRor *)c)->motion->runtime;
+    AoeScenarioRuntimePlayerRor *a = player_at(c, from), *b = player_at(c, to);
+    AoeObjectUpdateNode *node = NULL;
+    AoeVisibilityUnitRef *replaced = NULL;
+    int removed = 0, reassign = 0;
+    if (!a || !b) return 0;
+    if (u->owner_node &&
+        !aoe_player_unit_remove(&a->owner, &r->world, &u->core.position,
+                                u->core.unit_id, u->select_2c, u->select_30,
+                                u->owner_node, &removed))
+        return 0;
+    u->owner_node = NULL;
+    if (!aoe_player_unit_register(&b->owner, &r->world, &u->core.position,
+                                  u->core.unit_id, u->select_2c,
+                                  u->select_30, &node, &replaced,
+                                  &reassign) ||
+        replaced || reassign || !node)
+        return 0;
+    u->owner_node = node;
+    return 1;
+}
+static void co_vision(void *c, AoeLiveUnit *u, int16_t owner, int add,
+                      int foundation) {
+    AoeScenarioRuntimePlayerRor *p = player_at(c, owner);
+    if (p && u->placement.tile)
+        (void)aoe_live_unit_vision_change_ror(&u->core, &p->vision_binding,
+                                              add, foundation);
+}
+static void co_resource(void *c, int16_t owner, int16_t type, float amount) {
+    AoeScenarioRuntimePlayerRor *p = player_at(c, owner);
+    AoePlayerResourceTargetRor target;
+    if (!p) return;
+    target.resources = &p->resources;
+    target.derived = 1;
+    target.field_104 = &p->field_104;
+    target.context = c;
+    target.refresh_world = refresh_world;
+    (void)aoe_player_resource_add_virtual_ror(&target, type, amount, 0);
+}
+static const void *co_graphic(void *c, int16_t id) {
+    return graphic_by_id(c, id);
+}
+static void co_select(void *c, AoeLiveUnit *u, const void *g) {
+    select_graphic(c, u, g);
+}
+static void co_notice(void *c, AoeLiveUnit *u, int16_t owner) {
+    (void)u; (void)owner;
+    ++((AoeWorldCombatRor *)c)->conversions;
+}
+static void co_queue_cancel(void *c, AoeLiveUnit *u, int16_t item,
+                            int16_t count) {
+    AoeWorldCombatRor *w = c;
+    BuildingTick t = {w, u, 0};
+    AoeBuildingQueueCancelOps ops = {&t, bt_refund, bt_cancel, bt_notify};
+    uint32_t *n = &w->queue_status_four[u->runtime_owner_index];
+    if (!u->building_update || !bind_building(w, u)) return;
+    building_to_view(u, u->building_update);
+    (void)aoe_building_queue_cancel_ror(u->building_update, item, count, n,
+                                        &ops);
+}
+static void co_clear_actions(void *c, AoeLiveUnit *u) {
+    (void)c;
+    if (u->derived_action_list) (void)aoe_action_list_clear(u->derived_action_list);
+}
+static void co_create(void *c, int16_t owner, int16_t id, float x, float y,
+                      float z) {
+    AoeLiveUnit *made = NULL;
+    if (owner >= 0 && id >= 0)
+        (void)aoe_scenario_runtime_editor_create_ror(
+            ((AoeWorldCombatRor *)c)->motion->runtime, (uint8_t)owner,
+            (uint16_t)id, x, y, z, &made);
+}
+static void co_research(void *c, int16_t owner, int16_t tech) {
+    AoeScenarioRuntimePlayerRor *p = player_at(c, owner);
+    if (p && p->research.entries)
+        (void)aoe_research_complete_ror(&p->research, tech);
+}
+static uint32_t *co_status_four(void *c, int16_t owner) {
+    return owner >= 0 && owner < AOE_SCENARIO_RUNTIME_PLAYERS
+               ? &((AoeWorldCombatRor *)c)->queue_status_four[owner]
+               : NULL;
+}
+static void co_stop(void *c, AoeLiveUnit *u) { co_clear_actions(c, u); }
+static void co_group(void *c, AoeLiveUnit *u) { (void)c; (void)u; }
+int aoe_world_combat_change_owner_ror(AoeWorldCombatRor *c, AoeLiveUnit *u,
+                                      int16_t owner) {
+    AoeLiveUnitOwnerOps o = {c,           co_template,   co_move_lists,
+                             co_vision,   co_resource,   co_graphic,
+                             co_select,   co_notice,     co_queue_cancel,
+                             co_clear_actions, co_create, co_research,
+                             co_status_four,   co_stop,   co_group};
+    if (!c || !u || !player_at(c, owner)) return 0;
+    return aoe_live_unit_change_owner_ror(u, owner, &o);
+}
+
+/* ---- convert action (0x68) bindings --------------------------------- */
+
+static float cv_resource(void *c, AoeLiveUnit *u, int16_t type) {
+    AoeScenarioRuntimePlayerRor *p = owner_of(c, u);
+    return p && p->resources.values && type >= 0 && type < p->resources.count
+               ? p->resources.values[type]
+               : 0.0f;
+}
+static void cv_event(void *c, uint32_t e, int32_t a, int32_t b, int32_t x,
+                     int32_t y) {
+    (void)e; (void)a; (void)b; (void)x; (void)y;
+    ++((AoeWorldCombatRor *)c)->production_events;
+}
+static uint16_t cv_rand(void *c) {
+    return aoe_rng_next(&((AoeWorldCombatRor *)c)->motion->runtime->rng);
+}
+static uint8_t cv_civ(void *c, AoeLiveUnit *u) {
+    AoeScenarioRuntimePlayerRor *p = owner_of(c, u);
+    return p ? (uint8_t)p->civilization_id : 0;
+}
+static int cv_change_owner(void *c, AoeLiveUnit *t, int16_t owner) {
+    return aoe_world_combat_change_owner_ror(c, t, owner);
+}
+static void cv_resource_add(void *c, AoeLiveUnit *u, int16_t type,
+                            float amount) {
+    co_resource(c, u->runtime_owner_index, type, amount);
+}
+/* +0x80 = 0x004aacc0. */
+static void cv_set_carried(void *c, AoeLiveUnit *u, int16_t type,
+                           float amount) {
+    (void)c;
+    u->core.storage.carried_resource_type = type;
+    u->core.storage.carried_amount = amount;
+}
+/* Target owner +0x94 = 0x004f0b50 (0x0045db00): create template 112. */
+static void cv_flare(void *c, AoeLiveUnit *t, float x, float y, float z) {
+    co_create(c, t->runtime_owner_index, 0x70, x, y, z);
+}
+static void cv_target_notice(void *c, AoeLiveUnit *t, AoeLiveUnit *u) {
+    (void)c; (void)t; (void)u;
+}
+static void convert_ops(AoeWorldCombatRor *c, AoeConvertActionOps *o) {
+    memset(o, 0, sizeof(*o));
+    move_ops(c, &o->move);
+    o->graphic = graphic_id_cb;
+    o->tick_seconds = tick_seconds;
+    o->face = face_target;
+    o->allied = repair_allowed;
+    o->owner_kind = owner_kind_cb;
+    o->resource = cv_resource;
+    o->event = cv_event;
+    o->rand = cv_rand;
+    o->civ = cv_civ;
+    o->change_owner = cv_change_owner;
+    o->resource_add = cv_resource_add;
+    o->set_carried = cv_set_carried;
+    o->flare = cv_flare;
+    o->target_notice = cv_target_notice;
+    o->play_sound = play_sound_cb;
+    o->start_move = heal_start_move;
+    o->sub_update = heal_sub_update;
+    o->sub_clear = heal_sub_clear;
+}
+
 /* ---- heap action classes -------------------------------------------- */
 
 static void move_activate(AoeWorldCombatRor *c, void *a, uint8_t st) {
@@ -3012,7 +3198,36 @@ static int heal_retarget(AoeWorldCombatRor *c, void *a, AoeLiveUnit *t,
     return aoe_heal_action_retarget_ror(a, t, &o, &accepted) && accepted;
 }
 
+static void convert_activate(AoeWorldCombatRor *c, void *a, uint8_t st) {
+    AoeConvertActionOps o;
+    convert_ops(c, &o);
+    if (!aoe_convert_action_activate_ror(a, st, &o)) ++c->convert_failures;
+}
+static uint8_t convert_update(AoeWorldCombatRor *c, void *a) {
+    AoeConvertActionOps o;
+    uint8_t r = 0;
+    convert_ops(c, &o);
+    if (!aoe_convert_action_update_ror(a, &o, &r)) {
+        ++c->convert_failures;
+        return 0;
+    }
+    return r;
+}
+static const DatUnitTask *convert_task(void *a) {
+    return ((AoeConvertActionRor *)a)->task;
+}
+static int convert_retarget(AoeWorldCombatRor *c, void *a, AoeLiveUnit *t,
+                            float x, float y, float z) {
+    AoeConvertActionOps o;
+    int accepted = 0;
+    (void)x; (void)y; (void)z;
+    convert_ops(c, &o);
+    return aoe_convert_action_retarget_ror(a, t, &o, &accepted) && accepted;
+}
+
 static const HeapActionClass heap_classes[] = {
+    {0x68, NULL, convert_activate, convert_update, convert_task,
+     convert_retarget, base_target},
     {0x69, NULL, heal_activate, heal_update, heal_task, heal_retarget,
      base_target},
     {1, NULL, move_activate, move_update, NULL, NULL, base_target},

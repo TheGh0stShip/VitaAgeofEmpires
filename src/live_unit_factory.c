@@ -767,16 +767,21 @@ int aoe_live_unit_construct_ror(
             geometry, width, height, x, y, z, vision,
             unit_template->type == 80))
         goto fail;
-    /* The original replacement branch requires the displaced unit's virtual
-       rebase method. Do not enter it until that method is translated. */
-    if (aoe_visibility_registry_resolve(&world->view, out->core.unit_id))
+    /* An occupied slot: the world insert (RoR 0x00523190) simply
+       overwrites a negative-ID slot, leaving the displaced object alive
+       without a table entry (scenario flares reuse negative IDs). A
+       positive ID in special-ID mode instead calls the rebase 0x004a8820,
+       which is not translated: refuse that case. */
+    if (out->core.unit_id >= 0 &&
+        aoe_visibility_registry_resolve(&world->view, out->core.unit_id))
         goto fail;
     out->select_2c = out->core.positive_hit_points;
     out->select_30 = out->core.type_25;
     if (!aoe_player_unit_register(owner, world, &out->core.position,
                                   out->core.unit_id, out->select_2c,
                                   out->select_30, &out->owner_node, &replaced,
-                                  &needs_reassign) || replaced || needs_reassign)
+                                  &needs_reassign) || needs_reassign ||
+        (replaced && out->core.unit_id >= 0))
         goto fail;
     out->constructed = 1;
     switch (unit_template->type) {
@@ -1428,19 +1433,75 @@ static void high_visibility_enter(void *opaque, AoeLiveUnitCore *core,
         ctx->failed = 1;
 }
 
+/* Shared loop of root +0x60 (0x004aa350) and +0x64 (0x004aa470) over the
+   unit tile's visibility mask: low 16 bits visible, high 16 explored, one
+   bit per player from 0 (Gaia); it runs while explored bits remain. For a
+   player with the explored bit: notify mode (+0x60 only) removes the unit
+   from player +0x114 under template +0xa7; a doppelganger is created for
+   player > 0 without the visible bit when `doppelganger` is set. */
+static void high_player_effects(HighRootContext *ctx, AoeLiveUnitCore *core,
+                                int notify, int doppelganger) {
+    const AoeLiveUnitPlayerEffects *fx = ctx->world->player_effects;
+    uint32_t visible, explored;
+    if (!ctx->live_flags) {
+        ctx->failed = 1;
+        return;
+    }
+    visible = *ctx->live_flags & 0xffffu;
+    explored = *ctx->live_flags >> 16;
+    for (int player = 0; explored; ++player, visible >>= 1, explored >>= 1) {
+        if (!(explored & 1)) continue;
+        if (notify) {
+            if (!fx || !fx->memory_remove) {
+                ctx->failed = 1;
+                return;
+            }
+            (void)fx->memory_remove(fx->context, player, core->unit_id,
+                                    core->unit_template->state_notify_value);
+        }
+        if (doppelganger && !(visible & 1) && player > 0) {
+            if (!fx || !fx->doppelganger ||
+                !fx->doppelganger(fx->context, player, core)) {
+                ctx->failed = 1;
+                return;
+            }
+        }
+    }
+}
+
+/* Root +0x64 (0x004aa470): template +0xa6 mode 2 only. */
 static void high_mode_two_effect(void *opaque, AoeLiveUnitCore *core) {
     HighRootContext *ctx = opaque;
-    if (core != &ctx->live->core || !ctx->live_flags ||
-        !aoe_visibility_watch_add(&ctx->owner->visibility_watch40,
+    if (core != &ctx->live->core) {
+        ctx->failed = 1;
+        return;
+    }
+    if (core->unit_id < 0 || core->unit_template->state_effect_mode != 2)
+        return;
+    high_player_effects(ctx, core, 0, 1);
+    if (ctx->failed) return;
+    if (!aoe_visibility_watch_add(&ctx->owner->visibility_watch40,
                                   ctx->vision->owner_index,
                                   ctx->vision->owner_index, &core->position,
                                   ctx->live_flags, core->unit_id))
         ctx->failed = 1;
 }
 
+/* Root +0x60 (0x004aa350): template +0xa5 or +0xa6 set. */
 static void high_pre_terminal(void *opaque, AoeLiveUnitCore *core) {
     HighRootContext *ctx = opaque;
-    if (core != &ctx->live->core ||
+    const DatUnit *t;
+    if (core != &ctx->live->core) {
+        ctx->failed = 1;
+        return;
+    }
+    t = core->unit_template;
+    if (core->unit_id < 0 || (!t->state_effect_mode && !t->state_notify_mode))
+        return;
+    high_player_effects(ctx, core, t->state_notify_mode != 0,
+                        t->state_effect_mode == 1);
+    if (ctx->failed) return;
+    if (t->state_effect_mode == 2 &&
         !aoe_visibility_watch_remove(&ctx->owner->visibility_watch40,
                                      &core->position))
         ctx->failed = 1;
@@ -1467,10 +1528,6 @@ static int scenario_root_ops(AoeLiveUnit *unit, HighRootContext *context,
         (uint32_t)tile_y < vision->owner_grid->height)
         context->live_flags = &vision->owner_grid->tile_masks[
             (size_t)tile_y * vision->owner_grid->width + (uint32_t)tile_x];
-    if ((t->state_notify_mode || t->state_effect_mode) &&
-        (t->state_effect_mode != 2 || !context->live_flags ||
-         (*context->live_flags >> 16) != 0))
-        return 0;
     memset(ops, 0, sizeof(*ops));
     ops->context = context;
     ops->owner_resources = owner_resources;
@@ -1481,7 +1538,7 @@ static int scenario_root_ops(AoeLiveUnit *unit, HighRootContext *context,
         context, high_remove, high_register};
     ops->visibility_leave = high_visibility_leave;
     ops->visibility_enter = high_visibility_enter;
-    if (t->state_effect_mode == 2) {
+    if (t->state_effect_mode || t->state_notify_mode) {
         ops->mode_two_effect = high_mode_two_effect;
         ops->pre_terminal = high_pre_terminal;
     }
@@ -1543,14 +1600,10 @@ static void scenario_root_state_ops(HighRootContext *context,
         context, high_remove, high_register};
     ops->visibility_leave = high_visibility_leave;
     ops->visibility_enter = high_visibility_enter;
-    /* The +0xa6 == 2 method and the pre-terminal +0x60 are bound only for
-       the zero high-mask case they translate; the root setter refuses a
-       transition that would reach either one unbound (leaving states 0..2
-       with mode 2, or going from below 4 to 7+ with a notify/effect mode).
-       Other transitions of such templates, e.g. a 0-hp shore fish dying
-       (2 -> 3) into its resource carcass, need neither. */
-    if (t->state_effect_mode == 2 && context->live_flags &&
-        (*context->live_flags >> 16) == 0) {
+    /* Root +0x60/+0x64 for templates with a notify/effect mode; their
+       per-player effects go through the world's player_effects hooks. */
+    if ((t->state_effect_mode || t->state_notify_mode) &&
+        context->live_flags) {
         ops->mode_two_effect = high_mode_two_effect;
         ops->pre_terminal = high_pre_terminal;
     }
@@ -1683,7 +1736,14 @@ int aoe_live_unit_scenario_high_root_ror(
         !owner_resources || !owner || !world || !vision)
         return 0;
     type = unit->core.unit_template->type;
-    if (type != 10 && type != 20 && type != 25 && type != 30 && type != 90)
+    /* Types 40/50/60/70 use +0x68 = 0x00405d40: clear the +0x184 action
+       list (0x00403e50), then the root method. Type 80 (0x004acb40) is not
+       handled here. */
+    if (type != 10 && type != 20 && type != 25 && type != 30 && type != 40 &&
+        type != 50 && type != 60 && type != 70 && type != 90)
+        return 0;
+    if (type >= 40 && type <= 70 && unit->derived_action_list &&
+        !aoe_action_list_clear(unit->derived_action_list))
         return 0;
     memset(&context, 0, sizeof(context));
     context.live = unit;
@@ -1701,14 +1761,6 @@ int aoe_live_unit_scenario_high_root_ror(
         return 0;
     context.live_flags = &vision->owner_grid->tile_masks[
         (size_t)tile_y * vision->owner_grid->width + (uint32_t)tile_x];
-    /* For the remaining +0xa5/+0xa6 modes, nonzero high mask bits dispatch
-       per-player methods not yet translated. Mode 2 with no high bits is
-       the exact watch-add/watch-remove path used by the campaign trees. */
-    if ((unit->core.unit_template->state_notify_mode ||
-         unit->core.unit_template->state_effect_mode) &&
-        (unit->core.unit_template->state_effect_mode != 2 ||
-         (*context.live_flags >> 16) != 0))
-        return 0;
     memset(&ops, 0, sizeof(ops));
     ops.state.context = &context;
     ops.state.owner_resources = owner_resources;
@@ -1719,7 +1771,8 @@ int aoe_live_unit_scenario_high_root_ror(
         &context, high_remove, high_register};
     ops.state.visibility_leave = high_visibility_leave;
     ops.state.visibility_enter = high_visibility_enter;
-    if (unit->core.unit_template->state_effect_mode == 2) {
+    if (unit->core.unit_template->state_effect_mode ||
+        unit->core.unit_template->state_notify_mode) {
         ops.state.mode_two_effect = high_mode_two_effect;
         ops.state.pre_terminal = high_pre_terminal;
     }

@@ -10,6 +10,7 @@
 #include "tech_tree.h"
 #include "game_options.h"
 #include "player_outcome.h"
+#include "player_object_memory.h"
 
 enum { AOE_SCENARIO_RUNTIME_PLAYERS = 9 };
 
@@ -26,11 +27,12 @@ typedef struct {
     uint32_t civilization_id;
     int32_t field_104; /* derived player +0x104, used by +0x78 */
     int16_t tech_tree_id; /* player +0x110, the civ's tech tree effect */
-    /* Player +0x224 for players 1..8. In a new game Gaia is a computer
-       player (0x0050a470 -> 0x004f7290), which runs the tribe scenario load
-       0x004f02d0 and so has one too; that load's per-player stream data
-       for Gaia is not parsed yet, so Gaia has no manager here (open). */
+    /* Player +0x224. Players 1..8 get theirs from the tribe scenario load
+       0x004f02d0; Gaia (a computer player, 0x0050a470 -> 0x004f7290) keeps
+       the one its tribe constructor 0x004efb00 builds with a rebuild. */
     AoeResearchCompletionManagerRor research;
+    /* Player +0x114 object memory (see player_object_memory.h). */
+    AoePlayerObjectMemory object_memory;
     /* Player +0x34 outcome manager and its player view. */
     AoeOutcomeManager outcome;
     AoeOutcomePlayerRef outcome_player;
@@ -86,6 +88,8 @@ typedef struct {
     AoeScenarioBuildingStorageRor **buildings;
     size_t building_count, building_capacity;
     uint32_t queue_status_four; /* teardown sink for status-4 counts */
+    AoeLiveUnitPlayerEffects player_effects; /* world.player_effects */
+    uint32_t doppelgangers_requested;
     uint64_t completed_buildings;
     int16_t active_player;
     uint8_t initialized;

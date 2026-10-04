@@ -70,9 +70,10 @@ typedef struct {
     AoeLiveUnitRootStateOps state;
 } AoeLiveUnitRootHighStateOps;
 
-/* RoR root unit high-state virtual +0x68 = 0x004abb80. This is used
-   directly by types 10/20/25/90; types 40/50/60 prepend their own action
-   cleanup and types 70/80 override it. The owner reclassification occurs
+/* RoR root unit high-state virtual +0x68 = 0x004abb80 (patched 1.0a
+   0x004aa2e0). This is used directly by types 10/20/25/30/90; types
+   40/50/60/70 (patched 0x00405d40) first clear their +0x184 action list,
+   and type 80 overrides it (patched 0x004acb40). The owner reclassification occurs
    before the root +0x5c state setter, exactly as in the executable. */
 int aoe_live_unit_root_high_state_ror(
     AoeLiveUnitCore *unit, const AoeLiveUnitRootHighStateOps *ops);

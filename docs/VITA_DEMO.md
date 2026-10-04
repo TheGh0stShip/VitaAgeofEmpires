@@ -66,10 +66,8 @@ headless with scripted input. `ror_vita_demo_loop_real` runs it when
 
 ## Status (2026-10-04)
 
-- **Loading.** 11 of the 19 Rise of Rome campaign scenarios build. The
-  other 8 contain high-state records whose per-player state-notify methods
-  (template `+0xa5`/`+0xa6`) or type-40 high states are not translated
-  yet. The demo skips those scenarios.
+- **Loading.** All 19 Rise of Rome campaign scenarios build, start and
+  update (`ror_all_campaign_scenarios_build`).
 - **Fog.** Scenario fog history is not reconstructed, so the whole map is
   shown (the original's exploration-gate bypass).
 - **Rendering fixes from Vita3K testing** (each against patched RoR 1.0a
@@ -96,9 +94,6 @@ headless with scripted input. `ror_vita_demo_loop_real` runs it when
   - **Skeletons.** The bones reported in the water are scenario objects on
     beach tiles (terrain 2) at the waterline; all 69 skeletons on
     EXPANS_1_1 are on beach (10) or terrain 6 (59).
-- **Not translated yet.** Gaia's tribe scenario load (`0x004f02d0`) reads
-  per-player stream data our parser does not expose yet, so Gaia has no
-  research manager.
 - **Hardware performance (2026-10-04).** About 45 fps on a Vita.
   - Breakdown: terrain 2.1 ms (cached layer), objects 8.9 ms, colour
     conversion 8.2 ms on two cores. The conversion is limited by writing

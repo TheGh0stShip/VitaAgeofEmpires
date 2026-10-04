@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include "live_unit_factory.h"
 
 #include <assert.h>
@@ -239,6 +240,30 @@ static void update_dying_sound(void *context, AoeLiveUnit *unit,
 static int update_terminal(void *context, AoeLiveUnit *unit) {
     assert(unit);
     update_event(context, 'T');
+    return 1;
+}
+
+typedef struct {
+    int removes, doppelgangers;
+    uint32_t remove_players, doppelganger_players;
+    uint8_t category;
+} EffectTrace;
+
+static int trace_memory_remove(void *context, int player, int32_t unit_id,
+                               uint8_t category) {
+    EffectTrace *t = context;
+    (void)unit_id;
+    ++t->removes;
+    t->remove_players |= 1u << player;
+    t->category = category;
+    return 1;
+}
+
+static int trace_doppelganger(void *context, int player, void *unit) {
+    EffectTrace *t = context;
+    (void)unit;
+    ++t->doppelgangers;
+    t->doppelganger_players |= 1u << player;
     return 1;
 }
 
@@ -572,16 +597,71 @@ int main(void) {
     aoe_live_unit_destroy_ror(&live, &owner, &world, &vision);
     assert(owner.object_list28.count == 0);
 
+    /* Root +0x60 (0x004aa350) with notify mode: every player with the
+       explored (high) bit loses the unit from its +0x114 memory under
+       template +0xa7. Without the world's player hooks the needed effect
+       fails the change. */
     unit.state_notify_mode = 1;
+    unit.state_notify_value = 3;
+    /* A negative-ID unit (template +0xa4) skips the per-player effects
+       entirely (the methods return at once for unit +0x04 < 0). */
     assert(aoe_live_unit_construct_ror(&live, &unit, &graphics,
                                         &resource_state, &world, &owner,
                                         terrain, tiles, &geometry,
                                         4, 4, &vision, &rng,
                                         2.25f, 2.25f, 0.0f));
+    assert(live.core.unit_id < 0);
+    masks[10] = (0x5u << 16) | 0x1u;
+    assert(aoe_live_unit_scenario_high_root_ror(
+        &live, &resource_state, &owner, &world, &vision));
+    aoe_live_unit_destroy_ror(&live, &owner, &world, &vision);
+    unit.negative_id_mode = 0;
+    assert(aoe_live_unit_construct_ror(&live, &unit, &graphics,
+                                        &resource_state, &world, &owner,
+                                        terrain, tiles, &geometry,
+                                        4, 4, &vision, &rng,
+                                        2.25f, 2.25f, 0.0f));
+    masks[10] = (0x5u << 16) | 0x1u; /* explored by 0 and 2, seen by 0 */
     assert(!aoe_live_unit_scenario_high_root_ror(
         &live, &resource_state, &owner, &world, &vision));
-    assert(live.core.state == 2 && owner.object_list2c.count == 1);
     aoe_live_unit_destroy_ror(&live, &owner, &world, &vision);
+    {
+        EffectTrace fx_trace;
+        AoeLiveUnitPlayerEffects fx = {&fx_trace, trace_memory_remove,
+                                       trace_doppelganger};
+        memset(&fx_trace, 0, sizeof(fx_trace));
+        world.player_effects = &fx;
+        assert(aoe_live_unit_construct_ror(&live, &unit, &graphics,
+                                            &resource_state, &world, &owner,
+                                            terrain, tiles, &geometry,
+                                            4, 4, &vision, &rng,
+                                            2.25f, 2.25f, 0.0f));
+        masks[10] = (0x5u << 16) | 0x1u;
+        assert(aoe_live_unit_scenario_high_root_ror(
+            &live, &resource_state, &owner, &world, &vision));
+        assert(live.core.state == 7);
+        assert(fx_trace.removes == 2 && fx_trace.remove_players == 0x5 &&
+               fx_trace.category == 3 && fx_trace.doppelgangers == 0);
+        aoe_live_unit_destroy_ror(&live, &owner, &world, &vision);
+
+        /* Effect mode 1: a doppelganger for each player > 0 that explored
+           the tile but cannot see it (player 2 here; player 1 neither). */
+        unit.state_notify_mode = 0;
+        unit.state_effect_mode = 1;
+        memset(&fx_trace, 0, sizeof(fx_trace));
+        assert(aoe_live_unit_construct_ror(&live, &unit, &graphics,
+                                            &resource_state, &world, &owner,
+                                            terrain, tiles, &geometry,
+                                            4, 4, &vision, &rng,
+                                            2.25f, 2.25f, 0.0f));
+        masks[10] = (0x7u << 16) | 0x3u; /* explored 0..2, seen by 0, 1 */
+        assert(aoe_live_unit_scenario_high_root_ror(
+            &live, &resource_state, &owner, &world, &vision));
+        assert(fx_trace.removes == 0 && fx_trace.doppelgangers == 1 &&
+               fx_trace.doppelganger_players == 0x4);
+        aoe_live_unit_destroy_ror(&live, &owner, &world, &vision);
+        world.player_effects = NULL;
+    }
 
     unit.state_effect_mode = 2;
     assert(aoe_live_unit_construct_ror(&live, &unit, &graphics,

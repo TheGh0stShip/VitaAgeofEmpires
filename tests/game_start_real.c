@@ -60,7 +60,9 @@ int main(int argc, char **argv) {
     assert(build(&runtime, &in, NULL));
     p1 = &runtime.players[1];
     assert(runtime.player_count == in.scenario.player_count + 1);
-    assert(!runtime.players[0].research.entries);
+    /* Gaia keeps the research manager of its tribe constructor
+       (0x004efb00 -> 0x004ea91c with rebuild). */
+    assert(runtime.players[0].research.entries);
     assert(p1->research.entries);
     /* Scenario stocks replace the civ defaults: wood 600 for player 1. */
     assert(p1->resource_values[0] == in.scenario.resources[0].food);

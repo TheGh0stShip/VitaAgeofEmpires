@@ -197,7 +197,34 @@ Next:
    Game options (game object `0x00580e38`) are `AoeGameOptionsRor`.
    Not yet translated: the victory/relic setup before `0x0050b7c6` and the
    +0x840 tracker (`0x004b0c00`).
-   Next: research actions (103), the active player's view-code refresh, the transport
+   All 19 RoR campaign scenarios now load (`campaign_build_real`). The
+   fixes, from patched 1.0a evidence:
+   - Root `+0x60` (`0x004aa350`) and `+0x64` (`0x004aa470`) are shared by
+     every class. They walk the unit tile's visibility mask (visible low 16
+     bits, explored high 16):
+     - notify mode (`+0xa5`) removes the unit from each exploring player's
+       `+0x114` object memory (`0x00517220`, category `+0xa7`);
+     - effect mode 1 makes a doppelganger (template 243, type 25,
+       `0x00436030` / `0x004364b0`) for other players who explored the
+       tile but cannot see it. This is not translated; the runtime counts
+       requests and fails if one is needed (none in the campaigns);
+     - effect mode 2 adds/removes the owner's watch.
+   - Negative-ID slot reuse (flares) overwrites the slot (`0x00523190`).
+     Only positive IDs need the untranslated rebase `0x004a8820`.
+   - Types 40/50/60/70 use high-state `0x00405d40`: clear the `+0x184`
+     action list, then the root method.
+   - Gaia is a computer player whose tribe constructor `0x004efb00` builds
+     a research manager with a rebuild. Only players 1..8 run the tribe
+     scenario load (eight stock sets), and `0x00507e50` itself skips
+     index -1.
+   - Facets and adjacency: `0x0044c7b0` is
+     `(rotation - pi/4) * angles / 2pi + 0.5`; wall adjacency runs
+     `0x004ad550` / `0x004ad620` / `0x004ad380` / `0x0044f090`.
+   - Rendering: sprites go to the view sprite list (`0x00518d90`) and are
+     drawn after all terrain, ordered by layer, then row, then queue order.
+   - Water palette 248..254 cycles (`0x004843d0`).
+   Next: doppelganger construction, the object-memory add path (player map
+   update `0x00517060`), research actions (103), the active player's view-code refresh, the transport
    action (type 12) and the type-50 visibility spotting.
 2. Replace placeholder bindings (diplomacy, zones, sounds, victory
    conditions, player +0x30 lists).

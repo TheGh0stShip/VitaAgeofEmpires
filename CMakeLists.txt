@@ -382,12 +382,17 @@ target_link_libraries(aoe_runtime_viewport PUBLIC aoe_runtime_map
   aoe_terrain_draw aoe_live_unit_viewport)
 target_compile_options(aoe_runtime_viewport PRIVATE -Wall -Wextra)
 
+add_library(aoe_player_object_memory STATIC src/player_object_memory.c)
+target_include_directories(aoe_player_object_memory PUBLIC include)
+target_compile_options(aoe_player_object_memory PRIVATE -Wall -Wextra)
+
 add_library(aoe_scenario_runtime STATIC src/scenario_runtime.c
   src/game_start.c)
 target_include_directories(aoe_scenario_runtime PUBLIC include)
 target_link_libraries(aoe_scenario_runtime PUBLIC aoe_runtime_map
   aoe_live_unit_factory aoe_player_templates aoe_unit_placement_check
-  aoe_terrain_transition aoe_tech_tree aoe_sprite_draw)
+  aoe_terrain_transition aoe_tech_tree aoe_sprite_draw
+  aoe_player_object_memory)
 target_compile_options(aoe_scenario_runtime PRIVATE -Wall -Wextra)
 
 add_library(aoe_world_motion STATIC src/world_motion.c)
@@ -623,6 +628,11 @@ else()
   target_link_libraries(slp_decode_test PRIVATE aoe_slp)
   target_compile_options(slp_decode_test PRIVATE -UNDEBUG)
   add_test(NAME slp_format_decode COMMAND slp_decode_test)
+  add_executable(player_object_memory_test tests/player_object_memory_test.c)
+  target_link_libraries(player_object_memory_test PRIVATE
+    aoe_player_object_memory)
+  target_compile_options(player_object_memory_test PRIVATE -UNDEBUG)
+  add_test(NAME ror_player_object_memory COMMAND player_object_memory_test)
   add_executable(sprite_draw_queue_test tests/sprite_draw_queue_test.c)
   target_link_libraries(sprite_draw_queue_test PRIVATE aoe_sprite_draw)
   target_compile_options(sprite_draw_queue_test PRIVATE -UNDEBUG)
@@ -990,6 +1000,17 @@ else()
   add_executable(world_motion_real tests/world_motion_real.c)
   target_link_libraries(world_motion_real PRIVATE aoe_world_motion aoe_dat m)
   target_compile_options(world_motion_real PRIVATE -UNDEBUG)
+  add_executable(campaign_build_real tests/campaign_build_real.c)
+  target_link_libraries(campaign_build_real PRIVATE aoe_world_combat aoe_dat m)
+  target_compile_options(campaign_build_real PRIVATE -UNDEBUG)
+  file(GLOB AOE_ROR_CAMPAIGN_SCENARIOS
+    "${CMAKE_SOURCE_DIR}/build/ror/scenarios/EXPANS_*.scx")
+  if(AOE_ROR_CAMPAIGN_SCENARIOS AND
+     EXISTS "${CMAKE_SOURCE_DIR}/build/ror/disc/GAME/DATA2/EMPIRES.DAT")
+    add_test(NAME ror_all_campaign_scenarios_build COMMAND campaign_build_real
+      "${CMAKE_SOURCE_DIR}/build/ror/disc/GAME/DATA2/EMPIRES.DAT"
+      ${AOE_ROR_CAMPAIGN_SCENARIOS})
+  endif()
   add_executable(game_start_real tests/game_start_real.c)
   target_link_libraries(game_start_real PRIVATE aoe_scenario_runtime aoe_dat)
   target_compile_options(game_start_real PRIVATE -UNDEBUG)

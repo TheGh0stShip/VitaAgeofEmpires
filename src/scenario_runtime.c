@@ -17,6 +17,9 @@ static int runtime_research_init(AoeScenarioRuntimeRor *runtime,
 static void runtime_outcome_init(AoeScenarioRuntimeRor *runtime,
                                  AoeScenarioRuntimePlayerRor *player,
                                  const DatCiv *civ);
+static int effect_memory_remove(void *context, int player, int32_t unit_id,
+                                uint8_t category);
+static int effect_doppelganger(void *context, int player, void *unit);
 static int runtime_tribe_scenario_load(AoeScenarioRuntimeRor *runtime,
                                        AoeScenarioRuntimePlayerRor *player,
                                        const DatCiv *civ,
@@ -63,6 +66,7 @@ void aoe_scenario_runtime_destroy_ror(AoeScenarioRuntimeRor *runtime) {
         free(player->units);
         aoe_research_manager_free_ror(&player->research);
         aoe_outcome_events_free_ror(&player->outcome);
+        aoe_player_object_memory_free(&player->object_memory);
         free(player->resource_values);
         aoe_visibility_watch_destroy(&player->owner.visibility_watch40);
         aoe_player_vision_state_destroy(&player->vision);
@@ -120,6 +124,10 @@ int aoe_scenario_runtime_build_ror(
     /* Completing a building during load can create units (stack units)
        through the editor factory, as the original does inside its load. */
     runtime->initialized = 1;
+    runtime->player_effects.context = runtime;
+    runtime->player_effects.memory_remove = effect_memory_remove;
+    runtime->player_effects.doppelganger = effect_doppelganger;
+    runtime->world.player_effects = &runtime->player_effects;
     runtime->outcome_world.player_count = runtime->player_count;
     runtime->outcome_world.players = runtime->outcome_players;
     runtime->outcome_world.player_capacity = AOE_SCENARIO_RUNTIME_PLAYERS;
@@ -157,6 +165,19 @@ int aoe_scenario_runtime_build_ror(
         player->vision_binding.explored_ops.record_owner =
             aoe_explored_cells_record;
         runtime_outcome_init(runtime, player, civ);
+        /* Categories are template +0xa7 bytes. */
+        if (!aoe_player_object_memory_init(&player->object_memory, 256))
+            goto fail;
+        /* Gaia is a computer player (0x0050a470 -> 0x004f7290), whose
+           tribe constructor 0x004efb00 builds the research manager with
+           0x004ea91c(..., 1), i.e. with a rebuild (0x004eb38d). The
+           scenario reads stocks for players 1..8 only (eight sets), and
+           only they run the tribe scenario load, which replaces it. */
+        if (!p && (!runtime_research_init(runtime, player) ||
+                   !aoe_research_rebuild_ror(&player->research,
+                                             runtime->techs,
+                                             &player->resources)))
+            goto fail;
         if (p && !runtime_tribe_scenario_load(runtime, player, civ, scenario))
             goto fail;
     }
@@ -341,6 +362,25 @@ static void complete_storage(void *context, AoeLiveUnit *unit) {
 }
 static void complete_local(void *context, AoeLiveUnit *unit, int value) {
     (void)context; (void)unit; (void)value;
+}
+
+/* World player-effect hooks for root +0x60/+0x64. */
+static int effect_memory_remove(void *context, int player, int32_t unit_id,
+                                uint8_t category) {
+    AoeScenarioRuntimeRor *r = context;
+    if (player < 0 || player >= AOE_SCENARIO_RUNTIME_PLAYERS) return 0;
+    return aoe_player_object_memory_remove(&r->players[player].object_memory,
+                                           unit_id, category);
+}
+
+/* Doppelganger creation (template 243 +0x38 -> 0x00436030 with the source
+   unit, 0x004364b0) is not translated yet: report it instead of
+   inventing a fog image. */
+static int effect_doppelganger(void *context, int player, void *unit) {
+    AoeScenarioRuntimeRor *r = context;
+    (void)player; (void)unit;
+    ++r->doppelgangers_requested;
+    return 0;
 }
 
 /* Wall adjacency (patched RoR 1.0a). Only units whose current graphic

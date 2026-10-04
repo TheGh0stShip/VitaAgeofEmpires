@@ -222,7 +222,10 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
         unit->accuracy_percent = (int16_t)u16(cursor);
         take(cursor, 1); /* break-off combat */
         unit->frame_delay = (int16_t)u16(cursor);
-        take(cursor, 12); /* graphic displacement XYZ */
+        /* Graphic displacement XYZ: projectile spawn offsets, original
+           template +0x12c/+0x130/+0x134 (0x00426520). */
+        for (unsigned i = 0; i < 3; ++i)
+            unit->projectile_offset[i] = f32(cursor);
         take(cursor, 1); /* blast attack level */
         unit->min_range = f32(cursor);
         unit->attack_graphic = (int16_t)u16(cursor);

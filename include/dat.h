@@ -301,7 +301,9 @@ typedef struct {
     DatUnitAttackArmor *attacks, *armors;
     int16_t terrain_defense_bonus, projectile_unit_id, accuracy_percent;
     int16_t frame_delay, attack_graphic;
+    /* Original template +0x114, +0x118, +0x120 and +0x138. */
     float max_range, blast_width, reload_time, min_range;
+    float projectile_offset[3]; /* +0x12c/+0x130/+0x134 */
     int16_t displayed_melee_armor, displayed_attack;
     float displayed_range, displayed_reload_time;
     DatUnitCost costs[3];

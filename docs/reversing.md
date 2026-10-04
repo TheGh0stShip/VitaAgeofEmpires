@@ -1429,6 +1429,40 @@ loader `0x004413b0`: `+0x10` ID, `+0x14` class, `+0x30/+0x34/+0x38` size.
 - `src/action_attack.c` translates the class, and
   `tests/action_attack_test.c` covers it.
 
+Combat core (RoR 1.0a; type-50 vtable `0x0054324c`, tribe `0x00547fa0`):
+- **Reload.** `+0x7c` `0x004269f0` reports ready when the reload timer
+  `+0x1b4` is <= 0. `0x00426a10` resets it from template `+0x120`.
+- **Fire at target or point.** `+0x228` `0x00426520` (target) and `+0x224`
+  `0x004266a0` (point) launch a projectile when template `+0x124` >= 0:
+  - the spawn point is the template offsets `+0x12c/+0x130` rotated by the
+    facing, with z offset `+0x134` (the DAT "graphic displacement", now
+    parsed);
+  - the launch radius is footprint + max range `+0x114` + 6.0;
+  - the projectile itself is constructed via the owner's template list and
+    `0x00449070` (target) / `0x00449120` (point).
+
+  Otherwise `+0x22c` delivers a melee hit at the attacker's position.
+- **Melee hit** `0x004267b0`. Blast templates (`+0x118` > 0) go to
+  `+0x220`. Otherwise it notices 0x200 and rolls
+  `rand() * 100 / 32767 <= accuracy` (`+0x126`; the magic-number division
+  is verified for all rand values). A hit calls the target's `+0x70`.
+- **Damage** `+0x74` `0x00426910` sums, per attack class,
+  `(amount − armor) × terrain bonus × multiplier`, counting only positive
+  terms:
+  - armor is the last matching armor class entry, else base armor
+    `+0x100`;
+  - the terrain bonus is world `+0x54[+0x110][terrain]`.
+- **Receive.** Base `+0x70` `0x00426890` subtracts the damage, notices
+  0x1f4 with the truncated hit points and the template maximum, and clamps
+  below 1.0 to 0. The tribe override `0x004ad9b0` skips dead targets and
+  enforces a minimum of 1.0 damage (0.1 for attacker classes 0/23/26/36
+  and tower-like IDs 79/69/199/383/380). It credits the attacker's player
+  with `+0x78(0x2b, 1.0, 0)` when a non-Gaia target drops below 1.0.
+- **Multiplier.** Base `+0xf0` is 1.0. The tribe `0x004aec00` gives ranged
+  units 1.5 when `+0x250(target)` holds, and melee units 0.6666 when below
+  their target's z.
+- `src/combat.c` translates these, and `tests/combat_test.c` covers them.
+
 The pathfinder (vtable `0x00544cf0`, constructor `0x00458570`) works on
 255 x 255 grids (bytes at `+0x10de28`, dwords at `+0xce624`, indexed
 `[first*255 + second]`). Its distance table `0x006a18c0` holds

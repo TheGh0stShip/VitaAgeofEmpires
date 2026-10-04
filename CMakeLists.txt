@@ -328,6 +328,11 @@ target_include_directories(aoe_action_gather PUBLIC include)
 target_link_libraries(aoe_action_gather PUBLIC aoe_action_move m)
 target_compile_options(aoe_action_gather PRIVATE -Wall -Wextra)
 
+add_library(aoe_action_build STATIC src/action_build.c)
+target_include_directories(aoe_action_build PUBLIC include)
+target_link_libraries(aoe_action_build PUBLIC aoe_action_move m)
+target_compile_options(aoe_action_build PRIVATE -Wall -Wextra)
+
 add_library(aoe_action_attack STATIC src/action_attack.c)
 target_include_directories(aoe_action_attack PUBLIC include)
 target_link_libraries(aoe_action_attack PUBLIC aoe_action_move m)
@@ -385,7 +390,7 @@ target_compile_options(aoe_world_motion PRIVATE -Wall -Wextra)
 add_library(aoe_world_combat STATIC src/world_combat.c)
 target_include_directories(aoe_world_combat PUBLIC include)
 target_link_libraries(aoe_world_combat PUBLIC aoe_world_motion
-  aoe_action_attack aoe_action_gather aoe_action_list aoe_combat
+  aoe_action_attack aoe_action_build aoe_action_gather aoe_action_list aoe_combat
   aoe_projectile aoe_unit_sprite_binding aoe_unit_task aoe_player_resources
   aoe_unit_order)
 target_compile_options(aoe_world_combat PRIVATE -Wall -Wextra)
@@ -846,6 +851,10 @@ else()
   target_link_libraries(action_gather_test PRIVATE aoe_action_gather)
   target_compile_options(action_gather_test PRIVATE -UNDEBUG)
   add_test(NAME original_ror_gather_action COMMAND action_gather_test)
+  add_executable(action_build_test tests/action_build_test.c)
+  target_link_libraries(action_build_test PRIVATE aoe_action_build)
+  target_compile_options(action_build_test PRIVATE -UNDEBUG)
+  add_test(NAME original_ror_build_action COMMAND action_build_test)
   add_executable(combat_test tests/combat_test.c)
   target_link_libraries(combat_test PRIVATE aoe_combat)
   target_compile_options(combat_test PRIVATE -UNDEBUG)

@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "action_attack.h"
+#include "action_build.h"
 #include "action_gather.h"
 #include "action_list.h"
 #include "combat.h"
@@ -43,7 +44,13 @@ typedef struct {
     uint8_t attacking;
     AoeGatherActionRor gather;
     uint8_t gathering;
+    AoeBuildActionRor build;
+    uint8_t constructing;
     uint8_t pending; /* action built by the order step, not yet adopted */
+    /* Type-80 storage bound on first construction work (+0x1c0..+0x1d2,
+       live and queue action lists). */
+    AoeBuildingUpdate building_storage;
+    AoeActionList building_live, building_queue;
     /* The unit's +0x184 action list when it had none: its head entry is
        this record while a gather/attack action is adopted. */
     AoeActionList unit_actions;
@@ -69,7 +76,7 @@ typedef struct {
     uint32_t world_ms;
     float tick;
     uint32_t notices, hits, misses, projectiles, kills, blasts, alerts,
-        corpses, deposits;
+        corpses, deposits, repairs, completions;
     int32_t player_field_104[AOE_SCENARIO_RUNTIME_PLAYERS];
 } AoeWorldCombatRor;
 
@@ -85,6 +92,12 @@ AoeWorldCombatUnitRor *aoe_world_combat_unit_ror(AoeWorldCombatRor *combat,
    (type < 50) or on failure. */
 int aoe_world_combat_attack_ror(AoeWorldCombatRor *combat,
                                 AoeLiveUnit *attacker, AoeLiveUnit *target);
+
+/* Gather (0x00402ef0/0x00402f80), attack (0x00401150/0x00401290) and build
+   (0x004b13c0/0x004b1450) routes are constructed by the order step below.
+   Building work binds the foundation's type-80 storage on demand and
+   completes it through aoe_live_unit_scenario_building_complete_ror (class
+   pre-completion, adjacency and disappear hooks are no-ops). */
 
 /* Selects the actor's task for `target` with the translated tribe selector
    0x00508010 (owners: same player accepts, other non-Gaia players are

@@ -1357,10 +1357,11 @@ The tick toward a point `0x0044cde0` (RoR 1.0a):
   range + 0.3. It returns 2 if the goal is occupied. Otherwise it spends
   `+0x144` (4 at zero) and the player budget (1 without), then re-paths
   (4 on failure).
-- **Moving.** The unit snaps onto its waypoint when overshooting it at
-  distance 0, or when within 0.5 tiles while oscillating between two
-  facets (`+0x17c/+0x17d`). Constant `0x00544a78` is a denormal double
-  holding the float bits of 0.25, so the overshoot test means distance 0.
+- **Moving.** The unit snaps onto its waypoint when overshooting it
+  within 0.25 tiles, or when within 0.5 tiles while oscillating between
+  two facets (`+0x17c/+0x17d`). The overshoot test at `0x0044d8af` reads
+  `0x00544a78` with `fcomp DWORD PTR`, so it is the float 0.25 (the
+  eight-byte slot is not used as a double there).
   `+0x178` records the pre-move distance to the waypoint.
 - **Slope speed.** Speed is multiplied by 0.9 when climbing more than 0.02
   and by 1.03 when descending. Within that band it resets to the base
@@ -1590,6 +1591,43 @@ translates it.
     action;
   - it fills 10 food, walks to a drop site and deposits, taking the
     player's food from 200 to 210 and the bush from 150 to 140.
+
+Build action (RoR 1.0a; vtable `0x005486bc`, action type 0x65). It is
+routed from task action 0x65 to `0x004b13c0` (target) / `0x004b1450`
+(point); `src/action_build.c` translates it.
+- **Targets.** `0x004b13c0` keeps the target only when it has the unit's
+  owner. Retarget `+0x34` (`0x004b1bb0`) walks to another own target
+  (keeping states 4/6 for the same one) and otherwise walks to the point
+  (`+0x30`, `0x004b5db0`, state 11).
+- **States:**
+  - 3 idles (notice 0x202; owners of kind 1 (`0x00454150`) notice 0x1fa
+    and stop);
+  - 4 walks to the foundation within the task work range (`+0x24`);
+  - 6 faces it, then 7 shows the proceeding graphic and plays the task
+    sound;
+  - 13 fails (notice 0x1f9, result 3).
+- **Wall corner** (state 7 entry `0x004b16a8`). A builder diagonal to the
+  foundation tile cannot work when two walls of its owner (class 27,
+  world `0x00520590`) fill the neighbouring tiles across that corner.
+- **Work** (`0x004b1a42`) adds `tick × template work rate (+0xe4) × task
+  work value 1` through the target's `0x004ad7b0` (1000 with the option at
+  `+0x9a8`). On completion a farm (template 50) sets timer `+0x2c` to -1;
+  the next update resets the group (`0x004ac320`) and orders the unit
+  onto the farm. Anything else returns to idle.
+- **Finished targets** (`0x004b1880`). A finished target that is still
+  damaged queues a repair through owner player `+0x34` (0x2ce); otherwise
+  it is released.
+- **World binding.** `aoe_world_combat_order_ror` takes pending action
+  0x65 from the order step. The type-80 completion runs the translated
+  scenario state setter (`aoe_live_unit_scenario_building_complete_ror`).
+- **Movement fix found by this test.** The step overshoot snap
+  (`0x0044d8af`) compares against 0.25 as a float; reading it as a denormal
+  double left builders orbiting their waypoint.
+- **Real-map regression** (EXPANS_1_1):
+  - a villager (template 83) is ordered onto a house foundation created
+    next to it (state 0, 1 hp);
+  - the order reports 0x65 and switches it to template 118;
+  - it walks, faces and builds until the house completes at 75/75 hp.
 
 Combat core (RoR 1.0a; type-50 vtable `0x0054324c`, tribe `0x00547fa0`):
 - **Reload.** `+0x7c` `0x004269f0` reports ready when the reload timer

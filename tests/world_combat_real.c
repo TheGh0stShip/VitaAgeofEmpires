@@ -329,6 +329,67 @@ int main(int argc, char **argv) {
         ok = combat.deposits == 1 && after > before &&
              worker->core.unit_template->id != 83;
     }
+    /* Building: another player-1 villager is ordered onto a fresh house
+       foundation. The selector's "own state-0 building" rule job-switches
+       it to the builder, which walks there and builds through 0x004ad7b0
+       until the type-80 completion runs. The foundation itself is set up
+       by the test (state 0, 1 hp) in place of the untranslated placement
+       command. */
+    if (ok) {
+        AoeLiveUnit *mason = NULL, *house = NULL;
+        int16_t code = -1;
+        for (uint32_t i = 0; i < runtime.players[1].unit_count && !mason;
+             ++i) {
+            AoeLiveUnit *u = &runtime.players[1].units[i];
+            if (u->constructed && u->core.state == 2 && u->core.unit_template &&
+                u->core.unit_template->id == 83 &&
+                !combat.units[u->core.unit_id + 1000])
+                mason = u;
+        }
+        for (int r = 3; r <= 8 && mason && !house; ++r)
+            for (int dy = -r; dy <= r && !house; ++dy)
+                for (int dx = -r; dx <= r && !house; ++dx) {
+                    float x = floorf(mason->core.position.x38) + dx + 1.0f;
+                    float y = floorf(mason->core.position.y3c) + dy + 1.0f;
+                    AoeLiveUnit *h = NULL;
+                    if (abs(dx) != r && abs(dy) != r) continue;
+                    if (!aoe_scenario_runtime_editor_create_ror(
+                            &runtime, 1, 70, x, y, 0.0f, &h) || !h)
+                        continue;
+                    house = h;
+                }
+        if (!mason || !house) {
+            fprintf(stderr, "no mason/foundation\n");
+            ok = 0;
+            goto done;
+        }
+        house->core.state = 0;
+        house->core.hit_points = 1.0f;
+        if (!aoe_world_combat_order_ror(&combat, mason, house,
+                                        house->core.position.x38,
+                                        house->core.position.y3c, 0.0f,
+                                        &code)) {
+            fprintf(stderr, "build order failed\n");
+            ok = 0;
+            goto done;
+        }
+        printf("mason %d ordered onto house %d: code %d, template %d\n",
+               mason->core.unit_id, house->core.unit_id, code,
+               mason->core.unit_template->id);
+        int ticks = 0;
+        for (; ticks < 20000 && house->core.state == 0; ++ticks)
+            if (!aoe_world_combat_tick_ror(&combat, mason, 0.05f, &result))
+                break;
+        printf("after %d ticks: ", ticks);
+        printf("house state %u, hp %.1f/%d, completions %u, build state %u\n",
+               house->core.state, house->core.hit_points,
+               house->core.unit_template->hit_points, combat.completions,
+               combat.units[mason->core.unit_id + 1000]->build.base.state);
+        ok = code == 0x65 && house->core.state == 2 &&
+             combat.completions == 1 &&
+             house->core.hit_points ==
+                 (float)house->core.unit_template->hit_points;
+    }
 done:
     aoe_world_combat_destroy_ror(&combat);
     aoe_world_motion_destroy_ror(&motion);

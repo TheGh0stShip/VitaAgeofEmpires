@@ -1304,6 +1304,71 @@ static void high_pre_terminal(void *opaque, AoeLiveUnitCore *core) {
         ctx->failed = 1;
 }
 
+/* Shared runtime composition of the root state-setter callbacks. */
+static int scenario_root_ops(AoeLiveUnit *unit, HighRootContext *context,
+                             AoeLiveUnitRootStateOps *ops,
+                             AoePlayerResources *owner_resources,
+                             AoePlayerUpdateState *owner,
+                             AoeOwnedVisibilityRegistry *world,
+                             AoeLiveUnitVisionBinding *vision) {
+    const DatUnit *t = unit->core.unit_template;
+    int32_t tile_x, tile_y;
+    memset(context, 0, sizeof(*context));
+    context->live = unit;
+    context->owner = owner;
+    context->world = world;
+    context->vision = vision;
+    tile_x = (int32_t)unit->core.position.x38;
+    tile_y = (int32_t)unit->core.position.y3c;
+    if (tile_x >= 0 && tile_y >= 0 &&
+        (uint32_t)tile_x < vision->owner_grid->width &&
+        (uint32_t)tile_y < vision->owner_grid->height)
+        context->live_flags = &vision->owner_grid->tile_masks[
+            (size_t)tile_y * vision->owner_grid->width + (uint32_t)tile_x];
+    if ((t->state_notify_mode || t->state_effect_mode) &&
+        (t->state_effect_mode != 2 || !context->live_flags ||
+         (*context->live_flags >> 16) != 0))
+        return 0;
+    memset(ops, 0, sizeof(*ops));
+    ops->context = context;
+    ops->owner_resources = owner_resources;
+    ops->edition = AOE_PLAYER_RISE_OF_ROME;
+    ops->has_map_tile = unit->placement.tile != NULL;
+    ops->registration_node = (void **)&unit->owner_node;
+    ops->registration = (AoeLiveUnitRegistrationHooks){
+        context, high_remove, high_register};
+    ops->visibility_leave = high_visibility_leave;
+    ops->visibility_enter = high_visibility_enter;
+    if (t->state_effect_mode == 2) {
+        ops->mode_two_effect = high_mode_two_effect;
+        ops->pre_terminal = high_pre_terminal;
+    }
+    return 1;
+}
+
+int aoe_live_unit_scenario_building_complete_ror(
+    AoeLiveUnit *unit, const AoeBuildingCompletionVisualRuntimeOps *visual,
+    const AoeBuildingCompletionWorldRuntimeOps *world_ops,
+    AoePlayerResources *owner_resources, AoePlayerUpdateState *owner,
+    AoeOwnedVisibilityRegistry *world, AoeLiveUnitVisionBinding *vision) {
+    HighRootContext context;
+    AoeBuildingStateTwoRuntimeOps ops;
+    if (!unit || !unit->constructed || !unit->core.unit_template ||
+        unit->core.unit_template->type != 80 || !visual || !world_ops ||
+        !owner_resources || !owner || !world || !vision ||
+        !vision->owner_grid || !vision->owner_grid->tile_masks)
+        return 0;
+    memset(&ops, 0, sizeof(ops));
+    ops.visual = *visual;
+    ops.world = *world_ops;
+    if (!scenario_root_ops(unit, &context, &ops.root_state, owner_resources,
+                           owner, world, vision) ||
+        !aoe_live_unit_building_state_two_runtime_ror(unit, &ops) ||
+        context.failed)
+        return 0;
+    return 1;
+}
+
 int aoe_live_unit_scenario_state_set_ror(
     AoeLiveUnit *unit, uint8_t new_state, AoePlayerResources *owner_resources,
     AoePlayerUpdateState *owner, AoeOwnedVisibilityRegistry *world,

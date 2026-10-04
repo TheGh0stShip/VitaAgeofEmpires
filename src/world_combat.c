@@ -8,6 +8,7 @@
 #include "terrain.h"
 #include "unit_sprite_binding.h"
 #include "unit_task.h"
+#include "building_update.h"
 
 /* Every callback context is the AoeWorldCombatRor. */
 static AoeWorldMotionRor *motion_of(void *c) {
@@ -71,7 +72,8 @@ AoeWorldCombatUnitRor *aoe_world_combat_unit_ror(AoeWorldCombatRor *c,
     s->unit_actions.ops.context = c;
     s->unit_actions.ops.destroy = head_destroy;
     s->unit_actions.ops.set_state = head_activate;
-    if (!unit->derived_action_list)
+    if (!unit->derived_action_list &&
+        !(unit->core.unit_template && unit->core.unit_template->type == 80))
         unit->derived_action_list = &s->unit_actions;
     s->sub_actions.owner_state = &unit->core.state;
     s->sub_actions.ops.context = c;
@@ -688,6 +690,9 @@ void aoe_world_combat_destroy_ror(AoeWorldCombatRor *c) {
         for (size_t i = 0; i < AOE_WORLD_MOTION_ID_SLOTS; ++i)
             if (c->units[i]) {
                 AoeWorldCombatUnitRor *s = c->units[i];
+                if (s->unit && s->unit->building_update == &s->building_storage)
+                    (void)aoe_live_unit_unbind_building_update_ror(
+                        s->unit, NULL, NULL, NULL);
                 aoe_action_list_clear(&s->sub_actions);
                 aoe_action_list_clear(&s->unit_actions);
                 if (s->unit && s->unit->derived_action_list == &s->unit_actions)
@@ -919,6 +924,154 @@ int aoe_world_combat_gather_ror(AoeWorldCombatRor *c, AoeLiveUnit *unit,
     return aoe_gather_action_activate_ror(&s->gather, 1, &o);
 }
 
+/* Build action bindings. */
+static int wall_at(void *c, AoeLiveUnit *u, int32_t x, int32_t y) {
+    AoeLiveUnit *units[64];
+    size_t n = tile_units(c, x, y, units, 64);
+    for (size_t i = 0; i < n; ++i)
+        if (units[i]->runtime_owner_index == u->runtime_owner_index &&
+            units[i]->core.unit_template &&
+            units[i]->core.unit_template->unit_class == 0x1b &&
+            units[i]->core.state <= 2)
+            return 1;
+    return 0;
+}
+static void list_destroy_noop(void *c, void *a) { (void)c; (void)a; }
+static void list_activate_noop(void *c, void *a, uint8_t s) {
+    (void)c; (void)a; (void)s;
+}
+static int bind_building(AoeWorldCombatRor *w, AoeLiveUnit *t) {
+    AoeWorldCombatUnitRor *s;
+    AoeScenarioRuntimePlayerRor *p;
+    AoeActionListOps lo = {w, list_destroy_noop, list_activate_noop};
+    if (t->building_update) return 1;
+    if (!(s = aoe_world_combat_unit_ror(w, t)) || !(p = player_of(w, t)))
+        return 0;
+    if (t->derived_action_list == &s->unit_actions)
+        t->derived_action_list = NULL;
+    return aoe_live_unit_bind_building_update_ror(
+        t, &s->building_storage, &s->building_live, lo, &s->building_queue,
+        lo, p->resources, t->runtime_owner_index, 0);
+}
+static void no_unit_hook(void *c, AoeLiveUnit *u) { (void)c; (void)u; }
+static void no_local(void *c, AoeLiveUnit *u, int v) { (void)c; (void)u; (void)v; }
+static void disappear(void *c, AoeLiveUnit *u) {
+    (void)c;
+    u->core.hit_points = 0.0f;
+}
+typedef struct {
+    AoeWorldCombatRor *combat;
+} BuildStateContext;
+static int building_set_state(void *opaque, AoeLiveUnit *t, uint8_t state) {
+    AoeWorldCombatRor *w = ((BuildStateContext *)opaque)->combat;
+    AoeScenarioRuntimeRor *r = w->motion->runtime;
+    AoeScenarioRuntimePlayerRor *p = player_of(w, t);
+    AoeBuildingCompletionVisualRuntimeOps visual;
+    AoeBuildingCompletionWorldRuntimeOps world;
+    if (!p || state != 2) return 0;
+    memset(&visual, 0, sizeof(visual));
+    visual.context = w;
+    visual.rng = &r->rng;
+    visual.graphics = r->graphics;
+    visual.vision = &p->vision_binding;
+    visual.local_completion = no_local;
+    visual.building_pre_complete = no_unit_hook;
+    visual.complete_adjacent = no_unit_hook;
+    visual.disappear = disappear;
+    if (!aoe_scenario_runtime_building_completion_world_ops_ror(r, NULL, NULL,
+                                                                &world))
+        return 0;
+    if (!aoe_live_unit_scenario_building_complete_ror(
+            t, &visual, &world, &p->resources, &p->owner, &r->world,
+            &p->vision_binding))
+        return 0;
+    ++w->completions;
+    return 1;
+}
+static int add_build_work(void *c, AoeLiveUnit *t, float amount,
+                          int *completed) {
+    BuildStateContext sc = {c};
+    AoeLiveUnitSetStateOps so = {&sc, building_set_state};
+    if (!t->core.unit_template || t->core.unit_template->type != 80 ||
+        !bind_building(c, t))
+        return 0;
+    return aoe_live_unit_add_build_work_ror(t, amount, &so, completed);
+}
+static void reset_group_cb(void *c, AoeLiveUnit *u) {
+    (void)aoe_live_unit_reset_group_ror(u, owner_kind_cb(c, u));
+}
+static void request_repair(void *c, AoeLiveUnit *u, AoeLiveUnit *t) {
+    (void)u; (void)t;
+    ++((AoeWorldCombatRor *)c)->repairs;
+}
+int aoe_world_combat_order_ror(AoeWorldCombatRor *c, AoeLiveUnit *u,
+                               AoeLiveUnit *t, float x, float y, float z,
+                               int16_t *code);
+static void order_onto(void *c, AoeLiveUnit *u, AoeLiveUnit *t) {
+    int16_t code = -1;
+    (void)aoe_world_combat_order_ror(c, u, t, t->core.position.x38,
+                                     t->core.position.y3c, 0.0f, &code);
+}
+static int build_start_move(void *c, AoeBuildActionRor *a, AoeLiveUnit *t,
+                            float range, const void *graphic,
+                            int quiet_first) {
+    AoeWorldCombatRor *w = c;
+    AoeWorldCombatUnitRor *s = aoe_world_combat_unit_ror(w, a->base.unit);
+    AoeMoveActionOps o;
+    AoeMoveActionRor *mv;
+    const DatUnit *tt = a->base.unit->core.unit_template;
+    int ok;
+    if (!s) return 0;
+    mv = calloc(1, sizeof(*mv));
+    if (!mv) return 0;
+    move_ops(w, &o);
+    ok = t ? aoe_move_action_init_target_ror(
+                 mv, a->base.unit, t, range, graphic,
+                 graphic_by_id(w, tt->walking_graphic), &o)
+           : aoe_move_action_init_point_ror(
+                 mv, a->base.unit, a->base.x, a->base.y, a->base.z, range,
+                 graphic, graphic_by_id(w, tt->walking_graphic));
+    if (!ok) {
+        free(mv);
+        return 0;
+    }
+    if (quiet_first) mv->quiet = 1;
+    if (!aoe_action_list_push(&s->sub_actions, mv)) {
+        free(mv);
+        return 0;
+    }
+    mv->quiet = 1;
+    return 1;
+}
+static uint8_t build_sub_update(void *c, AoeBuildActionRor *a) {
+    AoeWorldCombatUnitRor *s = aoe_world_combat_unit_ror(c, a->base.unit);
+    AoeActionTickOps t = {c, update_head, update_waiting};
+    uint8_t r = 0;
+    if (!s || !aoe_action_list_update_ror(&s->sub_actions, &t, &r)) return 0;
+    return r;
+}
+static void build_sub_clear(void *c, AoeBuildActionRor *a) {
+    AoeWorldCombatUnitRor *s = aoe_world_combat_unit_ror(c, a->base.unit);
+    if (s) (void)aoe_action_list_clear(&s->sub_actions);
+}
+static void build_ops(AoeWorldCombatRor *c, AoeBuildActionOps *o) {
+    memset(o, 0, sizeof(*o));
+    move_ops(c, &o->move);
+    o->graphic = graphic_id_cb;
+    o->tick_seconds = tick_seconds;
+    o->owner_kind = owner_kind_cb;
+    o->face = face_target;
+    o->wall_at = wall_at;
+    o->add_build_work = add_build_work;
+    o->reset_group = reset_group_cb;
+    o->request_repair = request_repair;
+    o->order_onto = order_onto;
+    o->play_sound = play_sound_cb;
+    o->start_move = build_start_move;
+    o->sub_update = build_sub_update;
+    o->sub_clear = build_sub_clear;
+}
+
 /* 0x004aa160 bound to the runtime. */
 int aoe_world_combat_change_template_ror(AoeWorldCombatRor *c,
                                          AoeLiveUnit *u, const DatUnit *t) {
@@ -980,11 +1133,17 @@ static void order_change_template(void *c, AoeLiveUnit *u, const DatUnit *t) {
 static const DatUnitTask *order_action_task(void *c, void *action) {
     AoeWorldCombatUnitRor *s = action;
     (void)c;
-    return s->gathering ? s->gather.task : NULL;
+    return s->constructing ? s->build.task
+                           : s->gathering ? s->gather.task : NULL;
 }
 static int order_action_retarget(void *c, void *action, AoeLiveUnit *t,
                                  float x, float y, float z) {
     AoeWorldCombatUnitRor *s = action;
+    if (s->constructing) {
+        AoeBuildActionOps o;
+        build_ops(c, &o);
+        return aoe_build_action_retarget_ror(&s->build, t, x, y, z, &o);
+    }
     if (s->gathering) {
         AoeGatherActionOps o;
         gather_ops(c, &o);
@@ -1000,14 +1159,17 @@ static int order_action_retarget(void *c, void *action, AoeLiveUnit *t,
 static int16_t order_action_type(void *c, void *action) {
     AoeWorldCombatUnitRor *s = action;
     (void)c;
+    if (s->pending == 0x65) return s->build.base.type;
     if (s->pending == 5) return s->gather.base.type;
     if (s->pending == 9) return s->attack.base.type;
+    if (s->constructing) return s->build.base.type;
     return s->gathering ? s->gather.base.type
                         : s->attacking ? s->attack.base.type : -1;
 }
 static AoeLiveUnit *order_action_target(void *c, void *action) {
     AoeWorldCombatUnitRor *s = action;
     (void)c;
+    if (s->constructing) return s->build.base.target;
     return s->gathering ? s->gather.base.target
                         : s->attacking ? s->attack.base.target : NULL;
 }
@@ -1037,6 +1199,18 @@ static void *order_construct(void *c, AoeLiveUnit *u,
     AoeWorldCombatUnitRor *s = aoe_world_combat_unit_ror(w, u);
     if (!s) return NULL;
     switch (route->constructor) {
+    case 0x004b13c0: case 0x004b1450: {
+        AoeBuildActionOps o;
+        build_ops(w, &o);
+        if (route->constructor == 0x004b13c0
+                ? !t || !aoe_build_action_init_target_ror(&s->build, u, task,
+                                                          t, &o)
+                : !aoe_build_action_init_point_ror(&s->build, u, task, x, y,
+                                                   z))
+            return NULL;
+        s->pending = 0x65;
+        return s;
+    }
     case 0x00402ef0: case 0x00402f80: {
         AoeGatherActionOps o;
         gather_ops(w, &o);
@@ -1074,16 +1248,22 @@ static void order_adopt(void *c, AoeLiveUnit *u, void *action) {
     if (u->derived_action_list == &s->unit_actions &&
         (!s->unit_actions.head || s->unit_actions.head->action != s))
         (void)aoe_action_list_push(&s->unit_actions, s);
-    if (s->pending == 5) {
+    if (s->pending == 0x65) {
+        AoeBuildActionOps o;
+        build_ops(c, &o);
+        s->attacking = s->gathering = 0;
+        s->constructing = 1;
+        (void)aoe_build_action_activate_ror(&s->build, 1, &o);
+    } else if (s->pending == 5) {
         AoeGatherActionOps o;
         gather_ops(c, &o);
-        s->attacking = 0;
+        s->attacking = s->constructing = 0;
         s->gathering = 1;
         (void)aoe_gather_action_activate_ror(&s->gather, 1, &o);
     } else if (s->pending == 9) {
         AoeAttackActionOps o;
         attack_ops(c, &o);
-        s->gathering = 0;
+        s->gathering = s->constructing = 0;
         s->attacking = 1;
         (void)aoe_attack_action_activate_ror(&s->attack, &o);
     }
@@ -1151,6 +1331,12 @@ static int active_update(void *opaque, AoeLiveUnit *u) {
         AoeProjectileOps po;
         projectile_ops(sc->combat, &po);
         return aoe_projectile_update_ror(&sc->flight->flight, &po) >= 0;
+    }
+    if (sc->state && sc->state->constructing) {
+        AoeBuildActionOps bo;
+        build_ops(sc->combat, &bo);
+        return aoe_build_action_update_ror(&sc->state->build, &bo,
+                                           sc->result);
     }
     if (sc->state && sc->state->gathering) {
         AoeGatherActionOps go;
@@ -1242,7 +1428,7 @@ int aoe_world_combat_tick_ror(AoeWorldCombatRor *c, AoeLiveUnit *attacker,
     AoeWorldCombatUnitRor *s;
     if (!c || !attacker || !result ||
         !(s = aoe_world_combat_unit_ror(c, attacker)) ||
-        (!s->attacking && !s->gathering))
+        (!s->attacking && !s->gathering && !s->constructing))
         return 0;
     *result = 0;
     c->tick = tick;

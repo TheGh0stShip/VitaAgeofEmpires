@@ -565,6 +565,16 @@ typedef struct {
     AoeLiveUnitRootStateOps root_state;
 } AoeBuildingStateTwoRuntimeOps;
 
+/* Requested-state-2 completion of a type-80 foundation (patched setter
+   0x004acbf0) on the owned scenario runtime: the translated visual and
+   world continuations with the root setter tail composed like
+   aoe_live_unit_scenario_state_set_ror. */
+int aoe_live_unit_scenario_building_complete_ror(
+    AoeLiveUnit *unit, const AoeBuildingCompletionVisualRuntimeOps *visual,
+    const AoeBuildingCompletionWorldRuntimeOps *world_ops,
+    AoePlayerResources *owner_resources, AoePlayerUpdateState *owner,
+    AoeOwnedVisibilityRegistry *world, AoeLiveUnitVisionBinding *vision);
+
 /* Full state-2 composition using translated vision and owned sprite state for
    the common completion virtuals and the derived-player owner finalizer. */
 int aoe_live_unit_building_state_two_runtime_ror(

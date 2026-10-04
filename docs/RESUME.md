@@ -155,11 +155,15 @@ The unit movement system is now translated in `src/movement.c`:
 
 The fit check `0x0045a4f0` and the unit footprint restore/lift
 `0x004ab6e0/0x004ab7f0` are also translated (`src/pathfinder_search.c`).
+These are bound into a live world (`src/world_motion.c`,
+`src/world_combat.c`). Gather 5, attack 9, projectiles and build 0x65 are
+translated and pass real-map regressions on EXPANS_1_1. The build test
+exposed a movement translation bug: the overshoot snap at `0x0044d8af`
+compares against the float 0.25, not distance 0.
 Next:
-1. Bind these into the move action's movement interface and a live world.
-2. Translate the remaining callbacks: vtables `+0x1c0`/`+0x1c4`
-   (intermediate waypoints) and zone lookup `0x004ab9e0`.
-3. Translate gather 5, attack 7 and build 0x65.
+1. A player update loop that ticks every unit together.
+2. Replace placeholder bindings (diplomacy, zones, sounds).
+3. The remaining action classes.
 
 Validating against original-game traces remains outstanding. Note `0x00403e70` is the base list's
 stream loader (slot 0), not the order path.

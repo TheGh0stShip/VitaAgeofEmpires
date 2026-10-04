@@ -780,10 +780,9 @@ int32_t aoe_movement_step_to_ror(AoeLiveUnit *unit, AoeMovementRor *m,
         double d_next = sqrt(ndy * ndy + (double)ndx * ndx);
         int snap = 0;
         d_now = (float)sqrt(wdy * wdy + (double)dxf * dxf);
-        /* Overshooting: the 0x00544a78 constant is a denormal double
-           (float bits of 0.25 in its low word), so "d_now < it" means
-           d_now <= 0 for any float. */
-        if (d_next > m->best && !(d_now > 0.0f))
+        /* Overshooting within a quarter tile: 0x0044d8af compares
+           against 0x00544a78 as a float (0.25). */
+        if (d_next > m->best && d_now < 0.25f)
             snap = 1;
         else if (m->facet_history[1] == unit->core.scenario_frame &&
                  m->facet_history[1] != m->facet_history[0] &&

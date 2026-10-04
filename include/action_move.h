@@ -44,7 +44,8 @@ typedef struct {
     /* Movement system of the unit. */
     void (*set_destination)(void *context, AoeLiveUnit *unit, float x,
                             float y);          /* 0x0044be90(x, y, 1.0f) */
-    int (*explores)(void *context, AoeLiveUnit *unit); /* byte +0x174 */
+    /* Byte +0x174 (aoe_movement_record_waypoint_ror composes the pair). */
+    int (*waypoints_stale)(void *context, AoeLiveUnit *unit);
     /* +0x1bc(tile, 0) then 0x0044edd0, when +0x174 is clear. */
     void (*record_tile)(void *context, AoeLiveUnit *unit,
                         const uint8_t tile[3]);

@@ -207,6 +207,17 @@ int main(void) {
                w.waypoint_tile[0] == 9 && w.waypoint_capacity == 10);
         aoe_movement_waypoint_clear_ror(&w, 0, count_clear, &cleared);
         assert(!w.waypoint_count && cleared == 1);
+        /* The move action's record step appends once, then marks stale so
+           the next append starts a fresh list. */
+        {
+            uint8_t t1[3] = {4, 5, 0}, t2[3] = {6, 7, 0};
+            assert(aoe_movement_record_waypoint_ror(&w, t1) &&
+                   w.waypoint_count == 1 && w.waypoints_stale);
+            assert(aoe_movement_record_waypoint_ror(&w, t2) &&
+                   w.waypoint_count == 1 && w.waypoint_tile[0] == 4);
+            assert(aoe_movement_waypoint_append_ror(&w, t2, 0, NULL, NULL) &&
+                   w.waypoint_count == 1 && w.waypoint_tile[0] == 6);
+        }
         aoe_movement_waypoint_free_ror(&w);
     }
     return 0;

@@ -139,7 +139,7 @@ int aoe_move_action_update_ror(AoeMoveActionRor *a,
                                const AoeMoveActionOps *ops, uint8_t *result) {
     if (!a || !result || !ops || !ops->resolve || !ops->clear_secondary ||
         !ops->unit_notice || !ops->in_range || !ops->order_flag ||
-        !ops->set_destination || !ops->explores || !ops->record_tile ||
+        !ops->set_destination || !ops->waypoints_stale || !ops->record_tile ||
         !ops->set_range || !ops->set_target_id || !ops->set_target_size ||
         !ops->start || !ops->status)
         return 0;
@@ -175,7 +175,7 @@ int aoe_move_action_update_ror(AoeMoveActionRor *a,
         tile[0] = (uint8_t)aoe_ftol32(a->x);
         tile[1] = (uint8_t)aoe_ftol32(a->y);
         tile[2] = (uint8_t)aoe_ftol32(a->z);
-        if (!ops->explores(ops->context, a->unit))
+        if (!ops->waypoints_stale(ops->context, a->unit))
             ops->record_tile(ops->context, a->unit, tile);
         ops->set_range(ops->context, a->unit, a->range);
         if (a->target) {

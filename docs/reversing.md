@@ -1320,11 +1320,12 @@ The movement update `0x0044c2d0` (RoR 1.0a) runs once per tick:
 - `aoe_movement_update_ror` translates this, with `0x0044cde0` as a callback,
   and `tests/movement_update_test.c` covers it.
 
-The intermediate waypoint list lives in live vtable slots `+0x1b0..+0x1c4`
+The intermediate waypoint list lives in live vtable slots `+0x1b8..+0x1c4`
 (base `0x00542748`, shared by six moving-unit vtables):
 - **Entries.** Each entry is 3 bytes at `+0x168`, with count `+0x16c` and
   capacity `+0x170`.
-- **Append** `0x0044eb70` first clears the list when `+0x174` is set.
+- **Get** `0x0044eb40` (`+0x1b8`) returns entry i.
+- **Append** `0x0044eb70` (`+0x1bc`) first clears the list when `+0x174` is set.
   `0x0044edd0` sets that byte; an earlier note mislabelled it "explored".
   Storage grows to 5 entries and then doubles, with zero fill.
 - **Clear** `0x0044ed20` (`+0x1c0`) zeroes the count. With argument 1 it

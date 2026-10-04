@@ -106,6 +106,15 @@ void aoe_movement_waypoint_remove_ror(AoeMovementRor *m, int32_t index) {
     --m->waypoint_count;
 }
 
+int aoe_movement_record_waypoint_ror(AoeMovementRor *m,
+                                     const uint8_t tile[3]) {
+    if (!m || !tile) return 0;
+    if (m->waypoints_stale) return 1;
+    if (!aoe_movement_waypoint_append_ror(m, tile, 0, NULL, NULL)) return 0;
+    aoe_movement_mark_waypoints_stale_ror(m);
+    return 1;
+}
+
 void aoe_movement_waypoint_free_ror(AoeMovementRor *m) {
     if (!m) return;
     free(m->waypoint_tile);

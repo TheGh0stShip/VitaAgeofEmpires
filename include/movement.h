@@ -58,14 +58,14 @@ void aoe_movement_set_target_id_ror(AoeMovementRor *m, int32_t id);
 void aoe_movement_set_target_size_ror(AoeMovementRor *m, float x, float y);
 void aoe_movement_mark_waypoints_stale_ror(AoeMovementRor *m);
 
-/* Intermediate waypoint list (live vtable +0x1b0..+0x1c4):
-   - get 0x0044eb40: entry i or NULL;
-   - append 0x0044eb70: clears a stale list first (passing `clear_arg`),
+/* Intermediate waypoint list (live vtable +0x1b8..+0x1c4):
+   - get 0x0044eb40 (+0x1b8): entry i or NULL;
+   - append 0x0044eb70 (+0x1bc): clears a stale list first (passing `clear_arg`),
      then stores the 3-byte entry, growing storage to 5 entries and then
      doubling with zero fill; returns 0 on allocation failure;
-   - clear 0x0044ed20: count 0; with arg 1 the original also calls unit
+   - clear 0x0044ed20 (+0x1c0): count 0; with arg 1 the original also calls unit
      +0x74's vtable +0x58(0), which is the caller's `on_clear` hook here;
-   - remove 0x0044ed50: shifts entries from max(index, ...) down by one, so
+   - remove 0x0044ed50 (+0x1c4): shifts entries from max(index, ...) down by one, so
      index 0 drops entry 0 but index k > 0 drops entry k - 1; out-of-range
      indexes do nothing. */
 const uint8_t *aoe_movement_waypoint_get_ror(const AoeMovementRor *m,
@@ -80,6 +80,12 @@ void aoe_movement_waypoint_clear_ror(AoeMovementRor *m, int32_t arg,
                                      void *context);
 void aoe_movement_waypoint_remove_ror(AoeMovementRor *m, int32_t index);
 void aoe_movement_waypoint_free_ror(AoeMovementRor *m);
+
+/* The move action's record step (0x00405500): unless the list is stale,
+   append the tile (+0x1bc(tile, 0)) and mark it stale (0x0044edd0).
+   Returns 0 on allocation failure. */
+int aoe_movement_record_waypoint_ror(AoeMovementRor *m,
+                                     const uint8_t tile[3]);
 
 /* Path cursor helpers: 0x00458440 reset, 0x00458450 advance (cursor +1
    while below count - 1, else clamps and returns 0), 0x004583d0 current

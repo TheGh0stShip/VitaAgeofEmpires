@@ -57,7 +57,7 @@ static void dest(void *c, AoeLiveUnit *u, float x, float y) {
     snprintf(s, sizeof(s), "d%g,%g ", x, y);
     mark(s);
 }
-static int explores(void *c, AoeLiveUnit *u) { (void)c; (void)u; return 0; }
+static int waypoints_stale(void *c, AoeLiveUnit *u) { (void)c; (void)u; return 0; }
 static void tile(void *c, AoeLiveUnit *u, const uint8_t t[3]) {
     char s[32];
     (void)c; (void)u;
@@ -78,7 +78,7 @@ static int status(void *c, AoeLiveUnit *u) { (void)c; (void)u; return status_now
 int main(void) {
     AoeMoveActionOps ops = {0, resolve, released, attached, clear2, notice,
                             graphic, stand, range, speed, flag, dest,
-                            explores, tile, set_range, tid, tsize, start,
+                            waypoints_stale, tile, set_range, tid, tsize, start,
                             status};
     AoeMoveActionRor a;
     uint8_t r;

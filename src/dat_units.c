@@ -234,7 +234,15 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
         unit->displayed_range = f32(cursor);
         unit->displayed_reload_time = f32(cursor);
     }
-    if (unit->type == 60) take(cursor, 9); /* packed missile properties */
+    if (unit->type == 60) {
+        /* Type-60 loader 0x00440530: bytes +0x148..+0x14c, float +0x150. */
+        p = take(cursor, 5);
+        if (!p) return 0;
+        unit->projectile_flight_mode = p[0];
+        unit->projectile_lead = p[1];
+        unit->projectile_hit_mode = p[2];
+        unit->projectile_arc = f32(cursor);
+    }
     if (unit->type >= 70) {
         for (unsigned i = 0; i < 3; ++i) {
             unit->costs[i].resource_type = (int16_t)u16(cursor);

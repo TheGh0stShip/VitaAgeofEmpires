@@ -1463,6 +1463,38 @@ Combat core (RoR 1.0a; type-50 vtable `0x0054324c`, tribe `0x00547fa0`):
   their target's z.
 - `src/combat.c` translates these, and `tests/combat_test.c` covers them.
 
+Projectiles (RoR 1.0a). The fire methods create the projectile unit and
+call `0x00449070` (target) or `0x00449120` (point). That pushes a type-8
+flight action (vtable `0x0054267c`, constructor `0x00404990`, 0x54 bytes)
+holding the aim point, the target and the launcher (secondary setter
+`0x004073f0`), and stores the launch radius at projectile `+0x1bc`. Type-60
+template fields come from loader `0x00440530`: flight mode `+0x148`, lead
+`+0x149`, hit mode `+0x14a` and arc `+0x150`.
+- **Activate** `0x00404a10` aims (3) unless it has no target and its point is marked
+  -1.0.
+- **Aiming** (state 3, `0x00404ab0`):
+  - It targets the target's centre height.
+  - With lead == 1 it leads a moving target by
+    `t = d / (d − d' + speed)` when the denominator exceeds speed / 2.
+    Launcher IDs 35/36/280 cap the target speed at 1.0.
+  - Mode 0 stores the unit direction and mode 3 the whole offset. Modes 1
+    and 2 do not move.
+  - A positive arc sets gravity `−2·d·arc/(t/2)²` and climb `2·d·arc/(t/2)`
+    with `t = d / speed`.
+- **Update** `0x00404db0`:
+  - It drops a vanished or dying target. When the launcher dies it first
+    captures the launcher's attack data (`0x004495b0`).
+  - Mode 0 moves `tick·speed` along the direction and expires at the
+    launch radius. Mode 3 moves the full offset and strikes the target.
+  - The overlap query `0x00449280` scans ±3 tiles for units whose
+    footprints (plus the step) and heights (±0.1) overlap. Hit mode 0
+    strikes only the target, 1 strikes foreign non-Gaia units, and 2
+    strikes anything but the launcher, blasting at own or Gaia units.
+  - The live launcher strikes (`+0x22c` / `+0x220`), otherwise the
+    projectile itself. A landed projectile blasts and stops.
+- `src/projectile.c` translates this, and `tests/projectile_test.c`
+  covers it.
+
 The pathfinder (vtable `0x00544cf0`, constructor `0x00458570`) works on
 255 x 255 grids (bytes at `+0x10de28`, dwords at `+0xce624`, indexed
 `[first*255 + second]`). Its distance table `0x006a18c0` holds

@@ -304,6 +304,11 @@ typedef struct {
     /* Original template +0x114, +0x118, +0x120 and +0x138. */
     float max_range, blast_width, reload_time, min_range;
     float projectile_offset[3]; /* +0x12c/+0x130/+0x134 */
+    /* Type 60 (0x00404ab0/0x00404db0): flight mode +0x148 (0 directed,
+       1/2 stationary, 3 instant), target leading +0x149, hit mode +0x14a
+       and arc +0x150. */
+    uint8_t projectile_flight_mode, projectile_lead, projectile_hit_mode;
+    float projectile_arc;
     int16_t displayed_melee_armor, displayed_attack;
     float displayed_range, displayed_reload_time;
     DatUnitCost costs[3];

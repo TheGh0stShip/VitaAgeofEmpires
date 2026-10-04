@@ -847,8 +847,8 @@ static void deposit_cb(void *c, AoeLiveUnit *u, int16_t type, float amount) {
 /* Farm action bindings: player +0x78(type, amount, 0); the 0x7e event is
    counted; +0x6c drops the hit points to 0 (0x004aa320 also wakes the
    unit, which every type-80 unit already is). */
-static void farm_deposit(void *c, AoeLiveUnit *u, int16_t type,
-                         float amount) {
+/* Owner player +0x78(type, amount, 0). */
+static void owner_add(void *c, AoeLiveUnit *u, int16_t type, float amount) {
     AoeWorldCombatRor *w = c;
     AoeScenarioRuntimePlayerRor *p = player_of(c, u);
     AoePlayerResourceTargetRor target;
@@ -872,7 +872,7 @@ static void farm_ops(AoeWorldCombatRor *c, AoeFarmActionOps *o) {
     o->context = c;
     o->tick_seconds = tick_seconds;
     o->player_attribute = player_attribute;
-    o->deposit = farm_deposit;
+    o->deposit = owner_add;
     o->notify_depleted = farm_depleted;
     o->destroy = farm_destroy;
 }
@@ -1062,6 +1062,11 @@ static void disappear(void *c, AoeLiveUnit *u) {
 typedef struct {
     AoeWorldCombatRor *combat;
 } BuildStateContext;
+/* +0x260 = 0x004acaf0: storage entries of mode >= 4 reach the owner. */
+static void owner_add(void *c, AoeLiveUnit *u, int16_t type, float amount);
+static void storage_complete(void *c, AoeLiveUnit *u) {
+    (void)aoe_live_unit_building_storage_ror(u, 1, owner_add, c);
+}
 static int building_set_state(void *opaque, AoeLiveUnit *t, uint8_t state) {
     AoeWorldCombatRor *w = ((BuildStateContext *)opaque)->combat;
     AoeScenarioRuntimeRor *r = w->motion->runtime;
@@ -1075,7 +1080,7 @@ static int building_set_state(void *opaque, AoeLiveUnit *t, uint8_t state) {
     visual.graphics = r->graphics;
     visual.vision = &p->vision_binding;
     visual.local_completion = no_local;
-    visual.building_pre_complete = no_unit_hook;
+    visual.building_pre_complete = storage_complete;
     visual.complete_adjacent = no_unit_hook;
     visual.disappear = disappear;
     if (!aoe_scenario_runtime_building_completion_world_ops_ror(r, NULL, NULL,
@@ -1536,11 +1541,68 @@ static uint8_t foreign_head(void *context, void *action) {
     return 0;
 }
 
+/* Type-80 setter bindings. The building manager (world +0x40) and owner
+   research removal are not modelled (counted); queue refunds and
+   cancellations are counted until production is bound. */
+static int no_manager(void *c, AoeLiveUnit *u) {
+    (void)c; (void)u;
+    return 1;
+}
+static int probe_template(void *c, AoeLiveUnit *u, int16_t id) {
+    AoeScenarioRuntimeRor *r = ((AoeWorldCombatRor *)c)->motion->runtime;
+    int16_t o = u->runtime_owner_index;
+    AoeScenarioRuntimePlayerRor *p = &r->players[o];
+    for (uint32_t i = 0; i < p->unit_count; ++i) {
+        AoeLiveUnit *x = &p->units[i];
+        if (x->constructed && x->core.state == 2 && x->core.unit_template &&
+            x->core.unit_template->id == id)
+            return 1;
+    }
+    for (size_t i = 0; i < r->editor_unit_count; ++i) {
+        AoeLiveUnit *x = r->editor_units[i];
+        if (x && x->constructed && x->runtime_owner_index == o &&
+            x->core.state == 2 && x->core.unit_template &&
+            x->core.unit_template->id == id)
+            return 1;
+    }
+    return 0;
+}
+static void remove_research(void *c, AoeLiveUnit *u, int16_t id) {
+    (void)u; (void)id;
+    ++((AoeWorldCombatRor *)c)->research_removals;
+}
+static void refund_one(void *c, int16_t unit_id) {
+    (void)unit_id;
+    ++((AoeWorldCombatRor *)c)->queue_refunds;
+}
+static void cancel_action(void *c, void *action) { (void)c; (void)action; }
+static void queue_notify(void *c, uint32_t e, int16_t o, uint32_t r) {
+    (void)c; (void)e; (void)o; (void)r;
+}
+
 static int set_state(void *opaque, AoeLiveUnit *u, uint8_t state) {
     AoeWorldCombatRor *c = opaque;
     AoeScenarioRuntimeRor *r = c->motion->runtime;
     int16_t o = u->runtime_owner_index;
     if (o < 0 || o >= AOE_SCENARIO_RUNTIME_PLAYERS) return 0;
+    if (u->core.unit_template->type == 80) {
+        AoeBuildingSetterRuntimeOps bo;
+        BuildStateContext sc = {c};
+        if (!bind_building(c, u)) return 0;
+        if (state == 2) return building_set_state(&sc, u, 2);
+        bo.context = c;
+        bo.storage_add = owner_add;
+        bo.remove_building_manager = no_manager;
+        bo.completion_probe = probe_template;
+        bo.remove_research = remove_research;
+        bo.owner_status_four_count = &c->queue_status_four[o];
+        bo.queue_cancel = (AoeBuildingQueueCancelOps){c, refund_one,
+                                                      cancel_action,
+                                                      queue_notify};
+        return aoe_live_unit_scenario_building_state_set_ror(
+            u, state, &r->players[o].resources, &r->players[o].owner,
+            &r->world, &r->players[o].vision_binding, &bo);
+    }
     return aoe_live_unit_scenario_state_set_ror(
         u, state, &r->players[o].resources, &r->players[o].owner, &r->world,
         &r->players[o].vision_binding);

@@ -99,7 +99,7 @@ typedef struct AoeWorldCombatRor {
        updates, are counted only; list objects that are not runtime units
        are counted and skipped. */
     uint32_t default_tasks, attached_updates, foreign_objects, removed,
-        farms_depleted;
+        farms_depleted, research_removals, queue_refunds;
     /* Empty outcome managers for players without one (no victory
        conditions are loaded yet) and the type-80 status-4 counters
        (global +0xa34). */

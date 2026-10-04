@@ -427,6 +427,46 @@ int aoe_live_unit_target_release_ror(AoeLiveUnit *unit,
                                      AoeOwnedVisibilityRegistry *world,
                                      int *notice);
 
+/* Type-80 storage effects over template +0x6a/+0x70/+0x88: entries with
+   mode >= 4 and type >= 0 call owner +0x78(type, sign x amount, 0) -
+   +0x260 = 0x004acaf0 on completion (+1) and +0x25c = 0x004aca90 when a
+   finished building starts dying (-1), e.g. a house's population room. */
+int aoe_live_unit_building_storage_ror(
+    AoeLiveUnit *unit, int sign,
+    void (*add)(void *context, AoeLiveUnit *unit, int16_t type,
+                float amount),
+    void *context);
+
+typedef struct {
+    void *context;
+    /* Owner player +0x78(type, amount, 0). */
+    void (*storage_add)(void *context, AoeLiveUnit *unit, int16_t type,
+                        float amount);
+    /* World +0x40 0x00436980; clears semantic +0x1e0. */
+    int (*remove_building_manager)(void *context, AoeLiveUnit *unit);
+    /* Owner list +0x28 0x00451370(template ID, -1, -1, 1, 2, 0): another
+       state-2 unit of the template remains. */
+    int (*completion_probe)(void *context, AoeLiveUnit *unit,
+                            int16_t template_id);
+    /* Owner +0x224 0x004ea9e4(research ID). */
+    void (*remove_research)(void *context, AoeLiveUnit *unit,
+                            int16_t research_id);
+    uint32_t *owner_status_four_count; /* global +0xa34 + 4 x owner */
+    AoeBuildingQueueCancelOps queue_cancel;
+} AoeBuildingSetterRuntimeOps;
+
+/* Type-80 setter 0x004acbf0 for every requested state but 2 (completion,
+   see aoe_live_unit_scenario_building_complete_ror) on the owned scenario
+   runtime. 3 from 2 runs the state-three branch (+0x25c storage removal,
+   building-manager removal, queue cancellation, root setter, research
+   removal unless the probe finds another); any other state runs the queue
+   transition and the root setter. The building view's state follows. */
+int aoe_live_unit_scenario_building_state_set_ror(
+    AoeLiveUnit *unit, uint8_t new_state, AoePlayerResources *owner_resources,
+    AoePlayerUpdateState *owner, AoeOwnedVisibilityRegistry *world,
+    AoeLiveUnitVisionBinding *vision,
+    const AoeBuildingSetterRuntimeOps *ops);
+
 /* Source-backed composition of the common RoR constructor: initialize core
    fields/ID/storage, create a DAT sprite manager, select template +0x18's
    standing graphic, place on map with the +0xd8/+0xdc vision hooks, then use

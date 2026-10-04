@@ -1747,6 +1747,32 @@ Unit update chain and world loop (RoR 1.0a). Translated in
     and the victim;
   - no list object fails to resolve to a runtime unit.
 
+Type-80 setter and storage (RoR 1.0a; `0x004acbf0`). Bound on the runtime by
+`aoe_live_unit_scenario_building_state_set_ror` (every state but 2) and
+the existing completion composition (state 2).
+- **Dispatch:**
+  - requested 2 runs completion;
+  - requested 3 from 2 runs `+0x25c`, world `+0x40` `0x00436980`
+    (building manager), clears `+0x1e0`, then the queue branch and root
+    setter `0x004aa550`. If owner list `+0x28` `0x00451370(template ID,
+    -1, -1, 1, 2, 0)` finds no other state-2 unit of the template, it
+    removes research template `+0x178` and 0x4a/0x4b/0x4c (`0x004ea9e4`);
+  - anything else runs only the queue branch (new state >= 3, old >= 2,
+    queue non-empty) and the root setter.
+- **Storage.** `+0x260` (`0x004acaf0`, completion) and `+0x25c`
+  (`0x004aca90`, leaving state 2) walk template storage `+0x6a` (type),
+  `+0x70` (amount) and `+0x88` (mode). For mode >= 4 and type >= 0 they
+  call owner `+0x78(type, ±amount, 0)`. This is how a house adds and
+  withdraws population room. The world binding previously left `+0x260` a
+  no-op.
+- **Not modelled.** The building manager and the owner research table:
+  removals are counted. Queue refunds are counted until production is
+  bound.
+- **Regression.** On EXPANS_1_1, completing the house moves player 1's
+  resource 4 from -29 to -25 (+4). Destroying it during the world loop
+  restores -29, and the house enters its dying states without failing the
+  update.
+
 Farm action (RoR 1.0a; vtable `0x0054261c`, action type 0x15, 0x40 bytes;
 `src/action_farm.c`). A farm (template 50) builds it as its default task
 through constructor `0x00404750(unit, task)` (base `0x00406ea0(unit, 1)`).

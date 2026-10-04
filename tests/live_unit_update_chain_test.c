@@ -83,6 +83,39 @@ static int has_sprite(const AoeLiveUnit *u, const DatGraphic *g,
     }
 }
 
+/* Type-80 setter fixtures. */
+static float owner_values[8];
+static unsigned manager_calls, probe_calls, research_calls;
+static int16_t researched[8];
+static int probe_result;
+static void owner_add(void *c, AoeLiveUnit *u, int16_t type, float amount) {
+    (void)c; (void)u;
+    owner_values[type] += amount;
+}
+static int remove_manager(void *c, AoeLiveUnit *u) {
+    (void)c; (void)u;
+    ++manager_calls;
+    return 1;
+}
+static int probe(void *c, AoeLiveUnit *u, int16_t id) {
+    (void)c; (void)u; (void)id;
+    ++probe_calls;
+    return probe_result;
+}
+static void remove_research(void *c, AoeLiveUnit *u, int16_t id) {
+    (void)c; (void)u;
+    researched[research_calls++] = id;
+}
+static void refund(void *c, int16_t id) { (void)c; (void)id; }
+static void cancel(void *c, void *a) { (void)c; (void)a; }
+static void notify(void *c, uint32_t e, int16_t o, uint32_t r) {
+    (void)c; (void)e; (void)o; (void)r;
+}
+static void list_noop_destroy(void *c, void *a) { (void)c; (void)a; }
+static void list_noop_state(void *c, void *a, uint8_t s) {
+    (void)c; (void)a; (void)s;
+}
+
 static int list_count(const AoeActionList *l) {
     int n = 0;
     for (const AoeActionNode *x = l->head; x; x = x->next) ++n;
@@ -336,6 +369,51 @@ int main(void) {
         assert(aoe_live_unit_damage_graphics_ror(&b, &o));
         assert(b.core.damage_percent == 236 && selections == 2);
         aoe_live_unit_destroy_ror(&b, &owner, &world, &vision);
+    }
+    /* Type-80 storage (+0x260/+0x25c) and the 0x004acbf0 setter. */
+    {
+        DatUnit house = {.present = 1, .type = 80, .hit_points = 75,
+                         .standing_graphic = 0, .walking_graphic = -1,
+                         .default_task_id = -1, .building_research_id = 7};
+        AoeLiveUnit h = {0};
+        AoeBuildingUpdate storage;
+        AoeActionList live, queue;
+        AoeActionListOps lo = {NULL, list_noop_destroy, list_noop_state};
+        uint32_t status_four = 0;
+        AoeBuildingSetterRuntimeOps bo = {
+            NULL, owner_add, remove_manager, probe, remove_research,
+            &status_four, {NULL, refund, cancel, notify}};
+        house.storage[0] = (DatUnitStorage){4, 4.0f, 4};  /* mode 4 */
+        house.storage[1] = (DatUnitStorage){5, 9.0f, 1};  /* not >= 4 */
+        house.storage[2] = (DatUnitStorage){-1, 3.0f, 8}; /* no type */
+        assert(aoe_live_unit_construct_ror(&h, &house, &graphics,
+                                           &resource_state, &world, &owner,
+                                           terrain, tiles, &geometry, 4, 4,
+                                           &vision, &rng, 3.5f, 0.5f, 0.0f));
+        assert(aoe_live_unit_building_storage_ror(&h, 1, owner_add, NULL));
+        assert(owner_values[4] == 4.0f && owner_values[5] == 0.0f);
+        assert(aoe_live_unit_bind_building_update_ror(
+            &h, &storage, &live, lo, &queue, lo, resource_state, 0, 0));
+        /* State 2 is the completion branch, not this one. */
+        assert(!aoe_live_unit_scenario_building_state_set_ror(
+            &h, 2, &resource_state, &owner, &world, &vision, &bo));
+        /* 2 -> 3: storage withdrawn, manager removed, research 7 and
+           0x4a/0x4b/0x4c removed when the probe finds no other. */
+        assert(aoe_live_unit_scenario_building_state_set_ror(
+            &h, 3, &resource_state, &owner, &world, &vision, &bo));
+        assert(h.core.state == 3 && storage.state == 3 &&
+               owner_values[4] == 0.0f && manager_calls == 1 &&
+               probe_calls == 1 && research_calls == 4 &&
+               researched[0] == 7 && researched[1] == 0x4a &&
+               researched[3] == 0x4c);
+        /* Later states: queue transition and root setter only. */
+        assert(aoe_live_unit_scenario_building_state_set_ror(
+            &h, 5, &resource_state, &owner, &world, &vision, &bo));
+        assert(h.core.state == 5 && storage.state == 5 &&
+               manager_calls == 1 && probe_calls == 1);
+        assert(aoe_live_unit_unbind_building_update_ror(&h, &status_four,
+                                                        NULL, NULL));
+        aoe_live_unit_destroy_ror(&h, &owner, &world, &vision);
     }
     /* 0x00448cc0 with the fixture's 32/16 half tile. */
     {

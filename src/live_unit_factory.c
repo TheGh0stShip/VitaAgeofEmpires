@@ -1497,6 +1497,61 @@ int aoe_live_unit_scenario_building_complete_ror(
     return 1;
 }
 
+/* Root +0x5c ops over the owned scenario runtime. */
+static void scenario_root_state_ops(HighRootContext *context,
+                                    AoeLiveUnitRootStateOps *ops,
+                                    AoeLiveUnit *unit,
+                                    AoePlayerResources *owner_resources,
+                                    AoePlayerUpdateState *owner,
+                                    AoeOwnedVisibilityRegistry *world,
+                                    AoeLiveUnitVisionBinding *vision) {
+    const DatUnit *t = unit->core.unit_template;
+    int32_t tile_x, tile_y;
+    memset(context, 0, sizeof(*context));
+    context->live = unit;
+    context->owner = owner;
+    context->world = world;
+    context->vision = vision;
+    tile_x = (int32_t)unit->core.position.x38;
+    tile_y = (int32_t)unit->core.position.y3c;
+    if (tile_x >= 0 && tile_y >= 0 &&
+        (uint32_t)tile_x < vision->owner_grid->width &&
+        (uint32_t)tile_y < vision->owner_grid->height)
+        context->live_flags = &vision->owner_grid->tile_masks[
+            (size_t)tile_y * vision->owner_grid->width + (uint32_t)tile_x];
+    memset(ops, 0, sizeof(*ops));
+    ops->context = context;
+    ops->owner_resources = owner_resources;
+    ops->edition = AOE_PLAYER_RISE_OF_ROME;
+    ops->has_map_tile = unit->placement.tile != NULL;
+    ops->registration_node = (void **)&unit->owner_node;
+    ops->registration = (AoeLiveUnitRegistrationHooks){
+        context, high_remove, high_register};
+    ops->visibility_leave = high_visibility_leave;
+    ops->visibility_enter = high_visibility_enter;
+    /* The +0xa6 == 2 method and the pre-terminal +0x60 are bound only for
+       the zero high-mask case they translate; the root setter refuses a
+       transition that would reach either one unbound (leaving states 0..2
+       with mode 2, or going from below 4 to 7+ with a notify/effect mode).
+       Other transitions of such templates, e.g. a 0-hp shore fish dying
+       (2 -> 3) into its resource carcass, need neither. */
+    if (t->state_effect_mode == 2 && context->live_flags &&
+        (*context->live_flags >> 16) == 0) {
+        ops->mode_two_effect = high_mode_two_effect;
+        ops->pre_terminal = high_pre_terminal;
+    }
+}
+
+static int scenario_runtime_ok(const AoeLiveUnit *unit,
+                               const AoePlayerResources *owner_resources,
+                               const AoePlayerUpdateState *owner,
+                               const AoeOwnedVisibilityRegistry *world,
+                               const AoeLiveUnitVisionBinding *vision) {
+    return unit && unit->constructed && unit->core.unit_template &&
+           owner_resources && owner && world && vision &&
+           vision->owner_grid && vision->owner_grid->tile_masks;
+}
+
 int aoe_live_unit_scenario_state_set_ror(
     AoeLiveUnit *unit, uint8_t new_state, AoePlayerResources *owner_resources,
     AoePlayerUpdateState *owner, AoeOwnedVisibilityRegistry *world,
@@ -1504,11 +1559,9 @@ int aoe_live_unit_scenario_state_set_ror(
     HighRootContext context;
     AoeLiveUnitRootStateOps ops;
     const DatUnit *t;
-    int32_t tile_x, tile_y;
-    if (!unit || !unit->constructed || !(t = unit->core.unit_template) ||
-        !owner_resources || !owner || !world || !vision ||
-        !vision->owner_grid || !vision->owner_grid->tile_masks)
+    if (!scenario_runtime_ok(unit, owner_resources, owner, world, vision))
         return 0;
+    t = unit->core.unit_template;
     /* Type 80 has its own setter 0x004acbf0; type 70 diverts class-1
        units leaving the active states to untranslated 0x004aeed0 (world
        byte +0x1d is assumed clear). */
@@ -1516,42 +1569,91 @@ int aoe_live_unit_scenario_state_set_ror(
         (t->type == 70 && new_state >= 3 && unit->core.state <= 2 &&
          t->unit_class == 1))
         return 0;
-    memset(&context, 0, sizeof(context));
-    context.live = unit;
-    context.owner = owner;
-    context.world = world;
-    context.vision = vision;
-    tile_x = (int32_t)unit->core.position.x38;
-    tile_y = (int32_t)unit->core.position.y3c;
-    if (tile_x >= 0 && tile_y >= 0 &&
-        (uint32_t)tile_x < vision->owner_grid->width &&
-        (uint32_t)tile_y < vision->owner_grid->height)
-        context.live_flags = &vision->owner_grid->tile_masks[
-            (size_t)tile_y * vision->owner_grid->width + (uint32_t)tile_x];
-    memset(&ops, 0, sizeof(ops));
-    ops.context = &context;
-    ops.owner_resources = owner_resources;
-    ops.edition = AOE_PLAYER_RISE_OF_ROME;
-    ops.has_map_tile = unit->placement.tile != NULL;
-    ops.registration_node = (void **)&unit->owner_node;
-    ops.registration = (AoeLiveUnitRegistrationHooks){
-        &context, high_remove, high_register};
-    ops.visibility_leave = high_visibility_leave;
-    ops.visibility_enter = high_visibility_enter;
-    /* The +0xa6 == 2 method and the pre-terminal +0x60 are bound only for
-       the zero high-mask case they translate; the root setter refuses a
-       transition that would reach either one unbound (leaving states 0..2
-       with mode 2, or going from below 4 to 7+ with a notify/effect mode).
-       Other transitions of such templates, e.g. a 0-hp shore fish dying
-       (2 -> 3) into its resource carcass, need neither. */
-    if (t->state_effect_mode == 2 && context.live_flags &&
-        (*context.live_flags >> 16) == 0) {
-        ops.mode_two_effect = high_mode_two_effect;
-        ops.pre_terminal = high_pre_terminal;
-    }
+    scenario_root_state_ops(&context, &ops, unit, owner_resources, owner,
+                            world, vision);
     if (!aoe_live_unit_root_state_set_ror(&unit->core, new_state, &ops) ||
         context.failed)
         return 0;
+    return 1;
+}
+
+int aoe_live_unit_building_storage_ror(
+    AoeLiveUnit *unit, int sign,
+    void (*add)(void *context, AoeLiveUnit *unit, int16_t type,
+                float amount),
+    void *context) {
+    const DatUnit *t;
+    if (!unit || !(t = unit->core.unit_template) || !add ||
+        (sign != 1 && sign != -1))
+        return 0;
+    for (unsigned i = 0; i < 3; ++i)
+        if ((uint8_t)t->storage[i].paid >= 4 &&
+            t->storage[i].resource_type >= 0)
+            add(context, unit, t->storage[i].resource_type,
+                sign < 0 ? -t->storage[i].amount : t->storage[i].amount);
+    return 1;
+}
+
+typedef struct {
+    AoeLiveUnit *unit;
+    const AoeBuildingSetterRuntimeOps *ops;
+} BuildingSetterContext;
+static void setter_pre_three(void *opaque, AoeLiveUnit *unit) {
+    BuildingSetterContext *c = opaque;
+    (void)aoe_live_unit_building_storage_ror(unit, -1, c->ops->storage_add,
+                                             c->ops->context);
+}
+static int setter_remove_manager(void *opaque, AoeLiveUnit *unit) {
+    BuildingSetterContext *c = opaque;
+    return c->ops->remove_building_manager(c->ops->context, unit);
+}
+static int setter_probe(void *opaque, int16_t template_id) {
+    BuildingSetterContext *c = opaque;
+    return c->ops->completion_probe(c->ops->context, c->unit, template_id);
+}
+static void setter_remove_research(void *opaque, int16_t research_id) {
+    BuildingSetterContext *c = opaque;
+    c->ops->remove_research(c->ops->context, c->unit, research_id);
+}
+
+int aoe_live_unit_scenario_building_state_set_ror(
+    AoeLiveUnit *unit, uint8_t new_state, AoePlayerResources *owner_resources,
+    AoePlayerUpdateState *owner, AoeOwnedVisibilityRegistry *world,
+    AoeLiveUnitVisionBinding *vision,
+    const AoeBuildingSetterRuntimeOps *ops) {
+    HighRootContext context;
+    AoeLiveUnitRootStateOps root;
+    AoeBuildingUpdate *b;
+    if (!scenario_runtime_ok(unit, owner_resources, owner, world, vision) ||
+        unit->core.unit_template->type != 80 || !(b = unit->building_update) ||
+        !ops || !ops->storage_add || !ops->remove_building_manager ||
+        !ops->completion_probe || !ops->remove_research ||
+        !ops->owner_status_four_count || new_state == 2)
+        return 0;
+    b->state = unit->core.state;
+    scenario_root_state_ops(&context, &root, unit, owner_resources, owner,
+                            world, vision);
+    if (new_state == 3 && unit->core.state == 2) {
+        BuildingSetterContext sc = {unit, ops};
+        AoeBuildingStateThreeOps three;
+        memset(&three, 0, sizeof(three));
+        three.context = &sc;
+        three.building_pre_state_three = setter_pre_three;
+        three.remove_building_manager = setter_remove_manager;
+        three.completion_probe = setter_probe;
+        three.remove_research = setter_remove_research;
+        three.owner_status_four_count = ops->owner_status_four_count;
+        three.queue_cancel = ops->queue_cancel;
+        three.root_state = root;
+        return aoe_live_unit_building_state_three_ror(unit, &three) &&
+               !context.failed;
+    }
+    if (!aoe_building_state_queue_transition_ror(
+            b, new_state, ops->owner_status_four_count, &ops->queue_cancel) ||
+        !aoe_live_unit_root_state_set_ror(&unit->core, new_state, &root) ||
+        context.failed)
+        return 0;
+    b->state = unit->core.state;
     return 1;
 }
 

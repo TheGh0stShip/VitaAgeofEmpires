@@ -57,7 +57,9 @@ int main(int argc, char **argv) {
     AoeScenarioRuntimeRor runtime = {0};
     AoeWorldMotionRor motion;
     AoeWorldCombatRor combat;
-    AoeLiveUnit *attacker = NULL, *target = NULL;
+    AoeLiveUnit *attacker = NULL, *target = NULL, *built_house = NULL;
+    int16_t room_type = -1;
+    float room_amount = 0.0f, room_before = 0.0f;
     float start_hp = 0;
     int ok = 0, ticks = 0, placed = 0;
     uint8_t result = 0;
@@ -368,6 +370,17 @@ int main(int argc, char **argv) {
         }
         house->core.state = 0;
         house->core.hit_points = 1.0f;
+        /* Its storage entry of mode >= 4 (population room) reaches the
+           owner on completion (+0x260 = 0x004acaf0). */
+        for (unsigned i = 0; i < 3; ++i) {
+            const DatUnitStorage *st = &house->core.unit_template->storage[i];
+            if ((uint8_t)st->paid >= 4 && st->resource_type >= 0) {
+                room_type = st->resource_type;
+                room_amount = st->amount;
+            }
+        }
+        if (room_type >= 0)
+            room_before = runtime.players[1].resources.values[room_type];
         if (!aoe_world_combat_order_ror(&combat, mason, house,
                                         house->core.position.x38,
                                         house->core.position.y3c, 0.0f,
@@ -388,8 +401,16 @@ int main(int argc, char **argv) {
                house->core.state, house->core.hit_points,
                house->core.unit_template->hit_points, combat.completions,
                combat.units[mason->core.unit_id + 1000]->build.base.state);
+        printf("house storage: resource %d %.1f -> %.1f (+%.1f)\n",
+               room_type, room_before,
+               room_type >= 0
+                   ? runtime.players[1].resources.values[room_type]
+                   : 0.0f,
+               room_amount);
         ok = code == 0x65 && house->core.state == 2 &&
-             combat.completions == 1 &&
+             combat.completions == 1 && room_type >= 0 &&
+             runtime.players[1].resources.values[room_type] ==
+                 room_before + room_amount &&
              house->core.hit_points ==
                  (float)house->core.unit_template->hit_points;
         /* Damage graphics (0x004a9240): at 20/75 HP the house passes its
@@ -406,6 +427,7 @@ int main(int argc, char **argv) {
             ok = ok && ht->damage_graphic_count &&
                  house->core.damage_percent == 74 &&
                  aoe_sprite_list_count(&house->sprites.list) > before;
+            built_house = house;
         }
     }
     /* World loop: every player's +0x28 list updates together. A villager
@@ -459,6 +481,10 @@ int main(int argc, char **argv) {
                     farm = u;
             }
         if (farm) farm_food = farm->core.storage.carried_amount;
+        /* The finished house is destroyed: the type-80 setter 0x004acbf0
+           takes it 2 -> 3 (storage withdrawn by +0x25c, queue and research
+           cleanup) and on through its dying states. */
+        if (built_house) built_house->core.hit_points = 0.0f;
         if (!gx || !aoe_world_combat_order_ror(&combat, walker, NULL, gx, gy,
                                                0.0f, &code)) {
             fprintf(stderr, "no move order\n");
@@ -474,6 +500,16 @@ int main(int argc, char **argv) {
             if (walker->derived_action_list &&
                 !walker->derived_action_list->head)
                 break;
+        }
+        if (built_house) {
+            printf("destroyed house: state %u, constructed %u, resource %d "
+                   "%.1f\n",
+                   built_house->constructed ? built_house->core.state : 0,
+                   built_house->constructed,
+                   room_type, runtime.players[1].resources.values[room_type]);
+            if ((built_house->constructed && built_house->core.state < 3) ||
+                runtime.players[1].resources.values[room_type] != room_before)
+                ok = 0;
         }
         if (farm) {
             const DatUnit *ft = farm->core.unit_template;

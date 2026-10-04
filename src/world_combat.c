@@ -75,6 +75,7 @@ AoeWorldCombatUnitRor *aoe_world_combat_unit_ror(AoeWorldCombatRor *c,
             s->unit->derived_action_list = NULL;
         memset(s, 0, sizeof(*s));
     }
+    s->action_tag = AOE_WORLD_COMBAT_RECORD_TAG;
     s->unit = unit;
     s->world = c;
     s->unit_actions.owner_state = &unit->core.state;
@@ -237,9 +238,27 @@ static void sub_activate(void *context, void *action, uint8_t state) {
     move_ops(context, &o);
     (void)aoe_move_action_activate_ror(action, &o);
 }
+static int16_t entry_type(const void *action) {
+    int16_t t;
+    memcpy(&t, action, sizeof(t));
+    return t;
+}
+static void farm_ops(AoeWorldCombatRor *c, AoeFarmActionOps *o);
 static void head_activate(void *context, void *action, uint8_t state) {
     AoeWorldCombatUnitRor *s = context;
-    if (action != s) sub_activate(s->world, action, state);
+    switch (entry_type(action)) {
+    case 1:
+        sub_activate(s->world, action, state);
+        break;
+    case 0x15: {
+        AoeFarmActionOps o;
+        farm_ops(s->world, &o);
+        (void)aoe_farm_action_activate_ror(action, &o);
+        break;
+    }
+    default:
+        break;
+    }
 }
 
 /* Sprite queries on the unit's current graphic (0x004158f0/0x00415920). */
@@ -825,6 +844,38 @@ static void deposit_cb(void *c, AoeLiveUnit *u, int16_t type, float amount) {
     (void)aoe_player_resource_add_virtual_ror(&target, type, amount, 1);
     ++w->deposits;
 }
+/* Farm action bindings: player +0x78(type, amount, 0); the 0x7e event is
+   counted; +0x6c drops the hit points to 0 (0x004aa320 also wakes the
+   unit, which every type-80 unit already is). */
+static void farm_deposit(void *c, AoeLiveUnit *u, int16_t type,
+                         float amount) {
+    AoeWorldCombatRor *w = c;
+    AoeScenarioRuntimePlayerRor *p = player_of(c, u);
+    AoePlayerResourceTargetRor target;
+    if (!p) return;
+    target.resources = &p->resources;
+    target.derived = 1;
+    target.field_104 = &w->player_field_104[u->runtime_owner_index];
+    target.context = w;
+    target.refresh_world = refresh_world;
+    (void)aoe_player_resource_add_virtual_ror(&target, type, amount, 0);
+}
+static void farm_depleted(void *c, AoeLiveUnit *u) {
+    (void)u;
+    ++((AoeWorldCombatRor *)c)->farms_depleted;
+}
+static void farm_destroy(void *c, AoeLiveUnit *u) {
+    (void)c;
+    u->core.hit_points = 0.0f;
+}
+static void farm_ops(AoeWorldCombatRor *c, AoeFarmActionOps *o) {
+    o->context = c;
+    o->tick_seconds = tick_seconds;
+    o->player_attribute = player_attribute;
+    o->deposit = farm_deposit;
+    o->notify_depleted = farm_depleted;
+    o->destroy = farm_destroy;
+}
 /* 0x004514d0 over the owner's units with state filter 2. Without a zone
    lookup every candidate is in the same zone. */
 static AoeLiveUnit *find_drop_site(void *c, AoeLiveUnit *u, int16_t id1,
@@ -990,15 +1041,17 @@ static void list_activate_noop(void *c, void *a, uint8_t s) {
 static int bind_building(AoeWorldCombatRor *w, AoeLiveUnit *t) {
     AoeWorldCombatUnitRor *s;
     AoeScenarioRuntimePlayerRor *p;
-    AoeActionListOps lo = {w, list_destroy_noop, list_activate_noop};
+    AoeActionListOps qo = {w, list_destroy_noop, list_activate_noop};
+    AoeActionListOps lo;
     if (t->building_update) return 1;
     if (!(s = aoe_world_combat_unit_ror(w, t)) || !(p = player_of(w, t)))
         return 0;
+    lo = (AoeActionListOps){s, head_destroy, head_activate};
     if (t->derived_action_list == &s->unit_actions)
         t->derived_action_list = NULL;
     return aoe_live_unit_bind_building_update_ror(
         t, &s->building_storage, &s->building_live, lo, &s->building_queue,
-        lo, p->resources, t->runtime_owner_index, 0);
+        qo, p->resources, t->runtime_owner_index, 0);
 }
 static void no_unit_hook(void *c, AoeLiveUnit *u) { (void)c; (void)u; }
 static void no_local(void *c, AoeLiveUnit *u, int v) { (void)c; (void)u; (void)v; }
@@ -1177,15 +1230,23 @@ static void order_change_template(void *c, AoeLiveUnit *u, const DatUnit *t) {
     (void)aoe_world_combat_change_template_ror(c, u, t);
 }
 /* The head action is the unit's gather or attack action. */
+/* Heads other than the record are move (type 1) or farm (0x15) actions:
+   their task is +0x30 (farm), +0x34 retarget is the base 0x004072b0
+   (refuses), and their target is the base +0x4c. */
 static const DatUnitTask *order_action_task(void *c, void *action) {
     AoeWorldCombatUnitRor *s = action;
     (void)c;
+    if (entry_type(action) != AOE_WORLD_COMBAT_RECORD_TAG)
+        return entry_type(action) == 0x15
+                   ? ((AoeFarmActionRor *)action)->task
+                   : NULL;
     return s->constructing ? s->build.task
                            : s->gathering ? s->gather.task : NULL;
 }
 static int order_action_retarget(void *c, void *action, AoeLiveUnit *t,
                                  float x, float y, float z) {
     AoeWorldCombatUnitRor *s = action;
+    if (entry_type(action) != AOE_WORLD_COMBAT_RECORD_TAG) return 0;
     if (s->constructing) {
         AoeBuildActionOps o;
         build_ops(c, &o);
@@ -1206,6 +1267,8 @@ static int order_action_retarget(void *c, void *action, AoeLiveUnit *t,
 static int16_t order_action_type(void *c, void *action) {
     AoeWorldCombatUnitRor *s = action;
     (void)c;
+    if (entry_type(action) != AOE_WORLD_COMBAT_RECORD_TAG)
+        return entry_type(action);
     if (s->pending == 0x65) return s->build.base.type;
     if (s->pending == 5) return s->gather.base.type;
     if (s->pending == 9) return s->attack.base.type;
@@ -1216,6 +1279,8 @@ static int16_t order_action_type(void *c, void *action) {
 static AoeLiveUnit *order_action_target(void *c, void *action) {
     AoeWorldCombatUnitRor *s = action;
     (void)c;
+    if (entry_type(action) != AOE_WORLD_COMBAT_RECORD_TAG)
+        return ((AoeMoveActionRor *)action)->target;
     if (s->constructing) return s->build.base.target;
     return s->gathering ? s->gather.base.target
                         : s->attacking ? s->attack.base.target : NULL;
@@ -1285,18 +1350,45 @@ static void *order_construct(void *c, AoeLiveUnit *u,
         s->pending = 9;
         return s;
     }
+    case 0x00404750: {
+        AoeFarmActionRor *f = calloc(1, sizeof(*f));
+        if (f && !aoe_farm_action_init_ror(f, u, task)) {
+            free(f);
+            f = NULL;
+        }
+        return f;
+    }
     default:
         return NULL; /* other action classes are not translated yet */
     }
 }
 /* +0x208 = 0x00406490: clear the +0x184 list (0x00403e50), then push the
    action (0x00404400, which activates it). */
+static AoeActionList *own_list(AoeWorldCombatUnitRor *s, AoeLiveUnit *u) {
+    if (u->derived_action_list == &s->unit_actions ||
+        u->derived_action_list == &s->building_live)
+        return u->derived_action_list;
+    return NULL;
+}
 static void order_adopt(void *c, AoeLiveUnit *u, void *action) {
-    AoeWorldCombatUnitRor *s = action;
-    if (u->derived_action_list == &s->unit_actions) {
-        (void)aoe_action_list_clear(&s->unit_actions);
-        if (!aoe_action_list_push(&s->unit_actions, s) ||
-            !s->unit_actions.head || s->unit_actions.head->action != s) {
+    AoeWorldCombatUnitRor *s;
+    AoeActionList *list;
+    if (entry_type(action) != AOE_WORLD_COMBAT_RECORD_TAG) {
+        /* A heap action (move, farm) owned by the list from here on. */
+        s = aoe_world_combat_unit_ror(c, u);
+        if (!s || !(list = own_list(s, u))) {
+            free(action);
+            return;
+        }
+        (void)aoe_action_list_clear(list);
+        if (!aoe_action_list_push(list, action)) free(action);
+        return;
+    }
+    s = action;
+    if ((list = own_list(s, u))) {
+        (void)aoe_action_list_clear(list);
+        if (!aoe_action_list_push(list, s) || !list->head ||
+            list->head->action != s) {
             s->pending = 0; /* a terminal unit destroys the offer */
             return;
         }
@@ -1424,12 +1516,16 @@ static uint8_t record_update(AoeWorldCombatUnitRor *s) {
 static uint8_t unit_update_head(void *context, void *action) {
     AoeWorldCombatUnitRor *s = context;
     uint8_t r;
+    r = 0;
     if (action == s) {
         r = record_update(s);
+    } else if (entry_type(action) == 0x15) {
+        AoeFarmActionOps o;
+        farm_ops(s->world, &o);
+        if (!aoe_farm_action_update_ror(action, &o, &r)) r = 0;
     } else {
         AoeMoveActionOps o;
         move_ops(s->world, &o);
-        r = 0;
         if (!aoe_move_action_update_ror(action, &o, &r)) r = 0;
     }
     s->last_result = r;
@@ -1529,12 +1625,26 @@ static int unit_before(void *opaque, AoeLiveUnit *u) {
     return 1;
 }
 
+/* +0x1fc = 0x004063d0: 0x0043e670 indexes the template's task list
+   (negative indices other than -1 would read before it in the original);
+   the list's task factory +0x04 (0x004040b0 / tribe 0x004b4600) builds the
+   action with no target at (-1, -1, -1), and a built action is adopted
+   (+0x208). Action classes not translated yet are counted. */
 static int default_task(void *opaque, AoeLiveUnit *u, int16_t index) {
     AoeWorldCombatRor *c = opaque;
-    /* 0x0043e670 indexes the task list (negative indices other than -1
-       would read before it in the original). */
-    if (index >= 0 && (uint16_t)index < u->core.unit_template->task_count)
-        ++c->default_tasks;
+    const DatUnit *t = u->core.unit_template;
+    const DatUnitTask *task;
+    AoeActionRouteRor route;
+    void *action;
+    if (index < 0 || (uint16_t)index >= t->task_count) return 1;
+    task = &t->tasks[index];
+    aoe_action_route_ror(order_tribe_template(c, t), task->action_type, 0,
+                         &route);
+    action = order_construct(c, u, &route, task, NULL, -1.0f, -1.0f, -1.0f);
+    if (action)
+        order_adopt(c, u, action);
+    else if (route.constructor)
+        ++c->default_tasks; /* e.g. farm 21, transport 12 */
     return 1;
 }
 static int attached_update(void *opaque, AoeLiveUnit *u, AoeActionList *l) {
@@ -1580,7 +1690,7 @@ static int unit_after(void *opaque, AoeLiveUnit *u, uint8_t *result) {
     s = peek_unit(c, u);
     memset(&empty, 0, sizeof(empty));
     list = u->derived_action_list ? u->derived_action_list : &empty;
-    if (s && list == &s->unit_actions)
+    if (s && (list == &s->unit_actions || list == &s->building_live))
         tick = (AoeActionTickOps){s, unit_update_head, update_waiting};
     else
         tick = (AoeActionTickOps){c, foreign_head, update_waiting};

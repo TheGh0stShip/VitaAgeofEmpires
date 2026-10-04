@@ -5,6 +5,7 @@
 
 #include "action_attack.h"
 #include "action_build.h"
+#include "action_farm.h"
 #include "action_gather.h"
 #include "action_list.h"
 #include "combat.h"
@@ -41,7 +42,12 @@
      units reaching state 8 (predicate 1/2, then +0x08). */
 struct AoeWorldCombatRor;
 
+/* First int16 of every +0x184 entry: actions begin with their type; the
+   record carries this impossible type instead. */
+enum { AOE_WORLD_COMBAT_RECORD_TAG = -2 };
+
 typedef struct {
+    int16_t action_tag; /* AOE_WORLD_COMBAT_RECORD_TAG */
     AoeLiveUnit *unit;
     struct AoeWorldCombatRor *world;
     float reload_timer;
@@ -58,8 +64,10 @@ typedef struct {
     AoeBuildingUpdate building_storage;
     AoeActionList building_live, building_queue;
     /* The unit's +0x184 action list when it had none. Its entries are this
-       record (while a gather, attack or build action is adopted) or move
-       actions (0x00405db0); the list context is this record. */
+       record (while a gather, attack or build action is adopted), move
+       actions (0x00405db0) or farm actions (default task 0x15); the list
+       context is this record. Type-80 units use building_live instead,
+       with the same entries. */
     AoeActionList unit_actions;
     uint8_t last_result; /* head update result of the latest unit update */
     AoeActionList sub_actions;
@@ -86,10 +94,12 @@ typedef struct AoeWorldCombatRor {
     uint32_t notices, hits, misses, projectiles, kills, blasts, alerts,
         corpses, deposits, repairs, completions;
     int32_t player_field_104[AOE_SCENARIO_RUNTIME_PLAYERS];
-    /* World update placeholders: default tasks (+0x1fc) and attached-unit
-       list updates are counted only; list objects that are not runtime
-       units are counted and skipped. */
-    uint32_t default_tasks, attached_updates, foreign_objects, removed;
+    /* World update placeholders: default tasks (+0x1fc) routed to an
+       action class that is not translated yet, and attached-unit list
+       updates, are counted only; list objects that are not runtime units
+       are counted and skipped. */
+    uint32_t default_tasks, attached_updates, foreign_objects, removed,
+        farms_depleted;
     /* Empty outcome managers for players without one (no victory
        conditions are loaded yet) and the type-80 status-4 counters
        (global +0xa34). */

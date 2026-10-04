@@ -165,8 +165,10 @@ update chain (`aoe_world_combat_update_world_ror`). It also corrected live
 `+0x49`: it is a dormancy flag, and the type-20 constructor wakes every
 type 20-80 unit into the updated list.
 Next:
-1. The default-task action factory (`0x00403e70` via `+0x1fc`), the
-   damage graphics `0x004a9240` and the type-80 production update.
+1. Default tasks now route through the task factory, and the farm action
+   (0x15) is translated. Next: the transport action (type 12,
+   `0x004067d0`), the damage graphics `0x004a9240` and the type-80
+   production update.
 2. Replace placeholder bindings (diplomacy, zones, sounds, victory
    conditions, player +0x30 lists).
 3. The remaining action classes.

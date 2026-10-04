@@ -183,6 +183,8 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
             task->auto_search = p[33];
             task->search_wait = atfloat(p + 34);
             task->enable_targeting = p[38];
+            task->field_30 = (int16_t)at16(p + 40);
+            task->field_32 = (int16_t)at16(p + 42);
             task->owner_mode = p[44];
             task->requires_carried_resource = p[45];
             task->unbuilt_target = p[46];

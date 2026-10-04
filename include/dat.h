@@ -248,6 +248,10 @@ typedef struct {
        RoR 1.0a 0x004e7f90/0x004e7dc0: owner-relationship mode 1..5, "target
        must carry a resource", and "applies to a state-0 target". */
     uint8_t owner_mode, requires_carried_resource, unbuilt_target;
+    /* Runtime task +0x30/+0x32 (file bytes 40..43, loader 0x004e75cb).
+       The farm action 0x004047d0 credits its production straight to the
+       owner when +0x30 is nonzero. */
+    int16_t field_30, field_32;
 } DatUnitTask;
 
 typedef struct {

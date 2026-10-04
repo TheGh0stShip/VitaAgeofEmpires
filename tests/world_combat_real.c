@@ -400,7 +400,8 @@ int main(int argc, char **argv) {
        removed from its owner's list by the first world update (so are the
        scenario's records saved in state 7, which the state setter wakes). */
     if (ok) {
-        AoeLiveUnit *walker = NULL;
+        AoeLiveUnit *walker = NULL, *farm = NULL;
+        float farm_food = 0.0f;
         int16_t code = -1;
         uint16_t list_before = runtime.players[2].owner.object_list28.count;
         float gx = 0.0f, gy = 0.0f, d = 0.0f;
@@ -430,6 +431,19 @@ int main(int argc, char **argv) {
                     gy = y;
                 }
             }
+        /* A finished farm builds its farm action (0x15) as its default
+           task. Activation (0x00404780) switches its stored resource to
+           the task's resource-in (16) at amount 0, replacing the 15 food
+           of its template storage; it then grows that stock. */
+        for (unsigned p = 1; p < AOE_SCENARIO_RUNTIME_PLAYERS && !farm; ++p)
+            for (uint32_t i = 0; i < runtime.players[p].unit_count && !farm;
+                 ++i) {
+                AoeLiveUnit *u = &runtime.players[p].units[i];
+                if (u->constructed && u->core.state == 2 &&
+                    u->core.unit_template && u->core.unit_template->id == 50)
+                    farm = u;
+            }
+        if (farm) farm_food = farm->core.storage.carried_amount;
         if (!gx || !aoe_world_combat_order_ror(&combat, walker, NULL, gx, gy,
                                                0.0f, &code)) {
             fprintf(stderr, "no move order\n");
@@ -446,6 +460,21 @@ int main(int argc, char **argv) {
                 !walker->derived_action_list->head)
                 break;
         }
+        if (farm) {
+            const DatUnit *ft = farm->core.unit_template;
+            printf("farm %d: food %.2f -> %.2f (type %d, capacity %d)\n",
+                   farm->core.unit_id, farm_food,
+                   farm->core.storage.carried_amount,
+                   farm->core.storage.carried_resource_type,
+                   ft->resource_capacity);
+            if (!ft->task_count ||
+                farm->core.storage.carried_resource_type !=
+                    ft->tasks[0].resource_in ||
+                !(farm->core.storage.carried_amount > 0.0f) ||
+                farm->core.storage.carried_amount >
+                    (float)ft->resource_capacity)
+                ok = 0;
+        }
         printf("world loop: move code %d, %d ticks, walker %.2f from goal, "
                "removed %u (victim constructed %u, player-2 list %u -> %u), "
                "foreign %u, default tasks %u\n",
@@ -454,7 +483,8 @@ int main(int argc, char **argv) {
                combat.foreign_objects, combat.default_tasks);
         /* The move action ends within its 0.4 range of the point, measured
            from the walker's footprint edge. */
-        ok = code == 1 && ticks < 2000 && d < 1.0f && combat.removed >= 1 &&
+        ok = ok && farm && code == 1 && ticks < 2000 && d < 1.0f &&
+             combat.removed >= 1 &&
              !target->constructed && !combat.foreign_objects &&
              runtime.players[2].owner.object_list28.count < list_before;
     }

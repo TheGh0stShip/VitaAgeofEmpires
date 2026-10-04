@@ -1698,8 +1698,18 @@ Unit update chain and world loop (RoR 1.0a). Translated in
   - The move fallback `+0x9c` (`0x00405db0`) first offers the move to the
     head's `+0x30`. The base `0x004072b0` refuses; gather `0x00403b80` and
     build `0x004b5db0` absorb it. Otherwise it adopts a move action.
-- **Placeholders in the binding.** Default tasks and attached-unit list
-  updates are counted only. Empty outcome managers stand in for unloaded
+- **Default tasks** route through the translated task factory
+  (`aoe_action_route_ror`, no target, point -1/-1/-1). On EXPANS_1_1 the
+  gazelles and alligators default to action type 6, which neither factory
+  builds (the original adopts nothing either); farms build the farm action
+  below; transport boats (type 12, `0x004067d0`) reach an action class
+  that is not translated yet and are counted.
+- **+0x184 entries.** Besides the record, the list holds heap move (type
+  1) and farm (0x15) actions; the record's first int16 is the impossible
+  type -2 so heads dispatch on their leading type. Type-80 units use their
+  building live list with the same entries.
+- **Placeholders in the binding.** Attached-unit list updates are counted
+  only. Empty outcome managers stand in for unloaded
   victory conditions, and the map update is a no-op. Removal runs the
   portable destroy.
 - **Setter refusal narrowed.** `aoe_live_unit_scenario_state_set_ror` no
@@ -1715,6 +1725,34 @@ Unit update chain and world loop (RoR 1.0a). Translated in
     saved in state 7 (rocks, bones, clumps), 0-hp flares, finished arrows
     and the victim;
   - no list object fails to resolve to a runtime unit.
+
+Farm action (RoR 1.0a; vtable `0x0054261c`, action type 0x15, 0x40 bytes;
+`src/action_farm.c`). A farm (template 50) builds it as its default task
+through constructor `0x00404750(unit, task)` (base `0x00406ea0(unit, 1)`).
+- **Task layout addition.** Task `+0x30`/`+0x32` are file bytes 40..43
+  (loader `0x004e75cb`), now `DatUnitTask.field_30/field_32`. Byte 39 is
+  `+0x0d`.
+- **set_state** `+0x5c = 0x004047b0` stores the state and resets `+0x2c`
+  from owner attribute 36.
+- **Activation** `+0x1c = 0x00404780` enters state 6. When the task's
+  resource-in (`+0x14`) is >= 0 and differs from the unit's carried type,
+  it sets the carried type to it at amount 0 (`+0x80`). On EXPANS_1_1 that
+  replaces a farm's 15 food of template storage with resource 16.
+- **Update** `+0x28 = 0x004047d0`:
+  - state 1 returns 1;
+  - in state 6, while `+0x2c` > 0 or attribute 36 <= 0 (or NaN), it
+    produces tick × template work rate × task work value 1. The amount
+    goes to owner `+0x78(resource-in, amount, 0)` when task `+0x30` is
+    set, otherwise to the unit's carried amount (`+0x84(amount, 1, 1)`,
+    clamped to template `+0x7c`);
+  - `+0x2c` then falls by the carried amount actually gained;
+  - with the allowance used up, a farm that still holds stock waits;
+  - an empty farm raises global `+0x40(0x7e, owner, ID, tile x, tile y)`
+    and calls `+0x6c`. For types 70/80 that is `0x004ae970` (an extra step
+    only for head action 0x68), then `0x004aa320`: wake, and HP 0.
+- **Regression.** `tests/action_farm_test.c` covers the branches. On
+  EXPANS_1_1 a player farm grows 0.02 per 0.05 s update while the world
+  loop runs.
 
 Combat core (RoR 1.0a; type-50 vtable `0x0054324c`, tribe `0x00547fa0`):
 - **Reload.** `+0x7c` `0x004269f0` reports ready when the reload timer

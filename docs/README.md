@@ -12,6 +12,7 @@
 | [Vita build update](BUILDING_UPDATE.md) | Current Vita build configuration and one detailed reconstructed subsystem |
 | [Training action](TRAIN_ACTION.md) | Evidence and implementation notes for the training action lifecycle |
 | [DeepSeek tool audit](DEEPSEEK_TOOL_AUDIT.md) | Audit disposition, corrected format assumptions, and regression coverage for the supplied helper code |
+| [Vita ABI and test lanes](VITA_ABI.md) | Verified VitaSDK data model (signed char, small enums, 64-bit long double) and the ARMv7/VitaSDK CI lanes |
 | [Wonder status art](../status/README.md) | Reproducible configuration and rendering of the progress illustration |
 | [License](../LICENSE) and [scope notice](../LICENSE-NOTICE.md) | GPL-3.0-or-later terms for project-authored code and documentation, with explicit third-party exclusions |
 

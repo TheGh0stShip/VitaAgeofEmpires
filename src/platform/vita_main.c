@@ -11,9 +11,10 @@
 #include <string.h>
 
 /* PS Vita platform layer for the tech demo: CDRAM display buffers, the
-   controller, the process clock and CPU clocks. The demo renders into a
-   cached main-memory frame which is copied to the write-combined CDRAM
-   buffer that is then flipped on the next vblank. */
+   controller, the process clock and CPU clocks. The demo writes its 32-bit
+   output straight into the CDRAM back buffer (the overlay never reads it
+   back), which is then flipped on the next vblank. Loading and error
+   screens go through a main-memory frame. */
 
 /* The original game data, runtime and sprite cache live on the newlib
    heap; the default heap is too small for them. */
@@ -52,6 +53,22 @@ static int display_init(void) {
     }
     back = 0;
     return 1;
+}
+
+/* Shows the back buffer from the next vblank and waits for the switch, so
+   the following frame never draws into the buffer being scanned out. */
+static void display_flip(void) {
+    SceDisplayFrameBuf fb;
+    memset(&fb, 0, sizeof(fb));
+    fb.size = sizeof(fb);
+    fb.base = buffers[back].base;
+    fb.pitch = FB_STRIDE;
+    fb.pixelformat = SCE_DISPLAY_PIXELFORMAT_A8B8G8R8;
+    fb.width = AOE_DEMO_WIDTH;
+    fb.height = AOE_DEMO_HEIGHT;
+    sceDisplaySetFrameBuf(&fb, SCE_DISPLAY_SETBUF_NEXTFRAME);
+    sceDisplayWaitSetFrameBuf();
+    back ^= 1;
 }
 
 static void display_present(const uint32_t *frame) {
@@ -163,8 +180,8 @@ int main(void) {
         last = now;
         if (dt > 0.25f) dt = 0.25f;
         if (!aoe_demo_update(demo, &in, dt)) break;
-        aoe_demo_render(demo, frame, FB_STRIDE);
-        display_present(frame);
+        aoe_demo_render(demo, buffers[back].base, FB_STRIDE);
+        display_flip();
     }
     aoe_demo_close(demo);
     display_free();

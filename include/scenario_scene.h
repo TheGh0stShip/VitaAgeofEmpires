@@ -31,7 +31,17 @@ typedef struct {
     /* Nonzero draws sprites during the tile walk instead of through the
        original deferred sprite list (diagnostics only). */
     int immediate_sprites;
+    /* AOE_SCENE_PASS_*: because sprites are deferred until after all
+       terrain, the terrain layer and the object layer can be drawn as
+       separate passes (for example over a cached terrain layer). */
+    int pass;
 } AoeScenarioSceneDrawRor;
+
+enum {
+    AOE_SCENE_PASS_ALL = 0,
+    AOE_SCENE_PASS_TERRAIN = 1, /* terrain only, honouring the clip rect */
+    AOE_SCENE_PASS_OBJECTS = 2  /* objects only, over existing pixels */
+};
 
 typedef struct {
     size_t terrain_tiles;

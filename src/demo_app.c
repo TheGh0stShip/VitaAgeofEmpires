@@ -69,6 +69,15 @@ struct AoeDemo {
     uint8_t *edge_bytes;
     TileEdgeIndex edges;
     uint8_t *pixels, *first_clip, *second_clip;
+    /* Terrain layer cache: sprites are drawn after all terrain (the view's
+       sprite list), so the terrain layer can be kept between frames,
+       shifted when the camera scrolls (only exposed strips redrawn) and
+       redrawn when the map's tile data changes. */
+    uint8_t *terrain;
+    int terrain_valid;
+    int32_t terrain_cam_x, terrain_cam_y;
+    uint64_t terrain_hash;
+    uint32_t palette_half[256]; /* overlay backgrounds (halved colours) */
 
     DemoScenario *scenarios;
     size_t scenario_count;
@@ -250,6 +259,8 @@ static void update_palette_lut(AoeDemo *demo, int first, int count) {
         PaletteColor c = demo->palette.colors[i];
         demo->palette_abgr[i] = 0xff000000u | (uint32_t)c.b << 16 |
                                 (uint32_t)c.g << 8 | c.r;
+        demo->palette_half[i] =
+            0xff000000u | ((demo->palette_abgr[i] >> 1) & 0x007f7f7fu);
     }
 }
 
@@ -372,9 +383,10 @@ AoeDemo *aoe_demo_open(const char *root, AoeDemoClock clock, char *error,
     demo->pixels = calloc((size_t)AOE_DEMO_WIDTH * AOE_DEMO_HEIGHT, 1);
     demo->first_clip = calloc((size_t)AOE_DEMO_WIDTH * AOE_DEMO_HEIGHT, 1);
     demo->second_clip = calloc((size_t)AOE_DEMO_WIDTH * AOE_DEMO_HEIGHT, 1);
+    demo->terrain = calloc((size_t)AOE_DEMO_WIDTH * AOE_DEMO_HEIGHT, 1);
     demo->scenarios = calloc(DEMO_MAX_SCENARIOS, sizeof(*demo->scenarios));
     if (!demo->pixels || !demo->first_clip || !demo->second_clip ||
-        !demo->scenarios) {
+        !demo->terrain || !demo->scenarios) {
         demo_status(demo, "Out of memory for the frame buffers");
         goto fail;
     }
@@ -422,6 +434,7 @@ void aoe_demo_close(AoeDemo *demo) {
     unload_scenario(demo);
     aoe_graphic_art_cache_clear(&demo->graphic_cache);
     free(demo->scenarios);
+    free(demo->terrain);
     free(demo->second_clip);
     free(demo->first_clip);
     free(demo->pixels);
@@ -668,6 +681,7 @@ int aoe_demo_load_scenario(AoeDemo *demo, size_t index) {
         return 0;
     }
     demo->loaded = 1;
+    demo->terrain_valid = 0;
     demo->camera_x = demo->scenario.player_details[0].camera_x;
     demo->camera_y = demo->scenario.player_details[0].camera_y;
     demo->poi = 0;
@@ -758,6 +772,12 @@ int aoe_demo_update(AoeDemo *demo, const AoeDemoInput *input, float dt) {
                                    : "No player 1 soldiers near the camera",
                          a.ordered);
         }
+    }
+    if (dt > 0.0f) {
+        float fps = 1.0f / dt;
+        demo->stats.fps = demo->stats.fps > 0.0f
+                              ? demo->stats.fps * 0.9f + fps * 0.1f
+                              : fps;
     }
     if (demo->message_time > 0.0f) demo->message_time -= dt;
     /* The water colour cycle runs on wall time (0x004843d0). */
@@ -914,15 +934,169 @@ void aoe_demo_draw_text(uint32_t *fb, size_t stride, int x, int y, int scale,
 /* ------------------------------------------------------------------ */
 /* Render */
 
+/* FNV-1a over the map tile records and tile +10 draw flags: the inputs of
+   the terrain layer besides the camera (fog is off, so visibility masks do
+   not affect it). */
+static uint64_t map_terrain_hash(const AoeRuntimeMap *map) {
+    uint64_t h = 1469598103934665603ull;
+    size_t n = (size_t)map->width * map->height;
+    const uint8_t *t = (const uint8_t *)map->tiles;
+    for (size_t i = 0; i < n * sizeof(*map->tiles); ++i)
+        h = (h ^ t[i]) * 1099511628211ull;
+    for (size_t i = 0; map->draw_flags && i < n; ++i)
+        h = (h ^ map->draw_flags[i]) * 1099511628211ull;
+    return h;
+}
+
+static void scene_draw_init(AoeDemo *demo, AoeScenarioSceneDrawRor *draw,
+                            const TerrainViewCamera *camera,
+                            const TerrainViewIndexedSurface *surface,
+                            int pass) {
+    *draw = (AoeScenarioSceneDrawRor){
+        .geometry = &demo->geometry, .terrains = &demo->terrains,
+        .borders = &demo->borders, .terrain_art = &demo->terrain_art,
+        .border_art = &demo->border_art, .camera = camera,
+        .surface = surface, .tile_edges = &demo->edges,
+        .first_clip = {demo->first_clip,
+                       (size_t)AOE_DEMO_WIDTH * AOE_DEMO_HEIGHT,
+                       AOE_DEMO_WIDTH},
+        .second_clip = {demo->second_clip,
+                        (size_t)AOE_DEMO_WIDTH * AOE_DEMO_HEIGHT,
+                        AOE_DEMO_WIDTH},
+        /* Scenario fog history is not reconstructed yet; the original
+           exploration-gate bypass shows the whole map. */
+        .fog_enabled = 0, .bypass_exploration_gate = 1,
+        .resolve_unit = resolve_unit,
+        .resolve_unit_context = &demo->resolver,
+        .draw_ops = &demo->draw_ops, .pass = pass};
+}
+
+/* Draws the terrain layer into `target` inside one clip rectangle. */
+static int draw_terrain_rect(AoeDemo *demo, uint8_t *target,
+                             const TerrainViewCamera *camera, uint32_t left,
+                             uint32_t top, uint32_t width, uint32_t height) {
+    AoeScenarioSceneDrawRor draw;
+    AoeScenarioSceneResultRor result;
+    TerrainViewIndexedSurface surface = {
+        target, (size_t)AOE_DEMO_WIDTH * AOE_DEMO_HEIGHT, AOE_DEMO_WIDTH,
+        AOE_DEMO_HEIGHT, AOE_DEMO_WIDTH, left, top, width, height};
+    /* The full view's camera (same pixel origin and tile walk, so anchors
+       stay in absolute screen coordinates) with its view rectangle
+       narrowed to the clip, as the terrain walk requires. */
+    TerrainViewCamera strip = *camera;
+    if (!width || !height) return 1;
+    strip.view_left = (int32_t)left;
+    strip.view_top = (int32_t)top;
+    strip.view_width = (int32_t)width;
+    strip.view_height = (int32_t)height;
+    for (uint32_t y = top; y < top + height; ++y)
+        memset(target + (size_t)y * AOE_DEMO_WIDTH + left, 0, width);
+    scene_draw_init(demo, &draw, &strip, &surface, AOE_SCENE_PASS_TERRAIN);
+    return aoe_scenario_runtime_draw_scene_ror(&demo->runtime, &draw,
+                                               &result);
+}
+
+/* Brings the cached terrain layer up to date for `camera`. */
+static int update_terrain(AoeDemo *demo, const TerrainViewCamera *camera) {
+    const int32_t w = AOE_DEMO_WIDTH, h = AOE_DEMO_HEIGHT;
+    uint64_t hash = map_terrain_hash(&demo->runtime.map);
+    int32_t dx = camera->camera_pixel_x - demo->terrain_cam_x;
+    int32_t dy = camera->camera_pixel_y - demo->terrain_cam_y;
+    int ok = 1;
+    if (!demo->terrain_valid || hash != demo->terrain_hash ||
+        dx <= -w || dx >= w || dy <= -h || dy >= h) {
+        ok = draw_terrain_rect(demo, demo->terrain, camera, 0, 0, w, h);
+        ++demo->stats.terrain_full;
+    } else if (dx || dy) {
+        /* New pixel (x, y) is the old pixel (x + dx, y + dy). */
+        int32_t y0 = dy > 0 ? 0 : h - 1, y1 = dy > 0 ? h : -1;
+        int32_t step = dy > 0 ? 1 : -1;
+        int32_t cx0 = dx > 0 ? 0 : -dx, cw = w - (dx > 0 ? dx : -dx);
+        for (int32_t y = y0; y != y1; y += step) {
+            int32_t sy = y + dy;
+            if (sy < 0 || sy >= h) continue;
+            memmove(demo->terrain + (size_t)y * w + cx0,
+                    demo->terrain + (size_t)sy * w + cx0 + dx, (size_t)cw);
+        }
+        /* Exposed column band (all rows), then exposed row band without
+           those columns: each a clipped terrain draw. */
+        if (dx > 0)
+            ok = draw_terrain_rect(demo, demo->terrain, camera,
+                                   (uint32_t)(w - dx), 0, (uint32_t)dx,
+                                   (uint32_t)h);
+        else if (dx < 0)
+            ok = draw_terrain_rect(demo, demo->terrain, camera, 0, 0,
+                                   (uint32_t)-dx, (uint32_t)h);
+        if (ok && dy > 0)
+            ok = draw_terrain_rect(demo, demo->terrain, camera,
+                                   (uint32_t)cx0, (uint32_t)(h - dy),
+                                   (uint32_t)cw, (uint32_t)dy);
+        else if (ok && dy < 0)
+            ok = draw_terrain_rect(demo, demo->terrain, camera,
+                                   (uint32_t)cx0, 0, (uint32_t)cw,
+                                   (uint32_t)-dy);
+        ++demo->stats.terrain_shifted;
+    }
+    demo->terrain_valid = ok;
+    demo->terrain_hash = hash;
+    demo->terrain_cam_x = camera->camera_pixel_x;
+    demo->terrain_cam_y = camera->camera_pixel_y;
+    return ok;
+}
+
+size_t aoe_demo_verify_terrain_cache(AoeDemo *demo) {
+    TerrainViewCamera camera;
+    size_t mismatches = 0;
+    if (!demo || !demo->loaded || !demo->terrain_valid ||
+        !terrain_compute_view_camera(demo->runtime.map.tiles,
+                                     demo->runtime.map.width,
+                                     demo->runtime.map.height,
+                                     &demo->geometry, demo->camera_x,
+                                     demo->camera_y, 0, 0, AOE_DEMO_WIDTH,
+                                     AOE_DEMO_HEIGHT, &camera))
+        return 0;
+    if (!draw_terrain_rect(demo, demo->pixels, &camera, 0, 0, AOE_DEMO_WIDTH,
+                           AOE_DEMO_HEIGHT))
+        return (size_t)-1;
+    for (size_t i = 0; i < (size_t)AOE_DEMO_WIDTH * AOE_DEMO_HEIGHT; ++i)
+        mismatches += demo->pixels[i] != demo->terrain[i];
+    return mismatches;
+}
+
+/* Expands indexed rows [y0, y1) into the framebuffer; columns [hx0, hx1)
+   of rows [hy0, hy1) use the halved overlay palette. */
+static void expand_rows(const AoeDemo *demo, uint32_t *fb, size_t stride,
+                        uint32_t y0, uint32_t y1, int half_all,
+                        int box, uint32_t bx0, uint32_t bx1, uint32_t by0,
+                        uint32_t by1) {
+    for (uint32_t y = y0; y < y1; ++y) {
+        const uint8_t *src = demo->pixels + (size_t)y * AOE_DEMO_WIDTH;
+        uint32_t *dst = fb + (size_t)y * stride;
+        const uint32_t *lut = half_all ? demo->palette_half
+                                       : demo->palette_abgr;
+        if (box && y >= by0 && y < by1) {
+            for (uint32_t x = 0; x < bx0; ++x) dst[x] = lut[src[x]];
+            for (uint32_t x = bx0; x < bx1; ++x)
+                dst[x] = demo->palette_half[src[x]];
+            for (uint32_t x = bx1; x < AOE_DEMO_WIDTH; ++x)
+                dst[x] = lut[src[x]];
+        } else {
+            for (uint32_t x = 0; x < AOE_DEMO_WIDTH; ++x)
+                dst[x] = lut[src[x]];
+        }
+    }
+}
+
 int aoe_demo_render(AoeDemo *demo, uint32_t *fb, size_t stride) {
     TerrainViewCamera camera;
     AoeScenarioSceneResultRor result;
     uint64_t start;
     char line[192];
     const uint32_t white = 0xffffffffu, gold = 0xff40d0ffu;
+    int message = demo && demo->message_time > 0.0f && demo->message[0];
+    uint32_t mx0 = 0, mx1 = 0;
     if (!demo || !fb || stride < AOE_DEMO_WIDTH) return 0;
     start = now_us(demo);
-    memset(demo->pixels, 0, (size_t)AOE_DEMO_WIDTH * AOE_DEMO_HEIGHT);
     memset(&result, 0, sizeof(result));
     if (demo->loaded &&
         terrain_compute_view_camera(demo->runtime.map.tiles,
@@ -935,36 +1109,39 @@ int aoe_demo_render(AoeDemo *demo, uint32_t *fb, size_t stride) {
             demo->pixels, (size_t)AOE_DEMO_WIDTH * AOE_DEMO_HEIGHT,
             AOE_DEMO_WIDTH, AOE_DEMO_HEIGHT, AOE_DEMO_WIDTH,
             0, 0, AOE_DEMO_WIDTH, AOE_DEMO_HEIGHT};
-        AoeScenarioSceneDrawRor draw = {
-            .geometry = &demo->geometry, .terrains = &demo->terrains,
-            .borders = &demo->borders, .terrain_art = &demo->terrain_art,
-            .border_art = &demo->border_art, .camera = &camera,
-            .surface = &surface, .tile_edges = &demo->edges,
-            .first_clip = {demo->first_clip,
-                           (size_t)AOE_DEMO_WIDTH * AOE_DEMO_HEIGHT,
-                           AOE_DEMO_WIDTH},
-            .second_clip = {demo->second_clip,
-                            (size_t)AOE_DEMO_WIDTH * AOE_DEMO_HEIGHT,
-                            AOE_DEMO_WIDTH},
-            /* Scenario fog history is not reconstructed yet; the original
-               exploration-gate bypass shows the whole map. */
-            .fog_enabled = 0, .bypass_exploration_gate = 1,
-            .resolve_unit = resolve_unit,
-            .resolve_unit_context = &demo->resolver,
-            .draw_ops = &demo->draw_ops};
-        if (!aoe_scenario_runtime_draw_scene_ror(&demo->runtime, &draw,
-                                                 &result))
+        AoeScenarioSceneDrawRor draw;
+        int ok = update_terrain(demo, &camera);
+        memcpy(demo->pixels, demo->terrain,
+               (size_t)AOE_DEMO_WIDTH * AOE_DEMO_HEIGHT);
+        scene_draw_init(demo, &draw, &camera, &surface,
+                        AOE_SCENE_PASS_OBJECTS);
+        if (!ok || !aoe_scenario_runtime_draw_scene_ror(&demo->runtime,
+                                                        &draw, &result))
             demo_status(demo, "Scene draw failed: unit %d graphic %.20s "
                         "status %d", demo->backend.last_unit_id,
                         demo->backend.last_graphic
                             ? demo->backend.last_graphic->name : "-",
                         demo->backend.last_status);
+    } else {
+        memset(demo->pixels, 0, (size_t)AOE_DEMO_WIDTH * AOE_DEMO_HEIGHT);
     }
-    for (uint32_t y = 0; y < AOE_DEMO_HEIGHT; ++y) {
-        const uint8_t *src = demo->pixels + (size_t)y * AOE_DEMO_WIDTH;
-        uint32_t *dst = fb + (size_t)y * stride;
-        for (uint32_t x = 0; x < AOE_DEMO_WIDTH; ++x)
-            dst[x] = demo->palette_abgr[src[x]];
+    if (message) {
+        int w = (int)strlen(demo->message) * 12 + 24;
+        if (w > AOE_DEMO_WIDTH) w = AOE_DEMO_WIDTH;
+        mx0 = (uint32_t)((AOE_DEMO_WIDTH - w) / 2);
+        mx1 = mx0 + (uint32_t)w;
+    }
+    /* Overlay backgrounds are halved through the palette, so the overlay
+       never reads the (possibly uncached) framebuffer back. */
+    if (demo->hud) {
+        expand_rows(demo, fb, stride, 0, 52, 1, 0, 0, 0, 0, 0);
+        expand_rows(demo, fb, stride, 52, AOE_DEMO_HEIGHT - 20, 0, message,
+                    mx0, mx1, 70, 100);
+        expand_rows(demo, fb, stride, AOE_DEMO_HEIGHT - 20, AOE_DEMO_HEIGHT,
+                    1, 0, 0, 0, 0, 0);
+    } else {
+        expand_rows(demo, fb, stride, 0, AOE_DEMO_HEIGHT, 0, message, mx0,
+                    mx1, 70, 100);
     }
     demo->stats.draw_ms = (float)(now_us(demo) - start) / 1000.0f;
     demo->stats.units_drawn = (uint32_t)result.units.drawn;
@@ -978,8 +1155,6 @@ int aoe_demo_render(AoeDemo *demo, uint32_t *fb, size_t stride) {
     if (demo->hud) {
         const float *r = demo->loaded ? demo->runtime.players[1].resource_values
                                       : NULL;
-        aoe_demo_fill_rect(fb, stride, 0, 0, AOE_DEMO_WIDTH, 52, 0xff000000u,
-                           1);
         aoe_demo_draw_text(fb, stride, 8, 6, 2, gold,
                            "AGE OF EMPIRES: RISE OF ROME - VITA PORT TECH DEMO");
         snprintf(line, sizeof(line),
@@ -997,23 +1172,21 @@ int aoe_demo_render(AoeDemo *demo, uint32_t *fb, size_t stride) {
                      r[0], r[1], r[3], r[2], r[11], r[32]);
             aoe_demo_draw_text(fb, stride, 8, 40, 1, white, line);
         }
-        snprintf(line, sizeof(line), "SIM %.1f MS  DRAW %.1f MS  CAM %.1f,%.1f",
-                 demo->stats.update_ms, demo->stats.draw_ms, demo->camera_x,
+        snprintf(line, sizeof(line),
+                 "FPS %.0f  SIM %.1f MS  DRAW %.1f MS", demo->stats.fps,
+                 demo->stats.update_ms, demo->stats.draw_ms);
+        aoe_demo_draw_text(fb, stride, 600, 30, 1, white, line);
+        snprintf(line, sizeof(line), "CAM %.1f,%.1f", demo->camera_x,
                  demo->camera_y);
         aoe_demo_draw_text(fb, stride, 600, 40, 1, white, line);
-        aoe_demo_fill_rect(fb, stride, 0, AOE_DEMO_HEIGHT - 20, AOE_DEMO_WIDTH,
-                           20, 0xff000000u, 1);
         aoe_demo_draw_text(fb, stride, 8, AOE_DEMO_HEIGHT - 14, 1, white,
                            "STICK/DPAD SCROLL  X TRAIN VILLAGER  [] ARMY "
                            "ATTACK  O NEXT VIEW  L/R SCENARIO  SELECT PAUSE  "
                            "TRIANGLE HUD  START QUIT");
     }
-    if (demo->message_time > 0.0f && demo->message[0]) {
-        int w = (int)strlen(demo->message) * 12 + 24;
-        int x = (AOE_DEMO_WIDTH - w) / 2;
-        aoe_demo_fill_rect(fb, stride, x, 70, w, 30, 0xff000000u, 1);
-        aoe_demo_draw_text(fb, stride, x + 12, 78, 2, white, demo->message);
-    }
+    if (message)
+        aoe_demo_draw_text(fb, stride, (int)mx0 + 12, 78, 2, white,
+                           demo->message);
     return 1;
 }
 

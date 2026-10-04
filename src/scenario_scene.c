@@ -14,6 +14,12 @@ static int ensure_scratch(AoeScenarioRuntimeRor *runtime, size_t needed) {
     return 1;
 }
 
+static int no_objects(void *context, uint32_t x, uint32_t y, int32_t ax,
+                      int32_t ay, uint8_t mode) {
+    (void)context; (void)x; (void)y; (void)ax; (void)ay; (void)mode;
+    return 1;
+}
+
 int aoe_scenario_runtime_draw_scene_ror(
     AoeScenarioRuntimeRor *runtime, const AoeScenarioSceneDrawRor *draw,
     AoeScenarioSceneResultRor *result) {
@@ -51,6 +57,7 @@ int aoe_scenario_runtime_draw_scene_ror(
     visibility.black_edges = draw->black_edges;
     visibility.first = draw->first_clip;
     visibility.second = draw->second_clip;
+    visibility.skip_terrain = draw->pass == AOE_SCENE_PASS_OBJECTS;
 
     sprite_surface.indices = draw->surface->indices;
     sprite_surface.size = draw->surface->indices_size;
@@ -58,7 +65,7 @@ int aoe_scenario_runtime_draw_scene_ror(
     sprite_surface.height = draw->surface->height;
     sprite_surface.stride = draw->surface->stride;
     sprite_surface.queue = NULL;
-    if (!draw->immediate_sprites) {
+    if (!draw->immediate_sprites && draw->pass != AOE_SCENE_PASS_TERRAIN) {
         /* View sprite list rows -200 .. height + 249 (0x00512536). */
         aoe_sprite_draw_queue_reset(&runtime->sprite_queue, -200,
                                     (int32_t)draw->surface->height + 249);
@@ -77,7 +84,10 @@ int aoe_scenario_runtime_draw_scene_ror(
             runtime->map.tiles, runtime->map.width, runtime->map.height,
             draw->geometry, draw->terrains, draw->borders,
             draw->terrain_art, draw->border_art, draw->camera, draw->surface,
-            &visibility, aoe_runtime_viewport_draw_tile_ror, &viewport,
+            &visibility,
+            draw->pass == AOE_SCENE_PASS_TERRAIN ?
+                no_objects : aoe_runtime_viewport_draw_tile_ror,
+            &viewport,
             &next.terrain_tiles, &next.object_tiles))
         return 0;
     if (sprite_surface.queue) {

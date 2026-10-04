@@ -39,6 +39,8 @@ int main(int argc, char **argv) {
     int frames, ok = 1;
     size_t start_scenario = 0;
     double draw_total = 0.0, update_total = 0.0;
+    size_t terrain_mismatches = 0;
+    int verify = getenv("DEMO_VERIFY_TERRAIN") != NULL;
     if (argc < 4) {
         fprintf(stderr, "usage: demo_host ROOT FRAMES OUT.ppm [SCENARIO "
                 "[CAMERA_X CAMERA_Y]]\n");
@@ -71,10 +73,16 @@ int main(int argc, char **argv) {
         if (i == 6) in.pressed = AOE_DEMO_BUTTON_ATTACK;
         if (i > 10 && i < 30) in.scroll_x = 1.0f;
         if (i > 30 && i < 50) in.scroll_y = 1.0f;
+        if (i > 50 && i < 70) {
+            in.scroll_x = -0.7f;
+            in.scroll_y = -0.4f;
+        }
     step:
         if (!aoe_demo_update(demo, &in, 1.0f / 30.0f) ||
             !aoe_demo_render(demo, fb, AOE_DEMO_WIDTH))
             ok = 0;
+        if (ok && verify) terrain_mismatches +=
+            aoe_demo_verify_terrain_cache(demo);
         aoe_demo_stats(demo, &stats);
         draw_total += stats.draw_ms;
         update_total += stats.update_ms;
@@ -89,6 +97,14 @@ int main(int argc, char **argv) {
            frames ? update_total / frames : 0.0,
            frames ? draw_total / frames : 0.0, stats.camera_x,
            stats.camera_y);
+    printf("terrain cache: %u full, %u shifted redraws",
+           stats.terrain_full, stats.terrain_shifted);
+    if (verify) {
+        printf(", %zu mismatched pixels against full redraws",
+               terrain_mismatches);
+        if (terrain_mismatches) ok = 0;
+    }
+    printf("\n");
     if (ok && !write_ppm(argv[3], fb, AOE_DEMO_WIDTH)) ok = 0;
     free(fb);
     aoe_demo_close(demo);

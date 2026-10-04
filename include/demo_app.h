@@ -67,6 +67,11 @@ int aoe_demo_render(AoeDemo *demo, uint32_t *framebuffer, size_t stride);
 
 const char *aoe_demo_status(const AoeDemo *demo);
 
+/* Diagnostics: redraws the full terrain layer for the current camera and
+   returns how many pixels differ from the cached layer (0 when the cache
+   is exact or not yet built). */
+size_t aoe_demo_verify_terrain_cache(AoeDemo *demo);
+
 /* Moves the camera to map tile coordinates (clamped to the map). */
 void aoe_demo_set_camera(AoeDemo *demo, float x, float y);
 
@@ -76,6 +81,8 @@ typedef struct {
     uint32_t trained, attack_orders;
     float update_ms, draw_ms;
     float camera_x, camera_y;
+    float fps;                       /* smoothed from update dt */
+    uint32_t terrain_full, terrain_shifted; /* terrain cache redraws */
 } AoeDemoStats;
 void aoe_demo_stats(const AoeDemo *demo, AoeDemoStats *stats);
 

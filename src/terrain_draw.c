@@ -479,6 +479,17 @@ static void draw_view_tile(uint32_t x, uint32_t y, void *opaque) {
         TileEdgeCoveragePlane first = runtime->first;
         TileEdgeCoveragePlane second = runtime->second;
         if (mode == TERRAIN_VIEW_HIDDEN) return;
+        if (runtime->skip_terrain) {
+            if (ctx->draw_tile) {
+                if (!ctx->draw_tile(ctx->draw_tile_context, x, y, anchor_x,
+                                    anchor_y, mode)) {
+                    ctx->failed = 1;
+                    return;
+                }
+                ++ctx->object_tiles;
+            }
+            return;
+        }
         if ((mode == TERRAIN_VIEW_VISIBLE && runtime->fog_enabled &&
              !terrain_visibility_edge_pattern(
                  runtime->tile_masks, ctx->map_width, ctx->map_height,

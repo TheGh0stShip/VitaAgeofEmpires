@@ -524,6 +524,9 @@ else()
     add_test(NAME ror_vita_demo_loop_real COMMAND demo_host
       "${CMAKE_SOURCE_DIR}/build/demo_root" 120
       "${CMAKE_BINARY_DIR}/demo_host_frame.ppm" 1)
+    # The cached/scrolled terrain layer must equal a full redraw.
+    set_tests_properties(ror_vita_demo_loop_real PROPERTIES
+      ENVIRONMENT DEMO_VERIFY_TERRAIN=1)
   endif()
   add_executable(unit_refs_tool tools/unit_refs_tool.c)
   target_link_libraries(unit_refs_tool PRIVATE aoe_scn aoe_dat)

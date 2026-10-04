@@ -1260,6 +1260,31 @@ The move action translated in `src/action_move.c`:
     (result 2).
   - **States 1 and 0xd.** These report done (1) and arrival (3).
 
+The movement system's setters `0x0044be90..0x0044bee0` only store the
+destination (`+0x11c..+0x124`), range (`+0x134`), target ID (`+0x138`)
+and target size (`+0x13c/+0x140`). Movement start `0x0044bf00`:
+- A unit whose template speed `+0x38` is <= 0 gets a one-waypoint path.
+- Otherwise the unit must pass its owner's path budget
+  (`0x0045c180/0x0045c1c0`). Without budget, `+0x156` counts the retry and
+  the call returns 2.
+- With budget, the request goes to the global pathfinder object
+  `0x006a1cc0`.
+
+The pathfinder (vtable `0x00544cf0`, constructor `0x00458570`) works on
+255 x 255 grids (bytes at `+0x10de28`, dwords at `+0xce624`, indexed
+`[first*255 + second]`). Its distance table `0x006a18c0` holds
+`__ftol(i*1.4142f*16 + 0.5)`: octile costs in sixteenths of a tile.
+
+The search `0x00458930` takes 15 stack arguments, with integer
+coordinates despite Ghidra's float types:
+- Its entry checks compare all four coordinates with the width only.
+- With range > 1, a goal closer than range*16 succeeds at once.
+- A unit with speed 0 or NaN fails.
+- Mode 1 clears the unit's active path (`+0xa4`, or `+0xd8` when `+0x154`
+  is set) on every early exit.
+`src/pathfinder.c` holds these exact pieces. The search body (about 2,100
+instructions) remains.
+
 The type-40–70 prefix is now composed by
 `aoe_live_unit_cleanup_derived_prefix_ror`: when semantic live `+0x184` is
 present, it drains the list through `aoe_action_list_clear` (`0x00403e70`),

@@ -26,10 +26,14 @@ typedef struct {
     int32_t status;                /* +0x148: 1 stopped, 2 moving */
     uint8_t use_alternate_path;    /* +0x154 */
     uint8_t retry;                 /* +0x156 */
-    /* +0x168: intermediate waypoint tiles, 3 bytes each starting x, y. */
-    const uint8_t *waypoint_tile;
+    /* +0x168: intermediate waypoint tiles, 3 bytes each starting x, y
+       (owned by the list functions below; storage of
+       waypoint_capacity entries). */
+    uint8_t *waypoint_tile;
     int32_t waypoint_count;        /* +0x16c */
-    uint8_t explored;              /* +0x174 (0x0044edd0 sets it) */
+    int32_t waypoint_capacity;     /* +0x170 */
+    /* +0x174: set by 0x0044edd0; the next append clears the list first. */
+    uint8_t waypoints_stale;
     float best;                    /* +0x178 */
     uint8_t facet_history[2];      /* +0x17c/+0x17d: last two facets */
 } AoeMovementRor;
@@ -45,13 +49,37 @@ int aoe_path_budget_allows_ror(const AoePathBudgetRor *budget, int32_t retry);
 void aoe_path_budget_consume_ror(AoePathBudgetRor *budget);
 
 /* Setters 0x0044be90 (z is passed as 1.0f by the move action),
-   0x0044bec0, 0x0044bed0, 0x0044bee0, 0x0044edd0. */
+   0x0044bec0, 0x0044bed0, 0x0044bee0, 0x0044edd0 (marks the intermediate
+   waypoints stale). */
 void aoe_movement_set_destination_ror(AoeMovementRor *m, float x, float y,
                                       float z);
 void aoe_movement_set_range_ror(AoeMovementRor *m, float range);
 void aoe_movement_set_target_id_ror(AoeMovementRor *m, int32_t id);
 void aoe_movement_set_target_size_ror(AoeMovementRor *m, float x, float y);
-void aoe_movement_mark_explored_ror(AoeMovementRor *m);
+void aoe_movement_mark_waypoints_stale_ror(AoeMovementRor *m);
+
+/* Intermediate waypoint list (live vtable +0x1b0..+0x1c4):
+   - get 0x0044eb40: entry i or NULL;
+   - append 0x0044eb70: clears a stale list first (passing `clear_arg`),
+     then stores the 3-byte entry, growing storage to 5 entries and then
+     doubling with zero fill; returns 0 on allocation failure;
+   - clear 0x0044ed20: count 0; with arg 1 the original also calls unit
+     +0x74's vtable +0x58(0), which is the caller's `on_clear` hook here;
+   - remove 0x0044ed50: shifts entries from max(index, ...) down by one, so
+     index 0 drops entry 0 but index k > 0 drops entry k - 1; out-of-range
+     indexes do nothing. */
+const uint8_t *aoe_movement_waypoint_get_ror(const AoeMovementRor *m,
+                                             int32_t index);
+int aoe_movement_waypoint_append_ror(AoeMovementRor *m,
+                                     const uint8_t entry[3],
+                                     int32_t clear_arg,
+                                     void (*on_clear)(void *context),
+                                     void *context);
+void aoe_movement_waypoint_clear_ror(AoeMovementRor *m, int32_t arg,
+                                     void (*on_clear)(void *context),
+                                     void *context);
+void aoe_movement_waypoint_remove_ror(AoeMovementRor *m, int32_t index);
+void aoe_movement_waypoint_free_ror(AoeMovementRor *m);
 
 /* Path cursor helpers: 0x00458440 reset, 0x00458450 advance (cursor +1
    while below count - 1, else clamps and returns 0), 0x004583d0 current

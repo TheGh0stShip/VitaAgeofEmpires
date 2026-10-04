@@ -51,6 +51,8 @@ static void place(void *c, AoeLiveUnit *u, float x, float y, float z) {
     e->place_z = z;
 }
 
+static void count_clear(void *c) { ++*(int *)c; }
+
 int main(void) {
     DatUnit tmpl;
     AoeLiveUnit unit;
@@ -170,5 +172,42 @@ int main(void) {
     assert(!aoe_unit_path_current_ror(&m.path));
     assert(aoe_movement_start_ror(&unit, &m, &budget, NULL) == -1);
     aoe_unit_path_free_ror(&m.path);
+
+    /* Intermediate waypoint list 0x0044eb40..0x0044ed50. */
+    {
+        AoeMovementRor w;
+        int cleared = 0;
+        memset(&w, 0, sizeof(w));
+        for (uint8_t i = 0; i < 6; ++i) {
+            uint8_t e[3] = {i, (uint8_t)(i + 10), (uint8_t)(i + 20)};
+            assert(aoe_movement_waypoint_append_ror(&w, e, 1, NULL, NULL));
+        }
+        /* 5 entries, then doubled to 10 with zero fill. */
+        assert(w.waypoint_count == 6 && w.waypoint_capacity == 10 &&
+               w.waypoint_tile[3 * 6] == 0 && w.waypoint_tile[3 * 9 + 2] == 0);
+        assert(aoe_movement_waypoint_get_ror(&w, 5)[1] == 15 &&
+               !aoe_movement_waypoint_get_ror(&w, 6) &&
+               !aoe_movement_waypoint_get_ror(&w, -1));
+        /* Index 0 drops entry 0; index 2 drops entry 1 (off by one). */
+        aoe_movement_waypoint_remove_ror(&w, 0);
+        assert(w.waypoint_count == 5 && w.waypoint_tile[0] == 1);
+        aoe_movement_waypoint_remove_ror(&w, 2);
+        assert(w.waypoint_count == 4 && w.waypoint_tile[0] == 1 &&
+               w.waypoint_tile[3] == 3 && w.waypoint_tile[6] == 4);
+        aoe_movement_waypoint_remove_ror(&w, 4); /* out of range */
+        assert(w.waypoint_count == 4);
+        /* A stale list is cleared (hook only with argument 1) on append. */
+        aoe_movement_mark_waypoints_stale_ror(&w);
+        {
+            uint8_t e[3] = {9, 9, 9};
+            assert(aoe_movement_waypoint_append_ror(&w, e, 1, count_clear,
+                                                    &cleared));
+        }
+        assert(w.waypoint_count == 1 && !w.waypoints_stale && cleared == 1 &&
+               w.waypoint_tile[0] == 9 && w.waypoint_capacity == 10);
+        aoe_movement_waypoint_clear_ror(&w, 0, count_clear, &cleared);
+        assert(!w.waypoint_count && cleared == 1);
+        aoe_movement_waypoint_free_ror(&w);
+    }
     return 0;
 }

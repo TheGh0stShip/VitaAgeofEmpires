@@ -1320,6 +1320,20 @@ The movement update `0x0044c2d0` (RoR 1.0a) runs once per tick:
 - `aoe_movement_update_ror` translates this, with `0x0044cde0` as a callback,
   and `tests/movement_update_test.c` covers it.
 
+The intermediate waypoint list lives in live vtable slots `+0x1b0..+0x1c4`
+(base `0x00542748`, shared by six moving-unit vtables):
+- **Entries.** Each entry is 3 bytes at `+0x168`, with count `+0x16c` and
+  capacity `+0x170`.
+- **Append** `0x0044eb70` first clears the list when `+0x174` is set.
+  `0x0044edd0` sets that byte; an earlier note mislabelled it "explored".
+  Storage grows to 5 entries and then doubles, with zero fill.
+- **Clear** `0x0044ed20` (`+0x1c0`) zeroes the count. With argument 1 it
+  also calls unit `+0x74`'s vtable `+0x58(0)`.
+- **Remove** `0x0044ed50` (`+0x1c4`) shifts later entries down by one.
+  Index 0 therefore removes entry 0, but index k > 0 removes entry k − 1.
+  Movement only uses index 0.
+- These are translated as `aoe_movement_waypoint_*_ror`.
+
 The tick toward a point `0x0044cde0` (RoR 1.0a):
 - **Speed.** A zero speed `+0x88` restarts at template speed `+0xb8`
   times a positive sprite multiplier (sprite `+0x64`), and the heading is

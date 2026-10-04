@@ -2,6 +2,7 @@
 
 #include <math.h>
 #include <stddef.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "aoe_ftol.h"
@@ -39,8 +40,77 @@ void aoe_movement_set_target_size_ror(AoeMovementRor *m, float x, float y) {
     m->target_size_y = y;
 }
 
-void aoe_movement_mark_explored_ror(AoeMovementRor *m) {
-    if (m) m->explored = 1;
+void aoe_movement_mark_waypoints_stale_ror(AoeMovementRor *m) {
+    if (m) m->waypoints_stale = 1;
+}
+
+const uint8_t *aoe_movement_waypoint_get_ror(const AoeMovementRor *m,
+                                             int32_t index) {
+    if (!m || !m->waypoint_tile || index < 0 || index >= m->waypoint_count)
+        return NULL;
+    return m->waypoint_tile + 3 * index;
+}
+
+void aoe_movement_waypoint_clear_ror(AoeMovementRor *m, int32_t arg,
+                                     void (*on_clear)(void *context),
+                                     void *context) {
+    if (!m) return;
+    m->waypoint_count = 0;
+    if (arg == 1 && on_clear) on_clear(context);
+}
+
+int aoe_movement_waypoint_append_ror(AoeMovementRor *m,
+                                     const uint8_t entry[3],
+                                     int32_t clear_arg,
+                                     void (*on_clear)(void *context),
+                                     void *context) {
+    uint8_t *grown;
+    int32_t i;
+    if (!m || !entry) return 0;
+    if (m->waypoints_stale == 1) {
+        aoe_movement_waypoint_clear_ror(m, clear_arg, on_clear, context);
+        m->waypoints_stale = 0;
+    }
+    if (m->waypoint_capacity <= m->waypoint_count) {
+        if (m->waypoint_capacity == 0) {
+            /* Capacity 0 means no owned storage; like the original, any
+               existing pointer is replaced, not freed. */
+            grown = malloc(15);
+            if (!grown) return 0;
+            m->waypoint_capacity = 5;
+            m->waypoint_count = 0;
+        } else {
+            if (m->waypoint_capacity > INT32_MAX / 6) return 0;
+            grown = malloc((size_t)m->waypoint_capacity * 6);
+            if (!grown) return 0;
+            for (i = 0; i < m->waypoint_count; ++i)
+                memcpy(grown + 3 * i, m->waypoint_tile + 3 * i, 3);
+            m->waypoint_capacity *= 2;
+            for (; i < m->waypoint_capacity; ++i) memset(grown + 3 * i, 0, 3);
+            free(m->waypoint_tile);
+        }
+        m->waypoint_tile = grown;
+    }
+    memcpy(m->waypoint_tile + 3 * m->waypoint_count, entry, 3);
+    ++m->waypoint_count;
+    return 1;
+}
+
+void aoe_movement_waypoint_remove_ror(AoeMovementRor *m, int32_t index) {
+    int32_t j;
+    if (!m || index < 0 || index >= m->waypoint_count) return;
+    /* The original first walks j up to min(index, count), i.e. index. */
+    for (j = index; j < m->waypoint_count; ++j)
+        if (j) memcpy(m->waypoint_tile + 3 * (j - 1),
+                      m->waypoint_tile + 3 * j, 3);
+    --m->waypoint_count;
+}
+
+void aoe_movement_waypoint_free_ror(AoeMovementRor *m) {
+    if (!m) return;
+    free(m->waypoint_tile);
+    m->waypoint_tile = NULL;
+    m->waypoint_count = m->waypoint_capacity = 0;
 }
 
 void aoe_unit_path_rewind_ror(AoeUnitPathRor *path) {

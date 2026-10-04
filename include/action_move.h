@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 
+#include "action_list.h"
 #include "live_unit_factory.h"
 
 /* Patched Rise of Rome 1.0a base action (vtable 0x005429d8, initialiser
@@ -18,6 +19,10 @@ typedef struct {
     const void *graphic;       /* +0x38 */
     uint8_t quiet;             /* +0x3c: suppress unit notices */
     float range;               /* move action +0x40 */
+    /* +0x34 sub-action list when the action owns one (an action nested in
+       another's list); NULL uses the unit's shared list. Owned by the
+       action: cleared and freed with it. */
+    AoeActionList *sub_list;
 } AoeMoveActionRor;
 
 typedef struct {

@@ -1067,6 +1067,14 @@ else()
       "${CMAKE_SOURCE_DIR}/build/ror/scenarios/EXPANS_1_1.scx"
       "${CMAKE_SOURCE_DIR}/build/ror/disc/GAME/DATA2/EMPIRES.DAT")
   endif()
+  add_executable(hunt_real tests/hunt_real.c)
+  target_link_libraries(hunt_real PRIVATE aoe_world_combat aoe_dat m)
+  target_compile_options(hunt_real PRIVATE -UNDEBUG)
+  if(EXISTS "${CMAKE_SOURCE_DIR}/build/ror/scenarios/EXPANS_1_1.scx")
+    add_test(NAME ror_hunt_and_fell COMMAND hunt_real
+      "${CMAKE_SOURCE_DIR}/build/ror/scenarios/EXPANS_1_1.scx"
+      "${CMAKE_SOURCE_DIR}/build/ror/disc/GAME/DATA2/EMPIRES.DAT")
+  endif()
   add_executable(campaign_build_real tests/campaign_build_real.c)
   target_link_libraries(campaign_build_real PRIVATE aoe_world_combat aoe_dat m)
   target_compile_options(campaign_build_real PRIVATE -UNDEBUG)

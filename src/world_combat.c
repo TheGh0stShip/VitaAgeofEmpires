@@ -59,6 +59,7 @@ typedef struct {
     AoeLiveUnit *(*target)(void *action);
 } HeapActionClass;
 static const HeapActionClass *heap_class(int16_t type);
+static void base_destroy(AoeWorldCombatRor *c, AoeMoveActionRor *b);
 static void repair_ops(AoeWorldCombatRor *c, AoeRepairActionOps *o);
 static void heal_ops(AoeWorldCombatRor *c, AoeHealActionOps *o);
 static void convert_ops(AoeWorldCombatRor *c, AoeConvertActionOps *o);
@@ -78,6 +79,7 @@ static void head_destroy(void *context, void *action) {
         k->destroy(s->world, action);
         return;
     }
+    if (k && k->target) base_destroy(s->world, action); /* base layout */
     free(action);
 }
 static void head_activate(void *context, void *action, uint8_t state);
@@ -87,8 +89,28 @@ static void release_building(AoeWorldCombatUnitRor *s);
 static void queue_free(void *ctx, void *p);
 
 /* Action-list callbacks for the move sub-action. */
+static void move_ops(AoeWorldCombatRor *c, AoeMoveActionOps *o);
+/* Base destructor 0x00406ed0: release the target (0x00407380) and the
+   secondary (0x004073f0), then destroy the +0x34 list. */
+static void base_destroy(AoeWorldCombatRor *c, AoeMoveActionRor *b) {
+    AoeMoveActionOps o;
+    move_ops(c, &o);
+    (void)aoe_action_set_target_ror(b, NULL, &o);
+    if (b->secondary_id != -1) {
+        AoeLiveUnit *x = o.resolve(c, b->secondary_id);
+        if (x) o.target_released(c, x, b->unit);
+        b->secondary_id = -1;
+    }
+    if (b->sub_list) {
+        (void)aoe_action_list_clear(b->sub_list);
+        free(b->sub_list);
+        b->sub_list = NULL;
+    }
+}
+/* Sub-actions are moves (type 1) or, nested in a hunt, attacks (type 9)
+   with their own sub-action list. */
 static void sub_destroy(void *context, void *action) {
-    (void)context;
+    base_destroy(context, action);
     free(action);
 }
 static void sub_activate(void *context, void *action, uint8_t state);
@@ -272,9 +294,16 @@ static void move_ops(AoeWorldCombatRor *c, AoeMoveActionOps *o) {
     o->status = status;
 }
 
+static void attack_ops(AoeWorldCombatRor *c, AoeAttackActionOps *o);
 static void sub_activate(void *context, void *action, uint8_t state) {
     AoeMoveActionOps o;
     (void)state;
+    if (((AoeMoveActionRor *)action)->type == 9) {
+        AoeAttackActionOps ao;
+        attack_ops(context, &ao);
+        (void)aoe_attack_action_activate_ror(action, &ao);
+        return;
+    }
     move_ops(context, &o);
     (void)aoe_move_action_activate_ror(action, &o);
 }
@@ -282,6 +311,16 @@ static int16_t entry_type(const void *action) {
     int16_t t;
     memcpy(&t, action, sizeof(t));
     return t;
+}
+/* An action's sub-action list (+0x34): its own when it has one (an action
+   nested in another, such as a hunt's attack), else the unit's shared
+   list. */
+static AoeActionList *sub_list_of(AoeWorldCombatRor *w,
+                                  AoeMoveActionRor *base) {
+    AoeWorldCombatUnitRor *s;
+    if (base->sub_list) return base->sub_list;
+    s = aoe_world_combat_unit_ror(w, base->unit);
+    return s ? &s->sub_actions : NULL;
 }
 static void farm_ops(AoeWorldCombatRor *c, AoeFarmActionOps *o);
 static void head_activate(void *context, void *action, uint8_t state) {
@@ -708,7 +747,7 @@ static int start_move(void *c, AoeAttackActionRor *a) {
         return 0;
     }
     mv->quiet = 1; /* 0x004076a0(1) after the push */
-    if (!aoe_action_list_push(&s->sub_actions, mv)) {
+    if (!aoe_action_list_push(sub_list_of(w, &a->base), mv)) {
         free(mv);
         return 0;
     }
@@ -717,6 +756,11 @@ static int start_move(void *c, AoeAttackActionRor *a) {
 static uint8_t update_head(void *c, void *action) {
     AoeMoveActionOps o;
     uint8_t r = 0;
+    if (((AoeMoveActionRor *)action)->type == 9) {
+        AoeAttackActionOps ao;
+        attack_ops(c, &ao);
+        return aoe_attack_action_update_ror(action, &ao, &r) ? r : 0;
+    }
     move_ops(c, &o);
     if (!aoe_move_action_update_ror(action, &o, &r)) return 0;
     return r;
@@ -726,12 +770,13 @@ static uint8_t sub_update(void *c, AoeAttackActionRor *a) {
     AoeWorldCombatUnitRor *s = aoe_world_combat_unit_ror(c, a->base.unit);
     AoeActionTickOps t = {c, update_head, update_waiting};
     uint8_t r = 0;
-    if (!s || !aoe_action_list_update_ror(&s->sub_actions, &t, &r)) return 0;
+    if (!s || !aoe_action_list_update_ror(sub_list_of(c, &a->base), &t, &r))
+        return 0;
     return r;
 }
 static void sub_clear(void *c, AoeAttackActionRor *a) {
     AoeWorldCombatUnitRor *s = aoe_world_combat_unit_ror(c, a->base.unit);
-    if (s) (void)aoe_action_list_clear(&s->sub_actions);
+    if (s) (void)aoe_action_list_clear(sub_list_of(c, &a->base));
 }
 static float tick_seconds(void *c) { return ((AoeWorldCombatRor *)c)->tick; }
 
@@ -863,7 +908,8 @@ static void refresh_world(void *c) {
 }
 /* Player +0x78(type, amount, 1) through the derived 0x004f6c60, then the
    +0x5c deposit notice (counted). */
-static void deposit_cb(void *c, AoeLiveUnit *u, int16_t type, float amount) {
+static void deposit_cb(void *c, AoeLiveUnit *u, int16_t type, float amount,
+                       int flag) {
     AoeWorldCombatRor *w = c;
     AoeScenarioRuntimePlayerRor *p = player_of(c, u);
     AoePlayerResourceTargetRor target;
@@ -873,7 +919,7 @@ static void deposit_cb(void *c, AoeLiveUnit *u, int16_t type, float amount) {
     target.field_104 = &p->field_104;
     target.context = w;
     target.refresh_world = refresh_world;
-    (void)aoe_player_resource_add_virtual_ror(&target, type, amount, 1);
+    (void)aoe_player_resource_add_virtual_ror(&target, type, amount, flag);
     ++w->deposits;
 }
 /* Farm action bindings: player +0x78(type, amount, 0); the 0x7e event is
@@ -967,7 +1013,7 @@ static int gather_start_move(void *c, AoeGatherActionRor *a, AoeLiveUnit *t,
         return 0;
     }
     if (quiet_first) mv->quiet = 1;
-    if (!aoe_action_list_push(&s->sub_actions, mv)) {
+    if (!aoe_action_list_push(sub_list_of(w, &a->base), mv)) {
         free(mv);
         return 0;
     }
@@ -978,16 +1024,65 @@ static uint8_t gather_sub_update(void *c, AoeGatherActionRor *a) {
     AoeWorldCombatUnitRor *s = aoe_world_combat_unit_ror(c, a->base.unit);
     AoeActionTickOps t = {c, update_head, update_waiting};
     uint8_t r = 0;
-    if (!s || !aoe_action_list_update_ror(&s->sub_actions, &t, &r)) return 0;
+    if (!s || !aoe_action_list_update_ror(sub_list_of(c, &a->base), &t, &r))
+        return 0;
     return r;
 }
 static void gather_sub_clear(void *c, AoeGatherActionRor *a) {
     AoeWorldCombatUnitRor *s = aoe_world_combat_unit_ror(c, a->base.unit);
-    if (s) (void)aoe_action_list_clear(&s->sub_actions);
+    if (s) (void)aoe_action_list_clear(sub_list_of(c, &a->base));
 }
 
+static int attack_params(AoeWorldCombatRor *c, const DatUnit *t,
+                         const DatUnitTask *task, AoeAttackParamsRor *p,
+                         AoeAttackParamsRor *d);
+/* Hunting state 12: 0x00401150 with its own sub-action list, pushed on
+   the hunt's list, then quiet. */
+static int gather_start_attack(void *c, AoeGatherActionRor *a,
+                               const void *move_graphic,
+                               const void *attack_graphic, float range) {
+    AoeWorldCombatRor *w = c;
+    AoeLiveUnit *u = a->base.unit;
+    AoeWorldCombatUnitRor *s = aoe_world_combat_unit_ror(w, u);
+    AoeAttackActionRor *at;
+    AoeAttackActionOps o;
+    AoeAttackParamsRor p, d;
+    AoeActionList *own, *list;
+    if (!s || !a->base.target || !(list = sub_list_of(w, &a->base)))
+        return 0;
+    at = calloc(1, sizeof(*at));
+    own = calloc(1, sizeof(*own));
+    if (!at || !own) {
+        free(at);
+        free(own);
+        return 0;
+    }
+    own->owner_state = &u->core.state;
+    own->ops = s->sub_actions.ops;
+    attack_params(w, u->core.unit_template, NULL, &p, &d);
+    p.move_graphic = move_graphic;
+    p.attack_graphic = attack_graphic;
+    p.idle_graphic = NULL;
+    p.range = range;
+    attack_ops(w, &o);
+    if (!aoe_attack_action_init_target_ror(at, u, a->base.target, &p, &d,
+                                           u->core.unit_template->max_range,
+                                           &o)) {
+        free(at);
+        free(own);
+        return 0;
+    }
+    at->base.sub_list = own;
+    if (!aoe_action_list_push(list, at)) {
+        sub_destroy(w, at);
+        return 0;
+    }
+    at->base.quiet = 1;
+    return 1;
+}
 static void gather_ops(AoeWorldCombatRor *c, AoeGatherActionOps *o) {
     memset(o, 0, sizeof(*o));
+    o->start_attack = gather_start_attack;
     move_ops(c, &o->move);
     o->graphic = graphic_id_cb;
     o->tick_seconds = tick_seconds;
@@ -1188,7 +1283,7 @@ static int build_start_move(void *c, AoeBuildActionRor *a, AoeLiveUnit *t,
         return 0;
     }
     if (quiet_first) mv->quiet = 1;
-    if (!aoe_action_list_push(&s->sub_actions, mv)) {
+    if (!aoe_action_list_push(sub_list_of(w, &a->base), mv)) {
         free(mv);
         return 0;
     }
@@ -1199,12 +1294,13 @@ static uint8_t build_sub_update(void *c, AoeBuildActionRor *a) {
     AoeWorldCombatUnitRor *s = aoe_world_combat_unit_ror(c, a->base.unit);
     AoeActionTickOps t = {c, update_head, update_waiting};
     uint8_t r = 0;
-    if (!s || !aoe_action_list_update_ror(&s->sub_actions, &t, &r)) return 0;
+    if (!s || !aoe_action_list_update_ror(sub_list_of(c, &a->base), &t, &r))
+        return 0;
     return r;
 }
 static void build_sub_clear(void *c, AoeBuildActionRor *a) {
     AoeWorldCombatUnitRor *s = aoe_world_combat_unit_ror(c, a->base.unit);
-    if (s) (void)aoe_action_list_clear(&s->sub_actions);
+    if (s) (void)aoe_action_list_clear(sub_list_of(c, &a->base));
 }
 static void build_ops(AoeWorldCombatRor *c, AoeBuildActionOps *o) {
     memset(o, 0, sizeof(*o));
@@ -1404,6 +1500,19 @@ static void *order_construct(void *c, AoeLiveUnit *u,
             return NULL;
         s->pending = 9;
         return s;
+    }
+    case 0x004b32c0: case 0x004b3350: {
+        AoeGatherActionRor *a = calloc(1, sizeof(*a));
+        AoeGatherActionOps o;
+        gather_ops(w, &o);
+        if (a && !(route->constructor == 0x004b32c0
+                       ? aoe_hunt_action_init_target_ror(a, u, task, t, &o)
+                       : aoe_hunt_action_init_point_ror(a, u, task, x, y,
+                                                        z))) {
+            free(a);
+            a = NULL;
+        }
+        return a;
     }
     case 0x004b1cb0: case 0x004b1d40: {
         AoeConvertActionRor *a = calloc(1, sizeof(*a));
@@ -2673,23 +2782,24 @@ static int heap_start_move(AoeWorldCombatRor *w, AoeMoveActionRor *base,
         return 0;
     }
     if (quiet_first) mv->quiet = 1;
-    if (!aoe_action_list_push(&s->sub_actions, mv)) {
+    if (!aoe_action_list_push(sub_list_of(w, base), mv)) {
         free(mv);
         return 0;
     }
     mv->quiet = 1;
     return 1;
 }
-static uint8_t heap_sub_update(AoeWorldCombatRor *w, AoeLiveUnit *u) {
-    AoeWorldCombatUnitRor *s = aoe_world_combat_unit_ror(w, u);
-    AoeActionTickOps t = {w, update_head, update_waiting};
+static uint8_t heap_sub_update(AoeWorldCombatRor *c, AoeMoveActionRor *base) {
+    AoeWorldCombatUnitRor *s = aoe_world_combat_unit_ror(c, base->unit);
+    AoeActionTickOps t = {c, update_head, update_waiting};
     uint8_t r = 0;
-    if (!s || !aoe_action_list_update_ror(&s->sub_actions, &t, &r)) return 0;
+    if (!s || !aoe_action_list_update_ror(sub_list_of(c, base), &t, &r))
+        return 0;
     return r;
 }
-static void heap_sub_clear(AoeWorldCombatRor *w, AoeLiveUnit *u) {
-    AoeWorldCombatUnitRor *s = aoe_world_combat_unit_ror(w, u);
-    if (s) (void)aoe_action_list_clear(&s->sub_actions);
+static void heap_sub_clear(AoeWorldCombatRor *c, AoeMoveActionRor *base) {
+    AoeWorldCombatUnitRor *s = aoe_world_combat_unit_ror(c, base->unit);
+    if (s) (void)aoe_action_list_clear(sub_list_of(c, base));
 }
 static int repair_start_move(void *c, AoeRepairActionRor *a, AoeLiveUnit *t,
                              float range, const void *graphic,
@@ -2697,10 +2807,10 @@ static int repair_start_move(void *c, AoeRepairActionRor *a, AoeLiveUnit *t,
     return heap_start_move(c, &a->base, t, range, graphic, quiet_first);
 }
 static uint8_t repair_sub_update(void *c, AoeRepairActionRor *a) {
-    return heap_sub_update(c, a->base.unit);
+    return heap_sub_update(c, &a->base);
 }
 static void repair_sub_clear(void *c, AoeRepairActionRor *a) {
-    heap_sub_clear(c, a->base.unit);
+    heap_sub_clear(c, &a->base);
 }
 static double repair_distance(void *c, AoeLiveUnit *u, AoeLiveUnit *t) {
     (void)c;
@@ -2867,10 +2977,10 @@ static int heal_start_move(void *c, AoeMoveActionRor *a, AoeLiveUnit *t,
     return heap_start_move(c, a, t, range, graphic, quiet_first);
 }
 static uint8_t heal_sub_update(void *c, AoeMoveActionRor *a) {
-    return heap_sub_update(c, a->unit);
+    return heap_sub_update(c, a);
 }
 static void heal_sub_clear(void *c, AoeMoveActionRor *a) {
-    heap_sub_clear(c, a->unit);
+    heap_sub_clear(c, a);
 }
 static uint8_t heal_work(void *c, AoeLiveUnit *t, float amount) {
     AoeWorldCombatRor *w = c;
@@ -3225,7 +3335,35 @@ static int convert_retarget(AoeWorldCombatRor *c, void *a, AoeLiveUnit *t,
     return aoe_convert_action_retarget_ror(a, t, &o, &accepted) && accepted;
 }
 
+/* Hunt (0x6e): activation 0x004b33a0 is shared with gathering. */
+static void hunt_activate(AoeWorldCombatRor *c, void *a, uint8_t st) {
+    AoeGatherActionOps o;
+    gather_ops(c, &o);
+    if (!aoe_gather_action_activate_ror(a, st, &o)) ++c->hunt_failures;
+}
+static uint8_t hunt_update(AoeWorldCombatRor *c, void *a) {
+    AoeGatherActionOps o;
+    uint8_t r = 0;
+    gather_ops(c, &o);
+    if (!aoe_hunt_action_update_ror(a, &o, &r)) {
+        ++c->hunt_failures;
+        return 0;
+    }
+    return r;
+}
+static const DatUnitTask *hunt_task(void *a) {
+    return ((AoeGatherActionRor *)a)->task;
+}
+static int hunt_retarget(AoeWorldCombatRor *c, void *a, AoeLiveUnit *t,
+                         float x, float y, float z) {
+    AoeGatherActionOps o;
+    gather_ops(c, &o);
+    return aoe_hunt_action_retarget_ror(a, t, x, y, z, &o);
+}
+
 static const HeapActionClass heap_classes[] = {
+    {0x6e, NULL, hunt_activate, hunt_update, hunt_task, hunt_retarget,
+     base_target},
     {0x68, NULL, convert_activate, convert_update, convert_task,
      convert_retarget, base_target},
     {0x69, NULL, heal_activate, heal_update, heal_task, heal_retarget,

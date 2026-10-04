@@ -143,6 +143,7 @@ typedef struct AoeWorldCombatRor {
     /* Changes of owner (unit +0x44 notices 0x20b) and conversion action
        dependency failures. */
     uint32_t conversions, convert_failures;
+    uint32_t hunt_failures; /* hunting action dependency failures */
 } AoeWorldCombatRor;
 
 int aoe_world_combat_init_ror(AoeWorldCombatRor *combat,

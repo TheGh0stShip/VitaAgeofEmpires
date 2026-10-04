@@ -36,10 +36,10 @@ typedef struct {
     /* Owner player attribute table +0x50[index]. */
     float (*player_attribute)(void *context, AoeLiveUnit *unit,
                               int16_t index);
-    /* Owner player +0x78(attribute, amount, 1) and +0x5c(unit ID, type,
-       ftol(amount)) when depositing. */
+    /* Owner player +0x78(attribute, amount, flag) and +0x5c(unit ID, type,
+       ftol(amount)) when depositing (flag 1 gathering, 0 hunting). */
     void (*deposit)(void *context, AoeLiveUnit *unit, int16_t type,
-                    float amount);
+                    float amount, int flag);
     /* 0x004514d0 on the owner's object list with state filter 2: the
        nearest unit of either template ID to (x, y) (zone-matched when
        `unit` is passed), or NULL. */
@@ -60,6 +60,13 @@ typedef struct {
                       int quiet_first);
     uint8_t (*sub_update)(void *context, AoeGatherActionRor *action);
     void (*sub_clear)(void *context, AoeGatherActionRor *action);
+    /* Hunting state 12: construct the attack action 0x00401150(unit,
+       target, move graphic, attack graphic, idle 0, range, template min
+       range, projectile, fire frame), push it on the sub-action list and
+       mark it quiet (0x004076a0(1)); 0 on allocation failure. */
+    int (*start_attack)(void *context, AoeGatherActionRor *action,
+                        const void *move_graphic, const void *attack_graphic,
+                        float range);
 } AoeGatherActionOps;
 
 /* Unit methods used by gathering (type-70 vtable 0x0054820c):
@@ -115,5 +122,44 @@ int aoe_gather_action_retarget_ror(AoeGatherActionRor *action,
 int aoe_gather_action_update_ror(AoeGatherActionRor *action,
                                  const AoeGatherActionOps *ops,
                                  uint8_t *result);
+
+/* Hunting action (vtable 0x00548848, action type 0x6e; routed from task
+   action 0x6e to 0x004b32c0 (target: position and template ID only for a
+   target below state 7) / 0x004b3350 (point)). It shares the gather
+   layout, activation (0x004b33a0) and delivery (+0x30 0x00403b80); the
+   gather entry points dispatch to these by type, as the vtable does.
+   Differences from gathering:
+   - a live target (state <= 2) is attacked first (state 12, attack action
+     with the task's move/proceeding graphics and work range);
+   - the working graphic (task +0x3c) while gathering; notices carry
+     0x265;
+   - no foreign-owner check and no template 45/50 exception;
+   - an unreachable drop site retries with a fresh search after the 3 s
+     wait; none at all idles (owner kind 0: state 2, else 1);
+   - deposits use flag 0. */
+int aoe_hunt_action_init_target_ror(AoeGatherActionRor *action,
+                                    AoeLiveUnit *unit,
+                                    const DatUnitTask *task,
+                                    AoeLiveUnit *target,
+                                    const AoeGatherActionOps *ops);
+int aoe_hunt_action_init_point_ror(AoeGatherActionRor *action,
+                                   AoeLiveUnit *unit,
+                                   const DatUnitTask *task, float x, float y,
+                                   float z);
+/* +0x5c = 0x004b3460. */
+int aoe_hunt_action_set_state_ror(AoeGatherActionRor *action, uint8_t state,
+                                  const AoeGatherActionOps *ops);
+/* +0x2c = 0x004b4060: owner kind 0 idles (2), others finish (1). */
+int aoe_hunt_action_stop_ror(AoeGatherActionRor *action,
+                             const AoeGatherActionOps *ops);
+/* +0x34 = 0x004b40a0: an own drop site with a load delivers (8); another
+   target is hunted (4); none walks to the point (15). */
+int aoe_hunt_action_retarget_ror(AoeGatherActionRor *action,
+                                 AoeLiveUnit *target, float x, float y,
+                                 float z, const AoeGatherActionOps *ops);
+/* +0x28 = 0x004b39c0. *result: 0 working, 1 done, 3 failed. */
+int aoe_hunt_action_update_ror(AoeGatherActionRor *action,
+                               const AoeGatherActionOps *ops,
+                               uint8_t *result);
 
 #endif

@@ -56,7 +56,9 @@ static int32_t owner_kind(void *c, AoeLiveUnit *u) { (void)c; (void)u; return ow
 static int face(void *c, AoeLiveUnit *u, AoeLiveUnit *t) { (void)c; (void)u; (void)t; return faced; }
 static float distance(void *c, AoeLiveUnit *u, AoeLiveUnit *t) { (void)c; (void)u; (void)t; return distance_v; }
 static float attribute(void *c, AoeLiveUnit *u, int16_t i) { (void)c; (void)u; (void)i; return attribute_v; }
-static void deposit(void *c, AoeLiveUnit *u, int16_t type, float amount) {
+static void deposit(void *c, AoeLiveUnit *u, int16_t type, float amount,
+                    int flag) {
+    assert(flag == 1);
     (void)c; (void)u;
     deposit_type = type;
     deposit_amount = amount;
@@ -82,6 +84,12 @@ static int start_move(void *c, AoeGatherActionRor *a, AoeLiveUnit *t,
 static uint8_t sub_update(void *c, AoeGatherActionRor *a) { (void)c; (void)a; return sub_result; }
 static void sub_clear(void *c, AoeGatherActionRor *a) { (void)c; (void)a; }
 
+static int start_attack(void *c, AoeGatherActionRor *a, const void *mg,
+                        const void *ag, float range) {
+    (void)c; (void)a; (void)mg; (void)ag; (void)range;
+    return 1;
+}
+
 int main(void) {
     AoeGatherActionOps ops;
     AoeGatherActionRor g;
@@ -95,6 +103,7 @@ int main(void) {
     ops.deposit = deposit; ops.find_drop_site = find; ops.play_sound = play;
     ops.start_move = start_move; ops.sub_update = sub_update;
     ops.sub_clear = sub_clear;
+    ops.start_attack = start_attack;
 
     villager.core.unit_template = &vil_t;
     villager.core.unit_id = 1;

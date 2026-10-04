@@ -11,6 +11,7 @@
 #include "game_options.h"
 #include "player_outcome.h"
 #include "player_object_memory.h"
+#include "shared_vision.h"
 
 enum { AOE_SCENARIO_RUNTIME_PLAYERS = 9 };
 
@@ -31,6 +32,8 @@ typedef struct {
        0x004f02d0; Gaia (a computer player, 0x0050a470 -> 0x004f7290) keeps
        the one its tribe constructor 0x004efb00 builds with a rebuild. */
     AoeResearchCompletionManagerRor research;
+    /* Players +0xb0..+0x100, world 0x00520c60 (shared_vision.h). */
+    AoePlayerSharedVision shared;
     /* Player +0x114 object memory (see player_object_memory.h). */
     AoePlayerObjectMemory object_memory;
     /* Player +0x34 outcome manager and its player view. */
@@ -89,7 +92,7 @@ typedef struct {
     size_t building_count, building_capacity;
     uint32_t queue_status_four; /* teardown sink for status-4 counts */
     AoeLiveUnitPlayerEffects player_effects; /* world.player_effects */
-    uint32_t doppelgangers_requested;
+    uint32_t doppelgangers_requested, doppelgangers_created;
     uint64_t completed_buildings;
     int16_t active_player;
     uint8_t initialized;
@@ -120,6 +123,12 @@ int aoe_scenario_runtime_build_ror(
    limit), 33 (0), 30 (500) and 45 (1), the 23 outcome events of player
    +0x34 and the +0x840 tracker refresh (0x004f1aa0, counted only). */
 int aoe_scenario_runtime_start_game_ror(AoeScenarioRuntimeRor *runtime);
+
+/* World 0x00520c60 over the runtime's players: flags from player +0x104
+   (field_104), stances from the scenario diplomacy rows. Runs at the end
+   of the build and whenever resource 50 sets +0x104. */
+void aoe_scenario_runtime_refresh_shared_vision_ror(
+    AoeScenarioRuntimeRor *runtime);
 
 /* One attribute command (0x0045d6a0 family) for a player of the runtime. */
 int aoe_scenario_runtime_attribute_ror(AoeScenarioRuntimeRor *runtime,

@@ -94,7 +94,6 @@ typedef struct AoeWorldCombatRor {
     float tick;
     uint32_t notices, hits, misses, projectiles, kills, blasts, alerts,
         corpses, deposits, repairs, completions;
-    int32_t player_field_104[AOE_SCENARIO_RUNTIME_PLAYERS];
     /* World update placeholders: default tasks (+0x1fc) routed to an
        action class that is not translated yet, and attached-unit list
        updates, are counted only; list objects that are not runtime units

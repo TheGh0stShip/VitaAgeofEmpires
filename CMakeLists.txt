@@ -382,6 +382,10 @@ target_link_libraries(aoe_runtime_viewport PUBLIC aoe_runtime_map
   aoe_terrain_draw aoe_live_unit_viewport)
 target_compile_options(aoe_runtime_viewport PRIVATE -Wall -Wextra)
 
+add_library(aoe_shared_vision STATIC src/shared_vision.c)
+target_include_directories(aoe_shared_vision PUBLIC include)
+target_compile_options(aoe_shared_vision PRIVATE -Wall -Wextra)
+
 add_library(aoe_player_object_memory STATIC src/player_object_memory.c)
 target_include_directories(aoe_player_object_memory PUBLIC include)
 target_compile_options(aoe_player_object_memory PRIVATE -Wall -Wextra)
@@ -392,7 +396,7 @@ target_include_directories(aoe_scenario_runtime PUBLIC include)
 target_link_libraries(aoe_scenario_runtime PUBLIC aoe_runtime_map
   aoe_live_unit_factory aoe_player_templates aoe_unit_placement_check
   aoe_terrain_transition aoe_tech_tree aoe_sprite_draw
-  aoe_player_object_memory)
+  aoe_player_object_memory aoe_shared_vision)
 target_compile_options(aoe_scenario_runtime PRIVATE -Wall -Wextra)
 
 add_library(aoe_world_motion STATIC src/world_motion.c)
@@ -628,9 +632,13 @@ else()
   target_link_libraries(slp_decode_test PRIVATE aoe_slp)
   target_compile_options(slp_decode_test PRIVATE -UNDEBUG)
   add_test(NAME slp_format_decode COMMAND slp_decode_test)
+  add_executable(shared_vision_test tests/shared_vision_test.c)
+  target_link_libraries(shared_vision_test PRIVATE aoe_shared_vision)
+  target_compile_options(shared_vision_test PRIVATE -UNDEBUG)
+  add_test(NAME ror_world_shared_vision COMMAND shared_vision_test)
   add_executable(player_object_memory_test tests/player_object_memory_test.c)
   target_link_libraries(player_object_memory_test PRIVATE
-    aoe_player_object_memory)
+    aoe_player_object_memory aoe_shared_vision)
   target_compile_options(player_object_memory_test PRIVATE -UNDEBUG)
   add_test(NAME ror_player_object_memory COMMAND player_object_memory_test)
   add_executable(sprite_draw_queue_test tests/sprite_draw_queue_test.c)
@@ -1000,6 +1008,14 @@ else()
   add_executable(world_motion_real tests/world_motion_real.c)
   target_link_libraries(world_motion_real PRIVATE aoe_world_motion aoe_dat m)
   target_compile_options(world_motion_real PRIVATE -UNDEBUG)
+  add_executable(doppelganger_real tests/doppelganger_real.c)
+  target_link_libraries(doppelganger_real PRIVATE aoe_world_combat aoe_dat m)
+  target_compile_options(doppelganger_real PRIVATE -UNDEBUG)
+  if(EXISTS "${CMAKE_SOURCE_DIR}/build/ror/scenarios/EXPANS_1_1.scx")
+    add_test(NAME ror_doppelganger_fog_memory COMMAND doppelganger_real
+      "${CMAKE_SOURCE_DIR}/build/ror/scenarios/EXPANS_1_1.scx"
+      "${CMAKE_SOURCE_DIR}/build/ror/disc/GAME/DATA2/EMPIRES.DAT")
+  endif()
   add_executable(campaign_build_real tests/campaign_build_real.c)
   target_link_libraries(campaign_build_real PRIVATE aoe_world_combat aoe_dat m)
   target_compile_options(campaign_build_real PRIVATE -UNDEBUG)

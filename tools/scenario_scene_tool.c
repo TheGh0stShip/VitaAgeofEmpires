@@ -38,10 +38,18 @@ static int resolve_unit(void *opaque, const AoeLiveUnit *unit,
     int owner;
     if (!resolver || !unit || !state) return 0;
     owner = unit->runtime_owner_index;
+    /* A doppelganger (class 0x19) draws with its source's colour object
+       (+0x90), under its source's ID, and not for its hidden players. */
+    if (unit->core.class_code == 0x19) owner = unit->doppel.source_owner;
     if (owner < 0 || owner >= AOE_SCENARIO_RUNTIME_PLAYERS) return 0;
     memset(state, 0, sizeof(*state));
     state->active_player = resolver->active_player;
     state->owner_color = resolver->colors[owner];
+    if (unit->core.class_code == 0x19) {
+        state->type25_controller =
+            unit->doppel.source ? &unit->doppel.source->core : NULL;
+        state->type25_hidden_players = unit->doppel.hidden_players;
+    }
     return 1;
 }
 

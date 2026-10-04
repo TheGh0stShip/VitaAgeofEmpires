@@ -13,7 +13,7 @@
    live-unit constructor (0x004a7c80/0x004a8200). It deliberately is not the
    PC object ABI. `owner_node` is the player +0x28/+0x2c/+0x30 list link;
    `placement.node` is the distinct map-tile link. */
-typedef struct {
+typedef struct AoeLiveUnit {
     AoeLiveUnitCore core;
     AoeLiveUnitPlacement placement;
     AoeUnitGraphicState graphic;
@@ -54,6 +54,16 @@ typedef struct {
     uint8_t select_2c;
     uint8_t select_30; /* Constructor argument: live +0x4a (type 25). */
     uint8_t constructed;
+    /* Type-25 doppelganger fields (RoR 0x00436030, live +0x8c..+0xac). */
+    struct {
+        struct AoeLiveUnit *source;     /* +0x8c, NULL once it died */
+        const DatUnit *source_template; /* +0x94 */
+        int16_t source_owner;           /* +0x98 (also the +0x90 colour) */
+        int32_t source_id;              /* +0xac, -1 once it died */
+        const uint32_t *tile_mask;      /* +0x9c: shared mask at its tile */
+        uint32_t last_mask;             /* +0xa0 */
+        uint32_t hidden_players;        /* +0xa4 */
+    } doppel;
 } AoeLiveUnit;
 
 /* Source-backed tail of the RoR type-20/25 update predicate at 0x00415820.
@@ -341,6 +351,24 @@ typedef struct {
        before/predicate/after, 0 on failure, 1 with *result written. */
     int (*live_update)(void *context, AoeLiveUnit *unit, uint8_t *result);
 } AoeLiveUnitPlayerUpdateBinding;
+
+/* Doppelganger constructor tail 0x00436030 (after the common constructor
+   built template 243 for the observing player at the source position)
+   and 0x004364b0: source links and template (+0x8c/+0x94/+0x98/+0xac),
+   the source's current graphic (+0x10), a clone of its sprite list
+   (0x004155e0 -> 0x00415620), its facet (+0x35), class 0x19 (+0x4e) and
+   the tile-mask pointer (+0x9c). A source already in state 7+ is not
+   kept. The +0xa8/+0xa9 display bytes (source template +0x8e / +0x90) are
+   not parsed yet. */
+int aoe_live_unit_doppelganger_init_ror(AoeLiveUnit *unit,
+                                        AoeLiveUnit *source,
+                                        const uint32_t *tile_mask);
+
+/* The same bound per-object update (predicate, then +0x08 cleanup when it
+   reports done) over another player list: the world loop's second pass
+   over each player's +0x30 list (type-25 doppelgangers). */
+int aoe_live_unit_player_list_update_ror(
+    AoeLiveUnitPlayerUpdateBinding *binding, AoeObjectUpdateList *list);
 
 /* Installs callbacks into a copy of AoePlayerUpdateOps and runs the actual
    Rise of Rome player +0x7c update. It matches list object pointers against

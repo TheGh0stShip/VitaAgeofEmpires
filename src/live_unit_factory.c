@@ -706,6 +706,62 @@ int aoe_live_unit_player_update_step_ror(
     return !binding->failed;
 }
 
+int aoe_live_unit_doppelganger_init_ror(AoeLiveUnit *unit,
+                                        AoeLiveUnit *source,
+                                        const uint32_t *tile_mask) {
+    size_t count;
+    if (!unit || !unit->constructed || !source || !source->constructed ||
+        !tile_mask)
+        return 0;
+    unit->doppel.source = source;
+    unit->doppel.source_template = source->core.unit_template;
+    unit->doppel.source_owner = source->runtime_owner_index;
+    unit->doppel.source_id = source->core.unit_id;
+    unit->graphic.current_graphic = source->graphic.current_graphic;
+    /* 0x004155e0 rebuilds the source's list through the add method
+       (0x00415640) and hands the copy over (0x00415620 clears first). */
+    aoe_sprite_runtime_clear(&unit->sprites);
+    count = aoe_sprite_list_count(&source->sprites.list);
+    for (size_t i = 0; i < count; ++i) {
+        const AoeSpriteInstance *instance =
+            aoe_sprite_runtime_at(&source->sprites, i);
+        if (!instance ||
+            !aoe_sprite_runtime_add(
+                &unit->sprites, instance->graphic,
+                aoe_sprite_list_priority_at(&source->sprites.list, i),
+                instance->offset_x, instance->offset_y))
+            return 0;
+    }
+    unit->core.scenario_frame = source->core.scenario_frame;
+    if (source->core.state >= 7) {
+        unit->doppel.source = NULL;
+        unit->doppel.source_id = -1;
+    }
+    unit->core.class_code = 0x19;
+    unit->doppel.tile_mask = tile_mask;
+    unit->doppel.last_mask = 0;
+    unit->doppel.hidden_players = 0;
+    return 1;
+}
+
+int aoe_live_unit_player_list_update_ror(
+    AoeLiveUnitPlayerUpdateBinding *binding, AoeObjectUpdateList *list) {
+    AoeObjectUpdateOps ops;
+    if (!binding || !list || !binding->world || !binding->common_cleanup ||
+        !binding->other_predicate || !binding->other_action ||
+        !binding->cooperative_pending || !binding->cooperative_pump)
+        return 0;
+    binding->failed = 0;
+    memset(&ops, 0, sizeof(ops));
+    ops.user = binding;
+    ops.predicate = bound_live_predicate;
+    ops.action = bound_live_action;
+    ops.cooperative_pending = bound_cooperative_pending;
+    ops.cooperative_pump = bound_cooperative_pump;
+    if (!aoe_object_update_list(list->head, &ops)) return 0;
+    return !binding->failed;
+}
+
 int aoe_live_unit_cleanup_uses_reuse_pool_ror(const AoeLiveUnit *unit) {
     if (!unit || !unit->constructed || !unit->core.unit_template ||
         !unit->core.unit_template->negative_id_mode) return 0;

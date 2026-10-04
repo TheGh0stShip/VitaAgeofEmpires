@@ -835,7 +835,10 @@ static float player_attribute(void *c, AoeLiveUnit *u, int16_t index) {
     if (!p || index < 0 || index >= p->resources.count) return 0.0f;
     return p->resources.values[index];
 }
-static void refresh_world(void *c) { (void)c; }
+static void refresh_world(void *c) {
+    aoe_scenario_runtime_refresh_shared_vision_ror(
+        ((AoeWorldCombatRor *)c)->motion->runtime);
+}
 /* Player +0x78(type, amount, 1) through the derived 0x004f6c60, then the
    +0x5c deposit notice (counted). */
 static void deposit_cb(void *c, AoeLiveUnit *u, int16_t type, float amount) {
@@ -845,7 +848,7 @@ static void deposit_cb(void *c, AoeLiveUnit *u, int16_t type, float amount) {
     if (!p) return;
     target.resources = &p->resources;
     target.derived = 1;
-    target.field_104 = &w->player_field_104[u->runtime_owner_index];
+    target.field_104 = &p->field_104;
     target.context = w;
     target.refresh_world = refresh_world;
     (void)aoe_player_resource_add_virtual_ror(&target, type, amount, 1);
@@ -862,7 +865,7 @@ static void owner_add(void *c, AoeLiveUnit *u, int16_t type, float amount) {
     if (!p) return;
     target.resources = &p->resources;
     target.derived = 1;
-    target.field_104 = &w->player_field_104[u->runtime_owner_index];
+    target.field_104 = &p->field_104;
     target.context = w;
     target.refresh_world = refresh_world;
     (void)aoe_player_resource_add_virtual_ror(&target, type, amount, 0);
@@ -1746,6 +1749,40 @@ static int attached_update(void *opaque, AoeLiveUnit *u, AoeActionList *l) {
 /* Derived +0x24 tails after the common predicate: 0x00415200 (dying
    states, sprites) for types 20..80, then 0x00406500's action list for
    types 40..80. A projectile's list holds its flight action. */
+/* Doppelganger +0x24 tail 0x00436630 (after 0x00415200): a source in
+   state 7+ is dropped (+0x8c = 0, +0xac = -1). When the shared mask at its
+   tile changes: a doppelganger below state 3 whose player (with shared
+   vision, +0xd8) now sees the tile leaves (+0x68); for each player bit in
+   the owner's indirect mask (+0xdc) the owner's via mask (+0xe0 + 4i) is
+   added to the hidden players (+0xa4). (A source whose slot no longer holds
+   the same unit is also treated as gone: the runtime reuses slots.) */
+static int doppel_update(AoeWorldCombatRor *c, AoeLiveUnit *u) {
+    AoeScenarioRuntimeRor *r = c->motion->runtime;
+    AoeScenarioRuntimePlayerRor *owner;
+    AoeLiveUnit *src = u->doppel.source;
+    uint32_t mask, bits;
+    if (src && (!src->constructed ||
+                src->core.unit_id != u->doppel.source_id ||
+                src->core.state >= 7))
+        u->doppel.source = NULL;
+    if (!u->doppel.source) u->doppel.source_id = -1;
+    if (!u->doppel.tile_mask) return 1;
+    mask = *u->doppel.tile_mask;
+    if (mask == u->doppel.last_mask) return 1;
+    owner = owner_of(c, u);
+    if (!owner) return 0;
+    if ((owner->shared.visible & mask) && u->core.state < 3 &&
+        !aoe_live_unit_scenario_high_root_ror(u, &owner->resources,
+                                              &owner->owner, &r->world,
+                                              &owner->vision_binding))
+        return 0;
+    bits = owner->shared.indirect & mask;
+    for (int i = 0; bits && i < AOE_SHARED_VISION_PLAYERS; ++i, bits >>= 1)
+        if (bits & 1) u->doppel.hidden_players |= owner->shared.via[i];
+    u->doppel.last_mask = mask;
+    return 1;
+}
+
 static int unit_after(void *opaque, AoeLiveUnit *u, uint8_t *result) {
     AoeWorldCombatRor *c = opaque;
     const DatUnit *t = u->core.unit_template;
@@ -1761,6 +1798,8 @@ static int unit_after(void *opaque, AoeLiveUnit *u, uint8_t *result) {
     if (!aoe_live_unit_update_type20_tail_ror(
             u, &so, graphic_by_id(c, t->dying_graphic) != NULL))
         return 0;
+    if (t->type == 25 && u->core.class_code == 0x19)
+        return doppel_update(c, u);
     if (t->type < 40) return 1;
     if ((f = flight_of(c, u)) && f->active) {
         if (u->core.state > 2) {
@@ -2328,6 +2367,37 @@ int aoe_world_combat_update_world_ror(AoeWorldCombatRor *c, float tick) {
         /* The world tick then resets the player +0x58 queue (0x0045fad0
            disc, see player_queue.c). */
         aoe_explored_cells_reset(&pl->vision.owner_cells58);
+    }
+    /* Second pass over every player's +0x30 list (type-25 doppelgangers),
+       bracketed by r = rand() ... srand(r) (around 0x0051daae). */
+    {
+        uint32_t reseed = aoe_rng_next(&r->rng);
+        for (unsigned p = 0; p < AOE_SCENARIO_RUNTIME_PLAYERS; ++p) {
+            AoeScenarioRuntimePlayerRor *pl = &r->players[p];
+            AoeLiveUnitPlayerUpdateBinding b;
+            if (!pl->owner.object_list30.head) continue;
+            memset(&b, 0, sizeof(b));
+            b.owner = &pl->owner;
+            b.world = &r->world;
+            b.target_ops = (AoeLiveUnitUpdateTargetOps){c, set_state};
+            state_ops(c, &b.state_ops);
+            b.context = c;
+            b.common_cleanup = common_cleanup;
+            b.queue_status_four_count = status_four;
+            b.deallocate_queue_entries = free_queue;
+            b.other_predicate = other_predicate;
+            b.other_action = other_action;
+            b.cooperative_pending = no_cooperative;
+            b.cooperative_pump = no_pump;
+            b.resolve_live = resolve_live;
+            b.before_update = unit_before;
+            b.after_update = unit_after;
+            b.live_update = live_update;
+            if (!aoe_live_unit_player_list_update_ror(
+                    &b, &pl->owner.object_list30))
+                return 0;
+        }
+        aoe_rng_seed(&r->rng, reseed);
     }
     return 1;
 }

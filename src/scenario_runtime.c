@@ -252,6 +252,7 @@ int aoe_scenario_runtime_build_ror(
         }
     }
     runtime->initialized = 1;
+    aoe_scenario_runtime_refresh_shared_vision_ror(runtime);
     return 1;
 fail:
     aoe_scenario_runtime_destroy_ror(runtime);
@@ -337,7 +338,27 @@ static int runtime_building_init(AoeScenarioRuntimeRor *runtime,
                &player->vision_binding, runtime->graphics);
 }
 
-static void runtime_refresh_world(void *context) { (void)context; }
+void aoe_scenario_runtime_refresh_shared_vision_ror(
+    AoeScenarioRuntimeRor *runtime) {
+    int32_t flags[AOE_SHARED_VISION_PLAYERS];
+    uint8_t stance[AOE_SHARED_VISION_PLAYERS][AOE_SHARED_VISION_PLAYERS];
+    AoePlayerSharedVision out[AOE_SHARED_VISION_PLAYERS];
+    int count;
+    if (!runtime) return;
+    count = runtime->player_count;
+    if (count > AOE_SHARED_VISION_PLAYERS) count = AOE_SHARED_VISION_PLAYERS;
+    for (int i = 0; i < AOE_SHARED_VISION_PLAYERS; ++i) {
+        flags[i] = runtime->players[i].field_104;
+        for (int j = 0; j < AOE_SHARED_VISION_PLAYERS; ++j)
+            stance[i][j] = (uint8_t)runtime->diplomacy[i][j];
+    }
+    aoe_world_shared_vision_ror(count, flags, stance, out);
+    for (int i = 0; i < count; ++i) runtime->players[i].shared = out[i];
+}
+
+static void runtime_refresh_world(void *context) {
+    aoe_scenario_runtime_refresh_shared_vision_ror(context);
+}
 
 void aoe_scenario_runtime_owner_add_ror(AoeScenarioRuntimeRor *runtime,
                                         AoeLiveUnit *unit, int16_t type,
@@ -376,14 +397,55 @@ static int effect_memory_remove(void *context, int player, int32_t unit_id,
                                            unit_id, category);
 }
 
-/* Doppelganger creation (template 243 +0x38 -> 0x00436030 with the source
-   unit, 0x004364b0) is not translated yet: report it instead of
-   inventing a fog image. */
+/* Doppelganger template 243 +0x38(player, x, y, z, source): the factory
+   0x00440250 builds a 0xb0-byte type-25 unit for the observing player at
+   the source position with 0x00436030, whose tail ends in 0x004367a0:
+   among the other doppelgangers (class 0x19) on its tile with the same
+   source ID in state 2, one of the same observer is removed (+0x68) and
+   one of another observer exchanges hidden-player bits with it. */
 static int effect_doppelganger(void *context, int player, void *unit) {
     AoeScenarioRuntimeRor *r = context;
-    (void)player; (void)unit;
+    AoeLiveUnit *source = unit; /* the core is the unit's first member */
+    AoeLiveUnit *d;
+    AoeScenarioRuntimePlayerRor *pl;
+    int32_t tx, ty;
+    const AoeObjectUpdateNode *node;
+    if (player < 0 || player >= AOE_SCENARIO_RUNTIME_PLAYERS) return 0;
     ++r->doppelgangers_requested;
-    return 0;
+    if (!aoe_scenario_runtime_editor_create_ror(
+            r, (uint8_t)player, 243, source->core.position.x38,
+            source->core.position.y3c, source->core.position.z40, &d))
+        return 0;
+    tx = aoe_ftol32(d->core.position.x38);
+    ty = aoe_ftol32(d->core.position.y3c);
+    if (tx < 0 || ty < 0 || (uint32_t)tx >= r->map.width ||
+        (uint32_t)ty >= r->map.height)
+        return 0;
+    if (!aoe_live_unit_doppelganger_init_ror(
+            d, source,
+            &r->map.masks.masks[(size_t)ty * r->map.width + (uint32_t)tx]))
+        return 0;
+    for (node = r->map.objects[(size_t)ty * r->map.width + (uint32_t)tx].head;
+         node; node = node->next) {
+        AoeLiveUnit *other = node->object;
+        if (!other || other == d || other->core.class_code != 0x19 ||
+            other->core.unit_id == d->core.unit_id ||
+            other->doppel.source_id != d->doppel.source_id ||
+            other->core.state != 2)
+            continue;
+        if (other->runtime_owner_index == d->runtime_owner_index) {
+            pl = &r->players[other->runtime_owner_index];
+            if (!aoe_live_unit_scenario_high_root_ror(
+                    other, &pl->resources, &pl->owner, &r->world,
+                    &pl->vision_binding))
+                return 0;
+        } else {
+            other->doppel.hidden_players |= 1u << d->runtime_owner_index;
+            d->doppel.hidden_players |= 1u << other->runtime_owner_index;
+        }
+    }
+    ++r->doppelgangers_created;
+    return 1;
 }
 
 /* Wall adjacency (patched RoR 1.0a). Only units whose current graphic

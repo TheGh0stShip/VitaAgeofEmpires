@@ -223,8 +223,24 @@ Next:
    - Rendering: sprites go to the view sprite list (`0x00518d90`) and are
      drawn after all terrain, ordered by layer, then row, then queue order.
    - Water palette 248..254 cycles (`0x004843d0`).
-   Next: doppelganger construction, the object-memory add path (player map
-   update `0x00517060`), research actions (103), the active player's view-code refresh, the transport
+   Fog memory is now in place:
+   - **Object memory.** Player `+0x114` is filled by the map update
+     `0x00517060` / `0x00517130` from newly explored cells, and the world
+     tick resets player `+0x58`.
+   - **Shared vision.** `0x00520c60` runs at load and when resource 50
+     sets `+0x104` (`src/shared_vision.c`).
+   - **Doppelgangers.** Template 243, type 25, `0x00440250` ->
+     `0x00436030` / `0x004364b0`: source links, graphic, sprite-list clone
+     (`0x004155e0`), facet, class 0x19, tile-mask pointer and dedup
+     `0x004367a0`. The update `0x00436630` runs in the world loop's
+     `+0x30` pass, bracketed by `r = rand() ... srand(r)`.
+   - **Draw.** The scene resolvers give doppelgangers their source colour,
+     controller and hidden-player mask.
+   - **Test.** `ror_doppelganger_fog_memory` removes a real gold mine out
+     of player 2's sight and checks the image's life cycle.
+   - **Not yet.** The `+0xa8`/`+0xa9` display bytes (source template
+     `+0x8e`/`+0x90`) are unparsed. Fog is still bypassed for rendering.
+   Next: research actions (103), the active player's view-code refresh, the transport
    action (type 12) and the type-50 visibility spotting.
 2. Replace placeholder bindings (diplomacy, zones, sounds, victory
    conditions, player +0x30 lists).

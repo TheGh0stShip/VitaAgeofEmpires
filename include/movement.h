@@ -17,10 +17,13 @@ typedef struct {
     float range;                   /* +0x134 */
     int32_t target_id;             /* +0x138 */
     float target_size_x, target_size_y; /* +0x13c/+0x140 */
+    float current_speed;           /* live +0x88 (0 when stopped) */
     int32_t retry_baseline;        /* +0x144, read by the pathfinder */
+    int32_t status;                /* +0x148: 1 stopped, 2 moving */
     uint8_t use_alternate_path;    /* +0x154 */
     uint8_t retry;                 /* +0x156 */
-    const uint8_t *waypoint_tile;  /* +0x168: x, y bytes */
+    /* +0x168: intermediate waypoint tiles, 3 bytes each starting x, y. */
+    const uint8_t *waypoint_tile;
     int32_t waypoint_count;        /* +0x16c */
     uint8_t explored;              /* +0x174 (0x0044edd0 sets it) */
     float best;                    /* +0x178 */
@@ -88,5 +91,32 @@ typedef struct {
 int aoe_movement_start_ror(AoeLiveUnit *unit, AoeMovementRor *movement,
                            AoePathBudgetRor *budget,
                            const AoeMovementOps *ops);
+
+typedef struct {
+    AoeMovementOps base;
+    /* Live vtable +0x1c0(0) on stopping and +0x1c4(0), which drops the
+       front intermediate waypoint (updating waypoint_tile/count). */
+    void (*stop)(void *context, AoeLiveUnit *unit);
+    void (*pop_waypoint)(void *context, AoeLiveUnit *unit);
+    /* 0x004ab9e0(x, y): the unit's terrain-restriction zone at a tile. */
+    uint8_t (*zone)(void *context, AoeLiveUnit *unit, int32_t x, int32_t y);
+    /* Pathfinder re-path counter +0x11dcc0 (0x0045a4d0). */
+    void (*count_repath)(void *context);
+    /* 0x0044cde0: one tick toward (x, y), returning 0..6. */
+    int32_t (*step_to)(void *context, AoeLiveUnit *unit, float x, float y);
+} AoeMovementStepOps;
+
+/* 0x0044c2d0, one movement update. Returns 2 when stopped (in range, at the
+   destination, or when the tick toward it reports 2..5), 1 while moving or
+   after a deferred/failed re-path with intermediate waypoints left, and 0
+   when the path is exhausted without them. Distances use the template
+   footprint (+0x30/+0x34) and target size, the path waypoints and the
+   intermediate tiles; re-paths follow 0x0044bf00 with two different
+   centre-snap variants. Both only matter for the placement side effect:
+   a one-waypoint path cannot advance, so either way the update gives up. The debug path sprites are not reproduced. Returns
+   -1 for missing dependencies (host-only). */
+int aoe_movement_update_ror(AoeLiveUnit *unit, AoeMovementRor *movement,
+                            AoePathBudgetRor *budget,
+                            const AoeMovementStepOps *ops);
 
 #endif

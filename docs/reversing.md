@@ -1289,6 +1289,37 @@ and target size (`+0x13c/+0x140`). Movement start `0x0044bf00`:
 - `aoe_movement_start_ror` (`src/movement.c`) translates this, and
   `tests/movement_test.c` covers each branch.
 
+The movement update `0x0044c2d0` (RoR 1.0a) runs once per tick:
+- It measures the destination distance with the template footprint
+  (`+0x30/+0x34`) plus the target size (`+0x13c/+0x140`) subtracted per
+  axis and clamped at 0. A positive range `+0x134` that covers this
+  distance stops the unit: `+0x88 = 0`, status `+0x148 = 1`, vtable
+  `+0x1c0(0)`, `+0x58 = 0`, return 2.
+- Under 0.5 tiles it steps straight to the destination through `0x0044cde0`,
+  unless the unit already stands on its current waypoint (return 2 with no
+  status change).
+- Otherwise it advances past a waypoint it stands on (placing the unit there
+  when `0x0045a4f0` fits) and steps toward the current waypoint.
+  `0x0044cde0` results:
+  - 0 keeps moving (status 2, return 1);
+  - 1 also clears `+0x88`;
+  - 5 stops;
+  - 2 advances the path;
+  - 3, 4 and 6 give up. Giving up clears `+0x88`, sets status 2, and
+    returns 0 without intermediate waypoints or adds 5 to `+0x144` and
+    returns 1.
+- An exhausted path drops intermediate tiles (3 bytes each at `+0x168`, via
+  vtable `+0x1c4(0)`) until one lies beyond footprint radius + range + 0.3
+  tiles, then re-paths to it:
+  - The re-path needs the player budget and increments counter
+    `+0x11dcc0`.
+  - From the first exit only, `+0x144` is decremented and gives up at 0.
+  - The destination still counts as reached at radius + range, plus 3
+    tiles when the next two intermediate tiles share a terrain-restriction
+    zone (`0x004ab9e0`) and the distance exceeds 4.
+- `aoe_movement_update_ror` translates this, with `0x0044cde0` as a callback,
+  and `tests/movement_update_test.c` covers it.
+
 The pathfinder (vtable `0x00544cf0`, constructor `0x00458570`) works on
 255 x 255 grids (bytes at `+0x10de28`, dwords at `+0xce624`, indexed
 `[first*255 + second]`). Its distance table `0x006a18c0` holds

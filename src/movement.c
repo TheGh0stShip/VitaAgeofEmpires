@@ -157,3 +157,232 @@ int aoe_movement_start_ror(AoeLiveUnit *unit, AoeMovementRor *m,
     (void)aoe_unit_path_advance_ror(&m->path);
     return 0;
 }
+
+/* 0x0044c2d0 stop tail at 0x0044c9e5 (with +0x88 cleared first at
+   0x0044c5f4). */
+static int stop_moving(AoeLiveUnit *unit, AoeMovementRor *m,
+                       const AoeMovementStepOps *ops, int clear_speed) {
+    if (clear_speed) m->current_speed = 0.0f;
+    m->status = 1;
+    ops->stop(ops->base.context, unit);
+    unit->group_unit_count = 0;
+    return 2;
+}
+
+/* Tails at 0x0044c87d/0x0044cd70/0x0044cd9e. */
+static int give_up(AoeMovementRor *m) {
+    m->current_speed = 0.0f;
+    m->status = 2;
+    if (m->waypoint_count <= 1) return 0;
+    m->retry_baseline += 5;
+    return 1;
+}
+
+static double path_distance(const AoeVisibilityUnitRef *pos,
+                            const AoePathWaypointRor *wp) {
+    double dx = (float)((double)wp->x - pos->x38);
+    double dy = (double)wp->y - pos->y3c;
+    return sqrt(dy * dy + dx * dx);
+}
+
+/* Loops at 0x0044c61f and 0x0044ca5f: drop intermediate waypoints already
+   within reach. Returns 0 when none remain. */
+static int drop_reached(AoeLiveUnit *unit, AoeMovementRor *m, float radius,
+                        const AoeMovementStepOps *ops) {
+    const AoeVisibilityUnitRef *pos = &unit->core.position;
+    for (;;) {
+        double dx, dy, dist, reach;
+        float dyf;
+        ops->pop_waypoint(ops->base.context, unit);
+        if (m->waypoint_count <= 0) return 0;
+        if (!m->waypoint_tile) return -1;
+        dx = (double)m->waypoint_tile[0] - pos->x38;
+        dy = (double)m->waypoint_tile[1] - pos->y3c;
+        dyf = (float)dy;
+        dist = sqrt(dy * dyf + dx * dx);
+        reach = (double)radius + m->range + (double)0.3f;
+        if (reach < dist || isnan(reach) || isnan(dist)) return 1;
+    }
+}
+
+/* Re-path at 0x0044c70c / 0x0044cb04 after the budget passed. `variant`
+   1 fails when the snap test does not fit; variant 2 fails only when the
+   unit is already centred. Returns 1 to continue, 0 to give up, -1 on
+   error. */
+static int repath(AoeLiveUnit *unit, AoeMovementRor *m,
+                  AoePathBudgetRor *budget, const AoeMovementStepOps *ops,
+                  int variant) {
+    const AoeVisibilityUnitRef *pos = &unit->core.position;
+    AoePathRequestRor req;
+    uint32_t bits = UINT32_MAX;
+    int32_t returned;
+    aoe_path_budget_consume_ror(budget);
+    m->start_x = pos->x38;
+    m->start_y = pos->y3c;
+    m->start_z = pos->z40;
+    m->retry = 0;
+    ops->count_repath(ops->base.context);
+    req.x1 = aoe_ftol32(m->start_x);
+    req.y1 = aoe_ftol32(m->start_y);
+    if (m->waypoint_count > 0) {
+        if (!m->waypoint_tile) return -1;
+        req.x2 = m->waypoint_tile[0];
+        req.y2 = m->waypoint_tile[1];
+    } else {
+        req.x2 = aoe_ftol32(m->dest_x);
+        req.y2 = aoe_ftol32(m->dest_y);
+    }
+    req.unit = unit;
+    req.range = m->range;
+    req.target_id = m->target_id;
+    req.mode = 1;
+    req.budget_limited = 1;
+    req.argument_30 = 1;
+    req.check_occupancy = 1;
+    req.step = 1;
+    memcpy(&req.query_radius, &bits, sizeof(bits));
+    req.query_filter = -1;
+    req.budget_base = 2500;
+    returned = ops->base.find(ops->base.context, &req);
+    unit->group_unit_count = 0;
+    if (returned == 0 && m->path.count == 1) {
+        float cx = (float)(floor((double)pos->x38) + 0.5);
+        float cy = (float)(floor((double)pos->y3c) + 0.5);
+        int fits = ops->base.fits(ops->base.context, unit, cx, cy);
+        int off = off_centre(pos->x38) || off_centre(pos->y3c);
+        if (fits && off)
+            ops->base.place(ops->base.context, unit, cx, cy, pos->z40);
+        else if (variant == 1 || fits)
+            return 0;
+    }
+    aoe_unit_path_rewind_ror(&m->path);
+    return 1;
+}
+
+int aoe_movement_update_ror(AoeLiveUnit *unit, AoeMovementRor *m,
+                            AoePathBudgetRor *budget,
+                            const AoeMovementStepOps *ops) {
+    const AoeVisibilityUnitRef *pos;
+    const DatUnit *tmpl;
+    const AoePathWaypointRor *wp;
+    float dxf, ex, dist, radius, bonus = 0.0f;
+    double dy, ey;
+    int advanced = 1, r;
+    if (!unit || !unit->core.unit_template || !m || !budget || !ops ||
+        !ops->base.order_flag || !ops->base.find || !ops->base.fits ||
+        !ops->base.place || !ops->stop || !ops->pop_waypoint || !ops->zone ||
+        !ops->count_repath || !ops->step_to)
+        return -1;
+    pos = &unit->core.position;
+    tmpl = unit->core.unit_template;
+    ops->base.order_flag(ops->base.context, unit, 0);
+
+    /* Footprint-adjusted distance to the destination. */
+    dxf = (float)((double)m->dest_x - pos->x38);
+    dy = (double)m->dest_y - pos->y3c;
+    if (dxf < 0.0f || isnan(dxf)) dxf = -dxf;
+    if (dy < 0.0 || isnan(dy)) dy = -dy;
+    ex = (float)((double)dxf - ((double)tmpl->size[0] + m->target_size_x));
+    ey = dy - ((double)tmpl->size[1] + m->target_size_y);
+    if (ex < 0.0f || isnan(ex)) ex = 0.0f;
+    if (ey < 0.0 || isnan(ey)) ey = 0.0;
+    dist = (float)sqrt(ey * ey + (double)ex * ex);
+
+    if (m->range > 0.0f && !(dist > m->range)) {
+        m->current_speed = 0.0f;
+        return stop_moving(unit, m, ops, 0);
+    }
+    if (!((double)dist >= 0.5)) {
+        double d;
+        wp = aoe_unit_path_current_ror(&m->path);
+        d = wp ? path_distance(pos, wp) : dist;
+        if (d == 0.0 || isnan(d)) {
+            unit->group_unit_count = 0;
+            return 2;
+        }
+        r = ops->step_to(ops->base.context, unit, m->dest_x, m->dest_y);
+        switch (r) {
+        case 5: return stop_moving(unit, m, ops, 0);
+        case 0: m->status = 2; return 1;
+        case 1: case 6: m->current_speed = 0.0f; m->status = 2; return 1;
+        case 2: case 3: case 4: return stop_moving(unit, m, ops, 1);
+        default: break;
+        }
+    }
+
+    radius = (float)sqrt((double)tmpl->size[1] * tmpl->size[1] +
+                         (double)tmpl->size[0] * tmpl->size[0]);
+    wp = aoe_unit_path_current_ror(&m->path);
+    if (!wp) {
+        advanced = 0;
+    } else {
+        double d = path_distance(pos, wp);
+        if (d == 0.0 || isnan(d)) {
+            if (ops->base.fits(ops->base.context, unit, wp->x, wp->y))
+                ops->base.place(ops->base.context, unit, wp->x, wp->y, wp->z);
+            advanced = aoe_unit_path_advance_ror(&m->path);
+            m->best = 100000.0f;
+        }
+    }
+    if (m->waypoint_count > 1 && dist > 4.0f) {
+        if (!m->waypoint_tile) return -1;
+        if (ops->zone(ops->base.context, unit, m->waypoint_tile[0],
+                      m->waypoint_tile[1]) ==
+            ops->zone(ops->base.context, unit, m->waypoint_tile[3],
+                      m->waypoint_tile[4]))
+            bonus = 3.0f;
+    }
+
+    if (!advanced) {
+        double reach = (double)bonus + m->range + radius;
+        if (!(reach < dist || isnan(reach) || isnan(dist)))
+            return stop_moving(unit, m, ops, 1);
+        r = drop_reached(unit, m, radius, ops);
+        if (r <= 0) return r;
+        if (--m->retry_baseline <= 0) {
+            m->current_speed = 0.0f;
+            m->status = 2;
+            if (m->waypoint_count <= 1) return 0;
+            m->retry_baseline += 5;
+            return 1;
+        }
+        if (!aoe_path_budget_allows_ror(budget, m->retry)) {
+            m->current_speed = 0.0f;
+            ++m->retry;
+            return 1;
+        }
+        r = repath(unit, m, budget, ops, 1);
+        if (r < 0) return r;
+        if (!r) return give_up(m);
+        if (!aoe_unit_path_advance_ror(&m->path)) return give_up(m);
+        m->best = 100000.0f;
+    }
+
+    wp = aoe_unit_path_current_ror(&m->path);
+    if (!wp) return give_up(m);
+    r = ops->step_to(ops->base.context, unit, wp->x, wp->y);
+    switch (r) {
+    case 5: return stop_moving(unit, m, ops, 0);
+    case 0: m->status = 2; return 1;
+    case 1: m->current_speed = 0.0f; m->status = 2; return 1;
+    case 2: break;
+    default: return give_up(m);
+    }
+    if (aoe_unit_path_advance_ror(&m->path)) {
+        m->status = 2;
+        return 1;
+    }
+    r = drop_reached(unit, m, radius, ops);
+    if (r <= 0) return r;
+    if (!aoe_path_budget_allows_ror(budget, m->retry)) {
+        m->current_speed = 0.0f;
+        ++m->retry;
+        return 1;
+    }
+    r = repath(unit, m, budget, ops, 2);
+    if (r < 0) return r;
+    if (!r) return give_up(m);
+    if (!aoe_unit_path_advance_ror(&m->path)) return give_up(m);
+    m->status = 2;
+    return 1;
+}

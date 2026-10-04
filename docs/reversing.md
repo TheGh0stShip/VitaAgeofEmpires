@@ -1263,12 +1263,31 @@ The move action translated in `src/action_move.c`:
 The movement system's setters `0x0044be90..0x0044bee0` only store the
 destination (`+0x11c..+0x124`), range (`+0x134`), target ID (`+0x138`)
 and target size (`+0x13c/+0x140`). Movement start `0x0044bf00`:
-- A unit whose template speed `+0x38` is <= 0 gets a one-waypoint path.
+- A unit whose template `+0x38` is <= 0 (or NaN) gets a direct
+  start-to-destination path. `+0x38` is the third DAT size float (height):
+  `0x00404a60` adds half of it to `z` for a centre point, while the speed
+  getter `0x0044ead0` reads `+0xb8`. An earlier note here called `+0x38` the
+  speed.
 - Otherwise the unit must pass its owner's path budget
   (`0x0045c180/0x0045c1c0`). Without budget, `+0x156` counts the retry and
   the call returns 2.
 - With budget, the request goes to the global pathfinder object
   `0x006a1cc0`.
+  `+0x156` resets and `+0x144` becomes the intermediate-waypoint count
+  `+0x16c` plus 25 (owner player `0x00454150` returns 0) or 15. The search
+  runs from the unit's tile to the intermediate tile at `*(+0x168)` (when
+  `+0x16c > 0`) or the destination tile, with range `+0x134`, target
+  `+0x138`, mode 1, no distance output, budget-limited, occupancy checked,
+  step 1 and unit queries disabled (`-1, -1`).
+- A failed search that leaves a one-waypoint path, for a unit not centred
+  on its tile (fraction 0.5 on both axes) that fits at the centre
+  (`0x0045a4f0(.., 1)`), moves the unit there through vtable `+0x34` and
+  returns 2. Otherwise the path cursor rewinds and advances (`0x00458440`,
+  `0x00458450`) and the call returns 0. The moving branch sits behind a
+  constant test (`mov ecx,0x0044f1a0; test ecx,ecx`) whose dead side
+  returns 1.
+- `aoe_movement_start_ror` (`src/movement.c`) translates this, and
+  `tests/movement_test.c` covers each branch.
 
 The pathfinder (vtable `0x00544cf0`, constructor `0x00458570`) works on
 255 x 255 grids (bytes at `+0x10de28`, dwords at `+0xce624`, indexed

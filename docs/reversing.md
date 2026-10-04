@@ -1429,6 +1429,37 @@ loader `0x004413b0`: `+0x10` ID, `+0x14` class, `+0x30/+0x34/+0x38` size.
 - `src/action_attack.c` translates the class, and
   `tests/action_attack_test.c` covers it.
 
+World motion binding (`src/world_motion.c`). This binds movement, the A*
+search and the fit check to the owned scenario runtime, with per-unit state
+in a side table keyed by unit ID. Positions move through
+`aoe_live_unit_place_ror_with_vision` (0x004ab160). A unit's footprint is
+lifted before each move and restored after.
+- **Confirmed reads.**
+  - Border records sit at map `+0x338c` with stride 0x5a0 (the drawing code
+    reads byte `+0x338c` and short `+0x392a` per border). The pathfinder's
+    `+0x3928` short is therefore border offset `+0x59c`, the last-but-one
+    short (`underlay_terrain`). That field name is inferred from the record
+    layout.
+  - Terrain passability and the terrain speed multiplier both read the DAT
+    terrain restriction row of template `+0x66`.
+- **Assumptions to replace with traced behaviour:**
+  - every constructed unit in states 0..2 starts with its footprint
+    counted;
+  - path budgets are unlimited;
+  - owner kind is 0;
+  - free terrains are −1;
+  - one zone;
+  - idle group members;
+  - a no-op `+0x12c`.
+- **Real-map regression.** `tests/world_motion_real.c` on `EXPANS_1_1.scx`
+  drives one player-1 unit per terrain restriction class (a war boat and a
+  land unit) about 11 tiles to a stop. Both stop within the 0.4 edge range,
+  matching the move action's default.
+- **Range 0 never arrives.** With range 0 the 8-facet steps (turn threshold
+  0.8) can cycle four positions around the goal, and the two-tick
+  oscillation snap never fires. Real orders avoid this because the move
+  action substitutes 0.4 for a non-positive range.
+
 Combat core (RoR 1.0a; type-50 vtable `0x0054324c`, tribe `0x00547fa0`):
 - **Reload.** `+0x7c` `0x004269f0` reports ready when the reload timer
   `+0x1b4` is <= 0. `0x00426a10` resets it from template `+0x120`.

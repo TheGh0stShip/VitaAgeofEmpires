@@ -250,7 +250,8 @@ A separate status-art request is fulfilled by `status/port-progress.png` and
 `tools/render_status_art.sh`. It composes genuine local AoE/RoR grass, Roman
 town buildings, Wonder construction stage, and builder sprites. It is
 explicitly labeled original-asset status art, not a Vita/game screenshot.
-The present full-port estimate is approximately 10%; `status/README.md`
+The full-port estimate was approximately 10% at first and is 15% as of
+2026-10-04 (simulation milestones; see `status/current.json`); `status/README.md`
 documents the rationale and how to regenerate the single image at a later
 percentage. This does not advance or satisfy the actual scene-alpha milestone.
 

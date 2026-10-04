@@ -421,6 +421,11 @@ target_include_directories(aoe_action_convert PUBLIC include)
 target_link_libraries(aoe_action_convert PUBLIC aoe_action_move m)
 target_compile_options(aoe_action_convert PRIVATE -Wall -Wextra)
 
+add_library(aoe_action_trade STATIC src/action_trade.c)
+target_include_directories(aoe_action_trade PUBLIC include)
+target_link_libraries(aoe_action_trade PUBLIC aoe_action_move m)
+target_compile_options(aoe_action_trade PRIVATE -Wall -Wextra)
+
 add_library(aoe_action_heal STATIC src/action_heal.c)
 target_include_directories(aoe_action_heal PUBLIC include)
 target_link_libraries(aoe_action_heal PUBLIC aoe_action_move m)
@@ -434,7 +439,8 @@ target_link_libraries(aoe_world_combat PUBLIC aoe_world_motion
   aoe_unit_order aoe_train_action_adapter aoe_train_action aoe_building_update
   aoe_player_costs aoe_unit_placement_check aoe_player_templates
   aoe_command_production aoe_research_action aoe_action_repair
-  aoe_action_heal aoe_action_convert aoe_live_unit_owner)
+  aoe_action_heal aoe_action_convert aoe_live_unit_owner
+  aoe_action_trade)
 target_compile_options(aoe_world_combat PRIVATE -Wall -Wextra)
 
 add_library(aoe_scenario_editor_catalog STATIC src/scenario_editor_catalog.c)
@@ -960,6 +966,10 @@ else()
   target_link_libraries(action_convert_test PRIVATE aoe_action_convert)
   target_compile_options(action_convert_test PRIVATE -UNDEBUG)
   add_test(NAME original_ror_convert_action COMMAND action_convert_test)
+  add_executable(action_trade_test tests/action_trade_test.c)
+  target_link_libraries(action_trade_test PRIVATE aoe_action_trade)
+  target_compile_options(action_trade_test PRIVATE -UNDEBUG)
+  add_test(NAME original_ror_trade_action COMMAND action_trade_test)
   add_executable(combat_test tests/combat_test.c)
   target_link_libraries(combat_test PRIVATE aoe_combat)
   target_compile_options(combat_test PRIVATE -UNDEBUG)

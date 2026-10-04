@@ -10,6 +10,7 @@
 #include "action_gather.h"
 #include "action_heal.h"
 #include "action_repair.h"
+#include "action_trade.h"
 #include "action_list.h"
 #include "combat.h"
 #include "live_unit_owner.h"
@@ -144,6 +145,7 @@ typedef struct AoeWorldCombatRor {
        dependency failures. */
     uint32_t conversions, convert_failures;
     uint32_t hunt_failures; /* hunting action dependency failures */
+    uint32_t trade_payouts, trade_failures; /* gold paid at home docks */
 } AoeWorldCombatRor;
 
 int aoe_world_combat_init_ror(AoeWorldCombatRor *combat,

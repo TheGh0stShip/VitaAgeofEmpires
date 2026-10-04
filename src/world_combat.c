@@ -63,6 +63,7 @@ static void base_destroy(AoeWorldCombatRor *c, AoeMoveActionRor *b);
 static void repair_ops(AoeWorldCombatRor *c, AoeRepairActionOps *o);
 static void heal_ops(AoeWorldCombatRor *c, AoeHealActionOps *o);
 static void convert_ops(AoeWorldCombatRor *c, AoeConvertActionOps *o);
+static void trade_ops(AoeWorldCombatRor *c, AoeTradeActionOps *o);
 
 /* The record (gather/attack/build) clears its flags; heap actions run
    their class destructor, then are freed (train actions free
@@ -1500,6 +1501,20 @@ static void *order_construct(void *c, AoeLiveUnit *u,
             return NULL;
         s->pending = 9;
         return s;
+    }
+    case 0x004b6520: case 0x004b65b0: {
+        AoeTradeActionRor *a = calloc(1, sizeof(*a));
+        AoeMoveActionOps o;
+        move_ops(w, &o);
+        if (a && !(route->constructor == 0x004b6520
+                       ? t && aoe_trade_action_init_target_ror(a, u, task, t,
+                                                               &o)
+                       : aoe_trade_action_init_point_ror(a, u, task, x, y,
+                                                         z))) {
+            free(a);
+            a = NULL;
+        }
+        return a;
     }
     case 0x004b32c0: case 0x004b3350: {
         AoeGatherActionRor *a = calloc(1, sizeof(*a));
@@ -3190,6 +3205,42 @@ static void convert_ops(AoeWorldCombatRor *c, AoeConvertActionOps *o) {
     o->sub_clear = heal_sub_clear;
 }
 
+/* ---- trade action (0x6f) bindings ----------------------------------- */
+
+static void tr_store(void *c, AoeLiveUnit *u, int16_t type, float value) {
+    AoeScenarioRuntimePlayerRor *p = owner_of(c, u);
+    if (p && p->resources.values && type >= 0 && type < p->resources.count)
+        p->resources.values[type] = value;
+}
+static void tr_add(void *c, AoeLiveUnit *u, int16_t type, float amount) {
+    AoeScenarioRuntimePlayerRor *p = owner_of(c, u);
+    AoePlayerResourceTargetRor target;
+    if (!p) return;
+    target.resources = &p->resources;
+    target.derived = 1;
+    target.field_104 = &p->field_104;
+    target.context = c;
+    target.refresh_world = refresh_world;
+    (void)aoe_player_resource_add_virtual_ror(&target, type, amount, 1);
+    if (type == 3 && amount > 0.0f) ++((AoeWorldCombatRor *)c)->trade_payouts;
+}
+static void trade_ops(AoeWorldCombatRor *c, AoeTradeActionOps *o) {
+    memset(o, 0, sizeof(*o));
+    move_ops(c, &o->move);
+    o->graphic = graphic_id_cb;
+    o->tick_seconds = tick_seconds;
+    o->face = face_target;
+    o->resource = cv_resource;
+    o->resource_store = tr_store;
+    o->resource_add = tr_add;
+    o->civ = cv_civ;
+    o->find_home = find_drop_site;
+    o->play_sound = play_sound_cb;
+    o->start_move = heal_start_move;
+    o->sub_update = heal_sub_update;
+    o->sub_clear = heal_sub_clear;
+}
+
 /* ---- heap action classes -------------------------------------------- */
 
 static void move_activate(AoeWorldCombatRor *c, void *a, uint8_t st) {
@@ -3361,7 +3412,34 @@ static int hunt_retarget(AoeWorldCombatRor *c, void *a, AoeLiveUnit *t,
     return aoe_hunt_action_retarget_ror(a, t, x, y, z, &o);
 }
 
+static void trade_activate(AoeWorldCombatRor *c, void *a, uint8_t st) {
+    AoeTradeActionOps o;
+    trade_ops(c, &o);
+    if (!aoe_trade_action_activate_ror(a, st, &o)) ++c->trade_failures;
+}
+static uint8_t trade_update(AoeWorldCombatRor *c, void *a) {
+    AoeTradeActionOps o;
+    uint8_t r = 0;
+    trade_ops(c, &o);
+    if (!aoe_trade_action_update_ror(a, &o, &r)) {
+        ++c->trade_failures;
+        return 0;
+    }
+    return r;
+}
+static const DatUnitTask *trade_task(void *a) {
+    return ((AoeTradeActionRor *)a)->task;
+}
+static int trade_retarget(AoeWorldCombatRor *c, void *a, AoeLiveUnit *t,
+                          float x, float y, float z) {
+    AoeTradeActionOps o;
+    trade_ops(c, &o);
+    return aoe_trade_action_retarget_ror(a, t, x, y, z, &o);
+}
+
 static const HeapActionClass heap_classes[] = {
+    {0x6f, NULL, trade_activate, trade_update, trade_task, trade_retarget,
+     base_target},
     {0x6e, NULL, hunt_activate, hunt_update, hunt_task, hunt_retarget,
      base_target},
     {0x68, NULL, convert_activate, convert_update, convert_task,

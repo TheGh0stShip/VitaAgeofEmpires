@@ -10,6 +10,8 @@
 #include "unit_sprite_binding.h"
 #include "unit_task.h"
 #include "building_update.h"
+#include "player_costs.h"
+#include "unit_placement_check.h"
 
 /* Every callback context is the AoeWorldCombatRor. */
 static AoeWorldMotionRor *motion_of(void *c) {
@@ -47,6 +49,9 @@ static void head_destroy(void *context, void *action) {
 }
 static void head_activate(void *context, void *action, uint8_t state);
 static void order_adopt(void *c, AoeLiveUnit *u, void *action);
+static void train_ops(AoeWorldCombatRor *c);
+static void release_building(AoeWorldCombatUnitRor *s);
+static void queue_free(void *ctx, void *p);
 
 /* Action-list callbacks for the move sub-action. */
 static void sub_destroy(void *context, void *action) {
@@ -737,6 +742,7 @@ int aoe_world_combat_init_ror(AoeWorldCombatRor *c, AoeWorldMotionRor *m) {
     memset(c, 0, sizeof(*c));
     c->motion = m;
     c->units = calloc(AOE_WORLD_MOTION_ID_SLOTS, sizeof(*c->units));
+    train_ops(c);
     return c->units != NULL;
 }
 
@@ -755,9 +761,7 @@ void aoe_world_combat_destroy_ror(AoeWorldCombatRor *c) {
         for (size_t i = 0; i < AOE_WORLD_MOTION_ID_SLOTS; ++i)
             if (c->units[i]) {
                 AoeWorldCombatUnitRor *s = c->units[i];
-                if (s->unit && s->unit->building_update == &s->building_storage)
-                    (void)aoe_live_unit_unbind_building_update_ror(
-                        s->unit, NULL, NULL, NULL);
+                release_building(s);
                 aoe_action_list_clear(&s->sub_actions);
                 aoe_action_list_clear(&s->unit_actions);
                 if (s->unit && s->unit->derived_action_list == &s->unit_actions)
@@ -1038,20 +1042,35 @@ static void list_destroy_noop(void *c, void *a) { (void)c; (void)a; }
 static void list_activate_noop(void *c, void *a, uint8_t s) {
     (void)c; (void)a; (void)s;
 }
+/* Takes over the runtime-owned building lists: +0x184 entries are this
+   world's actions, +0x1cc entries training actions. */
 static int bind_building(AoeWorldCombatRor *w, AoeLiveUnit *t) {
     AoeWorldCombatUnitRor *s;
-    AoeScenarioRuntimePlayerRor *p;
-    AoeActionListOps qo = {w, list_destroy_noop, list_activate_noop};
-    AoeActionListOps lo;
-    if (t->building_update) return 1;
-    if (!(s = aoe_world_combat_unit_ror(w, t)) || !(p = player_of(w, t)))
+    AoeBuildingUpdate *b = t->building_update;
+    if (!b || !b->live_actions || !b->queue_actions ||
+        !(s = aoe_world_combat_unit_ror(w, t)))
         return 0;
-    lo = (AoeActionListOps){s, head_destroy, head_activate};
-    if (t->derived_action_list == &s->unit_actions)
-        t->derived_action_list = NULL;
-    return aoe_live_unit_bind_building_update_ror(
-        t, &s->building_storage, &s->building_live, lo, &s->building_queue,
-        qo, p->resources, t->runtime_owner_index, 0);
+    if (!s->adopted_building) {
+        b->live_actions->ops = (AoeActionListOps){s, head_destroy,
+                                                  head_activate};
+        aoe_train_action_adapter_list_ops(&w->train,
+                                          &b->queue_actions->ops);
+        s->adopted_building = 1;
+    }
+    return 1;
+}
+/* Clears the adopted lists and gives their callbacks back to the runtime. */
+static void release_building(AoeWorldCombatUnitRor *s) {
+    AoeBuildingUpdate *b;
+    AoeActionListOps ops;
+    if (!s->adopted_building || !s->unit || !(b = s->unit->building_update))
+        return;
+    (void)aoe_action_list_clear(b->live_actions);
+    (void)aoe_action_list_clear(b->queue_actions);
+    aoe_scenario_runtime_building_list_ops_ror(&ops);
+    b->live_actions->ops = ops;
+    b->queue_actions->ops = ops;
+    s->adopted_building = 0;
 }
 static void no_unit_hook(void *c, AoeLiveUnit *u) { (void)c; (void)u; }
 static void no_local(void *c, AoeLiveUnit *u, int v) { (void)c; (void)u; (void)v; }
@@ -1371,7 +1390,8 @@ static void *order_construct(void *c, AoeLiveUnit *u,
    action (0x00404400, which activates it). */
 static AoeActionList *own_list(AoeWorldCombatUnitRor *s, AoeLiveUnit *u) {
     if (u->derived_action_list == &s->unit_actions ||
-        u->derived_action_list == &s->building_live)
+        (s->adopted_building && u->building_update &&
+         u->derived_action_list == u->building_update->live_actions))
         return u->derived_action_list;
     return NULL;
 }
@@ -1677,8 +1697,7 @@ static int unit_before(void *opaque, AoeLiveUnit *u) {
     const DatUnit *t = u->core.unit_template;
     AoeWorldCombatUnitRor *s;
     if (t->type == 80 && !bind_building(c, u)) return 0;
-    if ((t->type == 70 || t->type == 80) && t->unit_class == 0x12 &&
-        u->core.state == 2) {
+    if (t->type == 70 && t->unit_class == 0x12 && u->core.state == 2) {
         float v = (float)((double)player_attribute(c, u, 35) * c->tick +
                           u->core.storage.carried_amount);
         u->core.storage.carried_amount =
@@ -1758,12 +1777,324 @@ static int unit_after(void *opaque, AoeLiveUnit *u, uint8_t *result) {
     s = peek_unit(c, u);
     memset(&empty, 0, sizeof(empty));
     list = u->derived_action_list ? u->derived_action_list : &empty;
-    if (s && (list == &s->unit_actions || list == &s->building_live))
+    if (s && (list == &s->unit_actions ||
+              (s->adopted_building && u->building_update &&
+               list == u->building_update->live_actions)))
         tick = (AoeActionTickOps){s, unit_update_head, update_waiting};
     else
         tick = (AoeActionTickOps){c, foreign_head, update_waiting};
     lo = (AoeLiveUnitActionListOps){c, default_task, attached_update, &tick};
     return aoe_live_unit_update_action_list_ror(u, list, &lo);
+}
+
+/* Type 80 (0x004acf80) around the chain. The building view mirrors the
+   live unit's state, frame byte +0x35 and carried resource across the
+   call; its parent (0x004ae7d0 -> 0x00426bf0 -> 0x00406500) is the reload
+   countdown, common predicate and tails, after aoe_building_parent_update_ror
+   has applied the class-18 generation. */
+typedef struct {
+    AoeWorldCombatRor *c;
+    AoeLiveUnit *u;
+    int failed;
+} BuildingTick;
+
+static void building_to_view(AoeLiveUnit *u, AoeBuildingUpdate *b) {
+    const DatGraphic *g = u->graphic.current_graphic;
+    b->unit_template = u->core.unit_template;
+    b->state = u->core.state;
+    b->angle = u->core.scenario_frame;
+    b->graphic_angles = g ? (int16_t)g->angle_count : 0;
+    b->carried_amount = u->core.storage.carried_amount;
+    b->carried_resource_type = u->core.storage.carried_resource_type;
+}
+static void view_to_building(AoeBuildingUpdate *b, AoeLiveUnit *u) {
+    u->core.scenario_frame = b->angle;
+    u->core.storage.carried_amount = b->carried_amount;
+    u->core.storage.carried_resource_type = b->carried_resource_type;
+}
+static void bt_set_state(void *ctx, AoeBuildingUpdate *b, uint8_t state) {
+    BuildingTick *t = ctx;
+    view_to_building(b, t->u);
+    if (!set_state(t->c, t->u, state)) t->failed = 1;
+    building_to_view(t->u, b);
+}
+static uint8_t bt_parent(void *ctx, AoeBuildingUpdate *b) {
+    BuildingTick *t = ctx;
+    AoeWorldCombatRor *c = t->c;
+    AoeLiveUnit *u = t->u;
+    AoeScenarioRuntimePlayerRor *p = owner_of(c, u);
+    AoeLiveUnitUpdateStateOps so;
+    AoeLiveUnitUpdateTargetOps to = {c, set_state};
+    AoeWorldCombatUnitRor *s = peek_unit(c, u);
+    uint8_t predicate = 0;
+    view_to_building(b, u);
+    if (s && s->reload_timer > 0.0f) {
+        s->reload_timer = (float)((double)s->reload_timer - c->tick);
+        if (s->reload_timer < 0.0f) s->reload_timer = 0.0f;
+    }
+    state_ops(c, &so);
+    if (!p ||
+        !aoe_live_unit_update_predicate_ror(u, &p->owner,
+                                            &c->motion->runtime->world, &to,
+                                            &so, &predicate) ||
+        !unit_after(c, u, &predicate))
+        t->failed = 1;
+    if (u->building_update == b) building_to_view(u, b);
+    return predicate;
+}
+static void bt_refund(void *ctx, int16_t unit_id) {
+    BuildingTick *t = ctx;
+    AoeScenarioRuntimePlayerRor *p = owner_of(t->c, t->u);
+    const DatUnit *tt;
+    ++t->c->queue_refunds;
+    if (p && unit_id >= 0 &&
+        (tt = aoe_player_templates_get(&p->templates, (uint16_t)unit_id)))
+        (void)aoe_player_cost_refund_ror(&p->resources, tt);
+}
+static void bt_cancel_notify(void *ctx, AoeTrainAction *a) {
+    (void)a;
+    ++((BuildingTick *)ctx)->c->production_events;
+}
+/* Queue-head cancel (head +0x2c): the training action's 0x004b6d90. */
+static void bt_cancel(void *ctx, void *action) {
+    BuildingTick *t = ctx;
+    AoeTrainCancelOps o = {t, bt_cancel_notify, bt_cancel_notify};
+    if (!aoe_train_action_cancel_ror(action, &o)) t->failed = 1;
+}
+static void bt_notify(void *ctx, uint32_t e, int16_t o, uint32_t r) {
+    (void)e; (void)o; (void)r;
+    ++((BuildingTick *)ctx)->c->production_events;
+}
+static void *bt_create(void *ctx, AoeBuildingUpdate *b, int16_t unit_id) {
+    return aoe_train_action_adapter_create(&((BuildingTick *)ctx)->c->train,
+                                           b, unit_id);
+}
+
+static int building_update(AoeWorldCombatRor *c, AoeLiveUnit *u,
+                           uint8_t *result) {
+    AoeScenarioRuntimePlayerRor *p = owner_of(c, u);
+    AoeBuildingUpdate *b;
+    BuildingTick t = {c, u, 0};
+    AoeBuildingProductionOps prod;
+    AoeBuildingUpdateOps ops;
+    uint8_t r = 0;
+    int16_t o;
+    if (!p || !bind_building(c, u) || !(b = u->building_update)) return 0;
+    o = u->runtime_owner_index;
+    building_to_view(u, b);
+    b->owner_resources = p->resources;
+    prod = (AoeBuildingProductionOps){&t, bt_refund, bt_cancel, bt_create,
+                                      &c->train_tick, bt_notify};
+    ops = (AoeBuildingUpdateOps){&t, bt_set_state, bt_parent, c->tick, &prod,
+                                 &c->queue_status_four[o]};
+    aoe_train_action_adapter_set_timing(&c->train, c->tick, 0);
+    c->train.failed = 0;
+    if (!aoe_building_update_ror(b, c->update_serial, &ops, &r)) return 0;
+    if (u->building_update == b) view_to_building(b, u);
+    if (t.failed || c->train.failed) return 0;
+    if (result) *result = r;
+    return 1;
+}
+
+/* Training bindings (adapter context: the world). */
+static AoeLiveUnit *unit_of_view(AoeBuildingUpdate *b) {
+    return aoe_scenario_runtime_building_unit_ror(b);
+}
+static int train_prepare(void *ctx, AoeBuildingUpdate *b, int16_t unit_id,
+                         AoeTrainActionCreate *out) {
+    AoeWorldCombatRor *c = ctx;
+    AoeLiveUnit *u = unit_of_view(b);
+    AoeScenarioRuntimePlayerRor *p = owner_of(c, u);
+    if (!p) return 0;
+    memset(out, 0, sizeof(*out));
+    out->unit_id = unit_id;
+    out->request_id = -1;
+    out->building_template = u->core.unit_template;
+    out->trained_template =
+        unit_id >= 0 ? aoe_player_templates_get(&p->templates,
+                                                 (uint16_t)unit_id)
+                     : NULL;
+    out->owner_resources = &p->resources;
+    out->owner_id = u->runtime_owner_index;
+    out->building_id = u->core.unit_id;
+    out->building_x = u->core.position.x38;
+    out->building_y = u->core.position.y3c;
+    out->owned_action_ops = (AoeActionListOps){c, list_destroy_noop,
+                                               list_activate_noop};
+    out->unit_registry = &c->registry_view;
+    return 1;
+}
+static int train_charge(void *ctx, AoeTrainAction *a) {
+    int paid = 0;
+    (void)ctx;
+    return aoe_player_cost_pay_ror(a->owner_resources, a->trained_template,
+                                   1.0f, 1, &paid) && paid;
+}
+static void train_failed(void *ctx, AoeTrainAction *a) {
+    (void)a;
+    ++((AoeWorldCombatRor *)ctx)->train_failures;
+}
+static void train_signal(void *ctx, AoeTrainAction *a, uint32_t code) {
+    (void)a; (void)code;
+    ++((AoeWorldCombatRor *)ctx)->production_events;
+}
+static void train_signal_failure(void *ctx, AoeTrainAction *a) {
+    train_signal(ctx, a, 505);
+}
+static void train_notify(void *ctx, uint32_t e, int16_t o, int16_t id,
+                         int32_t x, int32_t y) {
+    (void)e; (void)o; (void)id; (void)x; (void)y;
+    ++((AoeWorldCombatRor *)ctx)->production_events;
+}
+static void train_completed(void *ctx, AoeTrainAction *a, int32_t id) {
+    (void)a; (void)id;
+    ++((AoeWorldCombatRor *)ctx)->trained;
+}
+/* Trained template +0x20(owner, x, y, 0, 1, 1, 1, 0, 0, 1). */
+static int train_blocked(void *ctx, AoeTrainAction *a, float x, float y) {
+    AoeScenarioRuntimeRor *r = ((AoeWorldCombatRor *)ctx)->motion->runtime;
+    const DatUnit *t = a->trained_template;
+    AoeUnitPlacementCheckContext check;
+    int32_t blocker = -1;
+    if (!t || !r->intro || t->terrain_restriction < 0 ||
+        (uint16_t)t->terrain_restriction >= r->intro->restriction_count)
+        return 1;
+    check = (AoeUnitPlacementCheckContext){
+        &r->map,
+        r->intro->terrain_restrictions +
+            (size_t)(uint16_t)t->terrain_restriction *
+                r->intro->terrain_count,
+        r->intro->terrain_count, 0, NULL, 0, 0};
+    if (a->owner_id >= 0 && a->owner_id < AOE_SCENARIO_RUNTIME_PLAYERS) {
+        const AoeVisibilityFootprintGrid *g =
+            &r->players[a->owner_id].vision.grid;
+        check.owner_tile_masks = g->tile_masks;
+        check.owner_visible_mask = g->visible_mask;
+        check.owner_explored_mask = g->explored_mask;
+    }
+    return aoe_unit_placement_check_ror(t, &check, x, y, &blocker, 1, 1, 1, 0,
+                                        0, 1) != AOE_PLACEMENT_OK;
+}
+/* Trained template +0x18(owner, x, y, world). */
+static int train_create(void *ctx, AoeTrainAction *a, float x, float y,
+                        int32_t *id) {
+    AoeScenarioRuntimeRor *r = ((AoeWorldCombatRor *)ctx)->motion->runtime;
+    AoeLiveUnit *u = NULL;
+    if (!a->trained_template || a->owner_id < 0 ||
+        a->owner_id >= AOE_SCENARIO_RUNTIME_PLAYERS ||
+        !aoe_scenario_runtime_editor_create_ror(
+            r, (uint8_t)a->owner_id, (uint16_t)a->trained_template->id, x, y,
+            0.0f, &u) ||
+        !u)
+        return 0;
+    *id = u->core.unit_id;
+    return 1;
+}
+static AoeLiveUnit *unit_of_ref(const void *ref) {
+    return (AoeLiveUnit *)((char *)ref - offsetof(AoeLiveUnit, core) -
+                           offsetof(AoeLiveUnitCore, position));
+}
+static uint8_t train_target_state(void *ctx, const void *target) {
+    (void)ctx;
+    return unit_of_ref(target)->core.state;
+}
+static int32_t train_target_id(void *ctx, const void *target) {
+    (void)ctx;
+    return unit_of_ref(target)->core.unit_id;
+}
+static void train_detach(void *ctx, void *target, AoeTrainAction *a) {
+    (void)a;
+    target_released(ctx, unit_of_ref(target), NULL);
+}
+static void train_attach(void *ctx, void *target, AoeTrainAction *a,
+                         int16_t type) {
+    (void)a;
+    target_attached(ctx, unit_of_ref(target), NULL, type);
+}
+static void train_ops(AoeWorldCombatRor *c) {
+    AoeScenarioRuntimeRor *r = c->motion->runtime;
+    c->train_activation = (AoeTrainActivationOps){c, train_charge,
+                                                  train_failed,
+                                                  train_signal_failure};
+    c->train_spawn = (AoeTrainSpawnOps){c, train_blocked, train_create};
+    c->train_update = (AoeTrainActionOps){c, &r->rng, &c->train_spawn,
+                                          train_notify, train_failed,
+                                          train_completed, train_signal};
+    c->train_targets = (AoeTrainTargetOps){c, train_target_id, train_detach,
+                                           train_attach};
+    c->train_waiting = (AoeTrainWaitingOps){c, train_target_state,
+                                            &c->train_targets};
+    memset(&c->train, 0, sizeof(c->train));
+    c->train.context = c;
+    c->train.prepare = train_prepare;
+    c->train.activation = &c->train_activation;
+    c->train.update = &c->train_update;
+    c->train.waiting = &c->train_waiting;
+    c->train.targets = &c->train_targets;
+    aoe_train_action_adapter_tick_ops(&c->train, &c->train_tick);
+}
+static void refresh_registry(AoeWorldCombatRor *c) {
+    const AoeVisibilityRegistry *v = &c->motion->runtime->world.view;
+    c->registry_view = (AoeLiveUnitRegistry){
+        (void *const *)v->positive, v->positive_count,
+        (void *const *)v->negative, v->negative_count};
+}
+
+/* Queue add bindings. */
+typedef struct {
+    AoeWorldCombatRor *c;
+    AoeScenarioRuntimePlayerRor *p;
+} QueueContext;
+static const DatUnit *queue_template(void *ctx, int16_t index) {
+    QueueContext *q = ctx;
+    return index < 0 ? NULL
+                     : aoe_player_templates_get(&q->p->templates,
+                                                (uint16_t)index);
+}
+static void *queue_calloc(void *ctx, size_t n, size_t size) {
+    (void)ctx;
+    return calloc(n, size);
+}
+static void queue_free(void *ctx, void *p) {
+    (void)ctx;
+    free(p);
+}
+static void queue_notify_event(void *ctx, uint32_t e, int16_t o,
+                               uint32_t r) {
+    QueueContext *q = ((AoePlayerCostBindingRor *)ctx)->context;
+    (void)e; (void)o; (void)r;
+    ++q->c->production_events;
+}
+
+int aoe_world_combat_train_ror(AoeWorldCombatRor *c, AoeLiveUnit *u,
+                               int16_t unit_id, int16_t count) {
+    AoeScenarioRuntimePlayerRor *p;
+    QueueContext q;
+    AoePlayerCostBindingRor cost;
+    AoeBuildingQueueAddOps ops;
+    BuildingTick t;
+    if (!c || !u || !u->core.unit_template ||
+        u->core.unit_template->type != 80 || !(p = owner_of(c, u)) ||
+        !bind_building(c, u))
+        return 0;
+    q = (QueueContext){c, p};
+    cost = (AoePlayerCostBindingRor){&p->resources, &q, queue_template};
+    t = (BuildingTick){c, u, 0};
+    building_to_view(u, u->building_update);
+    u->building_update->owner_resources = p->resources;
+    memset(&ops, 0, sizeof(ops));
+    ops.context = &cost;
+    ops.can_afford = aoe_player_cost_queue_afford_ror;
+    ops.pay = aoe_player_cost_queue_pay_ror;
+    ops.notify = queue_notify_event;
+    ops.allocate_zeroed = queue_calloc;
+    ops.deallocate = queue_free;
+    ops.cancel = (AoeBuildingQueueCancelOps){&t, bt_refund, bt_cancel,
+                                             bt_notify};
+    ops.owner_status_four_count = &c->queue_status_four[u->runtime_owner_index];
+    return aoe_building_queue_add_ror(u->building_update, unit_id, count,
+                                      &ops) &&
+           !t.failed;
 }
 
 /* One unit through the whole chain, outside the player list. */
@@ -1777,6 +2108,12 @@ static int update_unit(AoeWorldCombatRor *c, AoeLiveUnit *u,
     uint8_t predicate = 0;
     if (!p) return 0;
     if (s) s->last_result = 0;
+    if (u->core.unit_template->type == 80) {
+        uint8_t r8 = 0;
+        if (!building_update(c, u, &r8)) return 0;
+        if (result) *result = (s = peek_unit(c, u)) ? s->last_result : 0;
+        return 1;
+    }
     state_ops(c, &so);
     if (!unit_before(c, u) ||
         !aoe_live_unit_update_predicate_ror(u, &p->owner, &r->world, &to, &so,
@@ -1834,6 +2171,10 @@ static AoeLiveUnit *resolve_live(void *opaque, void *object) {
             return r->editor_units[i];
     return NULL;
 }
+static int live_update(void *opaque, AoeLiveUnit *u, uint8_t *result) {
+    if (u->core.unit_template->type != 80) return -1;
+    return building_update(opaque, u, result);
+}
 static int other_predicate(void *opaque, void *object) {
     (void)object;
     ++((AoeWorldCombatRor *)opaque)->foreign_objects;
@@ -1870,9 +2211,7 @@ static void release_unit(AoeWorldCombatRor *c, AoeLiveUnit *u) {
         aoe_action_list_clear(&s->unit_actions);
         if (u->derived_action_list == &s->unit_actions)
             u->derived_action_list = NULL;
-        if (u->building_update == &s->building_storage)
-            (void)aoe_live_unit_unbind_building_update_ror(u, NULL, NULL,
-                                                           NULL);
+        release_building(s);
         free(s);
         c->units[slot] = NULL;
     }
@@ -1906,6 +2245,8 @@ int aoe_world_combat_update_world_ror(AoeWorldCombatRor *c, float tick) {
         return 0;
     c->tick = tick;
     c->world_ms += (uint32_t)(tick * 1000.0f + 0.5f);
+    ++c->update_serial; /* 0x0051da32: global 0x7d2460 */
+    refresh_registry(c);
     for (unsigned p = 0; p < AOE_SCENARIO_RUNTIME_PLAYERS; ++p) {
         AoeScenarioRuntimePlayerRor *pl = &r->players[p];
         AoeLiveUnitPlayerUpdateBinding b;
@@ -1932,6 +2273,7 @@ int aoe_world_combat_update_world_ror(AoeWorldCombatRor *c, float tick) {
         b.resolve_live = resolve_live;
         b.before_update = unit_before;
         b.after_update = unit_after;
+        b.live_update = live_update;
         memset(&po, 0, sizeof(po));
         po.user = c;
         po.emit_state_event = no_state_event;

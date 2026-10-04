@@ -610,6 +610,14 @@ static int bound_live_predicate(void *opaque, void *object) {
         }
         return binding->other_predicate(binding->context, object);
     }
+    if (binding->live_update) {
+        int handled = binding->live_update(binding->context, unit, &result);
+        if (handled == 0) {
+            binding->failed = 1;
+            return 0;
+        }
+        if (handled > 0) return result != 0;
+    }
     if ((binding->before_update &&
          !binding->before_update(binding->context, unit)) ||
         !aoe_live_unit_update_predicate_ror(
@@ -1263,8 +1271,14 @@ static void completion_world_runtime_research(
     void *opaque,AoeLiveUnit *unit,int16_t research_id) {
     BuildingCompletionWorldRuntimeContext *context=opaque;
     (void)unit;
-    context->research_ok=aoe_research_complete_ror(
-        context->ops->research,research_id);
+    AoeResearchCompletionManagerRor *m=context->ops->research;
+    /* 0x004acdda ignores 0x004eaa3d's result (an ID out of range or a tech
+       already done or disabled); only a missing binding fails here. */
+    if (!m || !m->entries || !m->apply_effect || !m->rebuild) {
+        context->research_ok=0;
+        return;
+    }
+    (void)aoe_research_complete_ror(m,research_id);
 }
 
 static void completion_world_runtime_notify(
@@ -1836,5 +1850,44 @@ int aoe_live_unit_damage_graphics_ror(AoeLiveUnit *unit,
         }
     }
     unit->core.damage_percent = level;
+    return 1;
+}
+
+int aoe_live_unit_building_foundation_ror(
+    AoeLiveUnit *unit, AoePlayerResources *owner_resources,
+    AoePlayerUpdateState *owner, AoeOwnedVisibilityRegistry *world,
+    AoeLiveUnitVisionBinding *vision, const DatGraphics *graphics) {
+    HighRootContext context;
+    AoeLiveUnitRootStateOps root;
+    const DatUnit *t;
+    AoeBuildingUpdate *b;
+    if (!scenario_runtime_ok(unit, owner_resources, owner, world, vision) ||
+        (t = unit->core.unit_template)->type != 80 ||
+        !(b = unit->building_update) || !graphics)
+        return 0;
+    unit->building_completed = 0;
+    unit->core.class_code = 0x50;
+    /* +0x5c(0) on the type-80 setter: no queue work below state 3. */
+    b->state = unit->core.state;
+    scenario_root_state_ops(&context, &root, unit, owner_resources, owner,
+                            world, vision);
+    if (!aoe_live_unit_root_state_set_ror(&unit->core, 0, &root) ||
+        context.failed)
+        return 0;
+    b->state = unit->core.state;
+    if (t->train_time > 0) {
+        AoeUnitGraphicTemplate gt;
+        gt.standing_graphic = graphic_by_id(graphics, t->standing_graphic);
+        gt.walking_graphic = graphic_by_id(graphics, t->walking_graphic);
+        if (!aoe_unit_graphic_select_runtime(
+                &unit->graphic, &gt, &unit->sprites,
+                graphic_by_id(graphics, t->construction_graphic),
+                AOE_PLAYER_RISE_OF_ROME))
+            return 0;
+    }
+    b->elapsed_build_time = 0.0f;
+    unit->core.hit_points = 1.0f;
+    unit->core.scenario_frame = (uint8_t)t->building_angle;
+    b->angle = unit->core.scenario_frame;
     return 1;
 }

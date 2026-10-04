@@ -10,6 +10,7 @@
 #include "action_list.h"
 #include "combat.h"
 #include "projectile.h"
+#include "train_action_adapter.h"
 #include "unit_order.h"
 #include "player_outcome.h"
 #include "world_motion.h"
@@ -59,15 +60,14 @@ typedef struct {
     AoeBuildActionRor build;
     uint8_t constructing;
     uint8_t pending; /* action built by the order step, not yet adopted */
-    /* Type-80 storage bound on first construction work (+0x1c0..+0x1d2,
-       live and queue action lists). */
-    AoeBuildingUpdate building_storage;
-    AoeActionList building_live, building_queue;
+    /* Set once this world has taken over a building's runtime-owned live
+       (+0x184) and queue (+0x1cc) list callbacks. */
+    uint8_t adopted_building;
     /* The unit's +0x184 action list when it had none. Its entries are this
        record (while a gather, attack or build action is adopted), move
        actions (0x00405db0) or farm actions (default task 0x15); the list
-       context is this record. Type-80 units use building_live instead,
-       with the same entries. */
+       context is this record. Type-80 units use their runtime-owned live
+       list instead, with the same entries. */
     AoeActionList unit_actions;
     uint8_t last_result; /* head update result of the latest unit update */
     AoeActionList sub_actions;
@@ -106,6 +106,20 @@ typedef struct AoeWorldCombatRor {
     AoeOutcomeManager outcome[AOE_SCENARIO_RUNTIME_PLAYERS];
     AoeOutcomePlayerRef outcome_player[AOE_SCENARIO_RUNTIME_PLAYERS];
     uint32_t queue_status_four[AOE_SCENARIO_RUNTIME_PLAYERS];
+    /* Production: the training action adapter over every building's queue
+       list (+0x1cc), its hooks, the world unit-table snapshot handed to
+       training actions, and the world update count (global 0x7d2460,
+       recorded into building history +0x1f0). */
+    AoeTrainActionAdapter train;
+    AoeTrainActivationOps train_activation;
+    AoeTrainActionOps train_update;
+    AoeTrainSpawnOps train_spawn;
+    AoeTrainWaitingOps train_waiting;
+    AoeTrainTargetOps train_targets;
+    AoeActionTickOps train_tick;
+    AoeLiveUnitRegistry registry_view;
+    uint32_t update_serial;
+    uint32_t trained, train_failures, production_events;
 } AoeWorldCombatRor;
 
 int aoe_world_combat_init_ror(AoeWorldCombatRor *combat,
@@ -165,11 +179,21 @@ int aoe_world_combat_change_template_ror(AoeWorldCombatRor *combat,
      switch with the state-2 damage graphics +0x28 = 0x004a9240);
    - the 0x00415200 tail (dying states, sprites) and the 0x00406500 action
      list (projectiles update their flight there);
+   - type 80 runs its own 0x004acf80 around that chain (construction
+     frame, history, class-18 generation, then production or the terminal
+     queue cleanup);
    - units reaching state 8 are cleaned up (+0x08) and removed.
    Not run yet: player +0x30 lists, the type-50 visibility spotting after
-   0x00406500, the type-80 construction frame/history/production steps
-   (0x004acf80) and the player map update. Returns 0 on failure. */
+   0x00406500 and the player map update. Returns 0 on failure. */
 int aoe_world_combat_update_world_ror(AoeWorldCombatRor *combat, float tick);
+
+/* Production queue add 0x004adab0 on a type-80 unit: charges the owner
+   (0x004f15f0 / 0x004f1750 with multiplier 1 and population flag 1) per
+   unit and queues up to `count` of `unit_id`. Training then runs inside
+   the building's update. Returns 0 on failure. */
+int aoe_world_combat_train_ror(AoeWorldCombatRor *combat,
+                               AoeLiveUnit *building, int16_t unit_id,
+                               int16_t count);
 
 /* Advances the world clock by `tick` seconds and runs one unit (which must
    have a record, e.g. from an order) through the same class chain as the

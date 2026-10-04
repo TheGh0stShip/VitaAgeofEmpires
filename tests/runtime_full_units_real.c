@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
     DatBorders borders = {0};
     DatMapGeometry geometry = {0};
     DatRandomMaps random_maps = {0};
-    DatEffects effects = {0};
+    DatEffects effects = {0}; DatTechs techs = {0};
     DatCivilizations civs = {0};
     ScnMap scenario = {0};
     AoeScenarioRuntimeRor runtime = {0};
@@ -47,10 +47,11 @@ int main(int argc, char **argv) {
         !dat_parse_random_maps(&blob, &geometry, &random_maps) ||
         !dat_parse_effects(&blob, &random_maps, &effects) ||
         !dat_parse_civilizations(&blob, &effects, &civs) ||
+        !dat_parse_techs(&blob, &civs, &techs) ||
         !scn_load_map(argv[1], (uint8_t)intro.terrain_count, &scenario) ||
         !aoe_scenario_runtime_build_ror(
             &runtime, &scenario, &intro, &civs, &graphics, &terrains, &borders,
-            &geometry, 1) ||
+            &geometry, &techs, &effects, 1) ||
         !aoe_scenario_runtime_set_active_player_ror(&runtime, 1)) goto done;
 
     AoeLiveUnit *terrain_removed = NULL;
@@ -243,6 +244,7 @@ done:
     aoe_scenario_runtime_destroy_ror(&runtime);
     scn_free_map(&scenario);
     dat_free_civilizations(&civs);
+    dat_free_techs(&techs);
     dat_free_effects(&effects);
     dat_free_random_maps(&random_maps);
     dat_free_borders(&borders);

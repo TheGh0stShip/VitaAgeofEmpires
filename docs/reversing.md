@@ -1773,6 +1773,149 @@ the existing completion composition (state 2).
   restores -29, and the house enters its dying states without failing the
   update.
 
+Buildings as foundations and scenario completion (RoR 1.0a).
+- **Constructor body.** The type-80 constructor body `0x004ac8a0` runs
+  after the inherited constructors and leaves every building a foundation:
+  - setter state 0;
+  - construction graphic `+0x168` when the build time `+0x15a` > 0;
+  - elapsed `+0x1d4` = 0, HP 1.0, `+0x35` = template `+0x16e`, class code
+    0x50.
+  `aoe_live_unit_building_foundation_ror` translates this. The runtime
+  binds owned building storage (`AoeScenarioBuildingStorageRor`) at
+  construction for scenario and editor units alike.
+- **Scenario spawn.** The tribe player spawn `0x004efe70` (players 1..8;
+  computer players share it) does this per record:
+  1. The factory creates the unit.
+  2. State 7+ → `+0x68`; 3..6 → `+0x6c`.
+  3. Otherwise `+0xb4(rotation)` only for 30 < type < 90, and
+     `+0x35 = ftol(rotation)` for the rest.
+  4. A type-80 record in state 2 then gets add-build-work
+     `0x004ad7b0(10000.0)`, completing it through the normal path
+     (storage, terrain, research).
+
+  The runtime now does the same. Gaia keeps the base spawn's `+0xb4` call,
+  because its player class is not yet established. On EXPANS_1_1 this
+  takes player 1's population room from -29 to -9.
+- **Building-completion research.** The research call in completion
+  (`0x004acdda` → `0x004eaa3d`) ignores the result. The portable binding
+  now fails only for a missing manager, not for an already-completed
+  tech.
+
+Technology (RoR 1.0a; `src/tech_tree.c`).
+- **Research manager** (player `+0x224`):
+  - Entries are `{float progress, int16 state}`, plus count `+0x04`, tech
+    tree `+0x08` (techs of 0x3c bytes) and player `+0x0c`.
+  - The new-game constructor `0x004ea91c` zeroes the entries and rebuilds.
+  - Rebuild `0x004eb38d`, for each tech in state 0/1:
+    - counts prerequisites (`+0x04`, four) that are in state 3;
+    - with at least `+0x0c` of them, completes the tech when
+      `research_time (+0x1e) <= progress`, recursing, else marks it
+      available (1);
+    - otherwise drops it back to 0.
+  - With nothing available or researching, owner attribute 39 becomes 1.
+  - Completion `0x004eaa3d` applies the tech's effect `+0x20` through the
+    world's effects object (`0x004ea3bc`).
+  - Disable `0x004eb8e9` / enable `0x004eb97f` (`0x004f1870(id, flag)`):
+    disable sets state -1 unless the tech is done; enable turns -1 into 0.
+- **Effects** (world `+0x4c`, vtable `0x00549920`):
+  - `+0x08 = 0x004ebb10` disables the tech of every command 102.
+  - It then runs the base interpreter `0x0043b940` over 0x2c-byte effects
+    with 0xc-byte commands:
+    - 0, 4, 5: set/add/multiply an attribute (player `0x0045d6a0`,
+      `0x0045d7a0`, `0x0045d8a0`);
+    - 1: resource set (`0x0045cfc0`, b = 0) or add (`+0x78`);
+    - 2: enable byte (template `0x00443130` → `+0x52`);
+    - 3: upgrade (`0x0045d9a0`).
+  - An attribute command applies the live hook to every awake (`+0x28`)
+    unit of the template, then the template method. It targets template a
+    when that index is in range, else every template of class b.
+- **Template attribute methods** (`+0x08/+0x0c/+0x10`). Each class handles
+  its own attributes and defers to its parent:
+  - root: 0 HP, 1 line of sight, 2 garrison, 3/4 size, 14 resource
+    capacity;
+  - type 20: 5 speed; type 30: 6 rotation speed; type 40: 13 work rate;
+  - type 50: 8–18;
+  - type 60: 19 projectile lead;
+  - tribe 70 (`0x004ecf20`): 100 deductible costs; 101 other costs and
+    storage of resources 4/11/19;
+  - tribe 80 (`0x004ec580`): 17 building angle.
+
+  Recorded quirks:
+  - set indexes the armor/attack lists by `value >> 8`, while add searches
+    by class and multiply does nothing;
+  - the projectile set keeps only the low byte;
+  - multiply of base armor reads the projectile word;
+  - attribute 18 add/multiply store the value;
+  - type 60's attribute 19 stores for every op and then continues to type
+    50.
+- **Live attribute hooks** (`+0x48/+0x4c/+0x50`, run before the template
+  changes):
+  - root `0x004a9fd0`: attribute 0 rescales HP to the new maximum as
+    int16; attribute 1 resets a placed state-2 unit's vision with the new
+    radius (`+0xdc(owner, 0, -1)`, `+0xd8(owner, 0, radius)`);
+  - tribe 70 `0x004ae820`: attribute 101 moves the storage contributions
+    of resources 4/11/19 to the new amount;
+  - tribe 80 `0x004ad350`: attribute 17 writes `+0x35`.
+- **Upgrade.** Player `0x0045d9a0(a, b)` first calls live `+0x58(b)` on the
+  awake units of a:
+  - type 80 `0x004ad960`: construction graphic, then adjacency
+    `0x004ad550` when the old template has `+0x16c`;
+  - types 50..80 `0x00426d70`: attack graphic;
+  - types 40..80 `0x004065c0`: action list `+0x14` re-tasks each action
+    through `+0x40` (`0x00407460`);
+  - types 30..80 `0x0044ef40`: walking graphics `+0xbc/+0xc0`;
+  - root `0x004aa210`: vision reset; HP rescaled by the old/new maximum
+    ratio after briefly setting it to the old maximum; standing, dying and
+    undead graphic remap; damage graphics before and after, without
+    changing the template pointer.
+
+  It then copies template b into slot a (`+0x04`). The root copy
+  `0x00441f50` keeps a's ID (`+0x10`), enable byte (`+0x52`) and
+  editor-hide byte (`+0x4e`). It keeps a's language name (`+0x12`) only
+  when b's `+0x4e` is 1, then sets b's `+0x4e` to 1. Each class copies its
+  own region, and type 40 (`0x0043e6f0`) skips the task list `+0xd8`.
+- **New DAT fields:** language name `+0x12`, garrison `+0x2c`, second
+  walking graphic `+0xc0`.
+- **Runtime binding.**
+  - The runtime takes the tech and effect tables. Each player gets a
+    research manager built new-game style with an immediate rebuild,
+    which completes the zero-time techs.
+  - `aoe_scenario_runtime_apply_effect_ror` applies an effect to a player.
+  - Building completion now gets the player's research manager.
+  - Not ported: the game-start setup around `0x0050b760`. It covers civ
+    tech trees (`+0x110`), option effects 105/100/210, starting resources,
+    starting age (`0x004f18a0` with ages in resources 23–25), population
+    limit 32 (50 in single player, `0x005054f0`), resources 30/33/45,
+    victory conditions, and the random-map object placement.
+
+Building update and training (RoR 1.0a).
+- **Building update.** Type 80 runs its own `+0x24` (`0x004acf80`, via
+  `aoe_building_update_ror`):
+  - construction frame `+0x35` from elapsed/build time, and completion at
+    the build time;
+  - history shifts using the world update count (global `0x7d2460`,
+    incremented at `0x0051da32`);
+  - the parent chain (class-18 generation, then reload, common predicate,
+    dying tail and action list);
+  - production `0x004adf50` (or queue cleanup above state 2).
+
+  The player-list binding gained a `live_update` override for this.
+- **Queue and training.** Queue add `0x004adab0` charges at queue time, so
+  queued training actions are prepaid. Training actions (`train_action.c`)
+  live on the building's `+0x1cc` list through the training adapter. They
+  spawn through the trained template's placement check `+0x20(owner, x, y,
+  0, 1, 1, 1, 0, 0, 1)` and factory `+0x18`.
+- **Owner visibility.** The placement check (patched `0x004429d0`) tests
+  visibility with the owner's vision (`0x00517670`: visible → 0x0f,
+  explored → 0x80) unless global mode `+0x1b0` is 7. The check now takes
+  the owner's masks; it previously read the active player's view bytes,
+  which are not rebuilt after load.
+- **Regression.** On EXPANS_1_1, with the population limit set to the
+  single-player 50 (the unported game start sets it) and three houses
+  completed for room, a villager queued at player 1's town center costs
+  50 food at queue time. It trains in 401 updates (20 s) and spawns
+  beside the town center.
+
 Farm action (RoR 1.0a; vtable `0x0054261c`, action type 0x15, 0x40 bytes;
 `src/action_farm.c`). A farm (template 50) builds it as its default task
 through constructor `0x00404750(unit, task)` (base `0x00406ea0(unit, 1)`).

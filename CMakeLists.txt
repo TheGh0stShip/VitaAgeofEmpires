@@ -323,6 +323,10 @@ target_include_directories(aoe_projectile PUBLIC include)
 target_link_libraries(aoe_projectile PUBLIC aoe_action_move m)
 target_compile_options(aoe_projectile PRIVATE -Wall -Wextra)
 
+add_library(aoe_tech_tree STATIC src/tech_tree.c)
+target_include_directories(aoe_tech_tree PUBLIC include)
+target_link_libraries(aoe_tech_tree PUBLIC aoe_live_unit_factory aoe_player_templates aoe_research_action m)
+target_compile_options(aoe_tech_tree PRIVATE -Wall -Wextra)
 add_library(aoe_action_farm STATIC src/action_farm.c)
 target_include_directories(aoe_action_farm PUBLIC include)
 target_link_libraries(aoe_action_farm PUBLIC aoe_action_gather)
@@ -382,7 +386,7 @@ add_library(aoe_scenario_runtime STATIC src/scenario_runtime.c)
 target_include_directories(aoe_scenario_runtime PUBLIC include)
 target_link_libraries(aoe_scenario_runtime PUBLIC aoe_runtime_map
   aoe_live_unit_factory aoe_player_templates aoe_unit_placement_check
-  aoe_terrain_transition)
+  aoe_terrain_transition aoe_tech_tree)
 target_compile_options(aoe_scenario_runtime PRIVATE -Wall -Wextra)
 
 add_library(aoe_world_motion STATIC src/world_motion.c)
@@ -396,7 +400,8 @@ target_include_directories(aoe_world_combat PUBLIC include)
 target_link_libraries(aoe_world_combat PUBLIC aoe_world_motion
   aoe_action_attack aoe_action_build aoe_action_farm aoe_action_gather aoe_action_list aoe_combat
   aoe_projectile aoe_unit_sprite_binding aoe_unit_task aoe_player_resources
-  aoe_unit_order)
+  aoe_unit_order aoe_train_action_adapter aoe_train_action aoe_building_update
+  aoe_player_costs aoe_unit_placement_check aoe_player_templates)
 target_compile_options(aoe_world_combat PRIVATE -Wall -Wextra)
 
 add_library(aoe_scenario_editor_catalog STATIC src/scenario_editor_catalog.c)
@@ -855,6 +860,10 @@ else()
   target_link_libraries(action_attack_test PRIVATE aoe_action_attack)
   target_compile_options(action_attack_test PRIVATE -UNDEBUG)
   add_test(NAME original_ror_attack_action COMMAND action_attack_test)
+  add_executable(tech_tree_test tests/tech_tree_test.c)
+  target_link_libraries(tech_tree_test PRIVATE aoe_tech_tree)
+  target_compile_options(tech_tree_test PRIVATE -UNDEBUG)
+  add_test(NAME original_ror_tech_tree COMMAND tech_tree_test)
   add_executable(action_farm_test tests/action_farm_test.c)
   target_link_libraries(action_farm_test PRIVATE aoe_action_farm)
   target_compile_options(action_farm_test PRIVATE -UNDEBUG)

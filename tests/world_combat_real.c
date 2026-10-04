@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
     DatBorders borders = {0};
     DatMapGeometry geometry = {0};
     DatRandomMaps random_maps = {0};
-    DatEffects effects = {0};
+    DatEffects effects = {0}; DatTechs techs = {0};
     DatCivilizations civs = {0};
     ScnMap scenario = {0};
     AoeScenarioRuntimeRor runtime = {0};
@@ -75,10 +75,11 @@ int main(int argc, char **argv) {
         !dat_parse_random_maps(&blob, &geometry, &random_maps) ||
         !dat_parse_effects(&blob, &random_maps, &effects) ||
         !dat_parse_civilizations(&blob, &effects, &civs) ||
+        !dat_parse_techs(&blob, &civs, &techs) ||
         !scn_load_map(argv[1], (uint8_t)intro.terrain_count, &scenario) ||
         !aoe_scenario_runtime_build_ror(&runtime, &scenario, &intro, &civs,
                                         &graphics, &terrains, &borders,
-                                        &geometry, 1) ||
+                                        &geometry, &techs, &effects, 1) ||
         !aoe_scenario_runtime_set_active_player_ror(&runtime, 1))
         return 1;
     if (!aoe_world_motion_init_ror(&motion, &runtime) ||
@@ -539,12 +540,104 @@ int main(int argc, char **argv) {
              !target->constructed && !combat.foreign_objects &&
              runtime.players[2].owner.object_list28.count < list_before;
     }
+    /* Production: a villager (83) queued at player 1's town center (109)
+       is charged at queue time (0x004adab0), trained by the queue list's
+       training action inside the building's update (0x004acf80 ->
+       0x004adf50) and spawned beside it. */
+    if (ok) {
+        AoeLiveUnit *tc = NULL;
+        const DatUnit *vt;
+        float food;
+        size_t editors;
+        int ticks = 0;
+        for (uint32_t i = 0; i < runtime.players[1].unit_count && !tc; ++i) {
+            AoeLiveUnit *u = &runtime.players[1].units[i];
+            if (u->constructed && u->core.state == 2 &&
+                u->core.unit_template && u->core.unit_template->id == 109)
+                tc = u;
+        }
+        vt = aoe_player_templates_get(&runtime.players[1].templates, 83);
+        if (!tc || !vt) {
+            fprintf(stderr, "no town center\n");
+            ok = 0;
+            goto done;
+        }
+        /* The game-start setup (0x0050bb54) sets the population limit
+           (resource 32) from the game options - 50 in single player - and
+           is not ported yet; set it here. Player 1 starts over its housing
+           (resource 4 < 0), so three more houses are placed and finished
+           through add-build-work (0x004ad7b0), adding their room. */
+        runtime.players[1].resources.values[32] = 50.0f;
+        for (int h = 0; h < 3; ++h) {
+            AoeLiveUnit *house = NULL;
+            int completed = 0;
+            for (int r = 4; r <= 12 && !house; ++r)
+                for (int k = 0; k < 8 && !house; ++k) {
+                    float x = floorf(tc->core.position.x38) + 0.5f +
+                              (k & 1 ? r : -r) * (k < 4 ? 1 : 0);
+                    float y = floorf(tc->core.position.y3c) + 0.5f +
+                              (k & 2 ? r : -r) * (k >= 4 ? 1 : 0);
+                    AoeLiveUnit *hh = NULL;
+                    if (aoe_scenario_runtime_editor_create_ror(
+                            &runtime, 1, 70, x, y, 0.0f, &hh) && hh)
+                        house = hh;
+                }
+            if (!house || !aoe_scenario_runtime_add_build_work_ror(
+                              &runtime, house, 10000.0f, &completed) ||
+                !completed) {
+                fprintf(stderr, "no house\n");
+                ok = 0;
+                goto done;
+            }
+        }
+        printf("pop: room(4) %.1f pop(11) %.1f limit(32) %.1f\n",
+               runtime.players[1].resources.values[4],
+               runtime.players[1].resources.values[11],
+               runtime.players[1].resources.values[32]);
+        food = runtime.players[1].resources.values[0];
+        editors = runtime.editor_unit_count;
+        if (!aoe_world_combat_train_ror(&combat, tc, 83, 1)) {
+            fprintf(stderr, "train order failed\n");
+            ok = 0;
+            goto done;
+        }
+        printf("pop: room(4) %.1f pop(11) %.1f limit(32) %.1f\n",
+               runtime.players[1].resources.values[4],
+               runtime.players[1].resources.values[11],
+               runtime.players[1].resources.values[32]);
+        printf("queued villager: food %.1f -> %.1f, queue %d\n", food,
+               runtime.players[1].resources.values[0],
+               tc->building_update->queue_count);
+        ok = runtime.players[1].resources.values[0] ==
+             food - vt->costs[0].amount && tc->building_update->queue_count == 1;
+        for (; ok && ticks < 2000 && !combat.trained; ++ticks)
+            if (!aoe_world_combat_update_world_ror(&combat, 0.05f)) ok = 0;
+        if (ok) {
+            AoeLiveUnit *n = NULL;
+            for (size_t i = editors; i < runtime.editor_unit_count; ++i)
+                if (runtime.editor_units[i] &&
+                    runtime.editor_units[i]->core.unit_template &&
+                    runtime.editor_units[i]->core.unit_template->id == 83)
+                    n = runtime.editor_units[i];
+            printf("trained after %d updates (train time %d s): unit %d at "
+                   "(%.2f,%.2f), town center (%.2f,%.2f), queue %d\n",
+                   ticks, vt->train_time, n ? n->core.unit_id : -1,
+                   n ? n->core.position.x38 : 0, n ? n->core.position.y3c : 0,
+                   tc->core.position.x38, tc->core.position.y3c,
+                   tc->building_update->queue_count);
+            ok = combat.trained == 1 && n && n->runtime_owner_index == 1 &&
+                 tc->building_update->queue_count == 0 &&
+                 fabsf(n->core.position.x38 - tc->core.position.x38) < 4.0f &&
+                 fabsf(n->core.position.y3c - tc->core.position.y3c) < 4.0f;
+        }
+    }
 done:
     aoe_world_combat_destroy_ror(&combat);
     aoe_world_motion_destroy_ror(&motion);
     aoe_scenario_runtime_destroy_ror(&runtime);
     scn_free_map(&scenario);
     dat_free_civilizations(&civs);
+    dat_free_techs(&techs);
     dat_free_effects(&effects);
     dat_free_random_maps(&random_maps);
     dat_free_borders(&borders);

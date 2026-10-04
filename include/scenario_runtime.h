@@ -6,6 +6,7 @@
 #include "runtime_map.h"
 #include "terrain_transition.h"
 #include "tile_object_draw.h"
+#include "tech_tree.h"
 
 enum { AOE_SCENARIO_RUNTIME_PLAYERS = 9 };
 
@@ -20,7 +21,18 @@ typedef struct {
     uint32_t unit_count;
     uint8_t player_index;
     uint32_t civilization_id;
+    int32_t field_104; /* derived player +0x104, used by +0x78 */
+    /* Player +0x224 (new-game constructor 0x004ea91c with rebuild). */
+    AoeResearchCompletionManagerRor research;
 } AoeScenarioRuntimePlayerRor;
+
+/* Owned type-80 storage: the building view (+0x1c0..+0x1f8) with its +0x184
+   live and +0x1cc queue action lists, bound to the unit at construction. */
+typedef struct {
+    AoeBuildingUpdate building;
+    AoeActionList live, queue;
+    AoeLiveUnit *unit;
+} AoeScenarioBuildingStorageRor;
 
 /* Portable owned scenario world assembled in the original RoR load order.
    Parsed DAT graphics and scenario/DAT inputs remain caller-owned and must
@@ -47,6 +59,17 @@ typedef struct {
     uint64_t constructed_units;
     uint64_t low_state_units;
     uint64_t high_state_units;
+    const DatTechs *techs;     /* tech tree (world +0x104 object) */
+    const DatEffects *effects; /* world +0x4c effects */
+    /* Optional world hook for upgrades: the +0x184 list's +0x14 retask. */
+    void *retask_context;
+    void (*retask)(void *context, AoeLiveUnit *unit,
+                   const DatUnit *new_template);
+    uint32_t wonder_signals, adjacency_refreshes;
+    AoeScenarioBuildingStorageRor **buildings;
+    size_t building_count, building_capacity;
+    uint32_t queue_status_four; /* teardown sink for status-4 counts */
+    uint64_t completed_buildings;
     int16_t active_player;
     uint8_t initialized;
 } AoeScenarioRuntimeRor;
@@ -62,7 +85,14 @@ int aoe_scenario_runtime_build_ror(
     const DatIntro *intro,
     const DatCivilizations *civilizations, const DatGraphics *graphics,
     const DatTerrains *terrains, const DatBorders *borders,
-    const DatMapGeometry *geometry, uint32_t rng_seed);
+    const DatMapGeometry *geometry, const DatTechs *techs,
+    const DatEffects *effects, uint32_t rng_seed);
+
+/* Applies effect `effect_id` (0x004ebb10) to a player of the runtime: its
+   templates, resources, research and awake (+0x28) units. */
+int aoe_scenario_runtime_apply_effect_ror(AoeScenarioRuntimeRor *runtime,
+                                          int16_t player_index,
+                                          int16_t effect_id);
 
 /* Binds one constructed player's visibility masks/view codes to the runtime
    map and updates every live-unit visibility binding with that player's
@@ -131,6 +161,33 @@ int aoe_scenario_runtime_building_completion_world_ops_ror(
 int aoe_scenario_runtime_tick_sprites_ror(
     AoeScenarioRuntimeRor *runtime, float world_delta,
     AoeScenarioRuntimeSpriteTickResult *result);
+
+/* The live unit whose owned storage holds `building`. */
+AoeLiveUnit *aoe_scenario_runtime_building_unit_ror(
+    const AoeBuildingUpdate *building);
+
+/* The inert list callbacks bound with runtime building storage (a world
+   binding may replace them and must restore them before it goes away). */
+void aoe_scenario_runtime_building_list_ops_ror(AoeActionListOps *out);
+
+/* Owner player +0x78(type, amount, flag) through the derived player
+   override 0x004f6c60. */
+void aoe_scenario_runtime_owner_add_ror(AoeScenarioRuntimeRor *runtime,
+                                        AoeLiveUnit *unit, int16_t type,
+                                        float amount, int flag);
+
+/* Type-80 setter request 2 (completion) on the owned runtime: the
+   translated visual and world continuations with the +0x260 storage add;
+   the local-completion signal, wall adjacency (complete_adjacent) and owner
+   research/UI are not bound. */
+int aoe_scenario_runtime_complete_building_ror(AoeScenarioRuntimeRor *runtime,
+                                               AoeLiveUnit *unit);
+
+/* 0x004ad7b0 add-build-work on a runtime building, completing it through
+   aoe_scenario_runtime_complete_building_ror. */
+int aoe_scenario_runtime_add_build_work_ror(AoeScenarioRuntimeRor *runtime,
+                                            AoeLiveUnit *unit, float amount,
+                                            int *completed);
 
 void aoe_scenario_runtime_destroy_ror(AoeScenarioRuntimeRor *runtime);
 

@@ -165,10 +165,14 @@ update chain (`aoe_world_combat_update_world_ror`). It also corrected live
 `+0x49`: it is a dormancy flag, and the type-20 constructor wakes every
 type 20-80 unit into the updated list.
 Next:
-1. Default tasks now route through the task factory, and the farm action
-   (0x15) and the damage graphics `0x004a9240` are translated. Next: the
-   type-80 production update, the transport action (type 12,
-   `0x004067d0`) and the type-50 visibility spotting.
+1. Default tasks, the farm action, damage graphics, the type-80 setter
+   and update, building production/training and the technology system
+   (research, effects, attributes, upgrades) are translated; scenario
+   buildings now load as foundations and complete like the original.
+   Next: the game-start setup (`0x0050b760`: tech trees, options, starting
+   resources and age, population limit, victory conditions), research
+   actions (103), the active player's view-code refresh, the transport
+   action (type 12) and the type-50 visibility spotting.
 2. Replace placeholder bindings (diplomacy, zones, sounds, victory
    conditions, player +0x30 lists).
 3. The remaining action classes.

@@ -336,6 +336,10 @@ typedef struct {
        action list) and may replace it. */
     int (*before_update)(void *context, AoeLiveUnit *unit);
     int (*after_update)(void *context, AoeLiveUnit *unit, uint8_t *result);
+    /* Optional. A unit's whole +0x24 when the class wraps the common
+       predicate itself (type 80's 0x004acf80); return -1 to fall back to
+       before/predicate/after, 0 on failure, 1 with *result written. */
+    int (*live_update)(void *context, AoeLiveUnit *unit, uint8_t *result);
 } AoeLiveUnitPlayerUpdateBinding;
 
 /* Installs callbacks into a copy of AoePlayerUpdateOps and runs the actual
@@ -426,6 +430,20 @@ int aoe_live_unit_target_release_ror(AoeLiveUnit *unit,
                                      AoePlayerUpdateState *owner,
                                      AoeOwnedVisibilityRegistry *world,
                                      int *notice);
+
+/* Type-80 constructor body 0x004ac8a0 (after the inherited constructors)
+   on a bound building: clears +0x1dd (completed), sets class code 0x50,
+   enters state 0 through the setter (root 0x004aa550 path), selects the
+   construction graphic (template +0x168) when the build time (+0x15a) is
+   positive, zeroes the elapsed build time (+0x1d4), sets HP to 1.0 and
+   +0x35 to the template's building angle (+0x16e). Not modelled here: the
+   +0x1dc owner byte, world 0x0050a600 and the +0x21c queue-list creation
+   (the bound storage supplies the list). Every type-80 unit starts as a
+   foundation this way, also when a scenario places it finished. */
+int aoe_live_unit_building_foundation_ror(
+    AoeLiveUnit *unit, AoePlayerResources *owner_resources,
+    AoePlayerUpdateState *owner, AoeOwnedVisibilityRegistry *world,
+    AoeLiveUnitVisionBinding *vision, const DatGraphics *graphics);
 
 /* Type-80 storage effects over template +0x6a/+0x70/+0x88: entries with
    mode >= 4 and type >= 0 call owner +0x78(type, sign x amount, 0) -

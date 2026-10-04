@@ -65,7 +65,8 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
     unit->type = u8(cursor);
     name_len = u16(cursor);
     unit->id = (int16_t)u16(cursor);
-    take(cursor, 4); /* language-name and creation IDs */
+    unit->language_name_id = u16(cursor); /* template +0x12 */
+    take(cursor, 2); /* creation language ID */
     unit->unit_class = (int16_t)u16(cursor);
     unit->standing_graphic = (int16_t)u16(cursor);
     unit->dying_graphic = (int16_t)u16(cursor);
@@ -73,7 +74,7 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
     unit->undead_mode = u8(cursor);
     unit->hit_points = (int16_t)u16(cursor);
     unit->line_of_sight = f32(cursor);
-    take(cursor, 1); /* garrison capacity */
+    unit->garrison_capacity = u8(cursor); /* template +0x2c */
     for (unsigned i = 0; i < 3; ++i) unit->size[i] = f32(cursor);
     take(cursor, 2); /* train sound */
     unit->dead_unit_id = (int16_t)u16(cursor); /* template +0x48 */
@@ -154,7 +155,7 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
     unit->speed = f32(cursor);
     if (unit->type >= 30) {
         unit->walking_graphic = (int16_t)u16(cursor);
-        take(cursor, 2); /* second walking graphic */
+        unit->walking_graphic2 = (int16_t)u16(cursor); /* +0xc0 */
         unit->rotation_speed = f32(cursor);
         take(cursor, 9); /* remaining AoE moving fields */
     }

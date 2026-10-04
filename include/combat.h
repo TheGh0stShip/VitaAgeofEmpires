@@ -1,6 +1,7 @@
 #ifndef VITA_AOE_COMBAT_H
 #define VITA_AOE_COMBAT_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include "live_unit_factory.h"
@@ -102,5 +103,41 @@ typedef struct {
 int aoe_combat_melee_hit_ror(AoeLiveUnit *attacker, AoeLiveUnit *target,
                              float x, float y, float z,
                              const AoeCombatHitOps *ops);
+
+typedef struct {
+    void *context;
+    int32_t (*rand)(void *context);                           /* 0x0052605d */
+    /* Map width/height (map +0x08/+0x0c) and the units on tile (x, y) in
+       its list order (map +0x8d8c rows, tile +0x10); returns the count
+       written. */
+    int32_t map_width, map_height;
+    size_t (*tile_units)(void *context, int32_t x, int32_t y,
+                         AoeLiveUnit **out, size_t capacity);
+    float (*multiplier)(void *context, AoeLiveUnit *attacker,
+                        AoeLiveUnit *target);                 /* +0xf0 */
+    /* Target vtable +0x70(attacks, count, multiplier, attacker player,
+       `source`). */
+    void (*receive)(void *context, AoeLiveUnit *target,
+                    const DatUnitAttackArmor *attacks, int32_t count,
+                    float multiplier, AoeLiveUnit *source);
+    int (*same_owner)(void *context, AoeLiveUnit *a, AoeLiveUnit *b);
+    /* Tribe only: a victim left below 1.0 hit points hears +0x84(0, 0, 1). */
+    void (*killed)(void *context, AoeLiveUnit *victim);
+} AoeCombatBlastOps;
+
+/* Blast damage, vtable +0x220: base 0x00426280 and tribe 0x004b04a0, at
+   (x, y, z) for `attacker` with `source` passed on to the receivers and
+   `excluded` skipped. Radius r = template +0x118 (nothing for r <= 0).
+   Tiles ftol(x - r) - 2 .. ftol(x + r) + 2 (end exclusive, clamped to the
+   map; rows by y) are scanned; a unit takes the attack list when it is not
+   the attacker or `excluded`, its blast defense (+0x8b) is at least the
+   attacker's blast level (+0x11c), the squared distance from the point to
+   its footprint edge is below r^2, and rand() * 100 / 32767 <= accuracy.
+   The tribe version also spares same-owner units for attacker classes 35
+   and 24 and reports kills. Returns 1, 0 when the radius is not positive,
+   -1 for missing dependencies. */
+int aoe_combat_blast_ror(AoeLiveUnit *attacker, float x, float y, float z,
+                         AoeLiveUnit *source, AoeLiveUnit *excluded,
+                         int tribe, const AoeCombatBlastOps *ops);
 
 #endif

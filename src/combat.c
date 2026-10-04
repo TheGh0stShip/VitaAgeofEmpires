@@ -140,3 +140,73 @@ int aoe_combat_melee_hit_ror(AoeLiveUnit *attacker, AoeLiveUnit *target,
                  ops->multiplier(ops->context, attacker, target), attacker);
     return 1;
 }
+
+enum { BLAST_TILE_CAPACITY = 256 };
+
+int aoe_combat_blast_ror(AoeLiveUnit *attacker, float x, float y, float z,
+                         AoeLiveUnit *source, AoeLiveUnit *excluded,
+                         int tribe, const AoeCombatBlastOps *ops) {
+    const DatUnit *t;
+    double r;
+    float r2;
+    int32_t x_lo, x_hi, y_lo, y_hi;
+    (void)z;
+    if (!attacker || !attacker->core.unit_template || !ops || !ops->rand ||
+        !ops->tile_units || !ops->multiplier || !ops->receive ||
+        (tribe && (!ops->same_owner || !ops->killed)))
+        return -1;
+    t = attacker->core.unit_template;
+    r = t->blast_width;
+    r2 = (float)(r * r);
+    if (!(r > 0.0)) return 0;
+    /* 16-bit tile indexes in the original. */
+    x_lo = (int16_t)(aoe_ftol32((double)x - r) - 2);
+    x_hi = (int16_t)(aoe_ftol32(r + x) + 2);
+    y_lo = (int16_t)(aoe_ftol32((double)y - r) - 2);
+    y_hi = (int16_t)(aoe_ftol32(r + y) + 2);
+    if (x_lo < 0) x_lo = 0;
+    if (x_hi > ops->map_width) x_hi = ops->map_width;
+    if (y_lo < 0) y_lo = 0;
+    if (y_hi > ops->map_height) y_hi = ops->map_height;
+    for (int32_t ty = y_lo; ty < y_hi; ++ty)
+        for (int32_t tx = x_lo; tx < x_hi; ++tx) {
+            AoeLiveUnit *units[BLAST_TILE_CAPACITY];
+            size_t n = ops->tile_units(ops->context, tx, ty, units,
+                                       BLAST_TILE_CAPACITY);
+            for (size_t i = 0; i < n && i < BLAST_TILE_CAPACITY; ++i) {
+                AoeLiveUnit *v = units[i];
+                const DatUnit *vt = v ? v->core.unit_template : NULL;
+                double dx, ex, ey;
+                float dyf;
+                if (!vt) continue;
+                if (tribe) {
+                    if (v == excluded) continue;
+                    if ((t->unit_class == 0x23 || t->unit_class == 0x18) &&
+                        ops->same_owner(ops->context, v, attacker))
+                        continue;
+                    if (v == attacker) continue;
+                    if (vt->blast_defense_level < t->blast_level) continue;
+                } else {
+                    if (v == attacker) continue;
+                    if (vt->blast_defense_level < t->blast_level) continue;
+                    if (v == excluded) continue;
+                }
+                dx = (double)v->core.position.x38 - x;
+                dyf = (float)((double)v->core.position.y3c - y);
+                if (dx < 0.0 || isnan(dx)) dx = -dx;
+                if (dyf < 0.0f || isnan(dyf)) dyf = -dyf;
+                ex = dx > vt->size[0] ? dx - vt->size[0] : 0.0;
+                ey = dyf > vt->size[1] ? (double)dyf - vt->size[1] : 0.0;
+                if (!(r2 > ey * ey + ex * ex)) continue;
+                if ((int16_t)(ops->rand(ops->context) * 100 / 32767) >
+                    t->accuracy_percent)
+                    continue;
+                ops->receive(ops->context, v, t->attacks, t->attack_count,
+                             ops->multiplier(ops->context, attacker, v),
+                             source);
+                if (tribe && !(v->core.hit_points >= 1.0f))
+                    ops->killed(ops->context, v);
+            }
+        }
+    return 1;
+}

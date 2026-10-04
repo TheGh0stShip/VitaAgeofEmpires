@@ -99,6 +99,7 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
     unit->terrain_restriction = (int16_t)at16(p + 2);
     unit->elevation_mode = p[4]; /* live placement vtable +0x34 */
     unit->decay_rate = atfloat(p + 7); /* runtime template +0x80 */
+    unit->blast_defense_level = p[11]; /* +0x8b, blast 0x00426280 */
     unit->field_8c = p[12]; /* loader 0x004413b0 order: +0x8b,+0x8c,... */
     unit->field_8f = p[15];
     p = take(cursor, 16); /* help/hotkey IDs and flags at +0xa4..+0xa7 */
@@ -226,7 +227,7 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
            template +0x12c/+0x130/+0x134 (0x00426520). */
         for (unsigned i = 0; i < 3; ++i)
             unit->projectile_offset[i] = f32(cursor);
-        take(cursor, 1); /* blast attack level */
+        unit->blast_level = u8(cursor); /* template +0x11c */
         unit->min_range = f32(cursor);
         unit->attack_graphic = (int16_t)u16(cursor);
         unit->displayed_melee_armor = (int16_t)u16(cursor);

@@ -37,6 +37,38 @@ static void receive(void *c, AoeLiveUnit *t, const DatUnitAttackArmor *at,
     mult_seen = m;
 }
 
+static AoeLiveUnit *tile_a[3];
+static size_t tile_a_count;
+static int32_t tiles_seen[64][2], tiles_seen_count;
+static AoeLiveUnit *blast_hits[8];
+static int blast_hit_count, killed_count;
+static AoeLiveUnit *owner_a, *owner_b;
+
+static size_t tile_units(void *c, int32_t x, int32_t y, AoeLiveUnit **out,
+                         size_t cap) {
+    (void)c;
+    if (tiles_seen_count < 64) {
+        tiles_seen[tiles_seen_count][0] = x;
+        tiles_seen[tiles_seen_count][1] = y;
+        ++tiles_seen_count;
+    }
+    if (x != 5 || y != 5) return 0;
+    for (size_t i = 0; i < tile_a_count && i < cap; ++i) out[i] = tile_a[i];
+    return tile_a_count;
+}
+static void blast_receive(void *c, AoeLiveUnit *t,
+                          const DatUnitAttackArmor *at, int32_t n, float m,
+                          AoeLiveUnit *src) {
+    (void)c; (void)at; (void)n; (void)m; (void)src;
+    blast_hits[blast_hit_count++] = t;
+    t->core.hit_points = 0.5f;
+}
+static int same(void *c, AoeLiveUnit *a, AoeLiveUnit *b) {
+    (void)c;
+    return (a == owner_a || a == owner_b) && (b == owner_a || b == owner_b);
+}
+static void killed(void *c, AoeLiveUnit *v) { (void)c; (void)v; ++killed_count; }
+
 int main(void) {
     DatUnit at, tt;
     AoeLiveUnit attacker, target;
@@ -140,5 +172,73 @@ int main(void) {
            blasts == 1 && attack_notices == 2);
     assert(aoe_combat_melee_hit_ror(&attacker, NULL, 0, 0, 0, &hops) == 0);
     assert(aoe_combat_melee_hit_ror(&attacker, &target, 0, 0, 0, NULL) == -1);
+
+    /* Blast at (5.5, 5.5) with radius 1: tiles 2..8 (exclusive) on both
+       axes in y-major order, clamped to a 7-wide map. */
+    {
+        AoeCombatBlastOps bops = {NULL, rnd, 7, 20, tile_units, multiplier,
+                                  blast_receive, same, killed};
+        AoeLiveUnit near_u, far_u, ally;
+        DatUnit nt;
+        memset(&nt, 0, sizeof(nt));
+        memset(&near_u, 0, sizeof(near_u));
+        memset(&far_u, 0, sizeof(far_u));
+        memset(&ally, 0, sizeof(ally));
+        nt.size[0] = nt.size[1] = 0.25f;
+        near_u.core.unit_template = far_u.core.unit_template =
+            ally.core.unit_template = &nt;
+        near_u.core.position.x38 = 6.0f; /* edge 0.25 away */
+        near_u.core.position.y3c = 5.5f;
+        far_u.core.position.x38 = 7.0f;  /* edge 1.25 away */
+        far_u.core.position.y3c = 5.5f;
+        ally.core.position.x38 = 5.5f;
+        ally.core.position.y3c = 5.5f;
+        tile_a[0] = &near_u;
+        tile_a[1] = &far_u;
+        tile_a[2] = &attacker;
+        tile_a_count = 3;
+        at.blast_width = 1.0f;
+        at.accuracy_percent = 100;
+        at.unit_class = 6;
+        rand_value = 0;
+        assert(aoe_combat_blast_ror(&attacker, 5.5f, 5.5f, 0, NULL, NULL, 0,
+                                    &bops) == 1);
+        assert(blast_hit_count == 1 && blast_hits[0] == &near_u &&
+               !killed_count);
+        assert(tiles_seen_count == 6 * 5 && tiles_seen[0][0] == 2 &&
+               tiles_seen[0][1] == 2 && tiles_seen[1][0] == 3 &&
+               tiles_seen[29][0] == 6 && tiles_seen[29][1] == 7);
+        /* Blast level above the victims' defense: nobody. */
+        at.blast_level = 1;
+        blast_hit_count = 0;
+        aoe_combat_blast_ror(&attacker, 5.5f, 5.5f, 0, NULL, NULL, 0, &bops);
+        assert(!blast_hit_count);
+        at.blast_level = 0;
+        /* Excluded units and failed accuracy rolls are skipped. */
+        aoe_combat_blast_ror(&attacker, 5.5f, 5.5f, 0, NULL, &near_u, 0,
+                             &bops);
+        assert(!blast_hit_count);
+        at.accuracy_percent = 0;
+        rand_value = 400; /* roll 1 */
+        aoe_combat_blast_ror(&attacker, 5.5f, 5.5f, 0, NULL, NULL, 0, &bops);
+        assert(!blast_hit_count);
+        at.accuracy_percent = 100;
+        /* Tribe: class 35 spares its own side; kills are reported. */
+        tile_a[0] = &ally;
+        tile_a[1] = &near_u;
+        owner_a = &attacker;
+        owner_b = &ally;
+        at.unit_class = 0x23;
+        aoe_combat_blast_ror(&attacker, 5.5f, 5.5f, 0, NULL, NULL, 1, &bops);
+        assert(blast_hit_count == 1 && blast_hits[0] == &near_u &&
+               killed_count == 1);
+        at.unit_class = 6;
+        blast_hit_count = 0;
+        aoe_combat_blast_ror(&attacker, 5.5f, 5.5f, 0, NULL, NULL, 1, &bops);
+        assert(blast_hit_count == 2);
+        at.blast_width = 0.0f;
+        assert(aoe_combat_blast_ror(&attacker, 5.5f, 5.5f, 0, NULL, NULL, 0,
+                                    &bops) == 0);
+    }
     return 0;
 }

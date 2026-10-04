@@ -1461,6 +1461,16 @@ Combat core (RoR 1.0a; type-50 vtable `0x0054324c`, tribe `0x00547fa0`):
 - **Multiplier.** Base `+0xf0` is 1.0. The tribe `0x004aec00` gives ranged
   units 1.5 when `+0x250(target)` holds, and melee units 0.6666 when below
   their target's z.
+- **Blast damage** `+0x220`: base `0x00426280`, tribe `0x004b04a0`. The
+  call is `(x, y, z, source, excluded)` with radius template `+0x118`.
+  - It scans tiles `ftol(x ± r) ∓ 2` (end exclusive, clamped, rows by y).
+  - It skips the attacker, the excluded unit, and units whose blast
+    defense `+0x8b` (DAT chunk byte 11, per loader order) is below the
+    attacker's blast level `+0x11c`.
+  - It hits when the squared distance to the victim's footprint edge is
+    below r², subject to the accuracy roll.
+  - The tribe version also spares same-owner units for attacker classes
+    35/24, and calls `+0x84(0, 0, 1)` on victims left below 1.0.
 - `src/combat.c` translates these, and `tests/combat_test.c` covers them.
 
 Projectiles (RoR 1.0a). The fire methods create the projectile unit and

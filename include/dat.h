@@ -282,6 +282,9 @@ typedef struct {
        0x004e7dc0/0x004e7f90/0x00508010. Their meaning beyond those uses is
        not yet established. */
     uint8_t field_8c, field_8f;
+    /* Template +0x8b: blasts of a lower level (+0x11c) skip this unit. */
+    uint8_t blast_defense_level;
+    uint8_t blast_level;    /* type >= 50, template +0x11c */
     float decay_rate;       /* original template +0x80 */
     int16_t selection_sound;
     int16_t dying_sound;    /* resolves to original template +0x44 */

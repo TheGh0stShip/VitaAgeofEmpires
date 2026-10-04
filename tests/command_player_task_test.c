@@ -38,6 +38,17 @@ static int has_group(void *c, const AoeLiveUnit *u) {
     (void)c;
     return group[u - units];
 }
+/* Field by field: the struct has padding, and the decoder fills its copy
+   one field at a time, so memcmp would compare indeterminate bytes. */
+static int task_equal(const AoePlayerUnitTaskRor *a,
+                      const AoePlayerUnitTaskRor *b) {
+    return a->mode == b->mode && a->unit_id == b->unit_id &&
+           a->value_16 == b->value_16 && a->value_32 == b->value_32 &&
+           a->flag == b->flag && a->x_bits == b->x_bits &&
+           a->y_bits == b->y_bits && a->z_bits == b->z_bits &&
+           a->extra_32 == b->extra_32 && a->extra_a == b->extra_a &&
+           a->extra_b == b->extra_b && a->extra_c == b->extra_c;
+}
 static void group_task(void *c, AoeLiveUnit *u, const AoePlayerUnitTaskRor *t) {
     (void)c;
     task_units[task_count] = u;
@@ -95,7 +106,7 @@ int main(void) {
     assert(aoe_command_dispatch_ror(&dispatch, record, n) ==
            AOE_COMMAND_ROUTE_HANDLED);
     assert(task_count == 1 && task_units[0] == &units[0] &&
-           !memcmp(&tasks[0], &task, sizeof(task)));
+           task_equal(&tasks[0], &task));
     /* Wrong issuing player: +0x34 ignores units it does not own. */
     record[1] = 3;
     assert(aoe_command_execute_unit_task_ror(record, n, &ops) == 1 &&

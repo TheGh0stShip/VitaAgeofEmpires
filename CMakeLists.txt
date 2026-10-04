@@ -426,6 +426,10 @@ target_include_directories(aoe_action_trade PUBLIC include)
 target_link_libraries(aoe_action_trade PUBLIC aoe_action_move m)
 target_compile_options(aoe_action_trade PRIVATE -Wall -Wextra)
 
+add_library(aoe_game_settings STATIC src/game_settings.c)
+target_include_directories(aoe_game_settings PUBLIC include)
+target_compile_options(aoe_game_settings PRIVATE -Wall -Wextra)
+
 add_library(aoe_zone_map STATIC src/zone_map.c)
 target_include_directories(aoe_zone_map PUBLIC include)
 target_link_libraries(aoe_zone_map PUBLIC m)
@@ -462,7 +466,8 @@ target_link_libraries(aoe_world_combat PUBLIC aoe_world_motion
   aoe_command_production aoe_research_action aoe_action_repair
   aoe_action_heal aoe_action_convert aoe_live_unit_owner
   aoe_action_trade aoe_action_artifact
-  aoe_action_base aoe_unit_garrison aoe_zone_map)
+  aoe_action_base aoe_unit_garrison aoe_zone_map
+  aoe_game_settings)
 target_compile_options(aoe_world_combat PRIVATE -Wall -Wextra)
 
 add_library(aoe_scenario_editor_catalog STATIC src/scenario_editor_catalog.c)
@@ -1004,6 +1009,10 @@ else()
   target_link_libraries(action_base_test PRIVATE aoe_action_base)
   target_compile_options(action_base_test PRIVATE -UNDEBUG)
   add_test(NAME original_ror_fly_explore_actions COMMAND action_base_test)
+  add_executable(game_settings_test tests/game_settings_test.c)
+  target_link_libraries(game_settings_test PRIVATE aoe_game_settings)
+  target_compile_options(game_settings_test PRIVATE -UNDEBUG)
+  add_test(NAME original_ror_game_settings COMMAND game_settings_test)
   add_executable(combat_test tests/combat_test.c)
   target_link_libraries(combat_test PRIVATE aoe_combat)
   target_compile_options(combat_test PRIVATE -UNDEBUG)

@@ -813,6 +813,7 @@ int aoe_world_combat_init_ror(AoeWorldCombatRor *c, AoeWorldMotionRor *m) {
     if (!c || !m || !m->runtime) return 0;
     memset(c, 0, sizeof(*c));
     c->motion = m;
+    for (int i = 0; i < 10; ++i) aoe_settings_clear_wonder_ror(&c->settings, i);
     c->units = calloc(AOE_WORLD_MOTION_ID_SLOTS, sizeof(*c->units));
     c->unit_slots = c->units ? AOE_WORLD_MOTION_ID_SLOTS : 0;
     train_ops(c);
@@ -3379,12 +3380,20 @@ static void ob_event(void *c, uint32_t e, int16_t o, int32_t x, int32_t y) {
     (void)e; (void)o; (void)x; (void)y;
     ++((AoeWorldCombatRor *)c)->production_events;
 }
+/* Game 0x0041c0d0 / 0x0041c0b0 on the settings' +0x9d8 countdowns. */
 static void ob_countdown_set(void *c, int16_t owner, int32_t years) {
-    if (owner >= 0 && owner < AOE_SCENARIO_RUNTIME_PLAYERS)
-        ((AoeWorldCombatRor *)c)->wonder_countdown[owner] = years;
+    AoeWorldCombatRor *w = c;
+    if (owner >= 0 && owner < AOE_SCENARIO_RUNTIME_PLAYERS) {
+        aoe_settings_set_wonder_ror(&w->settings, owner, years);
+        w->wonder_countdown[owner] = w->settings.wonder_years[owner];
+    }
 }
 static void ob_countdown_clear(void *c, int16_t owner) {
-    ob_countdown_set(c, owner, -1);
+    AoeWorldCombatRor *w = c;
+    if (owner >= 0 && owner < AOE_SCENARIO_RUNTIME_PLAYERS) {
+        aoe_settings_clear_wonder_ror(&w->settings, owner);
+        w->wonder_countdown[owner] = -1;
+    }
 }
 static void ob_no_event(void *user, int code, int16_t player) {
     (void)user; (void)code; (void)player;

@@ -15,6 +15,7 @@
 #include "action_trade.h"
 #include "action_list.h"
 #include "combat.h"
+#include "game_settings.h"
 #include "unit_garrison.h"
 #include "live_unit_owner.h"
 #include "command_production.h"
@@ -155,6 +156,9 @@ typedef struct AoeWorldCombatRor {
        100 after a wonder win). Artifact/discovery/wonder dependency
        failures. */
     int32_t wonder_countdown[AOE_SCENARIO_RUNTIME_PLAYERS];
+    /* The game object's settings (game_settings.h); its +0x9d8 wonder
+       countdowns start unset (-1) at init. */
+    AoeGameSettingsRor settings;
     int wonder_countdown_hidden;
     uint32_t wonder_victories, object_failures;
     uint8_t game_over;

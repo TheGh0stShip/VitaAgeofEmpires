@@ -2,6 +2,7 @@
 
 #include <math.h>
 #include <stddef.h>
+#include <stdio.h>
 
 #include "aoe_ftol.h"
 
@@ -221,4 +222,63 @@ int aoe_move_action_update_ror(AoeMoveActionRor *a,
     default:
         return 1;
     }
+}
+
+int16_t aoe_action_type_ror(const AoeMoveActionRor *action) {
+    return action ? action->type : 0;
+}
+
+float aoe_action_z_ror(const AoeMoveActionRor *action) {
+    return action ? action->z : 0.0f;
+}
+
+const char *aoe_action_state_text_ror(uint8_t state) {
+    static const char *const names[16] = {
+        "None", "Done", "Wait", "Search", "Goto", "Goto2", "Work", "Work2",
+        "Return", "Turn", "Delay", "Move", "Attack", "Failed", "Invalidated",
+        "MoveNoSearch"};
+    return state < 16 ? names[state] : "Unknown";
+}
+
+void aoe_action_state_name_ror(const AoeMoveActionRor *action, char *out,
+                               size_t size) {
+    if (!action || !out || !size) return;
+    snprintf(out, size, "%s", aoe_action_state_text_ror(action->state));
+}
+
+int32_t aoe_action_default_activate_ror(AoeMoveActionRor *action) {
+    (void)action;
+    return 0;
+}
+
+uint8_t aoe_action_default_update_ror(AoeMoveActionRor *action) {
+    (void)action;
+    return 0;
+}
+
+uint8_t aoe_action_default_2c_ror(AoeMoveActionRor *action) {
+    (void)action;
+    return 0;
+}
+
+void aoe_action_default_retarget_ror(AoeMoveActionRor *action) {
+    (void)action;
+}
+
+uint32_t aoe_action_base_done_ror(AoeMoveActionRor *action,
+                                  const AoeActionDoneOps *ops) {
+    AoeLiveUnit *second;
+    if (!action || !ops || !ops->unit_state) return 0;
+    if (action->target && ops->unit_state(ops->context, action->target) > 6 &&
+        ops->clear_target)
+        ops->clear_target(ops->context, action);
+    second = ops->second_target ? ops->second_target(ops->context, action)
+                                : NULL;
+    if (second && ops->unit_state(ops->context, second) > 6 &&
+        ops->clear_second)
+        ops->clear_second(ops->context, action);
+    if (ops->sub_count && ops->sub_count(ops->context, action) != 0 &&
+        ops->sub_done)
+        return ops->sub_done(ops->context, action);
+    return action->state == 1;
 }

@@ -98,4 +98,41 @@ int aoe_move_action_activate_ror(AoeMoveActionRor *action,
 int aoe_move_action_update_ror(AoeMoveActionRor *action,
                                const AoeMoveActionOps *ops, uint8_t *result);
 
+/* Base action vtable entries shared by every action class (vtable slots
+   from the action tables, e.g. 0x005429e8): +0x08 type 0x00407290,
+   0x00407690 the z coordinate (+0x28), +0x38 state name 0x00407550 into
+   `out` ("None", "Done", "Wait", "Search", "Goto", "Goto2", "Work",
+   "Work2", "Return", "Turn", "Delay", "Move", "Attack", "Failed",
+   "Invalidated", "MoveNoSearch" for states 0..15, else "Unknown"; the
+   original copies without a bound), and the defaults +0x1c activate
+   0x004072a0 (0), +0x28 update 0x004072c0 (0), +0x2c 0x004072d0 (0) and
+   +0x34 retarget 0x00407540 (nothing). */
+int16_t aoe_action_type_ror(const AoeMoveActionRor *action);
+float aoe_action_z_ror(const AoeMoveActionRor *action);
+const char *aoe_action_state_text_ror(uint8_t state);
+void aoe_action_state_name_ror(const AoeMoveActionRor *action, char *out,
+                               size_t size);
+int32_t aoe_action_default_activate_ror(AoeMoveActionRor *action);
+uint8_t aoe_action_default_update_ror(AoeMoveActionRor *action);
+uint8_t aoe_action_default_2c_ror(AoeMoveActionRor *action);
+void aoe_action_default_retarget_ror(AoeMoveActionRor *action);
+
+typedef struct {
+    void *context;
+    uint8_t (*unit_state)(void *context, AoeLiveUnit *unit);      /* +0x48 */
+    AoeLiveUnit *(*second_target)(void *context,
+                                  AoeMoveActionRor *action);       /* +0x14 */
+    void (*clear_target)(void *context, AoeMoveActionRor *action); /* +0x54(0) */
+    void (*clear_second)(void *context, AoeMoveActionRor *action); /* +0x58(0) */
+    /* Sub-action list (+0x34): its count (+8) and vtable +0xc. */
+    int32_t (*sub_count)(void *context, AoeMoveActionRor *action);
+    uint32_t (*sub_done)(void *context, AoeMoveActionRor *action);
+} AoeActionDoneOps;
+
+/* +0x18 0x00407330: a target (or second target) past state 6 is dropped
+   through +0x54 / +0x58; then a non-empty sub-action list answers, else
+   the action is done in state 1. */
+uint32_t aoe_action_base_done_ror(AoeMoveActionRor *action,
+                                  const AoeActionDoneOps *ops);
+
 #endif

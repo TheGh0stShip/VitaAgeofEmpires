@@ -755,9 +755,31 @@ static void dying_sound(void *opaque, AoeLiveUnit *u, int16_t sound) {
     (void)u; (void)sound;
     aoe_rng_seed(rng, r);
 }
+/* Vtable +0xb8 = 0x0044b910 (types 30..80; root 0x004a9450): create the
+   template's dead unit (+0x48) at the unit's position through the owner's
+   template factory; corpses of type >= 30 take the unit's facing (+0xb4 =
+   0x0044be40: facing, then the facet frame). */
 static int terminal_cleanup(void *opaque, AoeLiveUnit *u) {
-    (void)opaque; (void)u;
-    return 1; /* vtable +0xb8: not translated yet */
+    StateContext *sc = opaque;
+    AoeWorldCombatRor *w = sc->combat;
+    AoeLiveUnit *corpse = NULL;
+    int16_t dead = u->core.unit_template->dead_unit_id;
+    int16_t o = u->runtime_owner_index;
+    if (dead < 0) return 1;
+    if (o < 0 || o >= AOE_SCENARIO_RUNTIME_PLAYERS ||
+        !aoe_scenario_runtime_editor_create_ror(
+            w->motion->runtime, (uint8_t)o, (uint16_t)dead,
+            u->core.position.x38, u->core.position.y3c, u->core.position.z40,
+            &corpse))
+        return 1; /* the original ignores a failed factory */
+    ++w->corpses;
+    if (corpse && corpse->core.unit_template &&
+        corpse->core.unit_template->type >= 30 &&
+        u->core.unit_template->type >= 30) {
+        AoeMovementRor *from = movement_of(w, u);
+        if (from) set_facing(w, corpse, from->facing);
+    }
+    return 1;
 }
 
 static int update_unit(AoeWorldCombatRor *c, AoeLiveUnit *u,

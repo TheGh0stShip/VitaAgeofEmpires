@@ -260,6 +260,9 @@ typedef struct {
     int16_t dying_graphic;
     int16_t undead_graphic; /* original template +0x20 */
     uint8_t undead_mode;    /* original template +0x24 */
+    /* Original template +0x48: the corpse spawned by terminal cleanup
+       0x0044b910 / 0x004a9450 (-1 for none). */
+    int16_t dead_unit_id;
     int16_t hit_points;
     uint8_t hide_in_editor; /* serialized common-unit header byte */
     uint8_t enabled;        /* serialized common-unit header byte */

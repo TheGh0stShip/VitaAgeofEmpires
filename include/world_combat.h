@@ -30,8 +30,9 @@
      hold, unit notices and target attach/release hooks are counted only,
      and the instant-kill option is off;
    - victims never keep their carried resource for an attacker class
-     (+0x13c), kill credits are counted only, and terminal cleanup
-     (+0xb8) is a no-op. */
+     (+0x13c) and kill credits are counted only;
+   - terminal cleanup (+0xb8) spawns the corpse, but removing the dead
+     unit (state 8, predicate 1/2) is left to the player update list. */
 typedef struct {
     AoeLiveUnit *unit;
     float reload_timer;
@@ -59,7 +60,8 @@ typedef struct {
     size_t flight_count, flight_capacity;
     uint32_t world_ms;
     float tick;
-    uint32_t notices, hits, misses, projectiles, kills, blasts, alerts;
+    uint32_t notices, hits, misses, projectiles, kills, blasts, alerts,
+        corpses;
 } AoeWorldCombatRor;
 
 int aoe_world_combat_init_ror(AoeWorldCombatRor *combat,
@@ -86,8 +88,8 @@ int aoe_world_combat_tick_ror(AoeWorldCombatRor *combat,
 /* The same state switch for any unit (without advancing the clock): a
    unit below 1.0 hit points dies (state 3 through the runtime state
    setter, dying graphic, rand/srand-bracketed dying sound), then decays
-   per its carried resource (states 3/5 -> 6 or 7 -> 8). Terminal cleanup
-   (+0xb8) is not translated. */
+   per its carried resource (states 3/5 -> 6 or 7 -> 8); entering 7 spawns
+   its corpse. */
 int aoe_world_combat_update_unit_ror(AoeWorldCombatRor *combat,
                                      AoeLiveUnit *unit, float tick);
 

@@ -1520,11 +1520,17 @@ World combat binding (`src/world_combat.c`):
   - terrain defense bonuses;
   - visibility, owner refusal and groups;
   - the class-keeps-resource check `+0x13c`;
-  - terminal cleanup `+0xb8`;
+  - removal of a unit in state 8 (left to the player update list);
   - projectile trail units (`0x0044bc40`, template `+0xca/+0xcc/+0xd0`).
 - The real-map regression continues past the kill: the target goes
   2 → 3 → 7 → 8 (it carries nothing and has no undead mode), and the
   attacker's action reports result 5.
+- **Corpses.** Terminal cleanup `+0xb8` (`0x0044b910` for types 30..80,
+  root `0x004a9450`) creates the template's dead unit (`+0x48`, now parsed
+  from the DAT between train sound and placement fields) through the
+  owner's factory at the unit's position. Corpses of type ≥ 30 take its
+  facing via `+0xb4`. The real-map villager leaves template 43,
+  "Dead_Man" (type 30, decay 1.0).
 - **Ranged shot.** A player-1 war boat (template 19, range 5) then shoots
   an enemy villager placed 4.35 tiles away. Its projectile unit (template 9)
   flies and the launcher's attack lands for 5 damage on impact.

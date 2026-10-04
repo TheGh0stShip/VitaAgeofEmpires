@@ -75,7 +75,8 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
     unit->line_of_sight = f32(cursor);
     take(cursor, 1); /* garrison capacity */
     for (unsigned i = 0; i < 3; ++i) unit->size[i] = f32(cursor);
-    take(cursor, 4); /* train sound and dead-unit ID */
+    take(cursor, 2); /* train sound */
+    unit->dead_unit_id = (int16_t)u16(cursor); /* template +0x48 */
     p = take(cursor, 8); /* sort, build-on, icon, editor, portrait, enabled */
     if (!p) return 0;
     unit->placement_mode = p[0];

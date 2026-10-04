@@ -186,10 +186,13 @@ int main(int argc, char **argv) {
         }
         printf("target states:");
         for (uint8_t i = 0; i < n; ++i) printf(" %u", states[i]);
-        printf("; attacker result %d, kills %u\n", attacker_result,
-               combat.kills);
+        printf("; attacker result %d, kills %u, corpses %u (dead unit %d)\n",
+               attacker_result, combat.kills, combat.corpses,
+               target->core.unit_template->dead_unit_id);
         ok = n >= 2 && states[0] == 2 && states[1] == 3 &&
-             attacker_result == 5 && combat.kills == 1;
+             attacker_result == 5 && combat.kills == 1 &&
+             combat.corpses ==
+                 (target->core.unit_template->dead_unit_id >= 0 ? 1u : 0u);
     }
     /* Ranged: a player-1 projectile unit shoots another enemy placed 4..7
        tiles away. Arrows are projectile units flying under 0x00404db0;

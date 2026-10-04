@@ -35,11 +35,12 @@ jobs:
       - name: Build parser tests and WAV tool
         run: >-
           cmake --build build/parser-sanitize --parallel 2 --target
-          drs_format_test slp_decode_test dat_load_test wav_test wav_tool
+          drs_format_test slp_decode_test dat_load_test dat_random_map_test
+          wav_test wav_tool
       - name: Run parser sanitizer tests
         run: >-
           ctest --test-dir build/parser-sanitize --output-on-failure
-          -R "^(drs_format_and_bounds|slp_format_decode|dat_raw_deflate_boundary|wav_riff_parser)$"
+          -R "^(drs_format_and_bounds|slp_format_decode|dat_raw_deflate_boundary|dat_random_map_records|wav_riff_parser)$"
 
   # The full host suite as ARMv7-A Thumb-2 hard-float ILP32 code under
   # qemu-user, with VitaSDK's signed char and small enums. See docs/VITA_ABI.md;

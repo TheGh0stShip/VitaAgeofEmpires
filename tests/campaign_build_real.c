@@ -54,10 +54,23 @@ int main(int argc, char **argv) {
              aoe_world_combat_init_ror(&combat, &motion);
         for (int t = 0; ok && t < 20; ++t)
             ok = aoe_world_combat_update_world_ror(&combat, 0.05f);
-        printf("%s: %s, %llu units, %u doppelganger requests\n", argv[a],
-               ok ? "ok" : "FAILED",
-               (unsigned long long)runtime.constructed_units,
-               runtime.doppelgangers_requested);
+        {
+            size_t remembered = 0;
+            for (int p = 0; p < AOE_SCENARIO_RUNTIME_PLAYERS; ++p)
+                for (size_t k = 0;
+                     k < runtime.players[p].object_memory.category_count; ++k)
+                    remembered +=
+                        runtime.players[p].object_memory.categories[k].count;
+            printf("%s: %s, %llu units, %zu remembered objects, %u memory "
+                   "add failures, %u doppelganger requests\n", argv[a],
+                   ok ? "ok" : "FAILED",
+                   (unsigned long long)runtime.constructed_units, remembered,
+                   combat.memory_add_failures,
+                   runtime.doppelgangers_requested);
+            /* Explored cells are consumed by each world tick. */
+            for (int p = 0; ok && p < AOE_SCENARIO_RUNTIME_PLAYERS; ++p)
+                if (runtime.players[p].vision.owner_cells58.count) ok = 0;
+        }
         failures += !ok;
         if (combat.units) aoe_world_combat_destroy_ror(&combat);
         if (motion.units) aoe_world_motion_destroy_ror(&motion);

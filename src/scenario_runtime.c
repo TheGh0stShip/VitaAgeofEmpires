@@ -165,9 +165,12 @@ int aoe_scenario_runtime_build_ror(
         player->vision_binding.explored_ops.record_owner =
             aoe_explored_cells_record;
         runtime_outcome_init(runtime, player, civ);
-        /* Categories are template +0xa7 bytes. */
-        if (!aoe_player_object_memory_init(&player->object_memory, 256))
+        /* Player +0x114 (tribe constructor 0x004efb00): five categories.
+           Its presence enables the player map update 0x00517060. */
+        if (!aoe_player_object_memory_init(&player->object_memory,
+                                           AOE_PLAYER_MEMORY_CATEGORIES))
             goto fail;
+        player->owner.map_update_flag = 1;
         /* Gaia is a computer player (0x0050a470 -> 0x004f7290), whose
            tribe constructor 0x004efb00 builds the research manager with
            0x004ea91c(..., 1), i.e. with a rebuild (0x004eb38d). The

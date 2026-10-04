@@ -107,6 +107,7 @@ typedef struct AoeWorldCombatRor {
     AoeOutcomeManager outcome[AOE_SCENARIO_RUNTIME_PLAYERS];
     AoeOutcomePlayerRef outcome_player[AOE_SCENARIO_RUNTIME_PLAYERS];
     uint32_t queue_status_four[AOE_SCENARIO_RUNTIME_PLAYERS];
+    uint32_t memory_add_failures; /* out-of-range notify categories */
     /* Production: the training action adapter over every building's queue
        list (+0x1cc), its hooks, the world unit-table snapshot handed to
        training actions, and the world update count (global 0x7d2460,

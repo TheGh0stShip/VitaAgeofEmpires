@@ -11,6 +11,15 @@ int aoe_player_object_memory_init(AoePlayerObjectMemory *memory,
     memory->categories = calloc(category_count, sizeof(*memory->categories));
     if (!memory->categories) return 0;
     memory->category_count = category_count;
+    for (size_t i = 0; i < category_count; ++i) {
+        memory->categories[i].entries =
+            calloc(AOE_PLAYER_MEMORY_INITIAL, sizeof(AoePlayerMemoryEntry));
+        if (!memory->categories[i].entries) {
+            aoe_player_object_memory_free(memory);
+            return 0;
+        }
+        memory->categories[i].capacity = AOE_PLAYER_MEMORY_INITIAL;
+    }
     return 1;
 }
 
@@ -29,7 +38,7 @@ int aoe_player_object_memory_add(AoePlayerObjectMemory *memory,
     if (!memory || !entry || category >= memory->category_count) return 0;
     c = &memory->categories[category];
     if (c->count == c->capacity) {
-        size_t next = c->capacity ? c->capacity * 2 : 8;
+        size_t next = c->capacity ? c->capacity * 2 : AOE_PLAYER_MEMORY_INITIAL;
         AoePlayerMemoryEntry *grown =
             realloc(c->entries, next * sizeof(*grown));
         if (!grown) return 0;

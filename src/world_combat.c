@@ -2237,8 +2237,50 @@ static int common_cleanup(void *opaque, AoeLiveUnit *u) {
 static void no_state_event(void *user, int code, int16_t player) {
     (void)user; (void)code; (void)player;
 }
-static void no_map_update(void *user, AoePlayerUpdateState *player) {
-    (void)user; (void)player;
+/* Player map update 0x00517060: for each cell newly explored by the
+   player since the last world tick (player +0x58, 0x0045ebc0), every
+   object on the tile whose template has a notify mode (+0xa5) is added to
+   the player's +0x114 memory under +0xa7 by 0x00517130, which looks the
+   unit up in the world's positive-ID table and stores its tile x/y.
+   (Negative IDs would index before that table in the original; such
+   objects are skipped.) */
+static void map_update(void *user, AoePlayerUpdateState *owner) {
+    AoeWorldCombatRor *c = user;
+    AoeScenarioRuntimeRor *r = c->motion->runtime;
+    AoeScenarioRuntimePlayerRor *pl = NULL;
+    for (unsigned p = 0; p < AOE_SCENARIO_RUNTIME_PLAYERS; ++p)
+        if (&r->players[p].owner == owner) pl = &r->players[p];
+    if (!pl || !pl->object_memory.category_count) return;
+    for (size_t i = 0; i < pl->vision.owner_cells58.count; ++i) {
+        const AoeExploredCell *cell = &pl->vision.owner_cells58.cells[i];
+        const AoeObjectUpdateNode *node;
+        if (cell->x < 0 || cell->y < 0 ||
+            (uint32_t)cell->x >= r->map.width ||
+            (uint32_t)cell->y >= r->map.height)
+            continue;
+        for (node = r->map.objects[(size_t)cell->y * r->map.width +
+                                   (uint32_t)cell->x].head;
+             node; node = node->next) {
+            const AoeLiveUnit *u = node->object;
+            const AoeVisibilityUnitRef *ref;
+            AoePlayerMemoryEntry entry;
+            if (!u || !u->core.unit_template ||
+                !u->core.unit_template->state_notify_mode ||
+                u->core.unit_id < 0)
+                continue;
+            ref = aoe_visibility_registry_resolve(&r->world.view,
+                                                  u->core.unit_id);
+            if (!ref) continue;
+            memset(&entry, 0, sizeof(entry));
+            entry.unit_id = u->core.unit_id;
+            entry.x = (uint8_t)aoe_ftol32(ref->x38);
+            entry.y = (uint8_t)aoe_ftol32(ref->y3c);
+            if (!aoe_player_object_memory_add(
+                    &pl->object_memory,
+                    u->core.unit_template->state_notify_value, &entry))
+                ++c->memory_add_failures;
+        }
+    }
 }
 
 int aoe_world_combat_update_world_ror(AoeWorldCombatRor *c, float tick) {
@@ -2280,9 +2322,12 @@ int aoe_world_combat_update_world_ror(AoeWorldCombatRor *c, float tick) {
         memset(&po, 0, sizeof(po));
         po.user = c;
         po.emit_state_event = no_state_event;
-        po.map_update = no_map_update;
+        po.map_update = map_update;
         if (!aoe_live_unit_player_update_step_ror(&b, &pl->owner, &po))
             return 0;
+        /* The world tick then resets the player +0x58 queue (0x0045fad0
+           disc, see player_queue.c). */
+        aoe_explored_cells_reset(&pl->vision.owner_cells58);
     }
     return 1;
 }

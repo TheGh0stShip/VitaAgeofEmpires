@@ -216,3 +216,13 @@ void aoe_action_save_ror(const AoeActionRecordRor *a, AoeOutcomeStream *s, int r
         break;
     }
 }
+
+int32_t aoe_action_target_ror(const AoeActionRecordRor *a) { return a->target_id; }
+int32_t aoe_action_target2_ror(const AoeActionRecordRor *a) { return a->target2_id; }
+
+int aoe_action_drop_dead_targets_ror(AoeActionRecordRor *a,
+                                     int (*state)(void *context, int32_t id), void *context) {
+    if (a->target_id != -1 && state(context, a->target_id) > 6) a->target_id = -1;
+    if (a->target2_id != -1 && state(context, a->target2_id) > 6) a->target2_id = -1;
+    return 1;
+}

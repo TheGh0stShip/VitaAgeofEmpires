@@ -27,7 +27,8 @@ typedef struct {
 } AoeAiPlanItemRor;
 
 /* Plan item (vtable 0x00542a38): default 0x004076b0 (IDs -1, the rest 0,
-   name ""), full 0x00407730, copy 0x004077a0; destructor 0x00407820. */
+   name ""), full 0x00407730, copy 0x004077a0; destructor 0x00407820 (deleting
+   0x00407710). */
 void aoe_ai_plan_item_init_ror(AoeAiPlanItemRor *item);
 void aoe_ai_plan_item_set_ror(AoeAiPlanItemRor *item, int32_t type,
                               int32_t game_id, int32_t unique_id,

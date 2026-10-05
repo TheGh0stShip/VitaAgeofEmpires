@@ -7,6 +7,8 @@
 
 #include "aoe_stream.h"
 
+static int unit_state(void *c, int32_t id) { (void)c; return id == 9 ? 7 : 2; }
+
 int main(void) {
     static uint8_t buf[2048];
     AoeOutcomeStream s = {buf, sizeof buf, 0, 0};
@@ -86,5 +88,14 @@ int main(void) {
         free(back);
     }
     puts("action_io_test: ok");
+    {
+        AoeActionRecordRor r;
+        memset(&r, 0, sizeof r);
+        r.target_id = 4;
+        r.target2_id = 9;
+        assert(aoe_action_target_ror(&r) == 4 && aoe_action_target2_ror(&r) == 9);
+        assert(aoe_action_drop_dead_targets_ror(&r, unit_state, NULL));
+        assert(r.target_id == 4 && r.target2_id == -1);
+    }
     return 0;
 }

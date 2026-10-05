@@ -39,7 +39,9 @@ typedef struct AoeActionRecordRor {
    when asked) and 0x00406f10: the base fields after the type, the sub
    list and the graphic. 0x00407160: the save, starting with the type.
    0x00406ed0 (and its thunk 0x004b2bf0) releases the sub list;
-   the type 0x66 destructor 0x004b4f50 is the same. */
+   the type 0x66 destructor 0x004b4f50 is the same, as are 0x00401380
+   (vtable 0x005423f8) and 0x00402620 (0x005424d4); 0x00406e80 is the
+   deleting destructor. */
 int aoe_action_load_base_ror(AoeActionRecordRor *a, AoeOutcomeStream *s, int ror,
                              int32_t player_count, float version);
 void aoe_action_save_base_ror(const AoeActionRecordRor *a, AoeOutcomeStream *s, int ror);
@@ -78,5 +80,15 @@ void aoe_action_list_save_ror(const AoeActionRecordRor *list, int32_t count, Aoe
 int aoe_action_load_ror(AoeActionRecordRor *a, int16_t type, AoeOutcomeStream *s, int ror,
                         int32_t player_count, float version);
 void aoe_action_save_ror(const AoeActionRecordRor *a, AoeOutcomeStream *s, int ror);
+
+/* Base action slots (vtable 0x005423f8 and the action vtables that keep
+   them): +0x4c 0x00401110 the target (+0x10), +0x50 0x00401120 the
+   second target (+0x14); +0x20 / +0x24 0x004072f0 drops a target whose
+   unit is past state 6 (through +0x54(0) / +0x58(0)) and returns 1.
+   `state` reports a target's unit state (-1 when it has none). */
+int32_t aoe_action_target_ror(const AoeActionRecordRor *a);
+int32_t aoe_action_target2_ror(const AoeActionRecordRor *a);
+int aoe_action_drop_dead_targets_ror(AoeActionRecordRor *a,
+                                     int (*state)(void *context, int32_t id), void *context);
 
 #endif

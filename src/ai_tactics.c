@@ -259,3 +259,114 @@ void aoe_ai_trade_release_ror(AoeAiTradeRor *ai) {
 }
 
 int32_t aoe_ai_unit_default_c0_ror(void) { return -1; }
+
+void aoe_ai_members_init_ror(AoeAiMembersRor *m) {
+    if (!m) return;
+    memset(m, 0, sizeof *m);
+    m->field_190 = m->field_194 = -1;
+    m->field_1b8 = 0xfd;
+    m->field_1bc = -1;
+    for (int i = 0; i < AOE_AI_MEMBERS; ++i) {
+        m->slots[i].id = -1;
+        m->slots[i].category = m->slots[i].role = 0xff;
+    }
+    for (int i = 0; i < 5; ++i) m->totals[i] = -1;
+}
+
+static int members_full(const AoeAiMembersRor *m, const AoeAiGroupRor *play) {
+    return aoe_ai_members_count_ror(m) == play->field_42;
+}
+
+int aoe_ai_members_fill_ror(AoeAiMembersRor *m, uint8_t mode,
+                            AoeAiGroupRor *play, const int32_t *ids,
+                            int32_t count, AoeAiCategoryFn category,
+                            void *context) {
+    int32_t bucket[6][AOE_AI_MEMBERS], per[6] = {0}, r, c, j;
+    int ok = 1;
+    uint8_t shortfall = 0;
+    if (!m || !play) return 0;
+    for (j = 0; j < count; ++j) {
+        int32_t cat = category ? category(context, ids[j]) : -1;
+        if (cat < 0 || cat >= 6 || per[cat] >= AOE_AI_MEMBERS) {
+            ok = 0;
+            continue;
+        }
+        bucket[cat][per[cat]++] = ids[j];
+    }
+    if (play->range_count != 0) {
+        for (r = 0;; ++r) {
+            AoeAiCountRangeRor *range = aoe_ai_group_range_ror(play, r);
+            if (!range) return 0;
+            for (c = 0; c < 6; ++c) {
+                uint8_t min = aoe_ai_range_min_ror(range, c);
+                int32_t taken = 0;
+                if (!min) continue;
+                for (j = 0; j < per[c] && taken < min; ++j) {
+                    if (bucket[c][j] == -1) continue;
+                    if (aoe_ai_members_add_ror(m, bucket[c][j], (uint8_t)r, (uint8_t)c) == 1) {
+                        ++taken;
+                        bucket[c][j] = -1;
+                        if (members_full(m, play)) goto done;
+                    } else {
+                        ok = 0;
+                    }
+                }
+            }
+            if (r + 1 >= play->range_count) break;
+        }
+    }
+    for (c = 0; c < 6; ++c) {
+        for (j = 0; j < per[c]; ++j) {
+            int32_t id = bucket[c][j];
+            if (id == -1) continue;
+            if (mode == 1) {
+                int32_t best = -1;
+                uint8_t best_n = 0;
+                for (r = 0; r < play->range_count; ++r) {
+                    AoeAiCountRangeRor *range = aoe_ai_group_range_ror(play, r);
+                    if (!range) continue;
+                    if (aoe_ai_members_count_role_ror(m, (uint32_t)r, (uint32_t)c) <
+                            aoe_ai_range_max_ror(range, c) &&
+                        (best == -1 ||
+                         aoe_ai_members_count_category_ror(m, (uint32_t)r) < best_n)) {
+                        best_n = aoe_ai_members_count_category_ror(m, (uint32_t)r);
+                        best = r;
+                    }
+                }
+                if (best == -1) continue;
+                if (aoe_ai_members_add_ror(m, id, (uint8_t)best, (uint8_t)c) == 1) {
+                    bucket[c][j] = -1;
+                    if (members_full(m, play)) goto done;
+                } else {
+                    ok = 0;
+                }
+            } else if (mode == 2) {
+                for (r = 0; r < play->range_count; ++r) {
+                    AoeAiCountRangeRor *range = aoe_ai_group_range_ror(play, r);
+                    if (!range ||
+                        !(aoe_ai_members_count_role_ror(m, (uint32_t)r, (uint32_t)c) <
+                          aoe_ai_range_max_ror(range, c)))
+                        continue;
+                    if (aoe_ai_members_add_ror(m, id, (uint8_t)r, (uint8_t)c) == 1) {
+                        bucket[c][j] = -1;
+                        if (members_full(m, play)) goto done;
+                        break;
+                    }
+                    ok = 0;
+                }
+            }
+        }
+    }
+done:
+    for (r = 0; r < play->range_count; ++r) {
+        AoeAiCountRangeRor *range = aoe_ai_group_range_ror(play, r);
+        if (!range) continue;
+        for (c = 0; c < 6; ++c) {
+            uint8_t min = aoe_ai_range_min_ror(range, c);
+            uint8_t have = aoe_ai_members_count_role_ror(m, (uint32_t)r, (uint32_t)c);
+            if (have < min) shortfall = (uint8_t)(shortfall + (min - have));
+        }
+    }
+    m->shortfall = shortfall;
+    return ok;
+}

@@ -13,12 +13,61 @@ static int unit(void *c, int32_t id, uint8_t *state, float *hp) {
     return 1;
 }
 
+/* Units 100..: category = id % 10 (8 and 9 refused). */
+static int32_t fill_category(void *c, int32_t id) {
+    (void)c;
+    return id % 10 >= 6 ? -1 : id % 10;
+}
+
+static void fill_tests(void) {
+    static AoeAiGroupRor play;
+    static AoeAiMembersRor m;
+    const int32_t ids[] = {100, 110, 120, 101, 111, 102};
+    const int32_t bad[] = {100, 108};
+    aoe_ai_group_init_ror(&play);
+    aoe_ai_members_init_ror(&m);
+    assert(m.field_190 == -1 && m.field_1b8 == 0xfd && m.slots[49].id == -1 &&
+           m.slots[0].role == 0xff && m.totals[4] == -1 && m.shortfall == 0);
+    /* Two ranges: range 0 wants at least 2 of category 0 (at most 3),
+       range 1 at least 1 of category 1 and 2 of category 2 (max 2 each). */
+    play.range_count = 2;
+    play.field_42 = 50;
+    aoe_ai_range_set_min_ror(&play.ranges[0], 0, 2);
+    aoe_ai_range_set_max_ror(&play.ranges[0], 0, 3);
+    aoe_ai_range_set_max_ror(&play.ranges[0], 1, 0);
+    aoe_ai_range_set_max_ror(&play.ranges[0], 2, 0);
+    aoe_ai_range_set_min_ror(&play.ranges[1], 1, 1);
+    aoe_ai_range_set_min_ror(&play.ranges[1], 2, 2);
+    aoe_ai_range_set_max_ror(&play.ranges[1], 0, 0);
+    aoe_ai_range_set_max_ror(&play.ranges[1], 1, 2);
+    aoe_ai_range_set_max_ror(&play.ranges[1], 2, 2);
+    assert(aoe_ai_members_fill_ror(&m, 1, &play, ids, 6, fill_category, NULL) == 1);
+    /* 100, 110 (minimum) and 120 (room) in range 0; 101, 111 and 102 in
+       range 1; one category-2 member short. */
+    assert(aoe_ai_members_count_role_ror(&m, 0, 0) == 3 &&
+           aoe_ai_members_count_role_ror(&m, 1, 1) == 2 &&
+           aoe_ai_members_count_role_ror(&m, 1, 2) == 1 && m.shortfall == 1);
+    /* A refused unit clears the result; a size of 1 stops at once. */
+    aoe_ai_members_init_ror(&m);
+    play.field_42 = 1;
+    assert(aoe_ai_members_fill_ror(&m, 2, &play, bad, 2, fill_category, NULL) == 0);
+    assert(aoe_ai_members_count_ror(&m) == 1 && m.shortfall == 4);
+    /* No range 6: 0. */
+    aoe_ai_members_init_ror(&m);
+    play.range_count = 7;
+    play.field_42 = 50;
+    assert(aoe_ai_members_fill_ror(&m, 2, &play, ids, 6, fill_category, NULL) == 0);
+    assert(aoe_ai_members_fill_ror(&m, 2, NULL, ids, 6, fill_category, NULL) == 0);
+}
+
 int main(void) {
     static AoeAiGroupRor group;
     static AoeAiMembersRor m, m2;
     AoeAiCountersRor c;
     AoeAiPlayListRor plays;
     AoeAiTradeRor trade;
+
+    fill_tests();
     AoeAiModuleRor strat;
     int32_t ids[50];
     uint8_t buffer[1024];

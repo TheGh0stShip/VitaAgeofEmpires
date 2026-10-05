@@ -36,7 +36,31 @@ typedef struct {
     int32_t totals[5];  /* +0x1a4 */
     uint8_t field_1b8;
     int32_t field_1bc, field_1c0;
+    uint8_t shortfall;  /* +0x1c4, members still missing */
 } AoeAiMembersRor;
+
+/* 0x0040d2f0: the play and +0x194 -1, the point +0x198 (0, 0, 0), +0x1b8
+   0xfd, +0x1bc -1, +0x1c0 and +0x1c4 0, every slot free (ID -1, category
+   and role 0xff) and the five totals -1. */
+void aoe_ai_members_init_ror(AoeAiMembersRor *m);
+/* A world object's play category (the world's +0xa0 vtable +0x10): 0..5,
+   anything else refused; -1 also when there is no object (0x005206d0). */
+typedef int32_t (*AoeAiCategoryFn)(void *context, int32_t id);
+/* 0x0040ccd0: cast units into play `play` (the listed play +0x190; NULL
+   gives 0) for a caller with fill mode `mode` (its +0x4f). Units are
+   bucketed by category (a unit with none clears the result). First,
+   range by range (each must exist, else 0 without the shortfall), each
+   category's minimum is taken from its bucket; then the rest: mode 1
+   puts each unit in the range with room (members of that range and
+   category below its maximum) that has the fewest members, mode 2 in the
+   first range with room. Reaching the play's size (+0x42) stops at once.
+   The shortfall (+0x1c4) is the sum over ranges and categories of the
+   minimum not met (a byte). Returns 1 unless a unit had no category or
+   an add failed. */
+int aoe_ai_members_fill_ror(AoeAiMembersRor *m, uint8_t mode,
+                            AoeAiGroupRor *play, const int32_t *ids,
+                            int32_t count, AoeAiCategoryFn category,
+                            void *context);
 
 /* 0x0040d370 / 0x0040d390: per-category totals (0..4; -1 outside). */
 int32_t aoe_ai_members_total_ror(const AoeAiMembersRor *m, int32_t category);

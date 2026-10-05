@@ -418,3 +418,68 @@ int32_t aoe_ai_unit_ai_5644_cc_ror(const AoeAiUnitAiOrderRor *order,
     if (ops->call_1c) ops->call_1c(ops->context, (void *)msg);
     return 2;
 }
+
+static int32_t base_cc(const AoeAiUnitAiMessageRor *msg, int32_t arg,
+                       const AoeAiUnitAiOpsRor *ops) {
+    return ops->base_cc ? ops->base_cc(ops->context, (void *)msg, arg) : 0;
+}
+
+static int32_t join_500(const AoeAiUnitAiMessageRor *msg, int32_t arg, int type30,
+                        const AoeAiUnitAiOpsRor *ops) {
+    if (!msg || !ops) return 0;
+    if (msg->type != 500) return msg->type == 0x20f ? 2 : base_cc(msg, arg, ops);
+    if (msg->field_10 < 1) {
+        if (ops->base_414eb0) ops->base_414eb0(ops->context, arg);
+        return 4;
+    }
+    if (ops->group_add) ops->group_add(ops->context, msg->sender);
+    if (ops->unit_ec) ops->unit_ec(ops->context, 1);
+    if (type30) {
+        int32_t t = ops->call_3c ? ops->call_3c(ops->context, 0) : -1;
+        if (ops->call_5c) ops->call_5c(ops->context, t, 0);
+    } else if (ops->call_a4) {
+        ops->call_a4(ops->context, 1);
+    }
+    return 3;
+}
+
+int32_t aoe_ai_unit_ai_class9_cc_ror(const AoeAiUnitAiMessageRor *msg, int32_t arg,
+                                     const AoeAiUnitAiOpsRor *ops) {
+    return join_500(msg, arg, 0, ops);
+}
+
+int32_t aoe_ai_unit_ai_type30_cc_ror(const AoeAiUnitAiMessageRor *msg, int32_t arg,
+                                     const AoeAiUnitAiOpsRor *ops) {
+    return join_500(msg, arg, 1, ops);
+}
+
+int32_t aoe_ai_unit_ai_7e_cc_ror(AoeAiUnitAiRor *ai, const AoeAiUnitAiOrderRor *order,
+                                 const AoeAiUnitAiMessageRor *msg, int32_t arg,
+                                 const AoeAiUnitAiOpsRor *ops) {
+    if (!ai || !order || !msg || !ops) return 0;
+    if (msg->type == 0x1fc) {
+        AoeAiUnitViewRor t, me;
+        if (ops->object && ops->object(ops->context, order->target, &t) && ops->self) {
+            double d = ops->distance_to ? ops->distance_to(ops->context, order->target) : 0.0;
+            ops->self(ops->context, &me);
+            if (d <= (double)me.type_28) {
+                if (ops->call_5c) ops->call_5c(ops->context, order->target, 1);
+                return 3;
+            }
+        }
+        if (ops->clear_target) ops->clear_target(ops->context);
+        if (ops->call_58) ops->call_58(ops->context, 1);
+        if (ops->call_1c) ops->call_1c(ops->context, (void *)msg);
+        return base_cc(msg, arg, ops);
+    }
+    if (msg->type == 0x1fa && msg->value == 600) {
+        if (ops->settings_8fc == 1 && ops->settings_97d == 1)
+            ai->timer = ((ops->difficulty ? ops->difficulty(ops->context) : 0) + 3) * 5000;
+        else
+            ai->timer = 25000;
+        if (ops->restart_timer) ops->restart_timer(ops->context, ai->timer);
+        if (ops->clear_target) ops->clear_target(ops->context);
+        if (ops->call_58) ops->call_58(ops->context, 1);
+    }
+    return base_cc(msg, arg, ops);
+}

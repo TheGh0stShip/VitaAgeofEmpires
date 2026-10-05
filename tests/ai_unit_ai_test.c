@@ -131,6 +131,55 @@ static void cc_5644_tests(void) {
     assert(cc_cleared == 3);
 }
 
+static int eb_arg = -1, a4_v = -1, bcc2;
+static void t_eb(void *c, int32_t a) { (void)c; eb_arg = a; }
+static void t_a4(void *c, int32_t v) { (void)c; a4_v = v; }
+static int32_t t_bcc(void *c, void *m, int32_t a) { (void)c; (void)m; ++bcc2; return a; }
+static int32_t t_3c(void *c, int32_t v) { (void)c; (void)v; return 66; }
+static int32_t c5c_id = -1;
+static void t_5c(void *c, int32_t id, int32_t v) { (void)c; (void)v; c5c_id = id; }
+static int32_t t_restart = -1;
+static void t_rs(void *c, int32_t t) { (void)c; t_restart = t; }
+static int32_t t_diff(void *c) { (void)c; return 2; }
+static double t_dist3(void *c, int32_t id) { (void)c; (void)id; return 3.0; }
+static void me2(void *c, AoeAiUnitViewRor *o) { (void)c; memset(o, 0, sizeof *o); o->type_28 = 2.0f; }
+
+static void cc_more_tests(void) {
+    static AoeAiUnitAiRor ai;
+    AoeAiUnitAiOpsRor o;
+    AoeAiUnitAiMessageRor m = {44, 500, 0, 0};
+    AoeAiUnitAiOrderRor ord = {-1, 9, 0};
+    memset(&o, 0, sizeof o);
+    o.base_414eb0 = t_eb;
+    o.call_a4 = t_a4;
+    o.base_cc = t_bcc;
+    o.call_3c = t_3c;
+    o.call_5c = t_5c;
+    o.group_add = cc_add;
+    o.unit_ec = cc_ec_f;
+    assert(aoe_ai_unit_ai_class9_cc_ror(&m, 8, &o) == 4 && eb_arg == 8);
+    m.field_10 = 1;
+    assert(aoe_ai_unit_ai_class9_cc_ror(&m, 8, &o) == 3 && a4_v == 1 && cc_added == 44);
+    assert(aoe_ai_unit_ai_type30_cc_ror(&m, 8, &o) == 3 && c5c_id == 66);
+    m.type = 0x20f;
+    assert(aoe_ai_unit_ai_type30_cc_ror(&m, 8, &o) == 2);
+    m.type = 0x300;
+    assert(aoe_ai_unit_ai_type30_cc_ror(&m, 8, &o) == 8 && bcc2 == 1);
+    /* Type 0x7e: target 3 away, reach 2: pass on; message 600 timer. */
+    o.object = obj_any;
+    o.self = me2;
+    o.distance_to = t_dist3;
+    o.clear_target = cc_clear;
+    o.restart_timer = t_rs;
+    o.difficulty = t_diff;
+    m.type = 0x1fc;
+    assert(aoe_ai_unit_ai_7e_cc_ror(&ai, &ord, &m, 5, &o) == 5 && bcc2 == 2);
+    m.type = 0x1fa; m.value = 600;
+    o.settings_8fc = o.settings_97d = 1;
+    aoe_ai_unit_ai_7e_cc_ror(&ai, &ord, &m, 5, &o);
+    assert(ai.timer == 25000 && t_restart == 25000);
+}
+
 static void d4_5564_tests(void) {
     AoeAiUnitAiOpsRor o;
     AoeAiUnitAiOrderRor ord = {-1, -1};
@@ -195,6 +244,7 @@ int main(void) {
     priest_search_tests();
     d4_5564_tests();
     cc_5644_tests();
+    cc_more_tests();
     AoeAiUnitAiRor ai;
     AoeAiUnitAiOpsRor ops;
     memset(&ops, 0, sizeof ops);

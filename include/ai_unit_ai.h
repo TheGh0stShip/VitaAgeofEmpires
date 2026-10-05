@@ -119,6 +119,11 @@ typedef struct {
     uint8_t (*vision)(void *context, int32_t x, int32_t y);
     void (*group_add)(void *context, int32_t id);
     void (*unit_ec)(void *context, int32_t value);
+    /* The base's 0x00414eb0 (with the handler's argument), vtable +0xa4
+       (1) and +0x3c (0: a target). */
+    void (*base_414eb0)(void *context, int32_t arg);
+    void (*call_a4)(void *context, int32_t value);
+    int32_t (*call_3c)(void *context, int32_t value);
 } AoeAiUnitAiOpsRor;
 
 /* The unit AI's own order fields the overrides read: action (+0x28),
@@ -131,6 +136,7 @@ typedef struct {
 /* A message to a unit AI: sender (+0), type (+8), value (+0xc). */
 typedef struct {
     int32_t sender, type, value;
+    int32_t field_10;   /* +0x10 */
 } AoeAiUnitAiMessageRor;
 
 /* The constructors: the base, then the target-class table (and, for
@@ -248,5 +254,23 @@ int32_t aoe_ai_unit_ai_5564_d4_ror(const AoeAiUnitAiOrderRor *order, int32_t fir
 int32_t aoe_ai_unit_ai_5644_cc_ror(const AoeAiUnitAiOrderRor *order,
                                    const AoeAiUnitAiMessageRor *msg,
                                    const AoeAiUnitAiOpsRor *ops);
+/* 0x004e3ca0 (class 9, +0xcc) and 0x004e4060 (type 0x30, +0xcc): message
+   500 with +0x10 below 1 runs the base's 0x00414eb0(arg) and gives 4;
+   with +0x10 positive the sender joins the +0x60 list, the unit's +0xec(1)
+   runs, then class 9 calls +0xa4(1) and type 0x30 +0x5c(+0x3c(0), 0);
+   3. 0x20f gives 2; others go to the base's +0xcc. */
+int32_t aoe_ai_unit_ai_class9_cc_ror(const AoeAiUnitAiMessageRor *msg, int32_t arg,
+                                     const AoeAiUnitAiOpsRor *ops);
+int32_t aoe_ai_unit_ai_type30_cc_ror(const AoeAiUnitAiMessageRor *msg, int32_t arg,
+                                     const AoeAiUnitAiOpsRor *ops);
+/* 0x004e42d0 (type 0x7e, +0xcc): 0x1fc with the target within the unit
+   type's +0x28 gives +0x5c(target, 1) and 3, else clears the target,
+   stops, passes the message on (+0x1c) and to the base. 0x1fa with value
+   600 sets the timer to (difficulty + 3) x 5000 when both settings are 1
+   (else 25000), restarts it, clears the target and stops, then the base.
+   Others go to the base's +0xcc. */
+int32_t aoe_ai_unit_ai_7e_cc_ror(AoeAiUnitAiRor *ai, const AoeAiUnitAiOrderRor *order,
+                                 const AoeAiUnitAiMessageRor *msg, int32_t arg,
+                                 const AoeAiUnitAiOpsRor *ops);
 
 #endif

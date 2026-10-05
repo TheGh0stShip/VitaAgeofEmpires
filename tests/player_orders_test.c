@@ -5,10 +5,6 @@
 #include "le_bytes.h"
 #include "player_orders.h"
 
-static uint16_t aoe_le_u16(const uint8_t *p) {
-    return (uint16_t)(p[0] | (p[1] << 8));
-}
-
 typedef struct {
     uint8_t rec[16][160];
     size_t size[16];

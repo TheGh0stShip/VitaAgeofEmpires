@@ -788,6 +788,134 @@ static void site_tests(void) {
     aoe_value_grid_free_ror(&g);
 }
 
+static char written_path[2][64];
+static uint8_t written[2][256];
+static int written_size[2], writes;
+
+static int write_file(void *c, const char *path, const void *data, int size) {
+    (void)c;
+    assert(writes < 2 && size <= 256);
+    snprintf(written_path[writes], sizeof written_path[writes], "%s", path);
+    memcpy(written[writes], data, (size_t)size);
+    written_size[writes++] = size;
+    return 1;
+}
+
+static const char *player_name(void *c) { (void)c; return "Bob"; }
+
+static void lifecycle_tests(void) {
+    static AoeAiInfoRor a, b;
+    static uint8_t buf[200000];
+    AoeOutcomeStream s;
+    AoeAiInfoOpsRor ops;
+    size_t saved;
+
+    /* 0x004ba1c0 defaults. */
+    assert(aoe_ai_info_init_ror(&a));
+    assert(a.map_width == -1 && a.object_count == 500 && a.mark_count == 200 &&
+           a.area_count == 25);
+    assert(a.objects[499].id == -1 && a.objects[0].type_class == -1 &&
+           a.objects[0].hp == 0 && a.marks[7].id == -1);
+    assert(a.areas[3].id == -1 && a.areas[3].player_9 == 0xff &&
+           a.areas[3].field_14 == -1 && a.areas[3].x0 == 0);
+    assert(a.explored.width == 254 && aoe_value_grid_get_ror(&a.explored, 9, 9) == 0xff);
+    assert(a.age_allowed[0][3] == 0 && a.age_allowed[1][0] == 1 &&
+           a.age_allowed[3][3] == 1 && a.best_distance[2] == -1 &&
+           a.current_target[0] == -1 && a.field_1b0 == -1 &&
+           a.pairs_1d4[3][1] == -1 && a.last_site[0] == -1);
+    assert(strcmp(a.learn_path, "learn\\Default.uh") == 0);
+
+    /* 0x004bb840 and 0x004bbaa0. */
+    memset(&ops, 0, sizeof ops);
+    ops.map_width = width;
+    ops.map_height = height;
+    ops.learn_name = player_name;
+    aoe_ai_info_set_owner_ror(&a, &ops);
+    assert(a.owner == &ops);
+    assert(aoe_ai_info_setup_ror(&a, &ops) && a.map_width == 8 &&
+           a.map_height == 6 && strcmp(a.learn_path, "learn\\Bob.uh") == 0);
+
+    /* Save then load (0x004bbab0 / 0x004ba680) round-trips. */
+    aoe_ai_info_kind_append_ror(&a, 2, 77);
+    a.objects[4].id = 9;
+    a.objects[4].type_id = 0x6d;
+    a.objects[4].range = 2.5f;
+    a.marks[1].id = 3;
+    a.marks[1].x = 4;
+    a.areas[0].id = 5;
+    a.areas[0].age = 2;
+    aoe_ai_int_list_add_unique_ror(&a.list_148, 42);
+    aoe_ai_int_list_add_unique_ror(&a.list_180, 43);
+    aoe_value_grid_set_ror(&a.explored, 3, 4, 1);
+    a.pairs_1d4[2][0] = 6;
+    a.field_204 = 1;
+    snprintf(a.area_path, sizeof a.area_path, "%s", "ai\\x.ai");
+    a.zone_flags[7] = 1;
+    a.cells[1][2][0] = 8;
+    a.targets[1] = (AoeAiInfoTargetRor *)calloc(2, sizeof **a.targets);
+    a.target_capacity[1] = 2;
+    a.target_count[1] = 1;
+    a.targets[1][1].id = 11;
+    a.target_capacity[2] = 3; /* no array: zeroed by the save */
+    a.age_allowed[0][1] = 1;
+    a.field_560 = 12;
+    a.history[15999] = 13;
+    a.stats[4] = 14;
+    memset(&s, 0, sizeof s);
+    s.data = buf;
+    s.size = sizeof buf;
+    assert(aoe_ai_info_save_ror(&a, &s) && a.target_capacity[2] == 0);
+    saved = s.pos;
+    s.pos = 0;
+    s.size = saved;
+    assert(aoe_ai_info_load_ror(&b, &s, 7.0f) && s.pos == saved);
+    assert(b.kind_counts[2] == 1 && b.kind_lists[2][0] == 77 && b.map_width == 8);
+    assert(b.object_count == 500 && b.objects[4].id == 9 &&
+           b.objects[4].range == 2.5f && b.objects[5].id == -1);
+    assert(b.marks[1].x == 4 && b.areas[0].age == 2 && b.areas[1].player_a == 0xff);
+    assert(b.list_148.count == 1 && b.list_148.data[0] == 42 &&
+           b.list_180.data[0] == 43);
+    assert(aoe_value_grid_get_ror(&b.explored, 3, 4) == 1);
+    assert(b.pairs_1d4[2][0] == 6 && b.field_204 == 1 &&
+           strcmp(b.area_path, "ai\\x.ai") == 0 && b.zone_flags[7] == 1 &&
+           b.cells[1][2][0] == 8);
+    assert(b.target_capacity[1] == 2 && b.targets[1][1].id == 11 &&
+           b.targets[2] == NULL);
+    assert(b.age_allowed[0][1] == 1 && b.field_560 == 12 &&
+           b.history[15999] == 13 && b.stats[4] == 0 && b.owner == NULL &&
+           strcmp(b.learn_path, "learn\\Default.uh") == 0);
+    aoe_ai_info_release_ror(&b, NULL);
+
+    /* A 6.9 game stops before +0x560: the defaults stay. */
+    s.pos = 0;
+    assert(aoe_ai_info_load_ror(&b, &s, 6.9f) && b.field_560 == 0 &&
+           b.age_allowed[0][1] == 1 && b.history[15999] == 0);
+    aoe_ai_info_release_ror(&b, NULL);
+    s.pos = 0;
+    assert(aoe_ai_info_load_ror(&b, &s, 6.5f) && b.age_allowed[0][1] == 0 &&
+           b.best_distance[0] == -1);
+    aoe_ai_info_release_ror(&b, NULL);
+    s.size = 100;
+    s.pos = 0;
+    s.failed = 0;
+    assert(!aoe_ai_info_load_ror(&b, &s, 7.0f));
+    aoe_ai_info_release_ror(&b, NULL);
+
+    /* 0x004bb280: the area file, then the learn file. */
+    ops.write_file = write_file;
+    ops.self = 2;
+    ops.stats_player = 2;
+    aoe_ai_info_release_ror(&a, &ops);
+    assert(writes == 2 && strcmp(written_path[0], "ai\\x.ai") == 0);
+    /* w, h, 1 area, 1 type-0x6d object, four lists (capacity 2 for one),
+       the two int lists. */
+    assert(written_size[0] == 12 + 0x18 + 4 + 0x24 + 4 * 8 + 2 * 0x14 + 8 + 4);
+    assert(written[0][0] == 8 && written[0][4] == 6 && written[0][8] == 1);
+    assert(strcmp(written_path[1], "learn\\Bob.uh") == 0 &&
+           written_size[1] == 44 && written[1][16] == 14);
+    assert(a.objects == NULL);
+}
+
 int main(void) {
     static AoeAiInfoRor info;
     AoeAiInfoOpsRor ops;
@@ -796,6 +924,7 @@ int main(void) {
     int32_t t[2], a[2], b[2], first, second, i;
 
     site_tests();
+    lifecycle_tests();
     memset(&ops, 0, sizeof ops);
     ops.self = 1;
     ops.object = object;

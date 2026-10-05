@@ -6,8 +6,8 @@
 #include "ai_strategy.h" /* AoeAiIntListRor */
 #include "ai_unit_group.h"
 #include "ai_build.h" /* AoeAiConItemRor */
+#include "value_grid.h"
 
-struct AoeValueGridRor;
 
 /* Patched Rise of Rome 1.0a computer-player information AI (vtable
    0x00548b74; the computer player holds it at +0xcec): the members in
@@ -84,20 +84,27 @@ enum { AOE_AI_INFO_STATS = 11, AOE_AI_INFO_HISTORY = 16000 };
 
 typedef struct {
     AoeAiIntListRor list_f0;          /* +0xf0 */
+    void *owner;                      /* +0x100, the computer player */
     int32_t map_width, map_height;    /* +0x104, +0x108 (-1 unknown) */
+    int32_t field_10c;                /* +0x10c */
     AoeAiInfoObjectRor *objects;      /* +0x114 */
     int32_t object_count;             /* +0x110, 500 at first */
     AoeAiIntListRor list_118, list_128, list_138; /* +0x118 .. +0x138 */
     AoeAiIntListRor list_148;         /* +0x148 (count +0x14c) */
+    AoeValueGridRor explored;         /* +0x158, 254 x 254 of 0xff */
     AoeAiIntListRor list_180;         /* +0x180 */
     AoeAiIntListRor list_190;         /* +0x190 */
     int32_t last_site[2];             /* +0x1a0, +0x1a4 (-1 none) */
     int32_t prev_site[2];             /* +0x1a8, +0x1ac */
+    int32_t field_1b0;                /* +0x1b0 */
+    int32_t pairs_1b4[4][2];          /* +0x1b4 */
+    int32_t pairs_1d4[4][2];          /* +0x1d4 */
     AoeAiInfoMarkRor *marks;          /* +0x1f8 */
     int32_t mark_count;               /* +0x1f4 */
     AoeAiInfoAreaRor *areas;          /* +0x200 */
     int32_t area_count;               /* +0x1fc */
-    int32_t field_204;                /* +0x204 */
+    int32_t field_204;                /* +0x204, 1 writes the area file */
+    char area_path[256];              /* +0x208 */
     uint8_t zone_flags[256];          /* +0x308 */
     int32_t cells[4][4][3];           /* +0x408 */
     int32_t **kind_lists;             /* +0x4c8, one array per kind */
@@ -111,6 +118,7 @@ typedef struct {
     int32_t field_560;                /* +0x560 */
     int32_t history[AOE_AI_INFO_HISTORY]; /* +0x564 */
     int32_t stats[AOE_AI_INFO_STATS]; /* +0xff64 */
+    char learn_path[256];             /* +0xff90 */
 } AoeAiInfoRor;
 
 /* The world and the owning computer player. */
@@ -221,7 +229,56 @@ typedef struct {
     int32_t (*zone_size)(void *context, int32_t zone);
     /* An object's vtable +0x114: whether it could stand at (x, y). */
     int (*free_tile)(void *context, int32_t id, float x, float y);
+    /* Writing a whole binary file (created or truncated): 0 when it
+       cannot open. */
+    int (*write_file)(void *context, const char *path, const void *data,
+                      int size);
 } AoeAiInfoOpsRor;
+
+/* 0x004ba1c0: the constructor's state (the base part, 0x0040b470, is the
+   diplomacy AI's): no owner, map size -1, 500 free objects (ID, type and
+   class -1, the rest 0), 200 free marks, 25 free areas (ID -1, player
+   bytes 0xff, +0x14 -1), the explored grid 254 x 254 of 0xff, sites and
+   the +0x1b0 / +0x1b4 / +0x1d4 words -1, four empty kinds, age table
+   rows 1..3 all 1 (row 0 all 0), best distances and current targets -1,
+   the learn path "learn\Default.uh"; the rest 0. 0 when out of memory. */
+int aoe_ai_info_init_ror(AoeAiInfoRor *info);
+/* 0x004bb280 (0x004ba660 deletes too): when +0x204 is 1, the area file
+   (+0x208) gets the map width and height, the used areas (count, then
+   0x18 bytes each), the used remembered objects of type 0x6d (count, 0x24
+   bytes each), for each target list its capacity, count and capacity x 20
+   bytes (when the capacity is nonzero), and the +0x138 and +0x148 lists
+   (count, values); then, when the statistics follow this player (world
+   +0x11d equals ours or is 0xff), the eleven statistics go to the learn
+   path. Everything is freed. The list writers first grow a list whose
+   capacity is below its count (0x004cc5c0) and send that tail as is. */
+void aoe_ai_info_release_ror(AoeAiInfoRor *info, const AoeAiInfoOpsRor *ops);
+/* 0x004bbaa0: the owner (+0x100). */
+void aoe_ai_info_set_owner_ror(AoeAiInfoRor *info, void *owner);
+/* 0x004bb840: the map size from the owner's map, and the learn path
+   "learn\<name>.uh" for a named player, else "learn\Default.uh". */
+int aoe_ai_info_setup_ror(AoeAiInfoRor *info, const AoeAiInfoOpsRor *ops);
+/* 0x004bbab0: per kind its count and values; +0x104, +0x108, +0x10c; the
+   objects (count, 0x24 bytes each), marks (count, 8 each), areas (count,
+   0x18 each); the +0x118, +0x128, +0x138, +0x148, +0x190 and +0x180
+   lists (count, values; grown as above); the explored grid; the
+   sites, +0x1b0, the four +0x1b4 / +0x1d4 pairs interleaved, +0x204; the
+   area path's length and bytes; 255 zone flags; the 0xc0 cell bytes;
+   the target capacities (a capacity with no array is zeroed first),
+   counts and entries; the age table, best distances, current targets,
+   +0x560 and the history. Statistics are not saved. Records go out as
+   the original's bytes (padding 0). 0 when the stream fills up. */
+int aoe_ai_info_save_ror(AoeAiInfoRor *info, AoeOutcomeStream *out);
+/* 0x004ba680: the load constructor for a game of `version`: owner 0, the
+   default learn path, kinds, statistics and history 0, the default age
+   table and targets, then the saved fields in save order (list values
+   added once each). Before 1.6 the +0x1b0 word is followed by a discarded
+   word and no path is saved (the path is the global at 0x00561450, empty
+   in the image); before 2.5 the cells are 0; the age table, best
+   distances and current targets need 6.8, +0x560 6.91 and the history
+   6.99. 0 for a short stream or out of memory (the parts read stay). */
+int aoe_ai_info_load_ror(AoeAiInfoRor *info, AoeOutcomeStream *in,
+                         float version);
 
 /* 0x004bc690: 1 when the object exists and its zone has no flag;
    0x004bc6e0 sets the zone's flag. */

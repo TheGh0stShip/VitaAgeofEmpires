@@ -26,6 +26,15 @@ static inline float aoe_le_f32(const uint8_t *in) {
     return value;
 }
 
+static inline uint16_t aoe_le_u16(const uint8_t *in) {
+    return (uint16_t)(in[0] | in[1] << 8);
+}
+
+static inline void aoe_le_put_u16(uint8_t *out, uint16_t value) {
+    out[0] = (uint8_t)value;
+    out[1] = (uint8_t)(value >> 8);
+}
+
 static inline void aoe_le_put_u32(uint8_t *out, uint32_t value) {
     out[0] = (uint8_t)value;
     out[1] = (uint8_t)(value >> 8);

@@ -5,7 +5,6 @@
 
 #include "le_bytes.h"
 
-static uint16_t aoe_le_u16(const uint8_t *p) { return (uint16_t)(p[0] | p[1] << 8); }
 
 static int tag_at(const uint8_t *p, const char *tag) { return memcmp(p, tag, 4) == 0; }
 

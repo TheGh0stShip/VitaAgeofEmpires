@@ -8,6 +8,7 @@
 #include "aoe_ftol.h"
 #include "value_grid.h"
 #include "le_bytes.h"
+#include "aoe_stream.h"
 
 static int get_object(const AoeAiInfoOpsRor *ops, int32_t id,
                       AoeAiWorldObjectRor *out) {
@@ -2038,4 +2039,397 @@ AoeAiConItemRor *aoe_ai_ror_plan_choose_ror(AoeAiConPlanRor *plan, AoeAiInfoRor 
     result = copy_con_item(e);
     if (result) result->plan.type = item->type;
     return result;
+}
+
+/* Lifecycle, save and load. */
+
+static const char default_learn[] = "learn\\Default.uh";
+
+static void put_object(AoeOutcomeStream *s, const AoeAiInfoObjectRor *o) {
+    uint8_t b[0x24] = {0};
+    aoe_le_put_u32(b, (uint32_t)o->id);
+    aoe_le_put_u16(b + 4, (uint16_t)o->type_id);
+    aoe_le_put_u16(b + 6, (uint16_t)o->type_class);
+    b[8] = o->x; b[9] = o->y; b[10] = o->z; b[11] = o->owner;
+    aoe_le_put_u16(b + 0xc, o->hp);
+    aoe_le_put_u32(b + 0x10, (uint32_t)o->field_10);
+    b[0x14] = o->field_14;
+    aoe_le_put_f32(b + 0x18, o->field_18);
+    aoe_le_put_f32(b + 0x1c, o->field_1c);
+    aoe_le_put_f32(b + 0x20, o->range);
+    aoe_stream_put(s, b, sizeof b);
+}
+
+static void take_object(AoeOutcomeStream *s, AoeAiInfoObjectRor *o) {
+    const uint8_t *b = aoe_stream_take(s, 0x24);
+    if (!b) return;
+    o->id = aoe_le_i32(b);
+    o->type_id = (int16_t)aoe_le_u16(b + 4);
+    o->type_class = (int16_t)aoe_le_u16(b + 6);
+    o->x = b[8]; o->y = b[9]; o->z = b[10]; o->owner = b[11];
+    o->hp = aoe_le_u16(b + 0xc);
+    o->field_10 = aoe_le_i32(b + 0x10);
+    o->field_14 = b[0x14];
+    o->field_18 = aoe_le_f32(b + 0x18);
+    o->field_1c = aoe_le_f32(b + 0x1c);
+    o->range = aoe_le_f32(b + 0x20);
+}
+
+static void put_mark(AoeOutcomeStream *s, const AoeAiInfoMarkRor *m) {
+    aoe_stream_put_i32(s, m->id);
+    aoe_stream_put_u8(s, m->state);
+    aoe_stream_put_u8(s, m->x);
+    aoe_stream_put_u8(s, m->y);
+    aoe_stream_put_u8(s, 0);
+}
+
+static void take_mark(AoeOutcomeStream *s, AoeAiInfoMarkRor *m) {
+    m->id = aoe_stream_i32(s);
+    m->state = aoe_stream_u8(s);
+    m->x = aoe_stream_u8(s);
+    m->y = aoe_stream_u8(s);
+    m->pad = aoe_stream_u8(s);
+}
+
+static void put_area(AoeOutcomeStream *s, const AoeAiInfoAreaRor *a) {
+    uint8_t b[0x18] = {0};
+    aoe_le_put_u32(b, (uint32_t)a->id);
+    b[4] = a->field_4; b[5] = a->x0; b[6] = a->y0; b[7] = a->x1; b[8] = a->y1;
+    b[9] = a->player_9; b[10] = a->player_a;
+    aoe_le_put_u16(b + 0xc, a->field_c);
+    b[0xe] = a->field_e;
+    aoe_le_put_u32(b + 0x10, a->age);
+    aoe_le_put_u32(b + 0x14, (uint32_t)a->field_14);
+    aoe_stream_put(s, b, sizeof b);
+}
+
+static void take_area(AoeOutcomeStream *s, AoeAiInfoAreaRor *a) {
+    const uint8_t *b = aoe_stream_take(s, 0x18);
+    if (!b) return;
+    a->id = aoe_le_i32(b);
+    a->field_4 = b[4]; a->x0 = b[5]; a->y0 = b[6]; a->x1 = b[7]; a->y1 = b[8];
+    a->player_9 = b[9]; a->player_a = b[10]; a->pad_b = 0;
+    a->field_c = aoe_le_u16(b + 0xc);
+    a->field_e = b[0xe]; a->pad_f = 0;
+    a->age = aoe_le_u32(b + 0x10);
+    a->field_14 = aoe_le_i32(b + 0x14);
+}
+
+static void put_target(AoeOutcomeStream *s, const AoeAiInfoTargetRor *t) {
+    uint8_t b[0x14] = {0};
+    aoe_le_put_u32(b, (uint32_t)t->id);
+    b[4] = t->x; b[5] = t->y; b[6] = t->picks;
+    aoe_le_put_u32(b + 8, (uint32_t)t->field_8);
+    b[0xc] = t->wait; b[0xd] = t->gone; b[0xe] = t->field_e;
+    aoe_le_put_u32(b + 0x10, (uint32_t)t->field_10);
+    aoe_stream_put(s, b, sizeof b);
+}
+
+static void take_target(AoeOutcomeStream *s, AoeAiInfoTargetRor *t) {
+    const uint8_t *b = aoe_stream_take(s, 0x14);
+    if (!b) return;
+    memset(t, 0, sizeof *t);
+    t->id = aoe_le_i32(b);
+    t->x = b[4]; t->y = b[5]; t->picks = b[6];
+    t->field_8 = aoe_le_i32(b + 8);
+    t->wait = b[0xc]; t->gone = b[0xd]; t->field_e = b[0xe];
+    t->field_10 = aoe_le_i32(b + 0x10);
+}
+
+/* Count, then each value (growing a short list as 0x004cc5c0 does). */
+static void put_list(AoeOutcomeStream *s, AoeAiIntListRor *l) {
+    int32_t i, *v;
+    aoe_stream_put_i32(s, l->count);
+    for (i = 0; i < l->count; ++i) {
+        v = aoe_ai_int_list_at_ror(l, i);
+        aoe_stream_put_i32(s, v ? *v : 0);
+    }
+}
+
+static int take_list(AoeOutcomeStream *s, AoeAiIntListRor *l) {
+    int32_t n = aoe_stream_i32(s), i;
+    for (i = 0; i < n && !s->failed; ++i)
+        aoe_ai_int_list_add_unique_ror(l, aoe_stream_i32(s));
+    return !s->failed;
+}
+
+static void free_list(AoeAiIntListRor *l) {
+    free(l->data);
+    memset(l, 0, sizeof *l);
+}
+
+/* The state shared by both constructors. */
+static int init_common(AoeAiInfoRor *info) {
+    int i, j;
+    memset(info, 0, sizeof *info);
+    snprintf(info->learn_path, sizeof info->learn_path, "%s", default_learn);
+    info->kind_lists = (int32_t **)calloc(4, sizeof *info->kind_lists);
+    info->kind_counts = (int32_t *)calloc(4, sizeof *info->kind_counts);
+    if (!info->kind_lists || !info->kind_counts) return 0;
+    for (i = 0; i < 4; ++i) {
+        for (j = 0; j < 4; ++j) info->age_allowed[i][j] = i ? 1 : 0;
+        info->best_distance[i] = -1;
+        info->current_target[i] = -1;
+    }
+    return aoe_value_grid_init_ror(&info->explored, 0xfe, 0xfe, 0xff);
+}
+
+int aoe_ai_info_init_ror(AoeAiInfoRor *info) {
+    int32_t i;
+    if (!info || !init_common(info)) return 0;
+    info->map_width = info->map_height = -1;
+    info->object_count = 500;
+    info->objects = (AoeAiInfoObjectRor *)calloc(500, sizeof *info->objects);
+    info->mark_count = 200;
+    info->marks = (AoeAiInfoMarkRor *)calloc(200, sizeof *info->marks);
+    info->area_count = 25;
+    info->areas = (AoeAiInfoAreaRor *)calloc(25, sizeof *info->areas);
+    if (!info->objects || !info->marks || !info->areas) return 0;
+    for (i = 0; i < 500; ++i)
+        info->objects[i].id = info->objects[i].type_id =
+            info->objects[i].type_class = -1;
+    for (i = 0; i < 200; ++i) info->marks[i].id = -1;
+    for (i = 0; i < 25; ++i) {
+        info->areas[i].id = -1;
+        info->areas[i].player_9 = info->areas[i].player_a = 0xff;
+        info->areas[i].field_14 = -1;
+    }
+    info->last_site[0] = info->last_site[1] = -1;
+    info->prev_site[0] = info->prev_site[1] = -1;
+    info->field_1b0 = -1;
+    for (i = 0; i < 4; ++i)
+        info->pairs_1b4[i][0] = info->pairs_1b4[i][1] =
+            info->pairs_1d4[i][0] = info->pairs_1d4[i][1] = -1;
+    return 1;
+}
+
+void aoe_ai_info_set_owner_ror(AoeAiInfoRor *info, void *owner) {
+    if (info) info->owner = owner;
+}
+
+int aoe_ai_info_setup_ror(AoeAiInfoRor *info, const AoeAiInfoOpsRor *ops) {
+    const char *name;
+    if (!info || !ops) return 0;
+    if (ops->map_width) info->map_width = ops->map_width(ops->context);
+    if (ops->map_height) info->map_height = ops->map_height(ops->context);
+    name = ops->learn_name ? ops->learn_name(ops->context) : NULL;
+    if (name)
+        snprintf(info->learn_path, sizeof info->learn_path, "learn\\%s.uh",
+                 name);
+    else
+        snprintf(info->learn_path, sizeof info->learn_path, "%s",
+                 default_learn);
+    return 1;
+}
+
+static void write_area_file(AoeAiInfoRor *info, const AoeAiInfoOpsRor *ops) {
+    AoeOutcomeStream s;
+    size_t size = 16 + (size_t)info->area_count * 0x18 +
+                  (size_t)info->object_count * 0x24 + 8 * 2 +
+                  ((size_t)info->list_138.count + info->list_148.count) * 4;
+    int32_t i, k, n;
+    for (k = 0; k < 4; ++k) size += 8 + (size_t)info->target_capacity[k] * 0x14;
+    memset(&s, 0, sizeof s);
+    s.size = size;
+    s.data = (uint8_t *)malloc(size);
+    if (!s.data) return;
+    aoe_stream_put_i32(&s, info->map_width);
+    aoe_stream_put_i32(&s, info->map_height);
+    for (n = 0, i = 0; i < info->area_count; ++i) n += info->areas[i].id != -1;
+    aoe_stream_put_i32(&s, n);
+    for (i = 0; i < info->area_count; ++i)
+        if (info->areas[i].id != -1) put_area(&s, &info->areas[i]);
+    for (n = 0, i = 0; i < info->object_count; ++i)
+        n += info->objects[i].id != -1 && info->objects[i].type_id == 0x6d;
+    aoe_stream_put_i32(&s, n);
+    for (i = 0; i < info->object_count; ++i)
+        if (info->objects[i].id != -1 && info->objects[i].type_id == 0x6d)
+            put_object(&s, &info->objects[i]);
+    for (k = 0; k < 4; ++k) {
+        aoe_stream_put_i32(&s, info->target_capacity[k]);
+        aoe_stream_put_i32(&s, info->target_count[k]);
+        for (i = 0; i < info->target_capacity[k] && info->targets[k]; ++i)
+            put_target(&s, &info->targets[k][i]);
+    }
+    put_list(&s, &info->list_138);
+    put_list(&s, &info->list_148);
+    if (!s.failed)
+        ops->write_file(ops->context, info->area_path, s.data, (int)s.pos);
+    free(s.data);
+}
+
+void aoe_ai_info_release_ror(AoeAiInfoRor *info, const AoeAiInfoOpsRor *ops) {
+    uint8_t bytes[AOE_AI_INFO_STATS * 4];
+    int k;
+    if (!info) return;
+    if (ops && ops->write_file) {
+        if (info->field_204 == 1) write_area_file(info, ops);
+        if (ops->stats_player == (uint8_t)ops->self || ops->stats_player == 0xff) {
+            for (k = 0; k < AOE_AI_INFO_STATS; ++k)
+                aoe_le_put_u32(bytes + 4 * k, (uint32_t)info->stats[k]);
+            ops->write_file(ops->context, info->learn_path, bytes,
+                            (int)sizeof bytes);
+        }
+    }
+    if (info->kind_lists)
+        for (k = 0; k < 4; ++k) free(info->kind_lists[k]);
+    free(info->kind_lists);
+    free(info->kind_counts);
+    free(info->objects);
+    free(info->marks);
+    free(info->areas);
+    for (k = 0; k < 4; ++k) free(info->targets[k]);
+    free_list(&info->list_190);
+    free_list(&info->list_180);
+    aoe_value_grid_free_ror(&info->explored);
+    free_list(&info->list_148);
+    free_list(&info->list_138);
+    free_list(&info->list_128);
+    free_list(&info->list_118);
+    free_list(&info->list_f0);
+    memset(info, 0, sizeof *info);
+}
+
+int aoe_ai_info_save_ror(AoeAiInfoRor *info, AoeOutcomeStream *out) {
+    int32_t i, k, len;
+    for (k = 0; k < 4; ++k) {
+        aoe_stream_put_i32(out, info->kind_counts[k]);
+        for (i = 0; i < info->kind_counts[k]; ++i)
+            aoe_stream_put_i32(out, info->kind_lists[k][i]);
+    }
+    aoe_stream_put_i32(out, info->map_width);
+    aoe_stream_put_i32(out, info->map_height);
+    aoe_stream_put_i32(out, info->field_10c);
+    aoe_stream_put_i32(out, info->object_count);
+    for (i = 0; i < info->object_count; ++i) put_object(out, &info->objects[i]);
+    aoe_stream_put_i32(out, info->mark_count);
+    for (i = 0; i < info->mark_count; ++i) put_mark(out, &info->marks[i]);
+    aoe_stream_put_i32(out, info->area_count);
+    for (i = 0; i < info->area_count; ++i) put_area(out, &info->areas[i]);
+    put_list(out, &info->list_118);
+    put_list(out, &info->list_128);
+    put_list(out, &info->list_138);
+    put_list(out, &info->list_148);
+    put_list(out, &info->list_190);
+    put_list(out, &info->list_180);
+    aoe_value_grid_save_ror(&info->explored, out);
+    for (i = 0; i < 2; ++i) aoe_stream_put_i32(out, info->last_site[i]);
+    for (i = 0; i < 2; ++i) aoe_stream_put_i32(out, info->prev_site[i]);
+    aoe_stream_put_i32(out, info->field_1b0);
+    for (k = 0; k < 4; ++k)
+        for (i = 0; i < 4; ++i)
+            aoe_stream_put_i32(out, i < 2 ? info->pairs_1b4[k][i]
+                                          : info->pairs_1d4[k][i - 2]);
+    aoe_stream_put_i32(out, info->field_204);
+    len = (int32_t)strlen(info->area_path);
+    aoe_stream_put_i32(out, len);
+    aoe_stream_put(out, info->area_path, (size_t)len);
+    aoe_stream_put(out, info->zone_flags, 0xff);
+    for (k = 0; k < 4; ++k)
+        for (i = 0; i < 4; ++i)
+            for (len = 0; len < 3; ++len)
+                aoe_stream_put_i32(out, info->cells[k][i][len]);
+    for (k = 0; k < 4; ++k)
+        if (info->target_capacity[k] && !info->targets[k])
+            info->target_capacity[k] = 0;
+    for (k = 0; k < 4; ++k) aoe_stream_put_i32(out, info->target_capacity[k]);
+    for (k = 0; k < 4; ++k) aoe_stream_put_i32(out, info->target_count[k]);
+    for (k = 0; k < 4; ++k)
+        for (i = 0; i < info->target_capacity[k]; ++i)
+            put_target(out, &info->targets[k][i]);
+    for (k = 0; k < 4; ++k)
+        for (i = 0; i < 4; ++i) aoe_stream_put_i32(out, info->age_allowed[k][i]);
+    for (k = 0; k < 4; ++k) aoe_stream_put_i32(out, info->best_distance[k]);
+    for (k = 0; k < 4; ++k) aoe_stream_put_i32(out, info->current_target[k]);
+    aoe_stream_put_i32(out, info->field_560);
+    for (i = 0; i < AOE_AI_INFO_HISTORY; ++i)
+        aoe_stream_put_i32(out, info->history[i]);
+    return !out->failed;
+}
+
+int aoe_ai_info_load_ror(AoeAiInfoRor *info, AoeOutcomeStream *in,
+                         float version) {
+    int32_t i, k, n;
+    if (!info || !init_common(info)) return 0;
+    for (k = 0; k < 4; ++k) {
+        n = aoe_stream_i32(in);
+        for (i = 0; i < n && !in->failed; ++i)
+            aoe_ai_info_kind_append_ror(info, k, aoe_stream_i32(in));
+    }
+    info->map_width = aoe_stream_i32(in);
+    info->map_height = aoe_stream_i32(in);
+    info->field_10c = aoe_stream_i32(in);
+    n = aoe_stream_i32(in);
+    if (in->failed || n < 0) return 0;
+    info->object_count = n;
+    info->objects = (AoeAiInfoObjectRor *)calloc((size_t)n + 1, sizeof *info->objects);
+    if (!info->objects) return 0;
+    for (i = 0; i < n; ++i) take_object(in, &info->objects[i]);
+    n = aoe_stream_i32(in);
+    if (in->failed || n < 0) return 0;
+    info->mark_count = n;
+    info->marks = (AoeAiInfoMarkRor *)calloc((size_t)n + 1, sizeof *info->marks);
+    if (!info->marks) return 0;
+    for (i = 0; i < n; ++i) take_mark(in, &info->marks[i]);
+    n = aoe_stream_i32(in);
+    if (in->failed || n < 0) return 0;
+    info->area_count = n;
+    info->areas = (AoeAiInfoAreaRor *)calloc((size_t)n + 1, sizeof *info->areas);
+    if (!info->areas) return 0;
+    for (i = 0; i < n; ++i) take_area(in, &info->areas[i]);
+    if (!take_list(in, &info->list_118) || !take_list(in, &info->list_128) ||
+        !take_list(in, &info->list_138) || !take_list(in, &info->list_148) ||
+        !take_list(in, &info->list_190) || !take_list(in, &info->list_180))
+        return 0;
+    if (!aoe_value_grid_load_ror(&info->explored, in)) return 0;
+    for (i = 0; i < 2; ++i) info->last_site[i] = aoe_stream_i32(in);
+    for (i = 0; i < 2; ++i) info->prev_site[i] = aoe_stream_i32(in);
+    info->field_1b0 = aoe_stream_i32(in);
+    if (version < 1.6f) (void)aoe_stream_i32(in);
+    for (k = 0; k < 4; ++k)
+        for (i = 0; i < 4; ++i) {
+            if (i < 2) info->pairs_1b4[k][i] = aoe_stream_i32(in);
+            else info->pairs_1d4[k][i - 2] = aoe_stream_i32(in);
+        }
+    info->field_204 = aoe_stream_i32(in);
+    if (version >= 1.6f) {
+        const uint8_t *p;
+        n = aoe_stream_i32(in);
+        if (in->failed || n < 0 || n >= (int32_t)sizeof info->area_path) return 0;
+        p = aoe_stream_take(in, (size_t)n);
+        if (!p) return 0;
+        memcpy(info->area_path, p, (size_t)n);
+        info->area_path[n] = 0;
+    }
+    {
+        const uint8_t *p = aoe_stream_take(in, 0xff);
+        if (!p) return 0;
+        memcpy(info->zone_flags, p, 0xff);
+    }
+    if (version >= 2.5f)
+        for (k = 0; k < 4; ++k)
+            for (i = 0; i < 4; ++i)
+                for (n = 0; n < 3; ++n) info->cells[k][i][n] = aoe_stream_i32(in);
+    for (k = 0; k < 4; ++k) info->target_capacity[k] = aoe_stream_i32(in);
+    for (k = 0; k < 4; ++k) info->target_count[k] = aoe_stream_i32(in);
+    if (in->failed) return 0;
+    for (k = 0; k < 4; ++k) {
+        if (info->target_capacity[k] <= 0) continue;
+        info->targets[k] = (AoeAiInfoTargetRor *)calloc(
+            (size_t)info->target_capacity[k], sizeof **info->targets);
+        if (!info->targets[k]) return 0;
+        for (i = 0; i < info->target_capacity[k]; ++i)
+            take_target(in, &info->targets[k][i]);
+    }
+    if (version >= 6.8f) {
+        for (k = 0; k < 4; ++k)
+            for (i = 0; i < 4; ++i) info->age_allowed[k][i] = aoe_stream_i32(in);
+        for (k = 0; k < 4; ++k) info->best_distance[k] = aoe_stream_i32(in);
+        for (k = 0; k < 4; ++k) info->current_target[k] = aoe_stream_i32(in);
+    }
+    if (version >= 6.91f) info->field_560 = aoe_stream_i32(in);
+    if (version >= 6.99f)
+        for (i = 0; i < AOE_AI_INFO_HISTORY; ++i)
+            info->history[i] = aoe_stream_i32(in);
+    return !in->failed;
 }

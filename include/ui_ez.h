@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 
+#include "shape.h"
 #include "ui_button.h"
 #include "ui_dropdown.h"
 #include "ui_edit.h"
@@ -34,7 +35,8 @@ typedef struct {
        loaded; NULL when it does not load. free_shape frees it. */
     void *(*load_shape)(void *context, const char *file, int32_t id);
     void (*free_shape)(void *context, void *shape);
-    /* The shadow table for a palette and amount, and its deletion. */
+    /* The shadow table for a palette and amount (its 256 shade bytes, the
+       original object's +0x28), and its deletion. */
     void *(*create_shadow)(void *context, AoeUiAreaRor *area, int32_t amount,
                            uintptr_t palette);
     void (*free_shadow)(void *context, void *shadow);
@@ -64,9 +66,7 @@ typedef struct {
        by keyword. */
     int (*single_player)(void *context);
     void (*win_help_key)(void *context, const char *keyword);
-    /* The help popup; WinHelp for help mode 1. */
-    void (*help_popup)(void *context, const char *panel_name,
-                       const char *text, int32_t page, int32_t x, int32_t y);
+    /* WinHelp for help mode 1. */
     void (*win_help)(void *context);
     uint8_t *help_mode;                 /* 0x00583bc0: 1 WinHelp, 2 shown */
     /* Child panel callbacks. */
@@ -79,8 +79,8 @@ typedef struct {
        message dialog's idle). */
     void (*game_idle)(void *context);
     int (*idle_blocked)(void *context);
-    /* Rebuild the shadow area (not translated). */
-    void (*shadow_area)(void *context, AoeUiEzRor *ez, int32_t force);
+    /* The shape renderer for pictures drawn on draw surfaces. */
+    const AoeShapeDrawOpsRor *shape_ops;
 } AoeUiEzOpsRor;
 
 typedef struct {
@@ -117,7 +117,7 @@ struct AoeUiEzRor {
     int32_t stock_brush;               /* +0x460 */
     uintptr_t brush;                   /* +0x464 */
     int32_t field_468;                 /* +0x468 */
-    void *shadow_panel;                /* +0x46c */
+    struct AoeDrawSurfaceRor *shadow_panel; /* +0x46c */
     int32_t field_470;                 /* +0x470 */
     int32_t saved_pointer;             /* +0x474 */
 };
@@ -316,6 +316,22 @@ int aoe_ui_screen_init_ror(AoeUiEzRor *ez, AoeUiSystemRor *system,
 int aoe_ui_screen_setup_ror(AoeUiEzRor *ez, AoeUiAreaRor *area,
                             const char *info_name, int32_t info_id,
                             int32_t field_470);
+
+/* 0x00454d90: build the shadow area once (or again with `force`): a
+   "<name> Shadow Panel" surface the size of the background picture (at
+   most the panel), filled, the picture drawn and darkened through the
+   shadow table; the system flags are cleared to bit 0 while it is made.
+   0x00454fd0 (+0xe4): the background, with the parent's rect flag: the
+   shadow area copied at the origin, centred or tiled; else the background
+   (the second one with the flag, when there is one) drawn the same way
+   and, with the flag, darkened; a redraw level of 2 (or no picture) clears
+   the panel first; then the bevel when on. 0x00457c50: a help dialog for
+   a non-empty text (owner, text, page, point). */
+void aoe_ui_ez_shadow_area_ror(AoeUiEzRor *ez, int32_t force);
+void aoe_ui_ez_draw_background_ror(AoeUiEzRor *ez, int32_t parent_rect);
+void aoe_ui_ez_help_popup_ror(AoeUiEzRor *ez, const char *owner,
+                              const char *text, int32_t page, int32_t x,
+                              int32_t y);
 
 /* Slots: +0x28 0x00454f70 (the base begin_draw), +0x30 0x00454f80
    (restore marks the shadow rebuilt; draws the background, the parent's

@@ -3,6 +3,7 @@
 #include "ui_dialog.h"
 #include "ui_ez.h"
 #include "palette_fade.h"
+#include "shape.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -10,6 +11,79 @@
 #include <string.h>
 
 static uint32_t now(void *c) { (void)c; return 0; }
+/* A one-frame SHP picture: 4 x 2, hotspot (1, 1); row 0 two literal
+   pixels 0xa1 0xb2 then a skip, row 1 a fill of three 0xc3. */
+static uint8_t shp_data[0x40];
+static void put32(uint8_t *p, uint32_t v) {
+    p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8);
+    p[2] = (uint8_t)(v >> 16); p[3] = (uint8_t)(v >> 24);
+}
+static void build_shp(void) {
+    static const uint8_t rows[] = {0x05, 0xa1, 0xb2, 0x01, 1, 0x00,
+                                   0x06, 0xc3, 0x00};
+    uint8_t *f = shp_data + 0x10;
+    memcpy(shp_data, "1.10", 4);
+    put32(shp_data + 4, 1);
+    put32(shp_data + 8, 0x10);
+    put32(f, 4u << 16 | 2u);
+    put32(f + 8, (uint32_t)-1);
+    put32(f + 0xc, (uint32_t)-1);
+    put32(f + 0x10, 2);
+    put32(f + 0x14, 0);
+    memcpy(f + 0x18, rows, sizeof rows);
+}
+static uint8_t *shp_res(void *c, uint32_t type, int32_t id, uint32_t *size,
+                        int32_t *owned) {
+    (void)c; (void)id;
+    if (type != 0x73687020u) return NULL; /* only as 'shp ' */
+    *size = sizeof shp_data;
+    *owned = 0;
+    return shp_data;
+}
+/* A fake device whose surfaces are plain memory. */
+typedef struct { int32_t w, h; uint8_t *bits; } MemSurface;
+static int32_t mem_create(void *c, void *d, int32_t w, int32_t h, int sys,
+                          void **out) {
+    MemSurface *m = calloc(1, sizeof *m);
+    (void)c; (void)d; (void)sys;
+    m->w = w; m->h = h;
+    m->bits = calloc((size_t)w, (size_t)h);
+    *out = m;
+    return 0;
+}
+static int32_t mem_describe(void *c, void *s, int32_t *pitch, uint32_t *caps) {
+    (void)c;
+    *pitch = ((MemSurface *)s)->w;
+    *caps = 0x800;
+    return 0;
+}
+static int32_t mem_fill(void *c, void *s, const int32_t *r, uint32_t color) {
+    MemSurface *m = s;
+    (void)c;
+    if (!r) memset(m->bits, (int)color, (size_t)m->w * (size_t)m->h);
+    return 0;
+}
+static int32_t mem_lock(void *c, void *s, int wait, uint8_t **bits) {
+    (void)c; (void)wait;
+    *bits = ((MemSurface *)s)->bits;
+    return 0;
+}
+static void mem_unlock(void *c, void *s, uint8_t *bits) {
+    (void)c; (void)s; (void)bits;
+}
+static void mem_release(void *c, void *o) {
+    (void)c;
+    free(((MemSurface *)o)->bits);
+    free(o);
+}
+static int blits;
+static int32_t mem_blt(void *c, void *d, const int32_t dr[4], void *s,
+                       const int32_t sr[4], int keyed) {
+    (void)c; (void)d; (void)dr; (void)s; (void)sr; (void)keyed;
+    ++blits;
+    return 0;
+}
+
 static uint32_t ticks;
 static uint32_t ticking(void *c) { (void)c; return ticks += 50; }
 static int palette_sets, fills, presents;
@@ -113,12 +187,6 @@ static AoeUiMessageDialogRor *message(AoeUiSystemRor *s, const char *name) {
     return (AoeUiMessageDialogRor *)aoe_ui_system_find_ror(s, name);
 }
 
-static char help_text[64];
-static void help_popup(void *c, const char *panel, const char *text, int32_t page,
-                       int32_t x, int32_t y) {
-    (void)c; (void)panel; (void)page; (void)x; (void)y;
-    snprintf(help_text, sizeof(help_text), "%s", text);
-}
 static int win_helps;
 static void win_help(void *c) { (void)c; ++win_helps; }
 static uint8_t help_mode;
@@ -166,7 +234,6 @@ int main(void) {
     ops.cursor = cursor;
     ops.pointer_state = pointer_state;
     ops.set_pointer_state = set_pointer_state;
-    ops.help_popup = help_popup;
     ops.win_help = win_help;
     ops.help_mode = &help_mode;
     ops.caret_blink_ms = 530;
@@ -451,8 +518,14 @@ int main(void) {
     ez.panel.help_id = 7;
     ez.panel.clip.right = ez.panel.clip.bottom = 100;
     assert(ez.panel.vt->mouse_down(&ez.panel, 1, 5, 5, 0, 0) == 1);
-    assert(!ez.help_armed && cursor_help == 0 && pstate == 42 &&
-           strcmp(help_text, "Seven") == 0);
+    assert(!ez.help_armed && cursor_help == 0 && pstate == 42);
+    /* 0x00457c50: a registered help dialog with the panel's help text. */
+    {
+        AoeUiHelpDialogRor *hd =
+            (AoeUiHelpDialogRor *)aoe_ui_system_find_ror(&sys, "Help Dialog");
+        assert(hd && hd->text && strcmp(hd->text->lines->text, "Seven") == 0);
+        aoe_ui_system_close_ror(&sys, "Help Dialog");
+    }
 
     /* Focus: the pointer, the default palette, the IME. */
     ez.ime_toggle = 1;
@@ -503,6 +576,104 @@ int main(void) {
         assert(palette_sets == 0 && presents == 0);
         area.surface = NULL;
         pf.now_ms = now;
+    }
+
+    /* Backgrounds on a memory surface: drawn at the panel's origin; with
+       the parent's rect flag darkened through the shadow table; a full
+       redraw clears the panel first. */
+    {
+        static uint8_t bits[16 * 8];
+        static uint8_t *rows[8];
+        static uint8_t shade[256];
+        static AoeDrawSystemRor d;
+        static AoeDrawSurfaceRor surf;
+        static AoeShapeRor shape;
+        static const AoeShapeOpsRor sops = {NULL, 0, NULL, NULL, shp_res, NULL};
+        static const AoeDrawOpsRor mops = {.create_surface = mem_create,
+                                           .describe = mem_describe,
+                                           .fill = mem_fill,
+                                           .lock = mem_lock,
+                                           .unlock = mem_unlock,
+                                           .release = mem_release,
+                                           .blt = mem_blt};
+        AoeUiRectRor clip;
+        int i;
+        static const AoeShapeDrawOpsRor draw_ops = {0};
+        build_shp();
+        aoe_shape_load_ror(&shape, NULL, 1, &sops);
+        ops.shape_ops = &draw_ops;
+        for (i = 0; i < 256; ++i) shade[i] = (uint8_t)(i ^ 0xff);
+        d.type = 1;
+        surf.system = &d;
+        surf.view.bits = bits;
+        surf.view.width = 16;
+        surf.view.height = 8;
+        surf.view.pitch = 16;
+        surf.view.direction = 1;
+        surf.view.clip_right = 15;
+        surf.view.clip_bottom = 7;
+        for (i = 0; i < 8; ++i) rows[i] = bits + 16 * i;
+        surf.rows = rows;
+        area.surface = &surf;
+        ez.panel.x = 2;
+        ez.panel.y = 3;
+        ez.panel.width = 10;
+        ez.panel.height = 4;
+        clip = ez.panel.clip;
+        ez.panel.clip.left = 2;
+        ez.panel.clip.top = 3;
+        ez.panel.clip.right = 11;
+        ez.panel.clip.bottom = 6;
+        ez.background = &shape;
+        ez.background_mode = 0;
+        ez.bevel_on = 0;
+        ez.panel.redraw = 0;
+        memset(bits, 0x11, sizeof bits);
+        aoe_ui_ez_draw_background_ror(&ez, 0);
+        /* Hotspot (1, 1) at (2, 3): the frame's top-left lands at (1, 2). */
+        assert(bits[2 * 16 + 1] == 0xa1 && bits[2 * 16 + 2] == 0xb2 &&
+               bits[3 * 16 + 1] == 0xc3 && bits[3 * 16 + 3] == 0xc3);
+        ez.shadow_table = shade;
+        memset(bits, 0x11, sizeof bits);
+        aoe_ui_ez_draw_background_ror(&ez, 1);
+        /* Darkened over the picture's box from the origin (2, 3). */
+        assert(bits[3 * 16 + 2] == (uint8_t)(0xc3 ^ 0xff) &&
+               bits[3 * 16 + 1] == 0xc3 && bits[0] == 0x11);
+        ez.panel.redraw = 2;
+        ez.fill_color = 0x55;
+        ez.shadow_table = NULL;
+        memset(bits, 0x11, sizeof bits);
+        aoe_ui_ez_draw_background_ror(&ez, 0);
+        assert(bits[6 * 16 + 11] == 0x55 && bits[2 * 16 + 1] == 0xa1);
+        ez.panel.redraw = 0;
+
+        /* The shadow area on a DirectDraw display: a surface the picture's
+           size, drawn and darkened, then copied onto the panel. */
+        aoe_draw_clear_ror(&d, &mops);
+        d.type = 2;
+        d.device = &d;
+        surf.system = &d;
+        ez.shadow_table = shade;
+        ez.fill_color = 0x55;
+        aoe_ui_ez_shadow_area_ror(&ez, 0);
+        assert(ez.shadow_panel && ez.shadow_panel->view.width == 4 &&
+               ez.shadow_panel->view.height == 2);
+        /* As in the original, the picture's hotspot is put at (0, 0), so
+           its first row falls outside and its second lands on row 0. */
+        assert(((MemSurface *)ez.shadow_panel->surface)->bits[0] ==
+               (uint8_t)(0xc3 ^ 0xff));
+        assert(((MemSurface *)ez.shadow_panel->surface)->bits[4] ==
+               (uint8_t)(0x55 ^ 0xff));
+        surf.surface = &surf; /* the area has a device surface now */
+        blits = 0;
+        aoe_ui_ez_draw_background_ror(&ez, 1);
+        assert(blits == 1);
+        surf.surface = NULL;
+        ez.background = NULL;
+        ez.shadow_table = NULL;
+        aoe_shape_free_ror(&shape, &sops);
+        ez.panel.clip = clip;
+        area.surface = NULL;
     }
     aoe_ui_ez_release_ror(&ez);
     return 0;

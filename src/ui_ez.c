@@ -1,6 +1,8 @@
 #include "ui_ez.h"
 
 #include "palette_fade.h"
+#include "draw_prims.h"
+#include "draw_system.h"
 #include "ui_ez_slots.h"
 #include "ui_dialog.h"
 
@@ -92,9 +94,11 @@ static void free_shadow_table(AoeUiEzRor *ez) {
 
 void aoe_ui_ez_free_ror(AoeUiEzRor *ez) {
     if (!ez) return;
-    /* The shadow panel belongs to the untranslated shadow area; whoever
-       builds it through the callback frees it. */
-    ez->shadow_panel = NULL;
+    if (ez->shadow_panel) {
+        aoe_surface_free_ror(ez->shadow_panel);
+        free(ez->shadow_panel);
+        ez->shadow_panel = NULL;
+    }
     ez->brush = 0; /* the original deletes a brush that is not stock */
     free_shape(ez, &ez->background);
     free_shape(ez, &ez->background2);
@@ -897,10 +901,8 @@ int32_t aoe_ui_ez_help_press_ror(AoeUiEzRor *ez, uint8_t button, int32_t x,
     set_pointer_state(ez, ez->saved_pointer);
     if (button == 1) {
         text[0] = '\0';
-        if (ez->panel.vt->get_help(&ez->panel, text, &page, x, y) &&
-            ez->ops && ez->ops->help_popup)
-            ez->ops->help_popup(ez->ops->context, ez->panel.name, text, page,
-                                x, y);
+        if (ez->panel.vt->get_help(&ez->panel, text, &page, x, y))
+            aoe_ui_ez_help_popup_ror(ez, ez->panel.name, text, page, x, y);
     }
     return 1;
 }
@@ -914,8 +916,7 @@ void aoe_ui_ez_begin_draw_slot_ror(AoeUiPanelRor *p, int32_t clear) {
 void aoe_ui_ez_draw_slot_ror(AoeUiPanelRor *p) {
     AoeUiEzRor *ez = EZ(p);
     if (p->need_restore) {
-        if (ez->shadow_panel && ez->ops && ez->ops->shadow_area)
-            ez->ops->shadow_area(ez->ops->context, ez, 1);
+        if (ez->shadow_panel) aoe_ui_ez_shadow_area_ror(ez, 1);
         p->need_restore = 0;
     }
     EZ_VT(ez)->draw_background(ez, p->parent_rect ? 1 : 0);
@@ -973,9 +974,168 @@ int32_t aoe_ui_ez_no_key_action_ror(AoeUiPanelRor *p, int32_t a, int32_t b,
 }
 
 /* Background drawing is not translated. */
+void aoe_ui_ez_help_popup_ror(AoeUiEzRor *ez, const char *owner,
+                              const char *text, int32_t page, int32_t x,
+                              int32_t y) {
+    AoeUiHelpDialogRor *d;
+    if (!text || !*text) return;
+    d = calloc(1, sizeof *d);
+    if (!d) return;
+    /* Registered by name; closing it frees it. */
+    if (!aoe_ui_help_dialog_init_ror(d, ez->panel.system, ez->ops, &ez->panel,
+                                     owner, text, page, x, y)) {
+        d->dialog.ez.panel.vt->destroy(&d->dialog.ez.panel);
+        free(d);
+    }
+}
+
+static struct AoeDrawSurfaceRor *area_surface(AoeUiEzRor *ez) {
+    return ez->panel.area ? ez->panel.area->surface : NULL;
+}
+
+static void draw_picture(AoeUiEzRor *ez, void *shape, AoeShapeSurfaceRor *dst,
+                         int32_t x, int32_t y) {
+    if (shape && ez->ops && ez->ops->shape_ops)
+        aoe_shape_draw_ror(shape, dst, x, y, 0, 0, NULL, ez->ops->shape_ops);
+}
+
+static int picture_size(void *shape, int32_t *w, int32_t *h) {
+    int32_t x0 = 0, y0 = 0, x1 = -1, y1 = -1;
+    aoe_shape_bounds_ror(shape, 0, &x0, &y0, &x1, &y1);
+    *w = x1 - x0 + 1;
+    *h = y1 - y0 + 1;
+    return 1;
+}
+
+void aoe_ui_ez_shadow_area_ror(AoeUiEzRor *ez, int32_t force) {
+    struct AoeDrawSurfaceRor *area = area_surface(ez);
+    AoeDrawSystemRor *d = area ? area->system : NULL;
+    uint32_t flags;
+    int32_t w, h;
+    if ((ez->shadow_panel && !force) || !ez->background || !ez->shadow_table ||
+        !d)
+        return;
+    flags = d->flags;
+    if (!ez->shadow_panel) {
+        char name[0x120];
+        d->flags &= 1;
+        snprintf(name, sizeof name, "%s Shadow Panel",
+                 ez->panel.name ? ez->panel.name : "");
+        ez->shadow_panel = malloc(sizeof *ez->shadow_panel);
+        if (ez->shadow_panel && !aoe_surface_init_ror(ez->shadow_panel, name, 0)) {
+            free(ez->shadow_panel);
+            ez->shadow_panel = NULL;
+        }
+    }
+    if (ez->shadow_panel) {
+        picture_size(ez->background, &w, &h);
+        if (ez->panel.width < w) w = ez->panel.width;
+        if (ez->panel.height < h) h = ez->panel.height;
+        if (aoe_surface_attach_ror(ez->shadow_panel, d, w, h, 0, 0)) {
+            aoe_surface_fill_ror(ez->shadow_panel, NULL, ez->fill_color);
+            if (aoe_surface_lock_ror(ez->shadow_panel, 1)) {
+                AoeShapeSurfaceRor *v = &ez->shadow_panel->view;
+                draw_picture(ez, ez->background, v, 0, 0);
+                aoe_draw_set_shade_ror(v, ez->shadow_table);
+                aoe_draw_shade_ror(v, 0, 0, w - 1, h - 1);
+                aoe_surface_unlock_ror(ez->shadow_panel);
+            }
+        }
+    }
+    d->flags = flags;
+}
+
+static void fill_panel(AoeUiEzRor *ez, uint8_t color) {
+    struct AoeDrawSurfaceRor *area = area_surface(ez);
+    int32_t r[4];
+    if (!area) return;
+    r[0] = ez->panel.clip.left;
+    r[1] = ez->panel.clip.top;
+    r[2] = ez->panel.clip.right;
+    r[3] = ez->panel.clip.bottom;
+    aoe_surface_fill_ror(area, r, color);
+}
+
+void aoe_ui_ez_draw_background_ror(AoeUiEzRor *ez, int32_t parent_rect) {
+    AoeUiPanelRor *p = &ez->panel;
+    struct AoeDrawSurfaceRor *area = area_surface(ez);
+    void *picture;
+    int32_t w, h, x, y;
+    p->vt->begin_draw(p, 0);
+    if (parent_rect && ez->shadow_panel) {
+        if (p->redraw == 2) fill_panel(ez, ez->fill_color2);
+        w = ez->shadow_panel->view.width;
+        h = ez->shadow_panel->view.height;
+        if (area) {
+            if (ez->background_mode == 0) {
+                aoe_surface_blit_ror(ez->shadow_panel, area, p->x, p->y, NULL, 0);
+            } else if (ez->background_mode == 1) {
+                aoe_surface_blit_ror(
+                    ez->shadow_panel, area,
+                    (int16_t)((int16_t)(p->width / 2) - (int16_t)(w / 2) +
+                              (int16_t)p->x),
+                    (int16_t)((int16_t)(p->height / 2) - (int16_t)(h / 2) +
+                              (int16_t)p->y),
+                    NULL, 0);
+            } else if (ez->background_mode == 2 && p->height >= 0) {
+                for (y = 0; y <= p->height; y += h)
+                    for (x = 0; p->width >= 0 && x <= p->width; x += w)
+                        aoe_surface_blit_ror(ez->shadow_panel, area, p->x + x,
+                                             p->y + y, NULL, 0);
+            }
+        }
+        goto bevel;
+    }
+    picture = parent_rect && ez->background2 ? ez->background2 : ez->background;
+    if (p->redraw == 2 || !picture) {
+        fill_panel(ez, parent_rect ? ez->fill_color2 : ez->fill_color);
+        if (!picture) goto bevel;
+    }
+    if (area && aoe_surface_lock_ror(area, 1)) {
+        AoeShapeSurfaceRor *v = &area->view;
+        int shade = parent_rect && ez->shadow_table;
+        int32_t sx, sy, sr, sb;
+        picture_size(picture, &w, &h);
+        if (ez->background_mode == 1) {
+            sx = (int16_t)((int16_t)(p->width / 2) - (int16_t)(w / 2) +
+                           (int16_t)p->x);
+            sy = (int16_t)((int16_t)(p->height / 2) - (int16_t)(h / 2) +
+                           (int16_t)p->y);
+            draw_picture(ez, picture, v, sx, sy);
+            sr = sx - 1 + w;
+            sb = sy - 1 + h;
+        } else if (ez->background_mode == 2) {
+            for (y = 0; p->height >= 0 && y <= p->height; y += h)
+                for (x = 0; p->width >= 0 && x <= p->width; x += w)
+                    draw_picture(ez, picture, v, p->x + x, p->y + y);
+            sx = p->x;
+            sy = p->y;
+            sr = p->width - 1 + sx;
+            sb = p->height - 1 + sy;
+        } else {
+            draw_picture(ez, picture, v, p->x, p->y);
+            sx = p->x;
+            sy = p->y;
+            sr = sx - 1 + w;
+            sb = sy - 1 + h;
+        }
+        if (shade) {
+            aoe_draw_set_shade_ror(v, ez->shadow_table);
+            aoe_draw_shade_ror(v, sx, sy, sr, sb);
+        }
+        aoe_surface_unlock_ror(area);
+    }
+bevel:
+    if (ez->bevel_on && area && aoe_surface_lock_ror(area, 1)) {
+        aoe_draw_bevel3_ror(&area->view, p->x, p->y, p->width - 1 + p->x,
+                            p->height - 1 + p->y, ez->bevel);
+        aoe_surface_unlock_ror(area);
+    }
+    p->vt->end_draw(p);
+}
+
 void aoe_ui_ez_draw_background_slot_ror(AoeUiEzRor *ez, int32_t parent_rect) {
-    (void)ez;
-    (void)parent_rect;
+    aoe_ui_ez_draw_background_ror(ez, parent_rect);
 }
 
 

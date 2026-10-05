@@ -9,7 +9,7 @@
 #include "sprite_animation.h"
 
 /* Portable static/animated sprite instance corresponding to the original
-   factory RoR 0x004a7b10 / base 0x004b3d10. The DAT table owns graphic. */
+   factory RoR disc 0x004a7b10 (patched 0x004a6340) / base 0x004b3d10. The DAT table owns graphic. */
 typedef struct {
     const DatGraphic *graphic;
     int32_t offset_x, offset_y;
@@ -17,7 +17,7 @@ typedef struct {
     AoeSpriteAnimationState animation;
 } AoeSpriteInstance;
 
-/* Constructors RoR 0x00416060/0x00416300 and base
+/* Constructors RoR 0x00416060/disc 0x00416300 (patched 0x00415c90) and base
    0x004e8900/0x004e8bf0. rng is required only when sequence flag 0x04
    randomizes the starting frame. Returns zero without mutation if the
    source graphic cannot safely be instantiated. */

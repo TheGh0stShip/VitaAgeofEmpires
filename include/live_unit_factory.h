@@ -10,7 +10,7 @@
 #include "unit_sprite_binding.h"
 
 /* A portable owned composition of the parts initialized by the common RoR
-   live-unit constructor (0x004a7c80/0x004a8200). It deliberately is not the
+   live-unit constructor (disc 0x004a7c80 (patched 0x004a64b0)/0x004a8200). It deliberately is not the
    PC object ABI. `owner_node` is the player +0x28/+0x2c/+0x30 list link;
    `placement.node` is the distinct map-tile link. */
 typedef struct AoeLiveUnit {
@@ -575,7 +575,7 @@ typedef struct {
     AoeLiveUnitMiddleActionHooks root_middle_action;
     AoeLiveUnitRegistrationHooks registration;
     void **registration_node;
-    /* Type 70/80 middle state +0x6c = 0x004b02a0. The caller supplies the
+    /* Type 70/80 middle state +0x6c = disc 0x004b02a0 (patched 0x004ae970). The caller supplies the
        world timer at player+0x50+0xe4 and the 0x004045c0 lookup boundary. */
     float derived_middle_time;
     float derived_middle_threshold;

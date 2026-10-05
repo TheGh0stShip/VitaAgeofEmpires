@@ -56,7 +56,7 @@ typedef struct {
    - row key: the global the live draw 0x004a8a60 sets before its
      sprite-manager call, tile screen y + unit +0x2e (0x004a8b16);
    - layer: max(graphic layer +0x29, caller minimum) in 0x004a6dd0; sprite
-     instances (0x00416190) pass minimum 0;
+     instances (disc 0x00416190 (patched 0x00415b30)) pass minimum 0;
    - nodes outside rows [-200, view height + 249] (0x00512536: 0x518a80
      with -200 and height + 0xf9) are not queued;
    - a row bucket appends (0x00518e3d), and the flush walks rows ascending
@@ -95,7 +95,7 @@ const uint8_t *aoe_sprite_draw_transform_table_ror(
     const DatGraphic *graphic, const uint8_t *selected_table,
     AoeSpriteFixedColorTableRor fixed_table, void *fixed_context);
 
-/* RoR 0x00415dc0 -> 0x00416190/0x004166e0 -> 0x004a7110 draw plan.
+/* RoR 0x00415dc0 -> disc 0x00416190 (patched 0x00415b30)/disc 0x004166e0 (patched 0x00416050) -> 0x004a7110 draw plan.
    It applies static-instance offsets to both coordinate pairs, selects the
    secondary pair for graphic layer < 11 and primary otherwise, and expands
    direct delta graphics with their angle filter and offsets. If parts is
@@ -110,8 +110,8 @@ int aoe_sprite_draw_position(const AoeSpriteInstance *instance,
                               int32_t anchor_x, int32_t anchor_y,
                               int32_t *out_x, int32_t *out_y);
 
-/* Original sprite draw dispatch: static RoR 0x00416190 / base 0x004e8a40
-   adds instance X/Y offsets; animated RoR 0x004166e0 / base 0x004e9060
+/* Original sprite draw dispatch: static RoR disc 0x00416190 (patched 0x00415b30) / base 0x004e8a40
+   adds instance X/Y offsets; animated RoR disc 0x004166e0 (patched 0x00416050) / base 0x004e9060
    does not. Selects the original angle/frame, loads SLP art, and blits it.
    Return values are AOE_GRAPHIC_ART_*; special pixel effects require the
    original palette resolver supplied by the caller. */

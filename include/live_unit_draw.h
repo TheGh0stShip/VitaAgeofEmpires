@@ -29,7 +29,7 @@ typedef struct {
 
 typedef struct {
     void *context;
-    /* Original 0x004a8d50 receives the unchanged renderer/tile anchor and
+    /* Original disc 0x004a8d50 (patched 0x004a7520) receives the unchanged renderer/tile anchor and
        precedes sprite-manager vtable +0x0c. */
     void (*overlay)(void *context, void *renderer,
                     const AoeLiveUnitCore *unit,

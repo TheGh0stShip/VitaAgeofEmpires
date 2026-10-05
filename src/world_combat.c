@@ -2158,7 +2158,7 @@ static void bt_cancel_notify(void *ctx, AoeTrainAction *a) {
     (void)a;
     ++((BuildingTick *)ctx)->c->production_events;
 }
-/* Queue-head cancel (head +0x2c): the training action's 0x004b6d90. */
+/* Queue-head cancel (head +0x2c): the training action's disc 0x004b6d90 (patched 0x004b5450). */
 static void bt_cancel(void *ctx, void *action) {
     BuildingTick *t = ctx;
     AoeTrainCancelOps o = {t, bt_cancel_notify, bt_cancel_notify};

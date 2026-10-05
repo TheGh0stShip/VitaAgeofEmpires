@@ -344,7 +344,7 @@ int aoe_sprite_draw_instance_bounds_cached_indexed_ror(
                 (uint8_t)parts[i].graphic->player_color : player_color;
             e->table = aoe_sprite_draw_transform_table_ror(
                 parts[i].graphic, selected_table, fixed_table, fixed_context);
-            e->layer = parts[i].graphic->layer; /* minimum 0 (0x00416190) */
+            e->layer = parts[i].graphic->layer; /* minimum 0 (disc 0x00416190 (patched 0x00415b30)) */
             e->row = q->row_key;
             e->sequence = q->next_sequence++;
         }

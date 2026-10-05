@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-/* Semantic form of the 48-byte timed-action node used by RoR 0x004ee2b0
+/* Semantic form of the 48-byte timed-action node used by RoR disc 0x004ee2b0 (patched 0x004ebf90)
    and base 0x00512a90. This is not the original 32-bit object ABI. */
 typedef struct AoeScenarioAction {
     float time_s;             /* Original +0x00. */

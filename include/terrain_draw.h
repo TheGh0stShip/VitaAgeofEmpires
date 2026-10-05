@@ -48,7 +48,7 @@ typedef struct {
     size_t stride;
 } TerrainClipMask;
 
-/* Empiresx.exe 0x00516b40 chooses palette masks and draw order after the
+/* Empiresx.exe disc 0x00516b40 (patched 0x00514320) chooses palette masks and draw order after the
    terrain frame is selected. Tile flag 0x10 overrides clipping with one
    special pass; otherwise the second clip plane draws before the first.
    This records the original draw calls; the blit functions below apply

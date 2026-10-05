@@ -37,7 +37,7 @@ typedef struct {
 
 /* Common template virtual +0x24, release RoR 0x00443e90. It clamps the
    template footprint to [0,width/height-0.00001], then optionally applies
-   the original nearest-edge whole-tile snap. Type 80's 0x004eed30 wrapper
+   the original nearest-edge whole-tile snap. Type 80's disc 0x004eed30 (patched 0x004ec9f0) wrapper
    calls this same routine with snap_to_grid forced to one. The executable
    narrows truncations to signed 16-bit values, so this API rejects maps
    outside that numeric domain. */

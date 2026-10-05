@@ -56,7 +56,19 @@ static void disp(void *c) { (void)c; ++dispatches; }
 static void idle(void *c) { (void)c; ++idles; }
 static int filt(void *c) { (void)c; return 1; }
 
+static void dir_and_dplay_tests(void) {
+    char out[0x104];
+    aoe_working_dir_without_drive_ror("C:\\Games\\Empires", out);
+    assert(strcmp(out, "\\Games\\Empires") == 0);
+    aoe_working_dir_without_drive_ror("\\server\\share", out);
+    assert(strcmp(out, "\\server\\share") == 0);
+    assert(!aoe_dplay_version_ok_ror(0, 0x40006, 0));
+    assert(aoe_dplay_version_ok_ror(1, 0x40005, 0x1062f) && !aoe_dplay_version_ok_ror(1, 0x40005, 0x1062e));
+    assert(aoe_dplay_version_ok_ror(1, 0x40006, 0) && !aoe_dplay_version_ok_ror(1, 0x40004, 0xffff));
+}
+
 int main(void) {
+    dir_and_dplay_tests();
     static AoeStartupConfigRor cfg;
     static AoeGameSettingsRor settings;
     static AoeGameStartupRor g;

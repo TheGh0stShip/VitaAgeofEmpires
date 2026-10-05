@@ -335,7 +335,8 @@ int aoe_template_upgrade_copy_ror(DatUnit *slot, DatUnit *src) {
         src->hide_in_editor == 1 ? keep.language_name_id
                                  : src->language_name_id;
     src->hide_in_editor = 1;
-    if (level >= 2) slot->speed = src->speed;                 /* 0x0043ecb0 */
+    /* 0x0043ecb0; type 25's slot 0x00440330 only forwards to it. */
+    if (level >= 2) slot->speed = src->speed;
     if (level >= 3) {                                         /* 0x00440e10 */
         slot->walking_graphic = src->walking_graphic;
         slot->walking_graphic2 = src->walking_graphic2;

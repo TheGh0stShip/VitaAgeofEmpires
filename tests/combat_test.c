@@ -112,7 +112,30 @@ static void count_death(void *c, AoeLiveUnit *u) {
     ++*(int *)c;
 }
 
+static void template_damage_tests(void) {
+    DatUnit target, attacker;
+    DatUnitAttackArmor atk[3] = {{3, 6}, {4, -2}, {5, 4}}, arm[2] = {{3, 1}, {3, 2}};
+    memset(&target, 0, sizeof target);
+    memset(&attacker, 0, sizeof attacker);
+    attacker.attacks = atk;
+    attacker.attack_count = 3;
+    target.armors = arm;
+    target.armor_count = 2;
+    target.base_armor = 3;
+    /* 6 + 4 (the negative attack skipped). */
+    assert(aoe_combat_attack_total_ror(&attacker) == 10);
+    /* Class 3 against the last armor (2): 4; class 5 against base 3: 1. */
+    assert(aoe_combat_template_damage_ror(&target, &attacker) == 5);
+    /* At least 1. */
+    target.base_armor = 9;
+    arm[1].amount = 9;
+    assert(aoe_combat_template_damage_ror(&target, &attacker) == 1);
+    attacker.attack_count = 0;
+    assert(aoe_combat_attack_total_ror(&attacker) == 1);
+}
+
 int main(void) {
+    template_damage_tests();
     DatUnit at, tt;
     AoeLiveUnit attacker, target;
     DatUnitAttackArmor attacks[2] = {{4, 7}, {3, 2}};

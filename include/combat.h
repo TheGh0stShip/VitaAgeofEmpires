@@ -26,6 +26,14 @@ double aoe_combat_damage_ror(const DatUnit *target_template,
                              int32_t attack_count, float terrain_multiplier,
                              float multiplier);
 
+/* Template vtable +0x28: the damage `attacker`'s attacks would do.
+   0x00443680 (type 20): its positive attack amounts summed; 0x0043ff10
+   (type 50, against this template): each attack less this template's
+   armor for its class (the last matching entry, else the base armor
+   +0x100), positive terms summed. Both at least 1.0, truncated. */
+int32_t aoe_combat_attack_total_ror(const DatUnit *attacker);
+int32_t aoe_combat_template_damage_ror(const DatUnit *target, const DatUnit *attacker);
+
 /* 0x00426890 (vtable +0x70): hit points drop by the damage (stored as a
    float); with an attacker the target hears +0x148(attacker, target,
    0x1f4, attacker, ftol(hp), max hit points); hit points below 1.0 become

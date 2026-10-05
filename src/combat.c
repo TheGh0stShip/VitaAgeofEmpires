@@ -406,3 +406,31 @@ void aoe_combat_memory_moved_ror(uint8_t *entries[9], int32_t id, float old_x, f
             entries[i][7] = (uint8_t)ny;
         }
 }
+
+int32_t aoe_combat_attack_total_ror(const DatUnit *attacker) {
+    double sum = 0.0;
+    int i;
+    if (attacker)
+        for (i = 0; i < attacker->attack_count; ++i)
+            if ((double)attacker->attacks[i].amount > 0.0) sum += attacker->attacks[i].amount;
+    if (sum < 1.0) sum = 1.0;
+    return aoe_ftol32(sum);
+}
+
+int32_t aoe_combat_template_damage_ror(const DatUnit *target, const DatUnit *attacker) {
+    double sum = 0.0;
+    int i, j;
+    if (target && attacker) {
+        for (i = 0; i < attacker->attack_count; ++i) {
+            int32_t armor = target->base_armor;
+            double d;
+            for (j = 0; j < target->armor_count; ++j)
+                if (target->armors[j].class_id == attacker->attacks[i].class_id)
+                    armor = target->armors[j].amount;
+            d = (double)attacker->attacks[i].amount - armor;
+            if (d > 0.0) sum += d;
+        }
+    }
+    if (sum < 1.0) sum = 1.0;
+    return aoe_ftol32(sum);
+}

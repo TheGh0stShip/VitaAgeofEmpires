@@ -1,5 +1,7 @@
 #include "game_startup.h"
 
+#include <stdio.h>
+
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
@@ -308,4 +310,17 @@ int32_t aoe_game_font_string_ror(int16_t index, int *second) {
 void aoe_game_wrap_point_ror(int32_t *x, int32_t *y) {
     if (*x > 60000) *x -= 0x10000;
     if (*y > 60000) *y -= 0x10000;
+}
+
+void aoe_working_dir_without_drive_ror(const char *cwd, char out[0x104]) {
+    if (!out) return;
+    if (!cwd) cwd = "";
+    if (cwd[0] && cwd[1] == ':') cwd += 2;
+    snprintf(out, 0x104, "%s", cwd);
+}
+
+int aoe_dplay_version_ok_ror(int has_info, uint32_t version_ms, uint32_t version_ls) {
+    if (!has_info) return 0;
+    if (version_ms == 0x40005) return version_ls >= 0x1062f;
+    return version_ms >= 0x40006;
 }

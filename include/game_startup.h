@@ -168,6 +168,15 @@ typedef struct {
     int (*nodxcheck)(void *context);
     uint32_t (*directx_version)(void *context);
 } AoeStartupChainOpsRor;
+/* The working-directory object (0x0043ba80: the drive at +0x00 and
+   +0x104, the path at +0x108 and copied to +0x04). 0x0043bad0: +0x108
+   becomes the current directory (_getcwd) without its drive: _splitpath
+   then "%s%s%s" of directory, name and extension. */
+void aoe_working_dir_without_drive_ror(const char *cwd, char out[0x104]);
+/* 0x0043d390: dplayx.dll is new enough: its file version 4.5 needs a low
+   word pair of at least 0x1062f, anything else at least 4.6; 0 without
+   version information. */
+int aoe_dplay_version_ok_ror(int has_info, uint32_t version_ms, uint32_t version_ls);
 /* Returns 1 when every step succeeds (the caller then shows the window,
    starts the timer and opens the log files). */
 int aoe_game_startup_chain_ror(AoeGameStartupRor *g, const AoeStartupChainOpsRor *ops);

@@ -1442,7 +1442,7 @@ int aoe_ai_tactical_start_build_ror(AoeAiTacticalRor *ai, int32_t builder,
     sx = aoe_ftol32(aoe_ai_plan_item_float_ror(&site->plan, AOE_AI_ITEM_X));
     sy = aoe_ftol32(aoe_ai_plan_item_float_ror(&site->plan, AOE_AI_ITEM_Y));
     if (!ops->can_reach ||
-        !ops->can_reach(ops->context, builder, sx, sy, aoe_ftol32(b.z), 2.0f)) {
+        !ops->can_reach(ops->context, builder, sx, sy, aoe_ftol32(b.z), 2.0f, -1)) {
         free_site(ops, site);
         return 0;
     }
@@ -1458,4 +1458,54 @@ int aoe_ai_tactical_start_build_ror(AoeAiTacticalRor *ai, int32_t builder,
                          aoe_ai_plan_item_unique_id_ror(&item->plan));
     free_site(ops, site);
     return 1;
+}
+
+static int order_on(AoeAiTacticalRor *ai, int32_t unit, const AoeAiWorldObjectRor *target,
+                    int32_t action, int32_t flag, const AoeAiTacticalOpsRor *ops) {
+    AoeAiTaskOrderRor o;
+    double d;
+    aoe_ai_int_list_add_unique_ror(&ai->list_d58, unit);
+    d = ops->object_distance ? ops->object_distance(ops->context, unit, target->id) : 0.0;
+    o.player = ops->self;
+    o.unit = unit;
+    o.action = action;
+    o.target = target->id;
+    o.target2 = ops->self;
+    o.a = target->x;
+    o.b = target->y;
+    o.c = target->z;
+    o.d = 1.0f;
+    o.flag = 1;
+    o.zero = flag;
+    o.value = aoe_ai_tactical_effort_ror(ai, (float)d);
+    if (ops->order) ops->order(ops->context, &o);
+    return 1;
+}
+
+int aoe_ai_tactical_order_help_build_ror(AoeAiTacticalRor *ai, int32_t unit,
+                                         const AoeAiWorldObjectRor *target,
+                                         const AoeAiTacticalOpsRor *ops) {
+    AoeAiWorldObjectRor u;
+    if (!ai || !ops || !ops->world_object || !ops->world_object(ops->context, unit, &u))
+        return 0;
+    if (!target) return 0;
+    if (!ops->can_reach ||
+        !ops->can_reach(ops->context, unit, aoe_ftol32(target->x), aoe_ftol32(target->y),
+                        aoe_ftol32(target->z), 1.0f, target->id)) {
+        if (target->type_id != 0x114 && ops->delete_object)
+            ops->delete_object(ops->context, target->id);
+        return 0;
+    }
+    return order_on(ai, unit, target, 0x2be, 1, ops);
+}
+
+int aoe_ai_tactical_order_repair_ror(AoeAiTacticalRor *ai, int32_t unit,
+                                     const AoeAiWorldObjectRor *target,
+                                     const AoeAiTacticalOpsRor *ops) {
+    AoeAiWorldObjectRor u;
+    if (!ai || !ops || !ops->world_object || !ops->world_object(ops->context, unit, &u) ||
+        !target)
+        return 0;
+    if (!ops->can_engage || !ops->can_engage(ops->context, unit, target->id, 1.0f)) return 0;
+    return order_on(ai, unit, target, 0x2ce, 0, ops);
 }

@@ -268,9 +268,15 @@ typedef struct {
                                    int32_t arg);
     void (*con_free)(void *context, AoeAiConItemRor *site);
     /* A unit's vtable +0x198 path test to tile (x, y) at height z within
-       `radius` (then -1, 0, 1, -1, -1). */
+       `radius` toward object `target` (-1 none; then 0, 1, -1, -1); its
+       +0x194 engage test (target, 1.0, 0, 1, -1, -1); the distance
+       between two objects (0x004aaeb0); deleting our object
+       (0x004e1ae0). */
     int (*can_reach)(void *context, int32_t id, int32_t x, int32_t y,
-                     int32_t z, float radius);
+                     int32_t z, float radius, int32_t target);
+    int (*can_engage)(void *context, int32_t id, int32_t target, float range);
+    double (*object_distance)(void *context, int32_t from, int32_t to);
+    int (*delete_object)(void *context, int32_t id);
 } AoeAiTacticalOpsRor;
 
 /* 0x004e0630: in list order, the group with task `task` and +0x180
@@ -379,6 +385,19 @@ int aoe_ai_tactical_task_unit_ror(AoeAiTacticalRor *ai, int32_t unit, int32_t a,
 int aoe_ai_tactical_start_build_ror(AoeAiTacticalRor *ai, int32_t builder,
                                     AoeAiBuildItemRor *item, AoeAiConItemRor *site,
                                     int32_t arg, const AoeAiTacticalOpsRor *ops);
+/* 0x004dab50: send `unit` to help build `target`: its path test to the
+   target's truncated position within 1.0 must pass (else a foundation
+   other than a wonder is deleted, 0x004e1ae0, and 0); the unit is marked
+   tasked and ordered 0x2be on it (our index, its position, 1.0, 1, 1,
+   priority 0x004dc650 of their distance). 0x004dad50: the same for a
+   repair (0x2ce, last flag 0) after the unit's engage test (1.0); no
+   deletion. The original reads a missing target; the port gives 0. */
+int aoe_ai_tactical_order_help_build_ror(AoeAiTacticalRor *ai, int32_t unit,
+                                         const AoeAiWorldObjectRor *target,
+                                         const AoeAiTacticalOpsRor *ops);
+int aoe_ai_tactical_order_repair_ror(AoeAiTacticalRor *ai, int32_t unit,
+                                     const AoeAiWorldObjectRor *target,
+                                     const AoeAiTacticalOpsRor *ops);
 /* 0x004dc650: ftol(number 34 / f), at most 99. */
 int32_t aoe_ai_tactical_effort_ror(const AoeAiTacticalRor *ai, float f);
 /* 0x004e2f90: +0xd68[i] (0..3, else -1). 0x004e2f30 / 0x004e2f60 /

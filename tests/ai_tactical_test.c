@@ -513,11 +513,16 @@ static AoeAiConItemRor *t_choose(void *c, AoeAiBuildItemRor *it, int32_t b, int3
     (void)c; (void)it; (void)b; (void)srch; (void)arg; return &t_site;
 }
 static void t_free(void *c, AoeAiConItemRor *site) { (void)c; assert(site == &t_site); ++t_freed; }
-static int t_reach(void *c, int32_t id, int32_t x, int32_t y, int32_t z, float r) {
+static int t_reach(void *c, int32_t id, int32_t x, int32_t y, int32_t z, float r, int32_t t) {
     (void)c; (void)id; (void)z;
+    if (t != -1) { assert(r == 1.0f && x == 4 && y == 5 && z == 1); return t_reach_ok; }
     assert(x == 12 && y == 7 && r == 2.0f);
     return t_reach_ok;
 }
+static int t_engage(void *c, int32_t id, int32_t t, float r) { (void)c; (void)id; assert(r == 1.0f); return t == 70; }
+static double t_odist(void *c, int32_t a, int32_t b) { (void)c; (void)a; (void)b; return 4.0; }
+static int32_t t_deleted = -1;
+static int t_delete(void *c, int32_t id) { (void)c; t_deleted = id; return 1; }
 static void t_build_order(void *c, int32_t b, int32_t type, float x, float y, int32_t uid) {
     (void)c; (void)y; t_bo_builder = b; t_bo_type = type; t_bo_x = x; t_bo_uid = uid;
 }
@@ -567,6 +572,30 @@ static void build_start_tests(void) {
     assert(aoe_ai_tactical_start_build_ror(&ai, 33, &item, NULL, 0, &ops) == 0 && t_freed == 2);
     /* No next item: 0 without a site. */
     assert(aoe_ai_tactical_start_build_ror(&ai, 33, NULL, NULL, 0, &ops) == 0 && t_freed == 2);
+    {
+        /* 0x004dab50 / 0x004dad50 */
+        AoeAiWorldObjectRor tg;
+        memset(&tg, 0, sizeof tg);
+        tg.id = 70; tg.x = 4.5f; tg.y = 5.5f; tg.z = 1.0f; tg.type_id = 0x46;
+        ops.object_distance = t_odist;
+        ops.can_engage = t_engage;
+        ops.delete_object = t_delete;
+        ops.order = order;
+        ops.self = 2;
+        ai.sn[34] = 200;
+        assert(aoe_ai_tactical_order_help_build_ror(&ai, 34, &tg, &ops) == 0 && t_deleted == 70);
+        t_reach_ok = 1;
+        orders = 0;
+        assert(aoe_ai_tactical_order_help_build_ror(&ai, 34, &tg, &ops) == 1);
+        assert(orders == 1 && last_order.action == 0x2be && last_order.target == 70 &&
+               last_order.target2 == 2 && last_order.a == 4.5f && last_order.zero == 1 &&
+               last_order.value == 50 && aoe_ai_int_list_contains_ror(&ai.list_d58, 34));
+        assert(aoe_ai_tactical_order_repair_ror(&ai, 35, &tg, &ops) == 1 &&
+               last_order.action == 0x2ce && last_order.zero == 0);
+        tg.id = 71;
+        assert(aoe_ai_tactical_order_repair_ror(&ai, 35, &tg, &ops) == 0 && orders == 2);
+        orders = 0;
+    }
     aoe_ai_build_item_release_ror(&item);
     aoe_ai_tactical_release_ror(&ai);
 }

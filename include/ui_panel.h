@@ -68,6 +68,11 @@ typedef struct {
     void (*text_out)(void *context, int32_t x, int32_t y, const char *text,
                      int32_t count, uint32_t color);
     void (*text_end)(void *context);
+    /* DrawTextExA of a whole string into a rectangle with the format
+       flags, in a colour (inside text_begin/text_end). */
+    void (*text_rect)(void *context, const char *text,
+                      const AoeUiRectRor *rect, uint32_t flags,
+                      uint32_t color);
     /* Frame `frame` of a picture's shape with its hotspot at (x, y), on
        the area's locked surface (the original's shape draw). */
     void (*draw_shape)(void *context, AoeUiAreaRor *area, void *shape,

@@ -1,5 +1,8 @@
 #include "ui_edit.h"
 
+#include "draw_prims.h"
+#include "draw_system.h"
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -436,6 +439,163 @@ static int32_t no_key_action(AoeUiPanelRor *p, int32_t a, int32_t b,
     return 0;
 }
 
+/* ---- drawing and helpers ---- */
+
+static AoeShapeSurfaceRor *edit_lock(AoeUiEditRor *e) {
+    struct AoeDrawSurfaceRor *s = e->panel.area ? e->panel.area->surface : NULL;
+    if (!s || !aoe_surface_lock_ror(s, 1)) return NULL;
+    return &s->view;
+}
+
+static void edit_unlock(AoeUiEditRor *e) {
+    struct AoeDrawSurfaceRor *s = e->panel.area ? e->panel.area->surface : NULL;
+    if (s) aoe_surface_unlock_ror(s);
+}
+
+static void edit_fill(AoeUiEditRor *e, uint8_t color) {
+    struct AoeDrawSurfaceRor *s = e->panel.area ? e->panel.area->surface : NULL;
+    int32_t r[4] = {e->panel.clip.left, e->panel.clip.top, e->panel.clip.right,
+                    e->panel.clip.bottom};
+    if (s) aoe_surface_fill_ror(s, r, color);
+}
+
+void aoe_ui_edit_draw_slot_ror(AoeUiPanelRor *p) {
+    AoeUiEditRor *e = (AoeUiEditRor *)p;
+    const AoeUiPlatformRor *pf = p->system ? p->system->platform : NULL;
+    AoeShapeSurfaceRor *v;
+    p->redraw = 0;
+    if (!p->visible) return;
+    p->vt->begin_draw(p, 0);
+    if (!e->brush || !p->active || !p->has_focus) {
+        if (!p->parent) {
+            edit_fill(e, p->color);
+        } else if (e->bevel_type < 2 || e->bevel_type > 7) {
+            if (!p->parent->painting) p->parent->vt->draw_rect(p->parent, &p->clip);
+        } else {
+            p->parent->vt->draw_parent_rect(p->parent, &p->clip);
+        }
+    } else {
+        edit_fill(e, e->ops && e->ops->nearest_index
+                         ? e->ops->nearest_index(e->ops->context, p->area,
+                                                 e->background)
+                         : 0);
+    }
+    if (e->bevel_type != 0) {
+        v = edit_lock(e);
+        if (v) {
+            const uint8_t *b = e->bevel;
+            int32_t l = p->x, t = p->y, r = p->width - 1 + p->x,
+                    bot = p->height - 1 + p->y;
+            uint8_t c[6];
+            switch (e->bevel_type) {
+            case 1:
+                aoe_draw_rect_ror(v, l, t, r, bot, b[0]);
+                break;
+            case 2:
+                aoe_draw_bevel1_ror(v, l, t, r, bot, b[5], b[0]);
+                break;
+            case 5:
+                aoe_draw_bevel1_ror(v, l, t, r, bot, b[0], b[5]);
+                break;
+            case 3:
+                c[0] = b[5], c[1] = b[4], c[2] = b[1], c[3] = b[0];
+                aoe_draw_bevel2_ror(v, l, t, r, bot, c);
+                break;
+            case 6:
+                c[0] = b[0], c[1] = b[1], c[2] = b[4], c[3] = b[5];
+                aoe_draw_bevel2_ror(v, l, t, r, bot, c);
+                break;
+            case 4:
+                c[0] = b[5], c[1] = b[4], c[2] = b[3], c[3] = b[2],
+                c[4] = b[1], c[5] = b[0];
+                aoe_draw_bevel3_ror(v, l, t, r, bot, c);
+                break;
+            case 7:
+                aoe_draw_bevel3_ror(v, l, t, r, bot, b);
+                break;
+            }
+        }
+        edit_unlock(e);
+    }
+    if (e->window && p->active) {
+        if (!p->has_focus) {
+            if (!e->hidden) {
+                if (e->ops && e->ops->show) e->ops->show(e->ops->context, e->window, 0);
+                e->hidden = 1;
+            }
+            if (pf && pf->text_begin && pf->text_rect &&
+                pf->text_begin(pf->context, p->area, &p->clip, e->font)) {
+                AoeUiRectRor r = e->inner;
+                r.left -= 1;
+                r.top += 1;
+                r.right -= 1;
+                r.bottom += 1;
+                pf->text_rect(pf->context, e->text, &r, e->text_flags, e->shadow);
+                pf->text_rect(pf->context, e->text, &e->inner, e->text_flags,
+                              e->color);
+                pf->text_end(pf->context);
+            }
+        } else if (e->hidden) {
+            if (e->ops && e->ops->show) e->ops->show(e->ops->context, e->window, 5);
+            if (e->ops && e->ops->invalidate)
+                e->ops->invalidate(e->ops->context, e->window, 1);
+            e->hidden = 0;
+        }
+    }
+    p->vt->end_draw(p);
+}
+
+int32_t aoe_ui_edit_mouse_down_slot_ror(AoeUiPanelRor *p, uint8_t button,
+                                        int32_t x, int32_t y, int32_t c,
+                                        int32_t s) {
+    return aoe_ui_panel_mouse_down_ror(p, button, x, y, c, s);
+}
+
+static int blank_char(char c) {
+    return c == ' ' || (c >= '\t' && c <= '\r');
+}
+
+int aoe_ui_edit_blank_ror(AoeUiEditRor *e) {
+    const char *t;
+    aoe_ui_edit_sync_ror(e);
+    for (t = e->text; t && *t; ++t)
+        if (!blank_char(*t)) return 0;
+    return 1;
+}
+
+char *aoe_ui_edit_trimmed_ror(AoeUiEditRor *e, char *out, uint32_t size) {
+    char copy[0x100];
+    const char *src;
+    char *end;
+    size_t n;
+    aoe_ui_edit_sync_ror(e);
+    memset(copy, 0, sizeof copy);
+    /* Port guard: the original copies the whole text into 256 bytes. */
+    if (e->text) {
+        n = strlen(e->text);
+        if (n >= sizeof copy) n = sizeof copy - 1;
+        memcpy(copy, e->text, n);
+    }
+    if (size) memset(out, 0, size);
+    for (src = copy; blank_char(*src); ++src) {}
+    end = out;
+    /* Port guard: no more than the output holds. */
+    while (*src && (uint32_t)(end - out) + 1 < size) *end++ = *src++;
+    for (;;) {
+        *end = '\0';
+        if (end == out) return out;
+        --end;
+        if (!blank_char(*end)) return out;
+    }
+}
+
+void aoe_ui_edit_keep_focus_ror(AoeUiEditRor *e) {
+    if (!e->window || !e->panel.has_focus || !e->ops) return;
+    if (e->ops->focus && e->ops->set_focus &&
+        e->ops->focus(e->ops->context) != e->window)
+        e->ops->set_focus(e->ops->context, e->window);
+}
+
 const AoeUiPanelVtblRor aoe_ui_edit_vtable_ror = {
     edit_destroy,
     aoe_ui_panel_setup_ror,
@@ -449,7 +609,7 @@ const AoeUiPanelVtblRor aoe_ui_edit_vtable_ror = {
     aoe_ui_panel_redraw_overlaps_ror,
     aoe_ui_panel_begin_draw_ror,
     aoe_ui_panel_end_draw_ror,
-    aoe_ui_panel_draw_ror,
+    aoe_ui_edit_draw_slot_ror,
     aoe_ui_panel_draw_rect_ror,
     aoe_ui_panel_draw_offset_ror,
     aoe_ui_panel_draw_parent_rect_ror,
@@ -465,7 +625,7 @@ const AoeUiPanelVtblRor aoe_ui_edit_vtable_ror = {
     aoe_ui_panel_ignore_ror,
     aoe_ui_panel_ignore_ror,
     aoe_ui_panel_ignore_ror,
-    aoe_ui_panel_mouse_down_ror,
+    aoe_ui_edit_mouse_down_slot_ror,
     aoe_ui_panel_mouse_move_ror,
     aoe_ui_panel_mouse_up_ror,
     aoe_ui_panel_mouse_dbl_ror,

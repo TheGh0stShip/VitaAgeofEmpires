@@ -68,6 +68,22 @@ static int typed(AoeUiEditRor *e, const char *keys) {
     return ok;
 }
 
+static char drawn[4][48];
+static int ndrawn;
+static int tb(void *c, AoeUiAreaRor *a, const AoeUiRectRor *r, uintptr_t f) {
+    (void)c; (void)a; (void)r; (void)f;
+    return 1;
+}
+static void te(void *c) { (void)c; }
+static void trect(void *c, const char *t, const AoeUiRectRor *r, uint32_t fl,
+                  uint32_t color) {
+    (void)c; (void)fl;
+    if (ndrawn < 4)
+        snprintf(drawn[ndrawn], sizeof drawn[0], "%s@%d,%d:%x", t, (int)r->left,
+                 (int)r->top, (unsigned)color);
+    ++ndrawn;
+}
+
 int main(void) {
     AoeUiPlatformRor pf = {0};
     static AoeUiSystemRor sys;
@@ -188,6 +204,43 @@ int main(void) {
     e.hidden = 0;
     e.panel.vt->set_active(&e.panel, 0);
     assert(e.hidden);
+
+    /* Blank, trimmed and the focus keeper. */
+    snprintf(win.text, 256, "  hi  ");
+    {
+        char out[16];
+        assert(!aoe_ui_edit_blank_ror(&e));
+        assert(strcmp(aoe_ui_edit_trimmed_ror(&e, out, sizeof out), "hi") == 0);
+        snprintf(win.text, 256, " \t ");
+        assert(aoe_ui_edit_blank_ror(&e));
+        assert(aoe_ui_edit_trimmed_ror(&e, out, sizeof out)[0] == '\0');
+    }
+    focused = NULL;
+    e.panel.has_focus = 1;
+    aoe_ui_edit_keep_focus_ror(&e);
+    assert(focused == e.window);
+
+    /* Drawing: unfocused, the window hides and the text is drawn with a
+       shadow one pixel down-left; focused, the window shows again. */
+    snprintf(win.text, 256, "ok");
+    aoe_ui_edit_sync_ror(&e);
+    pf.text_begin = tb;
+    pf.text_rect = trect;
+    pf.text_end = te;
+    e.panel.active = 1;
+    e.panel.visible = 1;
+    e.panel.has_focus = 0;
+    e.hidden = 0;
+    win.shown = 5;
+    e.color = 0x11;
+    e.shadow = 0x22;
+    e.panel.vt->draw(&e.panel);
+    assert(e.hidden && win.shown == 0 && ndrawn == 2);
+    assert(drawn[0][0] == 'o' && strstr(drawn[0], ":22") && strstr(drawn[1], ":11"));
+    e.panel.has_focus = 1;
+    win.invalidates = 0;
+    e.panel.vt->draw(&e.panel);
+    assert(!e.hidden && win.shown == 5 && win.invalidates == 1);
     aoe_ui_edit_release_ror(&e);
     assert(!e.window && !e.text);
     aoe_ui_panel_release_ror(&parent);

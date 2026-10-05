@@ -60,6 +60,9 @@ typedef struct {
        while typing. */
     int (*software_cursor)(void *context);
     void (*hide_pointer)(void *context);
+    /* GetNearestPaletteIndex in the area's draw palette. */
+    uint8_t (*nearest_index)(void *context, AoeUiAreaRor *area,
+                             uint32_t color);
 } AoeUiEditOpsRor;
 
 typedef struct {
@@ -129,6 +132,22 @@ void aoe_ui_edit_set_colors_ror(AoeUiEditRor *e, uint32_t color,
 void aoe_ui_edit_set_bevel_ror(AoeUiEditRor *e, int32_t type,
                                const uint8_t colors[6]);
 void aoe_ui_edit_set_ime_ror(AoeUiEditRor *e, int32_t enabled, int32_t open);
+/* +0x30 0x004630e0: the background (the background colour while the
+   panel is active and focused with a brush, else the parent's rect or
+   the panel colour), the bevel (types 1..7), then the text: unfocused,
+   the window is hidden and the text drawn in its inner rect with a
+   shadow one pixel down-left; focused, the window shows again. +0x70
+   0x00463620 passes presses to the panel. 0x004634b0: is the text
+   blank (all white space)? 0x00463500: the text without leading and
+   trailing white space (into `out`, cleared first). 0x004635f0: give
+   the window the keyboard focus when the panel has it. */
+void aoe_ui_edit_draw_slot_ror(AoeUiPanelRor *p);
+int32_t aoe_ui_edit_mouse_down_slot_ror(AoeUiPanelRor *p, uint8_t button,
+                                        int32_t x, int32_t y, int32_t c,
+                                        int32_t s);
+int aoe_ui_edit_blank_ror(AoeUiEditRor *e);
+char *aoe_ui_edit_trimmed_ror(AoeUiEditRor *e, char *out, uint32_t size);
+void aoe_ui_edit_keep_focus_ror(AoeUiEditRor *e);
 /* 0x00462e60: may character c be typed? */
 int aoe_ui_edit_accept_char_ror(AoeUiEditRor *e, uint32_t c);
 /* 0x00462a70 the window's message procedure (reached through

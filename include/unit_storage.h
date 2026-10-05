@@ -30,4 +30,8 @@ int aoe_unit_storage_exit_active(const DatUnit *unit,
                                   AoePlayerResources *owner_resources,
                                   AoePlayerEdition edition);
 
+/* 0x004a7150: mode 0 alone (the load path): the type -1 and amount 0,
+   then the last entry with mode 0 and a type other than -1. */
+void aoe_unit_storage_select_ror(const DatUnit *unit, AoeUnitStorageState *state);
+
 #endif

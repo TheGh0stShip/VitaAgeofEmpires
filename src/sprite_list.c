@@ -173,3 +173,11 @@ void aoe_sprite_list_each_of_ror(const AoeSpriteList *list, const void *graphic,
     for (n = list->head; n; n = n->next)
         if (list->ops.graphic_of(list->ops.context, n->sprite) == graphic) fn(context, n->sprite);
 }
+
+int aoe_graphic_on_layer_zero_ror(const DatGraphic *graphic) {
+    uint16_t i;
+    if (graphic->delta_count == 0 || !graphic->deltas) return graphic->layer == 0;
+    for (i = 0; i < graphic->delta_count; ++i)
+        if (graphic->deltas[i].graphic && graphic->deltas[i].graphic->layer == 0) return 1;
+    return 0;
+}

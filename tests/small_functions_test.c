@@ -19,6 +19,11 @@ static void unit_defaults(void) {
     u.core.scenario_rotation = 3.5f;
     assert(aoe_unit_animation_rate_ror(&u) == 1.25f && aoe_unit_rotation_ror(&u) == 3.5f);
     u.core.unit_template = (const DatUnit *)&u;
+    {
+        AoeObjectUpdateList *l = aoe_unit_new_list_ror();
+        assert(l && !l->head && l->count == 0);
+        free(l);
+    }
     aoe_unit_set_byte_86_ror(&u, 9);
     assert(aoe_unit_byte_86_ror(&u) == 9);
     assert(aoe_unit_template_ror(&u) == (const DatUnit *)&u && aoe_unit_default_ff_ror() == 0xff);

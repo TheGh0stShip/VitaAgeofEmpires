@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "dat.h"
+
 typedef struct AoeSpriteNode AoeSpriteNode;
 
 typedef struct {
@@ -55,5 +57,10 @@ size_t aoe_sprite_list_count(const AoeSpriteList *list);
 const void *aoe_sprite_list_graphic_at(const AoeSpriteList *list, size_t index);
 const void *aoe_sprite_list_sprite_at(const AoeSpriteList *list, size_t index);
 uint8_t aoe_sprite_list_priority_at(const AoeSpriteList *list, size_t index);
+
+/* 0x004a63e0 (asked by 0x00415640 and 0x00415c80):
+   whether the graphic, or with deltas any delta's graphic, is on layer
+   0 (+0x29). */
+int aoe_graphic_on_layer_zero_ror(const DatGraphic *graphic);
 
 #endif

@@ -38,6 +38,12 @@ float aoe_unit_rotation_ror(const AoeLiveUnit *unit);
 const DatUnit *aoe_unit_template_ror(const AoeLiveUnit *unit);
 uint8_t aoe_unit_default_ff_ror(void);
 
+/* Action unit vtable 0x00542748 (and every subclass): +0x100 / +0x108 /
+   +0x10c / +0x110 (base unit +0xf8 / +0xfc too) 0x004a7080 answer 0.0
+   (aoe_unit_default_zero_float_ror); +0x1e0 0x004a7090 a new empty
+   object list (NULL when out of memory). */
+AoeObjectUpdateList *aoe_unit_new_list_ror(void);
+
 /* Action unit vtable 0x00542748 (and every subclass) +0xe8 0x004ab6c0
    reads and +0xec 0x004ab6d0 writes the +0x86 byte. */
 uint8_t aoe_unit_byte_86_ror(const AoeLiveUnit *unit);

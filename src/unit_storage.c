@@ -40,3 +40,14 @@ int aoe_unit_storage_exit_active(const DatUnit *unit,
     }
     return 1;
 }
+
+void aoe_unit_storage_select_ror(const DatUnit *unit, AoeUnitStorageState *state) {
+    int i;
+    state->carried_resource_type = -1;
+    state->carried_amount = 0.0f;
+    for (i = 0; i < 3; ++i)
+        if (unit->storage[i].paid == 0 && unit->storage[i].resource_type != -1) {
+            state->carried_resource_type = unit->storage[i].resource_type;
+            state->carried_amount = unit->storage[i].amount;
+        }
+}

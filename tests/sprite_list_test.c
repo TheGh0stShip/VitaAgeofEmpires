@@ -2,6 +2,7 @@
 
 #include <assert.h>
 #include <stdlib.h>
+#include <string.h>
 
 typedef struct { const void *graphic; } Sprite;
 typedef struct {
@@ -109,5 +110,23 @@ int main(void) {
     assert(trace.invalidated == 7);
     aoe_sprite_list_clear(&list);
     assert(trace.destroyed == 5);
+    {
+        DatGraphic g0, g1, parent;
+        DatGraphicDelta deltas[2];
+        memset(&g0, 0, sizeof g0);
+        memset(&g1, 0, sizeof g1);
+        memset(&parent, 0, sizeof parent);
+        memset(deltas, 0, sizeof deltas);
+        g1.layer = 5;
+        parent.layer = 5;
+        assert(aoe_graphic_on_layer_zero_ror(&g0) && !aoe_graphic_on_layer_zero_ror(&g1));
+        deltas[0].graphic = &g1;
+        deltas[1].graphic = &g1;
+        parent.deltas = deltas;
+        parent.delta_count = 2;
+        assert(!aoe_graphic_on_layer_zero_ror(&parent));
+        deltas[1].graphic = &g0;
+        assert(aoe_graphic_on_layer_zero_ror(&parent));
+    }
     return 0;
 }

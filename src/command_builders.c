@@ -60,6 +60,27 @@ size_t aoe_command_build_order_alternate_ror(
     return size;
 }
 
+size_t aoe_command_build_order_target_ror(
+    uint8_t *out, size_t out_size, const AoeCommandObjectRor *const *units,
+    int16_t count, const AoeCommandObjectRor *target, float x, float y) {
+    size_t size = aoe_command_build_order_alternate_ror(
+        out, out_size, units, count, target, x, y);
+    if (size) out[0] = 3;
+    return size;
+}
+
+size_t aoe_command_build_stop_ror(uint8_t *out, size_t out_size,
+                                  const AoeCommandObjectRor *const *units,
+                                  int16_t count) {
+    size_t size = 2 + 4u * (size_t)(count > 0 ? count : 0);
+    if (!units || count <= 0 || !out || out_size < size) return 0;
+    memset(out, 0, size);
+    put_ids(out + 2, units, count);
+    out[0] = 1;
+    out[1] = (uint8_t)count;
+    return size;
+}
+
 size_t aoe_command_build_order_alternate_ids_ror(uint8_t *out,
                                                  size_t out_size,
                                                  const int32_t *ids,

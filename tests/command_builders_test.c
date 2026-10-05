@@ -56,6 +56,18 @@ int main(void) {
         assert(n == 0x24 && aoe_le_i32(other + 4) == 9 &&
                aoe_le_i32(other + 0x20) == 6);
     }
+    n = aoe_command_build_order_target_ror(buf, sizeof(buf), units, 3, NULL,
+                                           1.5f, 2.5f);
+    assert(n == 0x28 && buf[0] == 3 && buf[1] == 3 &&
+           aoe_le_i32(buf + 4) == -1 && aoe_le_f32(buf + 8) == 1.5f &&
+           aoe_le_f32(buf + 0xc) == 2.5f && aoe_le_i32(buf + 0x24) == 12);
+    assert(!aoe_command_build_order_target_ror(buf, 0x27, units, 3, NULL, 0,
+                                               0));
+    n = aoe_command_build_stop_ror(buf, sizeof(buf), units, 3);
+    assert(n == 14 && buf[0] == 1 && buf[1] == 3 &&
+           aoe_le_i32(buf + 2) == 11 && aoe_le_i32(buf + 6) == -1 &&
+           aoe_le_i32(buf + 10) == 12);
+    assert(!aoe_command_build_stop_ror(buf, sizeof(buf), units, 0));
     n = aoe_command_build_arrange_ror(buf, sizeof(buf), units, 3, 4);
     assert(n == 0x18 && buf[0] == 6 && aoe_le_u32(buf + 4) == 3 &&
            aoe_le_i32(buf + 8) == 4 && aoe_le_i32(buf + 0x14) == 12);

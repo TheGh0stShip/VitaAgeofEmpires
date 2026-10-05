@@ -67,7 +67,8 @@ typedef struct {
 
 extern const AoeUiPanelVtblRor aoe_ui_message_vtable_ror;
 
-/* 0x00465730 constructor (font and its size); 0x00465840 destructor. */
+/* 0x00465730 constructor (font and its size); 0x00465840 destructor
+   (deleting 0x00465820). */
 void aoe_ui_message_init_ror(AoeUiMessageRor *m, AoeUiSystemRor *system,
                              const AoeUiMessageOpsRor *ops, uintptr_t font,
                              int32_t font_w, int32_t font_h);

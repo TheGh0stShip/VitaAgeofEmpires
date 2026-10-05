@@ -8,8 +8,7 @@
 /* Patched Rise of Rome 1.0a list panel (pnl_lst, vtable 0x005453f8,
    0x00464a50..0x004656e0): a text panel whose selection follows the mouse
    and keyboard, auto-scrolls while a drag holds above or below it, and
-   reports to its parent (action 1 selected, 2 released, 3 chosen).
-   Drawing is not translated. */
+   reports to its parent (action 1 selected, 2 released, 3 chosen). */
 typedef struct {
     AoeUiTextRor text;
     int32_t hover_select;     /* +0x188 */
@@ -21,6 +20,13 @@ typedef struct {
 } AoeUiListRor;
 
 extern const AoeUiTextVtblRor aoe_ui_list_vtable_ror;
+
+/* +0x30 0x00465340: as the text panel, but only the selected line takes
+   the focus colours (with the highlight on, while focused or captured),
+   then the highlight bar (0x00465470: the selected line's band inside the
+   margins, widened by the spacing, a rectangle or the bevel inverted). */
+void aoe_ui_list_draw_slot_ror(AoeUiPanelRor *p);
+void aoe_ui_list_draw_highlight_ror(AoeUiListRor *l);
 
 /* 0x00464a50 constructor; 0x00464ae0 / 0x00464ac0 destructors. */
 void aoe_ui_list_init_ror(AoeUiListRor *l, AoeUiSystemRor *system);

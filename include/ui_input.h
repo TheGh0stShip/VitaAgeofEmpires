@@ -12,8 +12,8 @@
    kept in step with the text panel's line (+0x100) and column (+0x102).
    Formats (+0x19c): 1 number with '.', 2 integer, 3 unsigned integer,
    4 file name, 5 file name without '.', 6 path, 7 multi-line text, 8 a
-   percentage up to 100; anything else is free text. Drawing (the caret)
-   is not translated; clipboard and beeps are callbacks. */
+   percentage up to 100; anything else is free text. Clipboard and beeps
+   are callbacks. */
 typedef struct {
     void *context;
     /* The sound object's play when a sound is set, else MessageBeep. */
@@ -39,6 +39,11 @@ typedef struct {
 } AoeUiInputRor;
 
 extern const AoeUiTextVtblRor aoe_ui_input_vtable_ror;
+
+/* +0x30 0x00464140: the text, then while focused with the caret on and
+   the caret's line visible a two-pixel caret in the caret colour after
+   the line's first `column_chars` characters (inside the panel). */
+void aoe_ui_input_draw_slot_ror(AoeUiPanelRor *p);
 
 /* 0x00463650 constructor (blink_ms from the platform, 530 by default);
    0x00463700 / 0x004636e0 destructors. */

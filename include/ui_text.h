@@ -202,6 +202,12 @@ int32_t aoe_ui_text_left_down_ror(AoeUiPanelRor *p, int32_t x, int32_t y,
    border (0x004699f0: bevel types 1..7). 0x0046a0f0 and 0x0046a6c0 are
    thunks to the line text 0x0046a600 and the clear 0x0046a6d0. */
 void aoe_ui_text_draw_slot_ror(AoeUiPanelRor *p);
+/* The pieces, for subclasses: background, one line (inside the platform's
+   text_begin / text_end), border. */
+void aoe_ui_text_draw_background_ror(AoeUiTextRor *t);
+void aoe_ui_text_draw_line_ror(AoeUiTextRor *t, int16_t row, int16_t line,
+                               uint32_t color, uint32_t shadow);
+void aoe_ui_text_draw_border_ror(AoeUiTextRor *t);
 /* Text vtable slots shared with subclasses: +0x0c 0x00468910, +0x14
    0x004692c0, +0xac 0x004695c0 keys, +0xb8 0x00469690 action, +0xe4
    0x00468fc0 lines, +0xf0 0x004691e0 bevel. */

@@ -1,5 +1,8 @@
 #include "ui_input.h"
 
+#include "draw_prims.h"
+#include "draw_system.h"
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -494,6 +497,31 @@ static int no_lines(AoeUiTextRor *t, const char *const *lines, int16_t count) {
     return 0;
 }
 
+void aoe_ui_input_draw_slot_ror(AoeUiPanelRor *p) {
+    AoeUiInputRor *in = (AoeUiInputRor *)p;
+    AoeUiTextRor *t = &in->text;
+    int16_t line = t->selected;
+    struct AoeDrawSurfaceRor *s;
+    AoeUiRectRor rect;
+    int32_t offset = 0;
+    aoe_ui_text_draw_slot_ror(p);
+    if (!p->area || !p->visible || !p->active || !p->has_focus ||
+        !in->caret_on || line < t->top || line > t->bottom)
+        return;
+    p->vt->begin_draw(p, 0);
+    aoe_ui_text_line_rect_ror(t, (int16_t)(line - t->top), line, &rect, &offset);
+    s = p->area->surface;
+    if (s && aoe_surface_lock_ror(s, 1)) {
+        int32_t x = rect.left + offset, h = rect.bottom - rect.top + 1;
+        if (x < p->rect.right) {
+            aoe_draw_vline_ror(&s->view, x, rect.top, h, in->caret_color);
+            aoe_draw_vline_ror(&s->view, x + 1, rect.top, h, in->caret_color);
+        }
+        aoe_surface_unlock_ror(s);
+    }
+    p->vt->end_draw(p);
+}
+
 const AoeUiTextVtblRor aoe_ui_input_vtable_ror = {
     {destroy,
      aoe_ui_panel_setup_ror,
@@ -507,7 +535,7 @@ const AoeUiTextVtblRor aoe_ui_input_vtable_ror = {
      aoe_ui_panel_redraw_overlaps_ror,
      aoe_ui_panel_begin_draw_ror,
      aoe_ui_panel_end_draw_ror,
-     aoe_ui_panel_draw_ror,
+     aoe_ui_input_draw_slot_ror,
      aoe_ui_panel_draw_rect_ror,
      aoe_ui_panel_draw_offset_ror,
      aoe_ui_panel_draw_parent_rect_ror,

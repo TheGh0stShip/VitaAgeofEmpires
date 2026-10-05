@@ -473,7 +473,7 @@ static void unlock_area(AoeUiTextRor *t) {
     if (s) aoe_surface_unlock_ror(s);
 }
 
-static void draw_background(AoeUiTextRor *t) {
+void aoe_ui_text_draw_background_ror(AoeUiTextRor *t) {
     AoeUiPanelRor *p = &t->panel;
     if (t->background) {
         const AoeUiPlatformRor *pf = platform(t);
@@ -517,7 +517,7 @@ static void draw_background(AoeUiTextRor *t) {
     }
 }
 
-static void draw_border(AoeUiTextRor *t) {
+void aoe_ui_text_draw_border_ror(AoeUiTextRor *t) {
     AoeUiPanelRor *p = &t->panel;
     AoeShapeSurfaceRor *v;
     const uint8_t *b = t->bevel;
@@ -573,8 +573,8 @@ static void out(const AoeUiPlatformRor *pf, int32_t style, int32_t x,
     }
 }
 
-static void draw_line(AoeUiTextRor *t, int16_t row, int16_t line,
-                      uint32_t color, uint32_t shadow) {
+void aoe_ui_text_draw_line_ror(AoeUiTextRor *t, int16_t row, int16_t line,
+                               uint32_t color, uint32_t shadow) {
     const AoeUiPlatformRor *pf = platform(t);
     const char *a = aoe_ui_text_line_ror(t, line);
     const char *b = aoe_ui_text_column_ror(t, line);
@@ -601,19 +601,20 @@ void aoe_ui_text_draw_slot_ror(AoeUiPanelRor *p) {
     int16_t line, row = 0;
     p->redraw = 0;
     if (!p->area || !p->visible || !p->active) return;
-    draw_background(t);
+    aoe_ui_text_draw_background_ror(t);
     p->vt->begin_draw(p, 0);
     if (pf && pf->text_begin && pf->text_begin(pf->context, p->area, &p->clip,
                                                t->font)) {
         for (line = t->top; line <= t->bottom; ++line, ++row) {
             int focus = !((p->tab_stop == 0 || p->has_focus == 0) &&
                           p->captured == 0);
-            draw_line(t, row, line, focus ? t->focus_color : t->color,
+            aoe_ui_text_draw_line_ror(t, row, line,
+                                      focus ? t->focus_color : t->color,
                       focus ? t->focus_shadow : t->shadow);
         }
         pf->text_end(pf->context);
     }
-    draw_border(t);
+    aoe_ui_text_draw_border_ror(t);
     p->vt->end_draw(p);
 }
 

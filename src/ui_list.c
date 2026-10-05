@@ -1,5 +1,8 @@
 #include "ui_list.h"
 
+#include "draw_prims.h"
+#include "draw_system.h"
+
 #include <ctype.h>
 
 #define L(p) ((AoeUiListRor *)(p))
@@ -257,6 +260,78 @@ static void bevel(AoeUiTextRor *t, int32_t type, const uint8_t colors[6]) {
     }
 }
 
+void aoe_ui_list_draw_highlight_ror(AoeUiListRor *l) {
+    AoeUiTextRor *t = &l->text;
+    AoeUiPanelRor *p = &t->panel;
+    struct AoeDrawSurfaceRor *s = p->area ? p->area->surface : NULL;
+    const uint8_t *b = t->bevel;
+    AoeUiRectRor rect;
+    int32_t x0, x1, y0, y1;
+    uint8_t c[6];
+    if (!l->highlight || t->selected < t->top || t->bottom < t->selected) return;
+    aoe_ui_text_line_rect_ror(t, (int16_t)(t->selected - t->top), t->selected,
+                              &rect, NULL);
+    if (!s || !aoe_surface_lock_ror(s, 1)) return;
+    x0 = p->x + t->margin;
+    x1 = p->width - t->margin - 1 + p->x;
+    y0 = rect.top - t->spacing;
+    y1 = t->spacing + rect.bottom;
+    switch (t->bevel_type) {
+    case 0:
+    case 1:
+        aoe_draw_rect_ror(&s->view, x0, y0, x1, y1, 0xff);
+        break;
+    case 2:
+        aoe_draw_bevel1_ror(&s->view, x0, y0, x1, y1, b[0], b[5]);
+        break;
+    case 5:
+        aoe_draw_bevel1_ror(&s->view, x0, y0, x1, y1, b[5], b[0]);
+        break;
+    case 3:
+        c[0] = b[0], c[1] = b[1], c[2] = b[4], c[3] = b[5];
+        aoe_draw_bevel2_ror(&s->view, x0, y0, x1, y1, c);
+        break;
+    case 6:
+        c[0] = b[5], c[1] = b[4], c[2] = b[1], c[3] = b[0];
+        aoe_draw_bevel2_ror(&s->view, x0, y0, x1, y1, c);
+        break;
+    case 4:
+        aoe_draw_bevel3_ror(&s->view, x0, y0, x1, y1, b);
+        break;
+    case 7:
+        c[0] = b[5], c[1] = b[4], c[2] = b[3], c[3] = b[2], c[4] = b[1],
+        c[5] = b[0];
+        aoe_draw_bevel3_ror(&s->view, x0, y0, x1, y1, c);
+        break;
+    }
+    aoe_surface_unlock_ror(s);
+}
+
+void aoe_ui_list_draw_slot_ror(AoeUiPanelRor *p) {
+    AoeUiListRor *l = (AoeUiListRor *)p;
+    AoeUiTextRor *t = &l->text;
+    const AoeUiPlatformRor *pf = p->system ? p->system->platform : NULL;
+    int16_t line, row = 0;
+    p->redraw = 0;
+    if (!p->area || !p->visible || !p->active) return;
+    aoe_ui_text_draw_background_ror(t);
+    p->vt->begin_draw(p, 0);
+    if (pf && pf->text_begin &&
+        pf->text_begin(pf->context, p->area, &p->clip, t->font)) {
+        for (line = t->top; line <= t->bottom; ++line, ++row) {
+            int focus = l->highlight && (p->has_focus || p->captured) &&
+                        t->top + row == t->selected;
+            aoe_ui_text_draw_line_ror(t, row, line,
+                                      focus ? t->focus_color : t->color,
+                                      focus ? t->focus_shadow : t->shadow);
+        }
+        pf->text_end(pf->context);
+    }
+    aoe_ui_text_draw_border_ror(t);
+    aoe_ui_list_draw_highlight_ror(l);
+    p->vt->end_draw(p);
+}
+
 const AoeUiTextVtblRor aoe_ui_list_vtable_ror = {
     {destroy,
      aoe_ui_panel_setup_ror,
@@ -270,7 +345,7 @@ const AoeUiTextVtblRor aoe_ui_list_vtable_ror = {
      aoe_ui_panel_redraw_overlaps_ror,
      aoe_ui_panel_begin_draw_ror,
      aoe_ui_panel_end_draw_ror,
-     aoe_ui_panel_draw_ror,
+     aoe_ui_list_draw_slot_ror,
      aoe_ui_panel_draw_rect_ror,
      aoe_ui_panel_draw_offset_ror,
      aoe_ui_panel_draw_parent_rect_ror,

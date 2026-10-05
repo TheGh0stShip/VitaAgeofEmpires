@@ -94,6 +94,8 @@ typedef struct {
     int32_t field_204;                /* +0x204 */
     uint8_t zone_flags[256];          /* +0x308 */
     int32_t cells[4][4][3];           /* +0x408 */
+    int32_t **kind_lists;             /* +0x4c8, one array per kind */
+    int32_t *kind_counts;             /* +0x4cc */
     AoeAiInfoTargetRor *targets[4];   /* +0x4d0 */
     int32_t target_count[4];          /* +0x4e0 */
     int32_t target_capacity[4];       /* +0x4f0 */
@@ -178,6 +180,15 @@ typedef struct {
     /* The Build AI (computer player +0x104, vtable +0x48) with type and
        flag: nonzero when it has that item. */
     int (*build_has)(void *context, int32_t type_id, int32_t flag);
+    /* The unit's vtable +0x198 path test toward tile (x, y) at height z
+       within `radius` (the other arguments are fixed: -1, 1, -1, -1). */
+    int (*can_reach)(void *context, int32_t id, int32_t x, int32_t y,
+                     int32_t z, float radius);
+    /* The game settings' +4 player name object (0x0043ce80), or NULL when
+       there is none, and reading the start of a binary file (0x0046b5b0
+       mode 0x8000, 0x0046b800, 0x0046b6b0): 0 when it cannot open. */
+    const char *(*learn_name)(void *context);
+    int (*read_file)(void *context, const char *path, void *out, int size);
     /* The objects standing on a tile (tile +0x10 list), at most `max`;
        the count. */
     int32_t (*tile_objects)(void *context, int32_t x, int32_t y,
@@ -486,6 +497,36 @@ int aoe_ai_info_food_far_ror(const AoeAiInfoRor *info,
    0x14 holding a class-0xf object raises +0x560. */
 void aoe_ai_info_scan_map_ror(AoeAiInfoRor *info,
                               const AoeAiInfoOpsRor *ops);
+/* 0x004c4930: append a value to the kind's array (a new array one longer
+   each time). */
+void aoe_ai_info_kind_append_ror(AoeAiInfoRor *info, int32_t kind,
+                                 int32_t value);
+/* 0x004c3180: a building type's site priority: 0x67 1, 0x44 2, 0x45 /
+   0x4f / 199 3, 0x48 / 0x75 / 0x9b 4, 0x46 / 0x52 / 0x54 / 0x6e / 0x114 6,
+   0x2d 7, 0x32 8, 0x6d 9, others 5. */
+int32_t aoe_ai_info_site_priority_ror(int32_t type_id);
+/* 0x004c3300: set the state of the mark with this ID and tile, else fill
+   the first free mark, else double the table (new marks free, with the
+   given state) and append. The original writes into an empty (zero-byte)
+   table when there are no marks yet; the port then stores nothing. */
+void aoe_ai_info_put_mark_ror(AoeAiInfoRor *info, int32_t id, uint8_t x,
+                              uint8_t y, uint8_t state);
+/* 0x004c3d00: for unit `id`, the nearest remembered object of another
+   player (not ours, not 0) on an unexplored tile (0x004bc720) of the
+   unit's zone, by truncated distance; its tile goes to `out`, and the
+   unit's path test there (radius type +0x28 - 1, height its truncated z)
+   marks the grid cell 0 (1 returned) or 1 (0 returned). 0 without one. */
+int aoe_ai_info_explore_toward_ror(AoeAiInfoRor *info, int32_t id,
+                                   int32_t out[2],
+                                   const AoeAiInfoOpsRor *ops);
+/* 0x004c6780: no remembered enemy town centre, granary, storage pit or
+   type 0x4f, 199 or 0x45 lies within number 202 tiles of (x, y). */
+int aoe_ai_info_clear_of_enemy_ror(const AoeAiInfoRor *info, int32_t x,
+                                   int32_t y, const AoeAiInfoOpsRor *ops);
+/* 0x004c6670: load the eleven statistics (44 bytes) from "learn\<name>.uh"
+   for a named player, else "learn\Default.uh". */
+void aoe_ai_info_load_learning_ror(AoeAiInfoRor *info,
+                                   const AoeAiInfoOpsRor *ops);
 /* 0x004c65c0: the statistics bucket of a unit: class 0x12 5, 0x1c 3,
    0xd 4, 0xc 2, 0x23 7; type 0x49 0, 0x4b 1, 4/5/0x27 6, 0x29 10,
    0x2e/0x19 9; class 0x16 8; else -1. */

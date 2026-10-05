@@ -1,10 +1,12 @@
 #include "ai_info.h"
 
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "aoe_ftol.h"
+#include "le_bytes.h"
 
 static int get_object(const AoeAiInfoOpsRor *ops, int32_t id,
                       AoeAiObjectViewRor *out) {
@@ -1283,4 +1285,151 @@ void aoe_ai_info_scan_map_ror(AoeAiInfoRor *info,
                 ++info->field_560;
         }
     }
+}
+
+/* ---- Marks, kinds and learning ---- */
+
+void aoe_ai_info_kind_append_ror(AoeAiInfoRor *info, int32_t kind,
+                                 int32_t value) {
+    int32_t n, *grown;
+    if (!info || !info->kind_lists || !info->kind_counts || kind < 0) return;
+    n = info->kind_counts[kind];
+    grown = (int32_t *)malloc((size_t)(n + 1) * sizeof(*grown));
+    if (!grown) return;
+    if (n) memcpy(grown, info->kind_lists[kind], (size_t)n * sizeof(*grown));
+    grown[n] = value;
+    free(info->kind_lists[kind]);
+    info->kind_lists[kind] = grown;
+    info->kind_counts[kind] = n + 1;
+}
+
+int32_t aoe_ai_info_site_priority_ror(int32_t type_id) {
+    switch (type_id) {
+    case 0x2d: return 7;
+    case 0x32: return 8;
+    case 0x44: return 2;
+    case 0x45: case 0x4f: case 199: return 3;
+    case 0x46: case 0x52: case 0x54: case 0x6e: case 0x114: return 6;
+    case 0x48: case 0x75: case 0x9b: return 4;
+    case 0x67: return 1;
+    case 0x6d: return 9;
+    default: return 5;
+    }
+}
+
+void aoe_ai_info_put_mark_ror(AoeAiInfoRor *info, int32_t id, uint8_t x,
+                              uint8_t y, uint8_t state) {
+    int32_t i, free_slot = -1, n;
+    AoeAiInfoMarkRor *grown;
+    if (!info) return;
+    n = info->mark_count;
+    for (i = 0; i < n; ++i) {
+        AoeAiInfoMarkRor *m = &info->marks[i];
+        if (m->id == id && m->x == x && m->y == y) {
+            m->state = state;
+            return;
+        }
+        if (free_slot == -1 && m->id == -1) free_slot = i;
+    }
+    if (free_slot != -1) {
+        info->marks[free_slot].id = id;
+        info->marks[free_slot].x = x;
+        info->marks[free_slot].y = y;
+        info->marks[free_slot].state = state;
+        return;
+    }
+    if (n <= 0) return;
+    grown = (AoeAiInfoMarkRor *)malloc((size_t)n * 2 * sizeof(*grown));
+    if (!grown) return;
+    memcpy(grown, info->marks, (size_t)n * sizeof(*grown));
+    for (i = n; i < n * 2; ++i) {
+        memset(&grown[i], 0, sizeof grown[i]);
+        grown[i].id = -1;
+        grown[i].state = state;
+    }
+    free(info->marks);
+    info->marks = grown;
+    grown[n].id = id;
+    grown[n].x = x;
+    grown[n].y = y;
+    grown[n].state = state;
+    info->mark_count = n * 2;
+}
+
+int aoe_ai_info_explore_toward_ror(AoeAiInfoRor *info, int32_t id,
+                                   int32_t out[2],
+                                   const AoeAiInfoOpsRor *ops) {
+    AoeAiObjectViewRor unit;
+    AoeAiInfoObjectRor *best = NULL;
+    int32_t i, best_d = -1;
+    uint8_t zone;
+    if (!info || !ops || !get_object(ops, id, &unit) || !ops->zone ||
+        !ops->tile_zone)
+        return 0;
+    zone = ops->zone(ops->context, id);
+    for (i = 0; i < info->object_count; ++i) {
+        AoeAiInfoObjectRor *e = &info->objects[i];
+        int32_t d;
+        if (e->id == -1 || (uint16_t)e->owner == (uint16_t)ops->self || !e->owner)
+            continue;
+        if (aoe_ai_info_explored_ror(info, e->x, e->y, ops) == 1) continue;
+        if (ops->tile_zone(ops->context, id, e->x, e->y) != zone) continue;
+        d = aoe_ftol32(ops->distance ? ops->distance(ops->context, id, (float)e->x,
+                                                     (float)e->y, (float)e->z)
+                                     : 0.0);
+        if (!best || d < best_d) {
+            best = e;
+            best_d = d;
+        }
+    }
+    if (!best) return 0;
+    out[0] = best->x;
+    out[1] = best->y;
+    if (ops->can_reach &&
+        ops->can_reach(ops->context, id, out[0], out[1], aoe_ftol32(unit.z),
+                       (float)((double)unit.type_28 - (double)1.0f))) {
+        if (ops->grid_set) ops->grid_set(ops->context, out[0], out[1], 0);
+        return 1;
+    }
+    if (ops->grid_set) ops->grid_set(ops->context, out[0], out[1], 1);
+    return 0;
+}
+
+int aoe_ai_info_clear_of_enemy_ror(const AoeAiInfoRor *info, int32_t x,
+                                   int32_t y, const AoeAiInfoOpsRor *ops) {
+    int32_t i, r;
+    if (!info || !ops || !ops->is_enemy) return 1;
+    r = ops->sn ? ops->sn(ops->context, 0xca) : 0;
+    for (i = 0; i < info->object_count; ++i) {
+        const AoeAiInfoObjectRor *e = &info->objects[i];
+        int32_t dx, dy;
+        if (!ops->is_enemy(ops->context, e->owner)) continue;
+        switch (e->type_id) {
+        case 0x6d: case 0x67: case 0x44: case 0x4f: case 199: case 0x45:
+            break;
+        default:
+            continue;
+        }
+        dx = (int32_t)e->x - x;
+        dy = (int32_t)e->y - y;
+        if (dy * dy + dx * dx <= r * r) return 0;
+    }
+    return 1;
+}
+
+void aoe_ai_info_load_learning_ror(AoeAiInfoRor *info,
+                                   const AoeAiInfoOpsRor *ops) {
+    char path[256];
+    const char *name;
+    uint8_t bytes[AOE_AI_INFO_STATS * 4];
+    int i;
+    if (!info || !ops || !ops->read_file) return;
+    name = ops->learn_name ? ops->learn_name(ops->context) : NULL;
+    if (name)
+        snprintf(path, sizeof path, "learn\\%s.uh", name);
+    else
+        snprintf(path, sizeof path, "%s", "learn\\Default.uh");
+    if (ops->read_file(ops->context, path, bytes, (int)sizeof bytes))
+        for (i = 0; i < AOE_AI_INFO_STATS; ++i)
+            info->stats[i] = aoe_le_i32(bytes + 4 * i);
 }

@@ -491,6 +491,113 @@ static void choice_tests(void) {
     aoe_ai_int_list_release_ror(&info.list_148);
 }
 
+static char read_path[64];
+static int read_file5(void *c, const char *path, void *out, int size) {
+    uint8_t *b = (uint8_t *)out;
+    int i;
+    (void)c;
+    snprintf(read_path, sizeof read_path, "%s", path);
+    for (i = 0; i < size; ++i) b[i] = (uint8_t)(i % 4 == 0 ? i / 4 + 1 : 0);
+    return 1;
+}
+static const char *name5;
+static const char *learn_name5(void *c) { (void)c; return name5; }
+static int reach5 = 1;
+static float reach_radius;
+static int32_t reach_z;
+static int can_reach5(void *c, int32_t id, int32_t x, int32_t y, int32_t z, float r) {
+    (void)c; (void)id; (void)x; (void)y; reach_z = z; reach_radius = r; return reach5;
+}
+static int object5(void *c, int32_t id, AoeAiObjectViewRor *o) {
+    (void)c;
+    memset(o, 0, sizeof *o);
+    o->id = id; o->z = 2.7f; o->type_28 = 3.0f;
+    return id == 700;
+}
+static double dist5(void *c, int32_t id, float x, float y, float z) {
+    (void)c; (void)id; (void)z; return (double)x + (double)y;
+}
+static int32_t sn5(void *c, int32_t i) { (void)c; return i == 0xca ? 3 : 0; }
+
+static void mark_tests(void) {
+    static AoeAiInfoRor info;
+    AoeAiInfoOpsRor ops;
+    int32_t *lists[2] = {NULL, NULL}, counts[2] = {0, 0}, out[2];
+
+    memset(&ops, 0, sizeof ops);
+    ops.self = 1;
+    ops.object = object5;
+    ops.zone = zone2;
+    ops.tile_zone = tile_zone2;
+    ops.distance = dist5;
+    ops.can_reach = can_reach5;
+    ops.grid_get = grid_get;
+    ops.grid_set = grid_set;
+    ops.is_enemy = is_enemy;
+    ops.sn = sn5;
+    ops.read_file = read_file5;
+    ops.learn_name = learn_name5;
+
+    info.kind_lists = lists;
+    info.kind_counts = counts;
+    aoe_ai_info_kind_append_ror(&info, 1, 7);
+    aoe_ai_info_kind_append_ror(&info, 1, 8);
+    assert(counts[1] == 2 && lists[1][1] == 8 && counts[0] == 0);
+    free(lists[1]);
+
+    assert(aoe_ai_info_site_priority_ror(0x6d) == 9 && aoe_ai_info_site_priority_ror(199) == 3 &&
+           aoe_ai_info_site_priority_ror(0x114) == 6 && aoe_ai_info_site_priority_ror(1) == 5);
+
+    aoe_ai_info_put_mark_ror(&info, 5, 1, 1, 0);
+    assert(info.mark_count == 0);
+    info.mark_count = 1;
+    info.marks = (AoeAiInfoMarkRor *)calloc(1, sizeof *info.marks);
+    info.marks[0].id = -1;
+    aoe_ai_info_put_mark_ror(&info, 5, 1, 1, 0);
+    assert(info.marks[0].id == 5);
+    aoe_ai_info_put_mark_ror(&info, 5, 1, 1, 2);
+    assert(info.marks[0].state == 2 && info.mark_count == 1);
+    aoe_ai_info_put_mark_ror(&info, 6, 2, 2, 1);
+    assert(info.mark_count == 2 && info.marks[1].id == 6 && info.marks[1].state == 1);
+    aoe_ai_info_put_mark_ror(&info, 7, 3, 3, 4);
+    assert(info.mark_count == 4 && info.marks[2].id == 7 && info.marks[3].id == -1 &&
+           info.marks[3].state == 4);
+    free(info.marks);
+
+    /* Exploring: entries 1 (ours), 2 (unexplored, x+y 9), 3 (unexplored,
+       x+y 5), 4 (explored), 5 (other zone). */
+    info.map_width = info.map_height = 8;
+    memset(grid, 0xff, sizeof grid);
+    info.object_count = 5;
+    info.objects = (AoeAiInfoObjectRor *)calloc(5, sizeof *info.objects);
+    info.objects[0] = (AoeAiInfoObjectRor){1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0};
+    info.objects[1] = (AoeAiInfoObjectRor){2, 0, 0, 4, 5, 0, 2, 0, 0, 0, 0, 0, 0};
+    info.objects[2] = (AoeAiInfoObjectRor){3, 0, 0, 2, 3, 0, 2, 0, 0, 0, 0, 0, 0};
+    info.objects[3] = (AoeAiInfoObjectRor){4, 0, 0, 1, 2, 0, 2, 0, 0, 0, 0, 0, 0};
+    info.objects[4] = (AoeAiInfoObjectRor){5, 0x6d, 0, 50, 0, 0, 2, 0, 0, 0, 0, 0, 0};
+    grid[1][2] = 0;
+    assert(aoe_ai_info_explore_toward_ror(&info, 700, out, &ops) == 1 &&
+           out[0] == 2 && out[1] == 3 && grid[2][3] == 0 && reach_z == 2 &&
+           reach_radius == 2.0f);
+    reach5 = 0;
+    grid[2][3] = 0xff;
+    assert(aoe_ai_info_explore_toward_ror(&info, 700, out, &ops) == 0 && grid[2][3] == 1);
+    assert(aoe_ai_info_explore_toward_ror(&info, 700, out, &ops) == 0 &&
+           out[0] == 4 && grid[4][5] == 1);
+    assert(!aoe_ai_info_explore_toward_ror(&info, 701, out, &ops));
+
+    /* Enemy buildings: entry 5 (0x6d) at (50, 0), radius 3. */
+    assert(aoe_ai_info_clear_of_enemy_ror(&info, 47, 0, &ops) == 0 &&
+           aoe_ai_info_clear_of_enemy_ror(&info, 46, 0, &ops) == 1);
+    free(info.objects);
+
+    aoe_ai_info_load_learning_ror(&info, &ops);
+    assert(!strcmp(read_path, "learn\\Default.uh") && info.stats[0] == 1 && info.stats[10] == 11);
+    name5 = "Ann";
+    aoe_ai_info_load_learning_ror(&info, &ops);
+    assert(!strcmp(read_path, "learn\\Ann.uh"));
+}
+
 int main(void) {
     static AoeAiInfoRor info;
     AoeAiInfoOpsRor ops;
@@ -717,6 +824,7 @@ int main(void) {
     dropsite_tests();
     sighting_tests();
     choice_tests();
+    mark_tests();
     puts("ai info ok");
     return 0;
 }

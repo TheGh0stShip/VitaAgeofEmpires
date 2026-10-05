@@ -10,7 +10,7 @@
    per-row pointers, with a cap that raising saturates below and that
    marks cells raising and lowering leave alone. Semantic storage; offsets
    are noted. */
-typedef struct {
+typedef struct AoeValueGridRor {
     int32_t width, height;       /* +0x04, +0x08 */
     int32_t origin_x, origin_y;  /* +0x0c, +0x10 */
     uint8_t *cells;              /* +0x14 */

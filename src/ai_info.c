@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "aoe_ftol.h"
+#include "value_grid.h"
 #include "le_bytes.h"
 
 static int get_object(const AoeAiInfoOpsRor *ops, int32_t id,
@@ -1421,4 +1422,185 @@ void aoe_ai_info_load_learning_ror(AoeAiInfoRor *info,
     if (ops->read_file(ops->context, path, bytes, (int)sizeof bytes))
         for (i = 0; i < AOE_AI_INFO_STATS; ++i)
             info->stats[i] = aoe_le_i32(bytes + 4 * i);
+}
+
+/* A box from two corners, each clamped to the map (0x004c2d60). */
+static void site_box(const AoeAiInfoRor *info, int32_t lo[2], int32_t hi[2]) {
+    aoe_ai_info_clamp_ror(info, lo);
+    aoe_ai_info_clamp_ror(info, hi);
+}
+
+static int resource_class_matches(int32_t need, int16_t cls) {
+    switch (need) {
+    case -1: return 1;
+    case 3: return cls == 0x20;
+    case 2: return cls == 8;
+    case 1: return cls == 0xf;
+    case 0: return cls != 0x20 && cls != 8 && cls != 0xf;
+    default: return 0;
+    }
+}
+
+void aoe_ai_info_prepare_sites_ror(AoeAiInfoRor *info, AoeValueGridRor *g, int32_t mode,
+                                   int32_t type, const int32_t lo_in[2], const int32_t hi_in[2],
+                                   const AoeAiInfoOpsRor *ops) {
+    int32_t w = info->map_width, h = info->map_height, x, y, i, k;
+    aoe_value_grid_fill_ror(g, 0x14);
+    aoe_value_grid_set_cap_ror(g, 0xff);
+    if (mode == 3 || mode == 4 || mode == 0)
+        for (x = 0; x < w; ++x)
+            for (y = 0; y < h; ++y)
+                if (x < 5 || x > w - 5 || y < 5 || y > h - 5)
+                    aoe_value_grid_lower_ror(g, x, y, 10);
+    if ((mode == 1 || mode == 2 || mode == 9) && ops && ops->object) {
+        int32_t need = aoe_ai_info_resource_need_ror(info, mode, ops);
+        for (k = 0; k < 4; ++k)
+            for (i = 0; i < info->target_count[k]; ++i) {
+                const AoeAiInfoTargetRor *t = &info->targets[k][i];
+                AoeAiWorldObjectRor o;
+                int32_t lo[2], hi[2], c[2];
+                memset(&o, 0, sizeof o);
+                if (t->gone == 1 || !ops->object(ops->context, t->id, &o)) continue;
+                lo[0] = aoe_ftol32((double)(o.x - o.size_x) - 1.0);
+                lo[1] = aoe_ftol32((double)(o.y - o.size_y) - 1.0);
+                aoe_ai_info_clamp_ror(info, lo);
+                hi[0] = aoe_ftol32((double)(o.size_y + o.x) + 1.0);
+                hi[1] = aoe_ftol32((double)(o.size_y + o.y) + 1.0);
+                aoe_ai_info_clamp_ror(info, hi);
+                c[0] = aoe_ftol32(o.x);
+                c[1] = aoe_ftol32(o.y);
+                aoe_ai_info_clamp_ror(info, c);
+                if (mode == 1 || mode == 2) aoe_value_grid_set_ror(g, c[0], c[1], 0xff);
+                else aoe_value_grid_set_box_ror(g, lo[0], lo[1], hi[0], hi[1], 0xff);
+                if (mode == 1) {
+                    if (o.type_class == 7) {
+                        lo[0] -= 5, lo[1] -= 5, hi[0] += 5, hi[1] += 5;
+                        site_box(info, lo, hi);
+                        aoe_value_grid_lower_box_ror(g, lo[0], lo[1], hi[0], hi[1], 0x80);
+                    } else if (resource_class_matches(need, o.type_class)) {
+                        static const int32_t grow[3] = {1, 3, 5};
+                        static const uint8_t add[3] = {8, 4, 2};
+                        for (int s = 0; s < 3; ++s) {
+                            lo[0] -= grow[s], lo[1] -= grow[s], hi[0] += grow[s], hi[1] += grow[s];
+                            site_box(info, lo, hi);
+                            aoe_value_grid_raise_box_ror(g, lo[0], lo[1], hi[0], hi[1], add[s]);
+                        }
+                    }
+                } else if (mode == 2 && o.type_class == 7) {
+                    lo[0] -= 3, lo[1] -= 3, hi[0] += 3, hi[1] += 3;
+                    site_box(info, lo, hi);
+                    aoe_value_grid_raise_box_ror(g, lo[0], lo[1], hi[0], hi[1], 0x80);
+                }
+            }
+    }
+    if ((mode == 1 || mode == 2 || mode == 3 || mode == 4 || mode == 0 || mode == 5 ||
+         mode == 6 || mode == 8) && ops && ops->object) {
+        for (i = 0; i < info->list_190.count; ++i) {
+            AoeAiWorldObjectRor o;
+            int32_t lo[2], hi[2], prio, fx, fy, d;
+            int center_grow = 0;
+            memset(&o, 0, sizeof o);
+            if (!ops->object(ops->context, info->list_190.data[i], &o)) continue;
+            prio = aoe_ai_info_site_priority_ror(o.type_id);
+            fx = aoe_ftol32(o.x);
+            fy = aoe_ftol32(o.y);
+            if ((double)o.size_x == 2.5 || ((double)o.size_x == 1.5 && prio != 6 && type == 0x46)) {
+                lo[0] = fx - 3, lo[1] = fy - 3, hi[0] = fx + 3, hi[1] = fy + 3;
+                center_grow = 1;
+            } else if ((double)o.size_x == 1.5) {
+                if (prio == 6) {
+                    lo[0] = fx - 1, lo[1] = fy - 1, hi[0] = fx + 1, hi[1] = fy + 1;
+                } else {
+                    lo[0] = fx - 2, lo[1] = fy - 2, hi[0] = fx + 2, hi[1] = fy + 2;
+                    center_grow = 1;
+                }
+            } else if (o.size_x == 1.0f) {
+                if (prio == 6 || prio == 3) lo[0] = fx - 1, lo[1] = fy - 1, hi[0] = fx, hi[1] = fy;
+                else lo[0] = fx - 2, lo[1] = fy - 2, hi[0] = fx + 1, hi[1] = fy + 1;
+                center_grow = 1;
+            } else if ((double)o.size_x == 0.5) {
+                if (prio == 6 || prio == 4) lo[0] = fx, lo[1] = fy, hi[0] = fx, hi[1] = fy;
+                else lo[0] = fx - 1, lo[1] = fy - 1, hi[0] = fx + 1, hi[1] = fy + 1;
+                center_grow = 1;
+            } else {
+                continue; /* "Unsupported building size" logged */
+            }
+            if (center_grow && prio == 0x6d) lo[0]--, lo[1]--, hi[0]++, hi[1]++;
+            site_box(info, lo, hi);
+            aoe_value_grid_set_box_ror(g, lo[0], lo[1], hi[0], hi[1], 0xff);
+            if (mode == 3 || mode == 0) {
+                double r = o.type_28;
+                if (mode != 0) r *= 0.5;
+                if (prio == 0x6d) r *= 0.5;
+                d = aoe_ftol32(r);
+                lo[0] -= d, lo[1] -= d, hi[0] += d, hi[1] += d;
+                site_box(info, lo, hi);
+                if (mode == 0 && prio == 3)
+                    aoe_value_grid_raise_box_ror(g, lo[0], lo[1], hi[0], hi[1], 10);
+                else
+                    aoe_value_grid_lower_box_ror(g, lo[0], lo[1], hi[0], hi[1], 10);
+            } else if (mode == 1 || mode == 2) {
+                double r = o.type_28;
+                if (prio == 0x6d) r *= 0.5;
+                else if (prio == 0x44 || prio == 0x67) r = 5.0;
+                d = aoe_ftol32(r);
+                lo[0] -= d, lo[1] -= d, hi[0] += d, hi[1] += d;
+                site_box(info, lo, hi);
+                aoe_value_grid_lower_box_ror(g, lo[0], lo[1], hi[0], hi[1], 10);
+            } else if (mode == 5) {
+                double r = o.type_28;
+                if (prio == 0x6d) r *= 0.25;
+                d = aoe_ftol32(r) * 2;
+                lo[0] -= d, lo[1] -= d, hi[0] += d, hi[1] += d;
+                site_box(info, lo, hi);
+                aoe_value_grid_lower_box_ror(g, lo[0], lo[1], hi[0], hi[1], 0x14);
+            } else if (mode == 8) {
+                int32_t base_lo[2] = {lo[0], lo[1]}, base_hi[2] = {hi[0], hi[1]};
+                int32_t full = aoe_ftol32(o.type_28);
+                const int32_t steps[3] = {full, full / 2, full / 3};
+                for (int s = 0; s < 3; ++s) {
+                    int32_t a[2] = {base_lo[0] - steps[s], base_lo[1] - steps[s]};
+                    int32_t b[2] = {base_hi[0] + steps[s], base_hi[1] + steps[s]};
+                    site_box(info, a, b);
+                    aoe_value_grid_raise_box_ror(g, a[0], a[1], b[0], b[1], 0x14);
+                }
+            }
+        }
+    }
+    if ((mode == 3 || mode == 4 || mode == 0) && lo_in && hi_in) {
+        for (x = lo_in[0]; x <= hi_in[0]; ++x)
+            for (y = lo_in[1]; y <= hi_in[1]; ++y) {
+                if (ops && ops->terrain && ops->terrain(ops->context, x, y) == 1) {
+                    int32_t a[2] = {x - 2, y - 2}, b[2] = {x - 2, y - 2};
+                    site_box(info, a, b);
+                    aoe_value_grid_set_ror(g, x, y, 0xff);
+                    aoe_value_grid_lower_box_ror(g, a[0], a[1], b[0], b[1], 10);
+                }
+                if (ops && ops->tile_byte5)
+                    aoe_value_grid_raise_ror(g, x, y,
+                                             (uint8_t)((ops->tile_byte5(ops->context, x, y) >> 5) * 5));
+            }
+    }
+    if (mode == 3 || mode == 4 || mode == 0 || mode == 6 || mode == 5) {
+        for (i = 0; i < info->area_count; ++i) {
+            const AoeAiInfoAreaRor *a = &info->areas[i];
+            int32_t lo[2], hi[2];
+            if (a->id == -1 || !ops || a->player_a != (uint8_t)ops->self) continue;
+            lo[0] = a->x0 - 4, lo[1] = a->y0 - 4;
+            aoe_ai_info_clamp_ror(info, lo);
+            hi[0] = a->x1 + 4, hi[1] = a->y1 + 4;
+            aoe_ai_info_clamp_ror(info, hi);
+            aoe_value_grid_raise_box_ror(g, lo[0], lo[1], hi[0], hi[1], 0x10);
+        }
+    }
+    if (mode == 0 && ops && ops->tactical_sites) ops->tactical_sites(ops->context, g);
+    {
+        const int32_t from[2] = {0, 0}, to[2] = {w, h};
+        aoe_value_grid_count_ror(g, from, to, 0xff, 1, mode == 4 ? 0 : 1, 1);
+    }
+    if (mode != 0)
+        for (i = 0; i < info->mark_count; ++i) {
+            const AoeAiInfoMarkRor *m = &info->marks[i];
+            if (m->id == type && m->state == 2) aoe_value_grid_set_ror(g, m->x, m->y, 0xff);
+        }
 }

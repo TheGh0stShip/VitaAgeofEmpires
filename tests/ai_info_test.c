@@ -1,5 +1,6 @@
 /* Patched RoR 1.0a information-AI members (0x004bc230..0x004c6880). */
 #include "ai_info.h"
+#include "value_grid.h"
 
 #include <assert.h>
 #include <math.h>
@@ -598,6 +599,47 @@ static void mark_tests(void) {
     assert(!strcmp(read_path, "learn\\Ann.uh"));
 }
 
+static int site_object(void *c, int32_t id, AoeAiWorldObjectRor *o) {
+    (void)c;
+    memset(o, 0, sizeof *o);
+    if (id != 900) return 0;
+    o->id = id; o->type_id = 12; o->x = 10.0f; o->y = 10.0f;
+    o->size_x = o->size_y = 1.0f; o->type_28 = 2.0f;
+    return 1;
+}
+static uint8_t site_terrain(void *c, int32_t x, int32_t y) { (void)c; return x == 15 && y == 15; }
+static uint8_t site_tile5(void *c, int32_t x, int32_t y) { (void)c; (void)y; return x == 12 ? 0x40 : 0; }
+
+static void site_tests(void) {
+    /* 0x004c1ef0 the site grid for mode 3 (a 20 x 20 map). */
+    static AoeAiInfoRor info;
+    static AoeValueGridRor g;
+    AoeAiInfoOpsRor ops;
+    int32_t ids[1] = {900};
+    const int32_t lo[2] = {0, 0}, hi[2] = {19, 19};
+    memset(&ops, 0, sizeof ops);
+    ops.self = 1;
+    ops.object = site_object;
+    ops.terrain = site_terrain;
+    ops.tile_byte5 = site_tile5;
+    info.map_width = info.map_height = 20;
+    info.list_190.data = ids;
+    info.list_190.count = 1;
+    assert(aoe_value_grid_init_ror(&g, 254, 254, 0));
+    aoe_ai_info_prepare_sites_ror(&info, &g, 3, 12, lo, hi, &ops);
+    /* Edge tiles lowered by 10; the dropsite's footprint blocked. */
+    assert(aoe_value_grid_get_ror(&g, 0, 0) == 10 && aoe_value_grid_get_ror(&g, 10, 3) == 10);
+    assert(aoe_value_grid_get_ror(&g, 10, 6) == 20);
+    assert(aoe_value_grid_get_ror(&g, 8, 8) == 255 && aoe_value_grid_get_ror(&g, 11, 11) == 255);
+    /* Grown by +0x28 halved (1): lowered by 10. */
+    assert(aoe_value_grid_get_ror(&g, 7, 7) == 10 && aoe_value_grid_get_ror(&g, 10, 12) == 10);
+    /* Elevation 2 raises column 12 by 10; water blocks with the cell two
+       up and left lowered. */
+    assert(aoe_value_grid_get_ror(&g, 12, 10) == 20 && aoe_value_grid_get_ror(&g, 12, 6) == 30);
+    assert(aoe_value_grid_get_ror(&g, 15, 15) == 255 && aoe_value_grid_get_ror(&g, 13, 13) == 10);
+    aoe_value_grid_free_ror(&g);
+}
+
 int main(void) {
     static AoeAiInfoRor info;
     AoeAiInfoOpsRor ops;
@@ -605,6 +647,7 @@ int main(void) {
     AoeAiInfoObjectRor *e;
     int32_t t[2], a[2], b[2], first, second, i;
 
+    site_tests();
     memset(&ops, 0, sizeof ops);
     ops.self = 1;
     ops.object = object;

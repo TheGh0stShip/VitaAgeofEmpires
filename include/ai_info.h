@@ -6,6 +6,8 @@
 #include "ai_strategy.h" /* AoeAiIntListRor */
 #include "ai_unit_group.h"
 
+struct AoeValueGridRor;
+
 /* Patched Rise of Rome 1.0a computer-player information AI (vtable
    0x00548b74; the computer player holds it at +0xcec): the members in
    0x004bc230..0x004c6880 that keep its object memory, explored grid,
@@ -29,6 +31,7 @@ typedef struct {
     int16_t max_hp;
     float type_28;
     int16_t field_4c;
+    float size_x, size_y;  /* the type's +0x30 / +0x34 (half sizes) */
 } AoeAiWorldObjectRor;
 
 /* One remembered object (0x24 bytes at +0x114): the ID (-1 free), type
@@ -193,6 +196,10 @@ typedef struct {
        the count. */
     int32_t (*tile_objects)(void *context, int32_t x, int32_t y,
                             int32_t *ids, int32_t max);
+    /* The map's terrain at a tile (0x00447de0, low byte) and the
+       tactical AI's pass over the site grid (+0x1146c, 0x004e0d80). */
+    uint8_t (*terrain)(void *context, int32_t x, int32_t y);
+    void (*tactical_sites)(void *context, struct AoeValueGridRor *grid);
 } AoeAiInfoOpsRor;
 
 /* 0x004bc690: 1 when the object exists and its zone has no flag;
@@ -538,5 +545,40 @@ int32_t aoe_ai_info_stat_share_ror(const AoeAiInfoRor *info);
    keep the first; -1 when none). */
 void aoe_ai_info_top_stats_ror(const AoeAiInfoRor *info, int32_t *first,
                                int32_t *second);
+
+/* 0x004c1ef0(mode, type, centre, lo, hi): the site grid (the 254 x 254
+   global 0x007c04a0) prepared for a building of `type` with placement
+   mode `mode` (site priority, 0..9):
+   - filled with 20, cap 255 (two build-list counts are taken and unused);
+   - modes 0, 3, 4: map tiles within 5 of the map's edge lowered by 10;
+   - modes 1, 2, 9: each known target (not gone) blocked: its centre tile
+     (modes 1, 2) or its box (x - sx - 1 .. x + sy + 1, y - sy - 1 .. y +
+     sy + 1; the x bound uses the y size, as the original does) set to
+     255; mode 1 then, for class 7, lowers the box grown by 5 by 0x80, and
+     for the class matching the resource wanted (0x004c5ec0: none -1, 3
+     class 0x20, 2 class 8, 1 class 0xf, 0 any other class) raises it
+     grown by 1, 4 and 9 by 8, 4 and 2; mode 2 lowers a class 7 box grown
+     by 3 by 0x80;
+   - modes 0..6 and 8: each dropsite (+0x190 list) blocked by its footprint
+     (by its type's half size 2.5, 1.5 (2.5 for type 0x46), 1.0 or 0.5 and
+     its site priority; other sizes are logged and skipped), then: modes
+     0 and 3 lower (mode 0 with priority 3: raise) a box grown by its
+     +0x28 (halved in mode 3) by 10; modes 1 and 2 lower one grown by +0x28
+     by 10; mode 5 lowers one grown by twice +0x28 by 20; mode 8 raises
+     boxes grown by +0x28, half and a third of it by 20 each. Priority
+     comparisons against 0x6d, 0x44 and 0x67 never match (priorities run
+     1..9) and are kept;
+   - modes 0, 3, 4: over lo..hi, water (terrain 1) tiles are set to 255
+     with the single cell at (x - 2, y - 2) lowered by 10, and every tile
+     raised by 5 x its elevation (tile byte 5 >> 5);
+   - modes 0, 3..6: our areas (+0x200, player byte +0xa) raise their box
+     grown by 4 by 16;
+   - mode 0: the tactical AI's pass;
+   - the open-neighbour counts (threshold 255, off-edge 1, off-corner
+     unless mode 4, diagonals) over the map;
+   - other modes: marks for `type` in state 2 set to 255. */
+void aoe_ai_info_prepare_sites_ror(AoeAiInfoRor *info, struct AoeValueGridRor *grid,
+                                   int32_t mode, int32_t type, const int32_t lo[2],
+                                   const int32_t hi[2], const AoeAiInfoOpsRor *ops);
 
 #endif

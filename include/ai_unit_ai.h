@@ -19,13 +19,17 @@ enum {
     AOE_AI_UNIT_AI_CLASS_2,      /* 0x004e56f0, vtable 0x005492c4 */
     AOE_AI_UNIT_AI_CLASS_14,     /* 0x004e5b40, vtable 0x005493a4 */
     AOE_AI_UNIT_AI_CLASS_15,     /* 0x004e5dc0, vtable 0x00549484 */
+    AOE_AI_UNIT_AI_KIND_5564,    /* 0x004e60f0, vtable 0x00549564 */
+    AOE_AI_UNIT_AI_KIND_5644,    /* 0x004e6900, vtable 0x00549644 */
+    AOE_AI_UNIT_AI_KIND_5724,    /* 0x004e6d60, vtable 0x00549724 */
+    AOE_AI_UNIT_AI_KIND_5804,    /* 0x004e6f40, vtable 0x00549804 */
     AOE_AI_UNIT_AI_KINDS
 };
 
 typedef struct {
     int kind;
     int32_t timer;            /* +0x100 */
-    int32_t classes[17];      /* +0x124 (allocated), the target classes */
+    int32_t classes[24];      /* +0x124 (allocated), the target classes */
     int32_t class_count;      /* +0x128 */
 } AoeAiUnitAiRor;
 
@@ -69,7 +73,11 @@ typedef struct {
 } AoeAiUnitAiOpsRor;
 
 /* The constructors: the base, then the target-class table (and, for
-   class 9 and type 0x7e, a 4000 / 6000 ms timer that is restarted). */
+   class 9 and type 0x7e, a 4000 / 6000 ms timer that is restarted).
+   0x004e60f0, 0x004e6d60 and 0x004e6f40 take the 21 classes 0, 3, 4,
+   0x1a, 0x18, 6, 0x23, 0x19, 0x11, 0xc, 0x17, 0x24, 0x1c, 0x12, 0xd,
+   0x1b, 0x16, 0x14, 2, 0x15, 0x27 (the first with a 1500 ms timer);
+   0x004e6900 the 19 without 3 and 0x1b and a 5000 ms timer. */
 void aoe_ai_unit_ai_init_ror(AoeAiUnitAiRor *ai, int kind,
                              const AoeAiUnitAiOpsRor *ops);
 

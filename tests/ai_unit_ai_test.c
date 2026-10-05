@@ -67,6 +67,16 @@ int main(void) {
     assert(ai.class_count == 0 && ai.timer == 0);
     aoe_ai_unit_ai_init_ror(&ai, AOE_AI_UNIT_AI_CLASS_15, &ops);
     assert(ai.class_count == 8 && ai.classes[7] == 0x21);
+    aoe_ai_unit_ai_init_ror(&ai, AOE_AI_UNIT_AI_KIND_5564, &ops);
+    assert(ai.class_count == 21 && ai.classes[1] == 3 && ai.classes[20] == 0x27 &&
+           ai.timer == 1500 && restarted == 1500);
+    aoe_ai_unit_ai_init_ror(&ai, AOE_AI_UNIT_AI_KIND_5644, &ops);
+    assert(ai.class_count == 19 && ai.classes[1] == 4 && ai.classes[14] == 0x16 &&
+           ai.timer == 5000);
+    aoe_ai_unit_ai_init_ror(&ai, AOE_AI_UNIT_AI_KIND_5724, &ops);
+    assert(ai.class_count == 21 && ai.timer == 0);
+    aoe_ai_unit_ai_init_ror(&ai, AOE_AI_UNIT_AI_KIND_5804, &ops);
+    assert(ai.class_count == 21 && ai.classes[15] == 0x1b);
     aoe_ai_unit_ai_init_ror(&ai, AOE_AI_UNIT_AI_PRIEST, &ops);
     assert(ai.class_count == 17 && ai.classes[0] == 3 && ai.classes[1] == 0);
     aoe_ai_unit_ai_init_ror(&ai, AOE_AI_UNIT_AI_CLASS_4, &ops);

@@ -17,6 +17,11 @@ static const int32_t table_priest[] = {3, 0, 4, 0x1a, 0x18, 6, 0x19, 0x11, 10,
 static const int32_t table_class2[] = {3, 0x16, 0x14, 2, 0x15};
 static const int32_t table_class15[] = {3, 0x16, 0x14, 2, 0x15, 5, 0x1f, 0x21};
 
+static const int32_t table_21[21] = {0, 3, 4, 0x1a, 0x18, 6, 0x23, 0x19, 0x11, 0xc, 0x17,
+                                     0x24, 0x1c, 0x12, 0xd, 0x1b, 0x16, 0x14, 2, 0x15, 0x27};
+static const int32_t table_19[19] = {0, 4, 0x1a, 0x18, 6, 0x23, 0x19, 0x11, 0xc, 0x17,
+                                     0x24, 0x1c, 0x12, 0xd, 0x16, 0x14, 2, 0x15, 0x27};
+
 void aoe_ai_unit_ai_init_ror(AoeAiUnitAiRor *ai, int kind,
                              const AoeAiUnitAiOpsRor *ops) {
     const int32_t *table = NULL;
@@ -58,6 +63,21 @@ void aoe_ai_unit_ai_init_ror(AoeAiUnitAiRor *ai, int kind,
     case AOE_AI_UNIT_AI_CLASS_15:
         table = table_class15;
         n = 8;
+        break;
+    case AOE_AI_UNIT_AI_KIND_5564:
+        table = table_21;
+        n = 21;
+        timer = 1500;
+        break;
+    case AOE_AI_UNIT_AI_KIND_5644:
+        table = table_19;
+        n = 19;
+        timer = 5000;
+        break;
+    case AOE_AI_UNIT_AI_KIND_5724:
+    case AOE_AI_UNIT_AI_KIND_5804:
+        table = table_21;
+        n = 21;
         break;
     default:
         return;

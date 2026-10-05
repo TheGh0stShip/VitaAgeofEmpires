@@ -589,7 +589,8 @@ add_library(aoe_ui_panel STATIC src/ui_panel.c src/ui_button.c
             src/ui_input.c
             src/ui_dropdown.c
             src/ui_ez.c
-            src/ui_dialog.c)
+            src/ui_dialog.c
+            src/ui_edit.c)
 target_include_directories(aoe_ui_panel PUBLIC include)
 target_compile_options(aoe_ui_panel PRIVATE -Wall -Wextra)
 
@@ -1322,6 +1323,10 @@ else()
   target_link_libraries(ui_list_test PRIVATE aoe_ui_panel)
   target_compile_options(ui_list_test PRIVATE -UNDEBUG)
   add_test(NAME original_ui_list COMMAND ui_list_test)
+  add_executable(ui_edit_test tests/ui_edit_test.c)
+  target_link_libraries(ui_edit_test PRIVATE aoe_ui_panel)
+  target_compile_options(ui_edit_test PRIVATE -UNDEBUG)
+  add_test(NAME original_ui_edit COMMAND ui_edit_test)
   add_executable(ui_dialog_test tests/ui_dialog_test.c)
   target_link_libraries(ui_dialog_test PRIVATE aoe_ui_panel)
   target_compile_options(ui_dialog_test PRIVATE -UNDEBUG)

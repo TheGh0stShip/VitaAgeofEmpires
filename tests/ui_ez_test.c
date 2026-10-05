@@ -206,6 +206,10 @@ static const char *INFO =
     "text 255 0 0   shadow 0 1 2   focus 0 255 0   fshadow 3 4 5 "
     "hot 0 0 255   hshadow 6 7 8";
 
+static void files_fn(void *c, const char *pat, void (*found)(void *, const char *), void *u) {
+    (void)c; assert(!strcmp(pat, "d/*.bmp")); found(u, "sky.bmp"); found(u, "sea.bmp");
+}
+static int type_fn(void *c, int32_t i) { (void)c; return i == 4; }
 static int last_list, last_radio, shows, hides, redraws_ed, last_action, last_arg;
 static void t_list(void *c, int l, int32_t i) { (void)c; last_list = l * 100 + i; }
 static void t_radio(void *c, int g, int32_t i) { (void)c; last_radio = g * 100 + i; }
@@ -699,6 +703,37 @@ int main(void) {
         /* Without edit ops here the edit cannot be made: 0, nothing hidden. */
         if (aoe_scenario_editor_edit_ror(&ed, &ez.panel, &e, "x", 10, 0, 0, 0))
             assert(!e->panel.active);
+        {
+            AoeUiButtonRor *c = NULL, *r = NULL;
+            assert(aoe_scenario_editor_check_ror(&ed, &ez.panel, &c) && !c->panel.active);
+            assert(c->bevel_type == 3);
+            assert(aoe_scenario_editor_radio_ror(&ed, &ez.panel, &r) && !r->panel.active);
+        }
+        {
+            AoeUiDropdownRor *dd = NULL;
+            if (aoe_ui_ez_create_dropdown_ror(&ez, &ez.panel, &dd, 100, 100, 0, 0, 100, 20, 11) && dd &&
+                dd->list) {
+                AoeUiButtonRor *bs[12];
+                AoeUiPanelRor *others[3];
+                int16_t cur = 3;
+                int k;
+                aoe_scenario_editor_ages_ror(dd, NULL);
+                assert(aoe_ui_dropdown_selected_id_ror(dd) == 0);
+                assert(aoe_scenario_editor_file_choice_ror(dd, "d/", ".bmp", 1, 0, files_fn, NULL) == 2);
+                assert(!strcmp(aoe_ui_text_line_ror(&dd->list->text, 1), "sky"));
+                for (k = 0; k < 12; ++k) {
+                    bs[k] = NULL;
+                    assert(aoe_scenario_editor_check_ror(&ed, &ez.panel, &bs[k]));
+                }
+                for (k = 0; k < 3; ++k) others[k] = &bs[k]->panel;
+                aoe_scenario_editor_player_page_ror(bs, others, dd, &cur, 1, type_fn, NULL);
+                assert(bs[3]->panel.active && aoe_ui_button_state_ror(bs[3]) == 1);
+                assert(aoe_ui_button_state_ror(bs[4]) == 2);
+                aoe_ui_dropdown_select_ror(dd, 1);
+                aoe_scenario_editor_player_page_ror(bs, others, dd, &cur, 0, type_fn, NULL);
+                assert(cur == 2 && !bs[0]->panel.active);
+            }
+        }
         (void)aoe_scenario_editor_string_ror(&ed, buf, 7, sizeof buf);
     }
     {

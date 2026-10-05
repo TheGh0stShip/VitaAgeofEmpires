@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 
+#include "ui_dropdown.h"
 #include "ui_ez.h"
 
 /* Patched Rise of Rome 1.0a scenario editor screen (vtable 0x00547360,
@@ -116,5 +117,32 @@ int aoe_scenario_editor_make_list_ror(AoeScenarioEditorUiRor *e, AoeUiPanelRor *
                                       int terrain);
 int aoe_scenario_editor_button_id_ror(AoeScenarioEditorUiRor *e, AoeUiPanelRor *parent,
                                       AoeUiButtonRor **out, int32_t text_id);
+
+/* 0x0049a4d0 / 0x0049a560: a hidden check box / radio button at the
+   front (sound 1) with the screen's bevel when on. */
+int aoe_scenario_editor_check_ror(AoeScenarioEditorUiRor *e, AoeUiPanelRor *parent,
+                                  AoeUiButtonRor **out);
+int aoe_scenario_editor_radio_ror(AoeScenarioEditorUiRor *e, AoeUiPanelRor *parent,
+                                  AoeUiButtonRor **out);
+/* 0x0049a2c0: the age choice (strings 4201..4205 as 0..4, the first
+   chosen) and the +0x5bc panel hidden. */
+void aoe_scenario_editor_ages_ror(AoeUiDropdownRor *ages, AoeUiPanelRor *panel_5bc);
+/* 0x0049a1a0: a drop-down of the files "<dir>*<ext>" (the extension
+   cut), after "None" (10101) and / or string 10107 when asked; the count
+   of files. */
+int32_t aoe_scenario_editor_file_choice_ror(
+    AoeUiDropdownRor *d, const char *dir, const char *ext, int none, int other,
+    void (*list_files)(void *context, const char *pattern,
+                       void (*found)(void *user, const char *name), void *user),
+    void *context);
+/* 0x0049a0e0: the player page shown or hidden: its twelve buttons (each
+   showing 2 when that scenario player's type (0x005075f0) is set, plus
+   1 for the current
+   one), the three other controls, and the player choice following the
+   current player (+0x4b8, 1-based) or setting it. */
+void aoe_scenario_editor_player_page_ror(AoeUiButtonRor *buttons[12], AoeUiPanelRor *others[3],
+                                         AoeUiDropdownRor *players, int16_t *current,
+                                         int32_t show, int (*player_on)(void *context, int32_t i),
+                                         void *context);
 
 #endif

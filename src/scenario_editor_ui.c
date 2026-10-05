@@ -1,6 +1,7 @@
 #include "scenario_editor_ui.h"
 
 #include <stdio.h>
+#include <string.h>
 
 static void front_hidden(AoeUiPanelRor *p) {
     aoe_ui_panel_set_z_ror(p, 1, 0);
@@ -169,4 +170,84 @@ int aoe_scenario_editor_button_id_ror(AoeScenarioEditorUiRor *e, AoeUiPanelRor *
     char text[0x78];
     aoe_scenario_editor_string_ror(e, text, text_id, sizeof text);
     return aoe_scenario_editor_button_ror(e, parent, out, text, NULL, NULL, NULL);
+}
+
+static int bevelled(AoeScenarioEditorUiRor *e, AoeUiButtonRor *b) {
+    front_hidden(&b->panel);
+    if (e->bevel_on) aoe_ui_button_set_bevel_ror(b, 3, e->bevel);
+    return 1;
+}
+
+int aoe_scenario_editor_check_ror(AoeScenarioEditorUiRor *e, AoeUiPanelRor *parent,
+                                  AoeUiButtonRor **out) {
+    if (!aoe_ui_ez_create_check_ror(e->ez, parent, out, 0, 0, 0, 0, 1, 0) || !*out) return 0;
+    return bevelled(e, *out);
+}
+
+int aoe_scenario_editor_radio_ror(AoeScenarioEditorUiRor *e, AoeUiPanelRor *parent,
+                                  AoeUiButtonRor **out) {
+    if (!aoe_ui_ez_create_radio_ror(e->ez, parent, out, 0, 0, 0, 0, 1, 0) || !*out) return 0;
+    return bevelled(e, *out);
+}
+
+void aoe_scenario_editor_ages_ror(AoeUiDropdownRor *ages, AoeUiPanelRor *panel_5bc) {
+    int32_t i;
+    aoe_ui_dropdown_clear_ror(ages);
+    for (i = 0; i < 5; ++i) aoe_ui_dropdown_append_id_ror(ages, 0x1069 + i, i);
+    aoe_ui_dropdown_select_ror(ages, 0);
+    if (panel_5bc) panel_5bc->vt->set_active(panel_5bc, 0);
+}
+
+typedef struct {
+    AoeUiDropdownRor *d;
+    size_t cut;
+    int32_t count;
+} FileChoice;
+
+static void add_file(void *user, const char *name) {
+    FileChoice *f = user;
+    char base[260];
+    size_t n = strlen(name);
+    n = n >= f->cut ? n - f->cut : 0;
+    if (n >= sizeof base) n = sizeof base - 1;
+    memcpy(base, name, n);
+    base[n] = '\0';
+    aoe_ui_dropdown_append_ror(f->d, base, 0);
+    ++f->count;
+}
+
+int32_t aoe_scenario_editor_file_choice_ror(
+    AoeUiDropdownRor *d, const char *dir, const char *ext, int none, int other,
+    void (*list_files)(void *context, const char *pattern,
+                       void (*found)(void *user, const char *name), void *user),
+    void *context) {
+    FileChoice f;
+    char pattern[0x104];
+    aoe_ui_dropdown_clear_ror(d);
+    if (none) aoe_ui_dropdown_append_id_ror(d, 0x2775, 0);
+    if (other) aoe_ui_dropdown_append_id_ror(d, 0x277b, 0);
+    f.d = d;
+    f.cut = strlen(ext);
+    f.count = 0;
+    snprintf(pattern, sizeof pattern, "%s*%s", dir, ext);
+    if (list_files) list_files(context, pattern, add_file, &f);
+    return f.count;
+}
+
+void aoe_scenario_editor_player_page_ror(AoeUiButtonRor *buttons[12], AoeUiPanelRor *others[3],
+                                         AoeUiDropdownRor *players, int16_t *current,
+                                         int32_t show, int (*player_on)(void *context, int32_t i),
+                                         void *context) {
+    int32_t i;
+    for (i = 0; i < 12; ++i) {
+        buttons[i]->panel.vt->set_active(&buttons[i]->panel, show);
+        if (show)
+            aoe_ui_button_set_state_ror(
+                buttons[i], (int16_t)((player_on(context, i) ? 2 : 0) + (*current == i)));
+    }
+    for (i = 0; i < 3; ++i) others[i]->vt->set_active(others[i], show);
+    if (show)
+        aoe_ui_dropdown_select_ror(players, (int16_t)(*current - 1));
+    else
+        *current = (int16_t)(aoe_ui_dropdown_selection_ror(players) + 1);
 }

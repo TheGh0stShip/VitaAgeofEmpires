@@ -9,6 +9,7 @@
 #include "value_grid.h"
 #include "le_bytes.h"
 #include "aoe_stream.h"
+#include "unit_class.h"
 
 static int get_object(const AoeAiInfoOpsRor *ops, int32_t id,
                       AoeAiWorldObjectRor *out) {
@@ -2542,4 +2543,99 @@ found:
     out[0] = (float)tx;
     out[1] = (float)ty;
     return 1;
+}
+
+static int gatherers(const AoeAiInfoOpsRor *ops, int32_t id) {
+    return ops->gatherers ? ops->gatherers(ops->context, id) : 0;
+}
+
+static int pick_class_ok(int boat, int16_t cls) {
+    int water = cls == 5 || cls == 0x1f || cls == 0x21;
+    return boat == 1 ? water : !water;
+}
+
+int32_t aoe_ai_info_pick_target_ror(AoeAiInfoRor *info, int32_t k,
+                                    int32_t id, float pos[2], int32_t *drop,
+                                    const int32_t *exclude,
+                                    int32_t exclude_count,
+                                    const AoeAiInfoOpsRor *ops) {
+    AoeAiWorldObjectRor unit, obj;
+    AoeAiInfoTargetRor *best = NULL;
+    int32_t best_score = -1, ux, uy, i, j, score;
+    int refresh = 0, boat;
+    uint8_t own_zone;
+    *drop = -1;
+    if (!info || !ops || k < 0 || k > 3 || !ops->object ||
+        !ops->object(ops->context, id, &unit))
+        return -1;
+    own_zone = ops->zone ? ops->zone(ops->context, id) : 0;
+    ux = aoe_ftol32(unit.x);
+    uy = aoe_ftol32(unit.y);
+    boat = aoe_class_is_boat_ror(unit.type_class);
+    for (i = 0; i < info->target_count[k]; ++i) {
+        AoeAiInfoTargetRor *t = &info->targets[k][i];
+        int32_t dx, dy;
+        if (t->gone == 1) continue;
+        if (t->wait) {
+            if (t->gone == 0) --t->wait;
+            continue;
+        }
+        for (j = 0; j < exclude_count; ++j)
+            if (exclude[j] == t->id) break;
+        if (j < exclude_count) continue;
+        if (!ops->object(ops->context, t->id, &obj)) {
+            t->gone = 1;
+            if (info->current_target[k] == t->id) refresh = 1;
+            continue;
+        }
+        if (!pick_class_ok(boat, obj.type_class)) continue;
+        dx = ux - t->x;
+        dy = uy - t->y;
+        score = dx * dx + t->field_8 * 10 + dy * dy;
+        if (obj.type_id == 0x3b) {
+            if (t->field_e > 20) continue;
+            score += t->picks / 150;
+            if (gatherers(ops, obj.id) > 2) score += 200;
+        } else {
+            score += t->picks / 50;
+        }
+        if (best && score >= best_score) continue;
+        if ((obj.type_class == 9 || obj.type_class == 10) && obj.state > 2 &&
+            obj.field_44 > 25.0f)
+            score += 25;
+        if (aoe_ai_info_enemy_center_near_ror(info, obj.x, obj.y, 0x19, ops) == 1)
+            continue;
+        if (aoe_ai_info_area_near_ror(info, obj.x, obj.y, 0xf,
+                                      (uint32_t)ops->self) == 1)
+            score += 500;
+        if (obj.type_id == 0x32) {
+            if (obj.owner != ops->self || obj.state != 2 ||
+                gatherers(ops, obj.id) > 0)
+                continue;
+            for (j = 0; j < info->list_f0.count && j < info->list_f0.capacity; ++j)
+                if (info->list_f0.data[j] == obj.id) break;
+            if (j < info->list_f0.count && j < info->list_f0.capacity) continue;
+        }
+        if (k == 1 ? gatherers(ops, obj.id) >= 1
+                   : (k == 2 || k == 3) && gatherers(ops, obj.id) >= 4)
+            continue;
+        if (obj.type_id == 0x30 && obj.state == 2 && ops->sn &&
+            (ops->tactical_d68 ? ops->tactical_d68(ops->context, 0) : 0) <
+                ops->sn(ops->context, 0xcc))
+            continue;
+        if (!ops->tile_zone ||
+            ops->tile_zone(ops->context, id, t->x, t->y) != own_zone)
+            continue;
+        if (!best || score < best_score) {
+            best = t;
+            best_score = score;
+            pos[0] = obj.x;
+            pos[1] = obj.y;
+        }
+    }
+    if (refresh) aoe_ai_info_refresh_targets_ror(info, k, ops);
+    if (!best) return -1;
+    ++best->picks;
+    *drop = best->field_10;
+    return best->id;
 }

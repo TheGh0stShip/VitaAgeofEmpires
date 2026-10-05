@@ -238,6 +238,10 @@ typedef struct {
        0x0045ebe0): the (x, y) pairs and their count, and the number added
        since the last call (which is then reset). */
     int32_t (*new_tiles)(void *context, const int32_t **xy, int32_t *count);
+    /* The tactical AI: how many gatherers work target `id` (0x004e33f0)
+       and its +0xd68 slot `i` (0x004e2f90). */
+    int32_t (*gatherers)(void *context, int32_t id);
+    int32_t (*tactical_d68)(void *context, int32_t i);
 } AoeAiInfoOpsRor;
 
 /* 0x004ba1c0: the constructor's state (the base part, 0x0040b470, is the
@@ -456,6 +460,28 @@ void aoe_ai_info_refresh_targets_ror(AoeAiInfoRor *info, int32_t list,
                                      const AoeAiInfoOpsRor *ops);
 void aoe_ai_info_refresh_all_targets_ror(AoeAiInfoRor *info,
                                          const AoeAiInfoOpsRor *ops);
+/* 0x004bc7b0: the target of list `k` for our unit `id` (-1 without one,
+   or when the unit is gone); `drop` gets its +0x10 (-1 first) and `pos`
+   the target object's position. Per target, in order: gone (1) ones are
+   skipped; a waiting one (+0xc) counts its wait down (while not gone) and
+   is skipped; one in `exclude` is skipped; one whose object is missing is
+   marked gone (the list is refreshed afterwards when it was the current
+   target). A boat only takes classes 5, 0x1f and 0x21, other units only
+   other classes. The score is dx^2 + dy^2 (from our truncated position
+   to its tile) + 10 x +8, plus picks / 150 for type 0x3b (skipped when
+   +0xe is above 20; +200 with more than 2 gatherers) or picks / 50 for
+   others. A score that would win then gains 25 for a class 9 or 10 object
+   in state above 2 with +0x44 above 25.0, is skipped near an enemy centre
+   (0x004c4090, 25 tiles), gains 500 near our kind-0xf area (0x004c3fb0);
+   type 0x32 must be ours, state 2, ungathered and not in the +0xf0
+   list; list 1 needs no gatherers, lists 2 and 3 fewer than 4; type 0x30
+   in state 2 needs tactical slot 0 at least number 204; and the target
+   tile must be in our unit's zone. The winner's picks (+6) rise. */
+int32_t aoe_ai_info_pick_target_ror(AoeAiInfoRor *info, int32_t k,
+                                    int32_t id, float pos[2], int32_t *drop,
+                                    const int32_t *exclude,
+                                    int32_t exclude_count,
+                                    const AoeAiInfoOpsRor *ops);
 /* 0x004c5750: the threat at tile (x, y) on unit `id`: for each live
    remembered object seen as an enemy whose distance to the point is at
    most its type's +0x28, value_104(id, it) / value_100(it) when both are

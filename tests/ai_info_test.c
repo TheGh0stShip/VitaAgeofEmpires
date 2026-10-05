@@ -886,6 +886,78 @@ static void explore_step_tests(void) {
     assert(aoe_ai_info_explore_step_ror(&info, 8, 2.0f, 2.0f, out, &ops) == 0);
 }
 
+static int pick_object(void *c, int32_t id, AoeAiWorldObjectRor *o) {
+    (void)c;
+    memset(o, 0, sizeof *o);
+    o->id = id;
+    o->state = 2;
+    switch (id) {
+    case 7: o->x = o->y = 5.5f; return 1;
+    case 104: o->x = o->y = 6.5f; o->type_id = 0x10; return 1;
+    case 105: o->x = o->y = 5.0f; o->type_class = 5; return 1;
+    case 106: o->x = o->y = 9.0f; return 1;
+    case 101: case 102: return 1;
+    default: return 0;
+    }
+}
+static int32_t pick_gatherers(void *c, int32_t id) { (void)c; return id == 104 ? 1 : 0; }
+static uint8_t pick_zone(void *c, int32_t id) { (void)c; (void)id; return 1; }
+static uint8_t pick_tile_zone(void *c, int32_t id, int32_t x, int32_t y) {
+    (void)c; (void)id; (void)y; return (uint8_t)(x == 9 ? 2 : 1);
+}
+
+static void pick_target_tests(void) {
+    static AoeAiInfoRor info;
+    static AoeAiInfoTargetRor list[7];
+    static const struct { int32_t id; uint8_t x, y, wait, gone; } in[7] = {
+        {100, 1, 1, 0, 1}, {101, 5, 5, 2, 0}, {102, 5, 5, 0, 0},
+        {103, 5, 5, 0, 0}, {104, 6, 6, 0, 0}, {105, 5, 5, 0, 0},
+        {106, 9, 9, 0, 0}};
+    AoeAiInfoOpsRor ops;
+    float pos[2] = {0, 0};
+    int32_t drop, exclude[1] = {102}, i;
+    memset(&ops, 0, sizeof ops);
+    ops.object = pick_object;
+    ops.world_object = pick_object;
+    ops.zone = pick_zone;
+    ops.tile_zone = pick_tile_zone;
+    ops.gatherers = pick_gatherers;
+    ops.self = 1;
+    for (i = 0; i < 7; ++i) {
+        list[i].id = in[i].id;
+        list[i].x = in[i].x;
+        list[i].y = in[i].y;
+        list[i].wait = in[i].wait;
+        list[i].gone = in[i].gone;
+    }
+    list[4].field_10 = 55;
+    info.targets[0] = list;
+    info.target_count[0] = 7;
+    info.current_target[0] = 103;
+    info.map_width = info.map_height = 16;
+    /* 100 gone, 101 waits, 102 excluded, 103 missing (gone, refreshed),
+       104 scores 2 (+ 0 picks), 105 is water, 106 is in another zone. */
+    assert(aoe_ai_info_pick_target_ror(&info, 0, 7, pos, &drop, exclude, 1, &ops) == 104);
+    /* The refresh (no dropsites known) rewrote 104's +0x10 before it is
+       read, as in the original. */
+    assert(drop == -1 && pos[0] == 6.5f && list[4].picks == 1 &&
+           list[1].wait == 1 && list[3].gone == 1 && info.current_target[0] == -1);
+    list[4].field_10 = 55;
+    assert(aoe_ai_info_pick_target_ror(&info, 0, 7, pos, &drop, exclude, 1, &ops) == 104 &&
+           drop == 55 && list[4].picks == 2 && list[1].wait == 0);
+    /* List 1 wants ungathered targets: 104 has a gatherer; 101 (no longer
+       waiting, and not excluded now) wins. */
+    info.targets[1] = list;
+    info.target_count[1] = 7;
+    list[1].field_10 = 9;
+    assert(aoe_ai_info_pick_target_ror(&info, 1, 7, pos, &drop, NULL, 0, &ops) == 101 &&
+           drop == 9);
+    list[1].wait = list[2].gone = 1;
+    assert(aoe_ai_info_pick_target_ror(&info, 1, 7, pos, &drop, NULL, 0, &ops) == -1 &&
+           drop == -1);
+    assert(aoe_ai_info_pick_target_ror(&info, 0, 8, pos, &drop, NULL, 0, &ops) == -1);
+}
+
 static void lifecycle_tests(void) {
     static AoeAiInfoRor a, b;
     static uint8_t buf[200000];
@@ -1009,6 +1081,7 @@ int main(void) {
     site_tests();
     lifecycle_tests();
     explore_step_tests();
+    pick_target_tests();
     memset(&ops, 0, sizeof ops);
     ops.self = 1;
     ops.object = object;

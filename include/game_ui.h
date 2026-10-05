@@ -7,6 +7,7 @@
 #include "game_settings.h"
 #include "ui_dialog.h"
 #include "ui_ez.h"
+#include "ui_picture.h"
 
 /* The game-side context shared by the Patched Rise of Rome 1.0a screens
    and in-game dialogs: the panel system (0x005830e8), the game object
@@ -44,6 +45,10 @@ typedef struct {
     void (*play_sound)(void *context, int32_t index);
     void (*show_chat)(void *context, const char *text);
     void (*send_chat)(void *context, const char *text);
+    /* The product ID from the registry ("PID"), NULL when absent; the
+       credits screen. */
+    const char *(*product_id)(void *context);
+    void (*open_credits)(void *context);
     /* The viewed player's game state byte (+0x80: 0 playing). */
     uint8_t (*player_state)(void *context, void *player);
 } AoeGameUiOpsRor;
@@ -55,6 +60,7 @@ typedef struct {
     AoeGameSettingsRor *settings;
     const AoeGameBaseOps *game_ops;
     const AoeGameUiOpsRor *ops;
+    const AoeUiPictureOpsRor *picture_ops;
     int32_t quit_requested;          /* global 0x007c0338 */
 } AoeGameUiRor;
 
@@ -137,5 +143,33 @@ extern const AoeUiEzVtblRor aoe_quick_chat_dialog_vtable_ror;
 int aoe_quick_chat_dialog_init_ror(AoeQuickChatDialogRor *d,
                                    AoeGameUiRor *ui, AoeUiPanelRor *parent,
                                    int32_t comment);
+
+/* "About Dialog" (vtable 0x005435ac, 0x0042f7f0..0x0042ff80): 520 x 472
+   inside a bevelled frame: the title lines (strings 9241, 9255), the
+   version line (9242 with "a" appended), the copyright line (9243 with
+   the circle-p picture and 9244 beside it, or one line when 9252 has
+   text), lines 9245 and 9251, "Product ID:" and the registry's product
+   ID ("00000-000-0000000-00000" without one), the warning text (9247),
+   9254, and Credits / Close (Escape) buttons. Close resumes a paused
+   single-player game and goes back to the game screen when there is
+   one; Credits opens the credits screen. */
+typedef struct {
+    AoeUiDialogRor dialog;
+    AoeUiTextRor *title, *title2, *version;   /* +0x490, +0x494, +0x498 */
+    AoeUiTextRor *copyright, *copyright2;     /* +0x49c, +0x4a0 */
+    AoeUiTextRor *developer, *engine;         /* +0x4a4, +0x4a8 */
+    AoeUiTextRor *pid_label, *pid;            /* +0x4ac, +0x4b0 */
+    AoeUiTextRor *warning, *frame, *notice;   /* +0x4b4, +0x4b8, +0x4bc */
+    AoeUiButtonRor *credits, *close;          /* +0x4c0, +0x4c4 */
+    AoeUiPictureRor *logo;                    /* +0x4c8 */
+    AoeGameUiRor *ui;
+} AoeAboutDialogRor;
+
+extern const AoeUiEzVtblRor aoe_about_dialog_vtable_ror;
+
+/* 0x0042f7f0 constructor (with its setup); 0x0042fe60 destructor
+   (deleting 0x0042fe40); +0xb8 0x0042ff80. */
+int aoe_about_dialog_init_ror(AoeAboutDialogRor *d, AoeGameUiRor *ui,
+                              AoeUiPanelRor *parent);
 
 #endif

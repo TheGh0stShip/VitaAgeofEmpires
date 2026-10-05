@@ -45,6 +45,9 @@ static void *ed_create(void *c, AoeUiAreaRor *a, int32_t x, int32_t y, int32_t w
 static void ed_destroy(void *c, void *w) { (void)c; (void)w; }
 static void ed_set(void *c, void *w, const char *t) { (void)c; (void)w; snprintf(edit_text, sizeof(edit_text), "%s", t); }
 static void ed_get(void *c, void *w, char *o, int32_t n) { (void)c; (void)w; snprintf(o, (size_t)n, "%s", edit_text); }
+static int credits;
+static const char *pid(void *c) { (void)c; return NULL; }
+static void open_credits(void *c) { (void)c; ++credits; }
 static uint8_t state;
 static uint8_t player_state(void *c, void *p) { (void)c; (void)p; return state; }
 
@@ -249,6 +252,30 @@ int main(void) {
         qp = &q->dialog.ez.panel;
         qp->vt->mouse_down(qp, 1, 0, 0, 0, 0);
         assert(!aoe_ui_system_find_ror(&sys, "Send Quick Message Dialog"));
+    }
+    /* About: the version line gets "a"; one copyright line when 9252 has
+       text; the default product ID; Close goes back to the game. */
+    {
+        AoeAboutDialogRor *a = calloc(1, sizeof(*a));
+        AoeUiPanelRor *ap;
+        ops.product_id = pid;
+        ops.open_credits = open_credits;
+        settings.flag_97d = 1;
+        assert(aoe_about_dialog_init_ror(a, &ui, &screen->panel));
+        ap = &a->dialog.ez.panel;
+        assert(ap->width == 520 && ap->height == 472);
+        assert(strcmp(a->version->lines->text, "S9242a") == 0);
+        assert(strcmp(a->copyright->lines->text, "S9243S9252 S9244") == 0 &&
+               !a->logo && !a->copyright2);
+        assert(strcmp(a->pid->lines->text, "00000-000-0000000-00000") == 0);
+        assert(a->close->hotkey == 0x1b && ap->current == &a->credits->panel);
+        ap->vt->action(ap, &a->close->panel, 1, 0, 0);
+        assert(!aoe_ui_system_find_ror(&sys, "About Dialog") && sys.screen == &screen->panel);
+        a = calloc(1, sizeof(*a));
+        aoe_about_dialog_init_ror(a, &ui, &screen->panel);
+        ap = &a->dialog.ez.panel;
+        ap->vt->action(ap, &a->credits->panel, 1, 0, 0);
+        assert(credits == 1 && !aoe_ui_system_find_ror(&sys, "About Dialog"));
     }
     aoe_ui_system_close_ror(&sys, "Game Screen");
     free(sys.panels);

@@ -568,7 +568,8 @@ target_compile_options(aoe_map_shore PRIVATE -Wall -Wextra)
 
 add_library(aoe_game_ui STATIC src/screens/menu_dialog.c
             src/screens/scenario_menu_dialog.c
-            src/screens/chat_dialogs.c)
+            src/screens/chat_dialogs.c
+            src/screens/about_dialog.c)
 target_include_directories(aoe_game_ui PUBLIC include)
 target_link_libraries(aoe_game_ui PUBLIC aoe_ui_panel aoe_game_base aoe_game_settings)
 target_compile_options(aoe_game_ui PRIVATE -Wall -Wextra)

@@ -28,7 +28,7 @@ mapping, `tools/revision_match.py`.
 
 ## Snapshot (2026-10-04 evening: computer-player AI merged)
 
-Counted with the mapped-citation fix described below; earlier snapshots
+Counted with the marked-citation rule described above; earlier snapshots
 (41.6% and before) overstate coverage because every RoR address was also
 looked up as a base-game address.
 

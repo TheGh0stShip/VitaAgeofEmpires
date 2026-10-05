@@ -1130,3 +1130,157 @@ void aoe_ai_info_area_influence_ror(const AoeAiInfoRor *info,
     }
     ops->influence_finish(ops->context, 1);
 }
+
+/* ---- Choosing targets ---- */
+
+static int seen_as(const AoeAiInfoObjectRor *e, uint32_t owner,
+                   const AoeAiInfoOpsRor *ops) {
+    if (owner == 0xffffffffu)
+        return ops->is_enemy && ops->is_enemy(ops->context, e->owner);
+    return e->owner == owner;
+}
+
+AoeAiInfoObjectRor *aoe_ai_info_best_9e_ror(AoeAiInfoRor *info,
+                                            uint32_t owner,
+                                            const AoeAiInfoOpsRor *ops) {
+    AoeAiInfoObjectRor *best = NULL;
+    int32_t i, best_score = -1, center;
+    if (!info || !ops) return NULL;
+    center = ops->first_of_type ? ops->first_of_type(ops->context, 0x6d) : -1;
+    for (i = 0; i < info->object_count; ++i) {
+        AoeAiInfoObjectRor *e = &info->objects[i];
+        AoeAiObjectViewRor o;
+        int32_t score;
+        if (e->type_id != 0x9e && e->type_id != 0xa3) continue;
+        if (!seen_as(e, owner, ops)) continue;
+        if (!get_object(ops, e->id, &o) || o.state >= 3) continue;
+        score = aoe_ai_info_count_near_ror(info, (int32_t)owner, e->x, e->y, 5, ops);
+        if (center != -1 && ops->distance)
+            score *= aoe_ftol32(ops->distance(ops->context, center, (float)e->x,
+                                              (float)e->y, (float)e->z));
+        if (!best || score < best_score) {
+            best = e;
+            best_score = score;
+        }
+    }
+    return best;
+}
+
+AoeAiInfoObjectRor *aoe_ai_info_best_9f_ror(AoeAiInfoRor *info,
+                                            uint32_t owner,
+                                            const AoeAiInfoOpsRor *ops) {
+    AoeAiInfoObjectRor *best = NULL;
+    int32_t i, best_score = -1, center;
+    if (!info || !ops || !ops->vision) return NULL;
+    center = ops->first_of_type ? ops->first_of_type(ops->context, 0x6d) : -1;
+    for (i = 0; i < info->object_count; ++i) {
+        AoeAiInfoObjectRor *e = &info->objects[i];
+        AoeAiObjectViewRor o;
+        int32_t score, x, y;
+        if (e->type_id != 0x9f || !seen_as(e, owner, ops)) continue;
+        if (!get_object(ops, e->id, &o) || o.state >= 3) continue;
+        x = aoe_ftol32(o.x);
+        y = aoe_ftol32(o.y);
+        if (!ops->vision(ops->context, x, y)) continue;
+        e->x = (uint8_t)aoe_ftol32(o.x);
+        e->y = (uint8_t)aoe_ftol32(o.y);
+        e->z = (uint8_t)aoe_ftol32(o.z);
+        score = aoe_ai_info_count_near_ror(info, (int32_t)owner, x, y, 5, ops);
+        if (center != -1 && ops->object_distance)
+            score *= aoe_ftol32(ops->object_distance(ops->context, center, o.id));
+        if (!best || score < best_score) {
+            best = e;
+            best_score = score;
+        }
+    }
+    return best;
+}
+
+int32_t aoe_ai_info_resource_need_ror(const AoeAiInfoRor *info, int32_t mode,
+                                      const AoeAiInfoOpsRor *ops) {
+    if (mode == 2) return 0;
+    if (ops && ops->build_has && !ops->build_has(ops->context, 0x67, 0) &&
+        info->best_distance[1] != -1)
+        return 1;
+    if (mode == 1 && ops && ops->sn) {
+        if (info->best_distance[1] != -1 &&
+            ops->sn(ops->context, 0xa4) < info->best_distance[1])
+            return 1;
+        if (info->best_distance[3] != -1 &&
+            ops->sn(ops->context, 0xa6) < info->best_distance[3])
+            return 3;
+        if (info->best_distance[0] != -1 && 15 < info->best_distance[0])
+            return 2;
+        if (info->best_distance[2] != -1 &&
+            ops->sn(ops->context, 0xa5) < info->best_distance[2])
+            return 2;
+    }
+    return -1;
+}
+
+/* The target is reachable from the town centre's zone (or there is no
+   centre or target). */
+static int same_zone_as_center(const AoeAiInfoRor *info, int32_t k,
+                               const AoeAiInfoOpsRor *ops) {
+    AoeAiObjectViewRor t;
+    int32_t center;
+    if (!ops->first_of_type || !ops->zone || !ops->tile_zone) return 1;
+    center = ops->first_of_type(ops->context, 0x6d);
+    if (center == -1 || !get_object(ops, info->current_target[k], &t)) return 1;
+    return ops->zone(ops->context, center) ==
+           ops->tile_zone(ops->context, center, aoe_ftol32(t.x), aoe_ftol32(t.y));
+}
+
+int aoe_ai_info_target_far_ror(const AoeAiInfoRor *info, int32_t k,
+                               const AoeAiInfoOpsRor *ops) {
+    int32_t age;
+    if (!info || !ops || k < 0 || k >= 4) return 0;
+    age = aoe_ftol32(ops->resource ? ops->resource(ops->context, 6) : 0.0f) - 1;
+    if (age < 0)
+        age = 0;
+    else if (age > 3)
+        age = 3;
+    if (!info->age_allowed[k][age]) return 0;
+    if (!same_zone_as_center(info, k, ops)) return 0;
+    return info->best_distance[k] > (ops->sn ? ops->sn(ops->context, 0xa3 + k) : -1);
+}
+
+int aoe_ai_info_food_far_ror(const AoeAiInfoRor *info,
+                             const AoeAiInfoOpsRor *ops) {
+    if (!info || !ops || info->best_distance[0] == -1) return 0;
+    if (!same_zone_as_center(info, 0, ops)) return 0;
+    return (ops->sn ? ops->sn(ops->context, 0xa3) : -1) < info->best_distance[0];
+}
+
+void aoe_ai_info_scan_map_ror(AoeAiInfoRor *info,
+                              const AoeAiInfoOpsRor *ops) {
+    int32_t x, y, ids[256];
+    if (!info || !ops || !ops->tile_byte5) return;
+    for (x = 0; x < info->map_width; ++x) {
+        for (y = 0; y < info->map_height; ++y) {
+            uint8_t terrain = ops->tile_byte5(ops->context, x, y) & 0x1f;
+            int32_t n, i, trees = 0;
+            if (info->map_width != -1) {
+                int32_t col = x * 4 / info->map_width;
+                int32_t row = y * 4 / info->map_height;
+                if (col >= 0 && col < 4 && row >= 0 && row < 4)
+                    ++info->cells[col][row][0];
+            }
+            if (ops->grid_set) ops->grid_set(ops->context, x, y, 0);
+            n = ops->tile_objects ? ops->tile_objects(ops->context, x, y, ids, 256)
+                                  : 0;
+            for (i = 0; i < n; ++i) {
+                AoeAiObjectViewRor o;
+                if (!ops->world_object || !ops->world_object(ops->context, ids[i], &o))
+                    continue;
+                if (aoe_ai_info_known_class_ror(o.type_class) == 1)
+                    aoe_ai_info_notice_ror(info, &o, 0, ops);
+                if (o.type_class == 0xf) ++trees;
+            }
+            if (n > 0 && trees > 0 &&
+                (terrain == 10 || terrain == 0x13 || terrain == 0xd ||
+                 terrain == 0x14))
+                ++info->field_560;
+        }
+    }
+}

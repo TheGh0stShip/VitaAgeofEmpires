@@ -97,8 +97,10 @@ typedef struct {
     AoeAiInfoTargetRor *targets[4];   /* +0x4d0 */
     int32_t target_count[4];          /* +0x4e0 */
     int32_t target_capacity[4];       /* +0x4f0 */
+    int32_t age_allowed[4][4];        /* +0x500, by list and age */
     int32_t best_distance[4];         /* +0x540 */
     int32_t current_target[4];        /* +0x550 */
+    int32_t field_560;                /* +0x560 */
     int32_t history[AOE_AI_INFO_HISTORY]; /* +0x564 */
     int32_t stats[AOE_AI_INFO_STATS]; /* +0xff64 */
 } AoeAiInfoRor;
@@ -164,6 +166,22 @@ typedef struct {
     int32_t (*player_field_4)(void *context, int32_t player);
     int (*names_us_ally)(void *context, int32_t player);
     void (*share)(void *context, int32_t player, int32_t id);
+    /* 0x0040bad0 on the player: our first object of a type (-1 none). */
+    int32_t (*first_of_type)(void *context, int32_t type_id);
+    /* 0x00517670 on the player's vision map: 0 unseen, 0x80 explored,
+       0xf visible. */
+    uint8_t (*vision)(void *context, int32_t x, int32_t y);
+    /* 0x004aaeb0: the distance between two objects. */
+    double (*object_distance)(void *context, int32_t from, int32_t to);
+    /* The player's resource `i` (player +0x50). */
+    float (*resource)(void *context, int32_t i);
+    /* The Build AI (computer player +0x104, vtable +0x48) with type and
+       flag: nonzero when it has that item. */
+    int (*build_has)(void *context, int32_t type_id, int32_t flag);
+    /* The objects standing on a tile (tile +0x10 list), at most `max`;
+       the count. */
+    int32_t (*tile_objects)(void *context, int32_t x, int32_t y,
+                            int32_t *ids, int32_t max);
 } AoeAiInfoOpsRor;
 
 /* 0x004bc690: 1 when the object exists and its zone has no flag;
@@ -435,6 +453,39 @@ void aoe_ai_info_unit_influence_ror(const AoeAiInfoRor *info, uint32_t owner,
 void aoe_ai_info_area_influence_ror(const AoeAiInfoRor *info,
                                     uint32_t player_a, int32_t x, int32_t y,
                                     const AoeAiInfoOpsRor *ops);
+/* 0x004c5b80: among live remembered objects of type 0x9e or 0xa3 seen
+   as `owner` (-1: an enemy), the one with the fewest such objects within
+   5 tiles (0x004c3ef0), that count multiplied by the truncated distance
+   from our first town centre to its tile when we have one; the first
+   wins ties. 0x004c5d10 does the same for type 0x9f, but only for
+   objects on explored tiles, whose remembered tile is refreshed first and
+   whose distance is object to object. NULL for none. */
+AoeAiInfoObjectRor *aoe_ai_info_best_9e_ror(AoeAiInfoRor *info,
+                                            uint32_t owner,
+                                            const AoeAiInfoOpsRor *ops);
+AoeAiInfoObjectRor *aoe_ai_info_best_9f_ror(AoeAiInfoRor *info,
+                                            uint32_t owner,
+                                            const AoeAiInfoOpsRor *ops);
+/* 0x004c5ec0: which resource to gather next for `mode`: mode 2 none
+   (0); with no granary on the build list and a wood target, 1; in mode
+   1, wood (1) when its distance passes number 164, gold (3) past 166,
+   food (2) past 15 tiles, stone (2) past 165; else -1. */
+int32_t aoe_ai_info_resource_need_ror(const AoeAiInfoRor *info, int32_t mode,
+                                      const AoeAiInfoOpsRor *ops);
+/* 0x004c5fc0: list `k`'s best distance is above number 163 + k, when the
+   age table (age = ftol(resource 6) - 1, 0..3) allows it and, with a town
+   centre, the target lies in the centre's zone. 0x004c60b0: the same for
+   list 0 without the age table. */
+int aoe_ai_info_target_far_ror(const AoeAiInfoRor *info, int32_t k,
+                               const AoeAiInfoOpsRor *ops);
+int aoe_ai_info_food_far_ror(const AoeAiInfoRor *info,
+                             const AoeAiInfoOpsRor *ops);
+/* 0x004c6170: scan the whole known map: each tile counts in its 4x4 cell
+   (+0x408), is cleared in the explored grid, and every object of a known
+   class on it is noticed (0x004bdd10); a tile of terrain 10, 0x13, 0xd or
+   0x14 holding a class-0xf object raises +0x560. */
+void aoe_ai_info_scan_map_ror(AoeAiInfoRor *info,
+                              const AoeAiInfoOpsRor *ops);
 /* 0x004c65c0: the statistics bucket of a unit: class 0x12 5, 0x1c 3,
    0xd 4, 0xc 2, 0x23 7; type 0x49 0, 0x4b 1, 4/5/0x27 6, 0x29 10,
    0x2e/0x19 9; class 0x16 8; else -1. */

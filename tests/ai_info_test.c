@@ -353,6 +353,144 @@ static void sighting_tests(void) {
     aoe_ai_int_list_release_ror(&info.list_190);
 }
 
+/* World four: town centre 600 at (0,0); towers 601 (type 0x9e at 4,0),
+   602 (0xa3 at 8,0), 603 (0x9f at 3,4, explored), 604 (0x9f unexplored),
+   all owned by 2; a berry bush 605 target in zone 2. */
+static int center_exists = 1;
+static int object4(void *c, int32_t id, AoeAiObjectViewRor *o) {
+    (void)c;
+    memset(o, 0, sizeof *o);
+    o->id = id;
+    o->state = 2;
+    o->owner = 2;
+    switch (id) {
+    case 600: o->type_id = 0x6d; return center_exists;
+    case 601: o->type_id = 0x9e; o->x = 4.0f; return 1;
+    case 602: o->type_id = 0xa3; o->x = 8.0f; return 1;
+    case 603: o->type_id = 0x9f; o->x = 3.2f; o->y = 4.7f; o->z = 1.0f; return 1;
+    case 604: o->type_id = 0x9f; o->x = 15.0f; o->y = 15.0f; return 1;
+    case 605: o->type_class = 7; o->x = 45.0f; return 1;
+    case 606: o->type_class = 0xf; o->x = 3.0f; return 1;
+    default: return 0;
+    }
+}
+static int32_t first4(void *c, int32_t t) { (void)c; return t == 0x6d && center_exists ? 600 : -1; }
+static uint8_t vision4(void *c, int32_t x, int32_t y) { (void)c; (void)y; return (uint8_t)(x < 10 ? 0x80 : 0); }
+static double dist4(void *c, int32_t id, float x, float y, float z) {
+    (void)c; (void)id; (void)z; return sqrt((double)x * x + (double)y * y);
+}
+static double odist4(void *c, int32_t a, int32_t b) {
+    AoeAiObjectViewRor o;
+    (void)a; object4(c, b, &o); return sqrt((double)o.x * o.x + (double)o.y * o.y);
+}
+static float age4 = 2.9f;
+static float res4(void *c, int32_t i) { (void)c; return i == 6 ? age4 : 0.0f; }
+static int granary4 = 1;
+static int build4(void *c, int32_t t, int32_t f) { (void)c; return t == 0x67 && f == 0 && granary4; }
+static int32_t sn4(void *c, int32_t i) { (void)c; return i >= 0xa3 && i <= 0xa6 ? 10 + (i - 0xa3) : 0; }
+static int32_t tile_objs(void *c, int32_t x, int32_t y, int32_t *ids, int32_t max) {
+    (void)c; (void)max;
+    if (x == 1 && y == 1) { ids[0] = 606; ids[1] = 601; return 2; }
+    if (x == 2 && y == 0) { ids[0] = 605; return 1; }
+    return 0;
+}
+static uint8_t terrain4(void *c, int32_t x, int32_t y) { (void)c; return (uint8_t)(x == 1 && y == 1 ? 0x2a : 0); }
+
+static void choice_tests(void) {
+    static AoeAiInfoRor info;
+    AoeAiInfoOpsRor ops;
+    int k;
+
+    memset(&ops, 0, sizeof ops);
+    ops.self = 1;
+    ops.object = object4;
+    ops.world_object = object4;
+    ops.is_enemy = is_enemy;
+    ops.first_of_type = first4;
+    ops.vision = vision4;
+    ops.distance = dist4;
+    ops.object_distance = odist4;
+    ops.resource = res4;
+    ops.build_has = build4;
+    ops.sn = sn4;
+    ops.zone = zone2;
+    ops.tile_zone = tile_zone2;
+    ops.tile_objects = tile_objs;
+    ops.tile_byte5 = terrain4;
+    ops.grid_set = grid_set;
+    info.object_count = 6;
+    info.objects = (AoeAiInfoObjectRor *)calloc(6, sizeof *info.objects);
+    info.objects[0] = (AoeAiInfoObjectRor){601, 0x9e, 0, 4, 0, 0, 2, 0, 0, 0, 0, 0, 0};
+    info.objects[1] = (AoeAiInfoObjectRor){602, 0xa3, 0, 8, 0, 0, 2, 0, 0, 0, 0, 0, 0};
+    info.objects[2] = (AoeAiInfoObjectRor){603, 0x9f, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0};
+    info.objects[3] = (AoeAiInfoObjectRor){604, 0x9f, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0};
+    info.objects[4] = (AoeAiInfoObjectRor){-1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    info.objects[5] = (AoeAiInfoObjectRor){-1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    /* Objects seen as 2 within 5 tiles: 601 at (4,0) counts all four (the
+       0x9f entries sit at 0,0 for now), 602 at (8,0) counts two. Times
+       the distance from the centre at (0,0): 16 and 16, the first wins. */
+    assert(aoe_ai_info_best_9e_ror(&info, 2, &ops) == &info.objects[0]);
+    center_exists = 0;
+    /* Without a centre the counts decide: 602. */
+    assert(aoe_ai_info_best_9e_ror(&info, 2, &ops) == &info.objects[1]);
+    center_exists = 1;
+    assert(!aoe_ai_info_best_9e_ror(&info, 3, &ops));
+    /* 0x9f: 604 is unexplored; 603 is refreshed from its object. */
+    assert(aoe_ai_info_best_9f_ror(&info, 0xffffffffu, &ops) == &info.objects[2] &&
+           info.objects[2].x == 3 && info.objects[2].y == 4 && info.objects[2].z == 1 &&
+           info.objects[3].x == 0);
+
+    /* Resource needs. */
+    for (k = 0; k < 4; ++k) info.best_distance[k] = -1;
+    assert(aoe_ai_info_resource_need_ror(&info, 2, &ops) == 0);
+    assert(aoe_ai_info_resource_need_ror(&info, 1, &ops) == -1);
+    info.best_distance[0] = 16;
+    assert(aoe_ai_info_resource_need_ror(&info, 1, &ops) == 2 &&
+           aoe_ai_info_resource_need_ror(&info, 0, &ops) == -1);
+    info.best_distance[3] = 14;
+    assert(aoe_ai_info_resource_need_ror(&info, 1, &ops) == 3);
+    info.best_distance[1] = 12;
+    assert(aoe_ai_info_resource_need_ror(&info, 1, &ops) == 1);
+    info.best_distance[1] = 5;
+    granary4 = 0;
+    assert(aoe_ai_info_resource_need_ror(&info, 0, &ops) == 1);
+    granary4 = 1;
+
+    /* Far targets: age 2.9 -> 1; list 0 needs age_allowed[0][1]. */
+    info.best_distance[0] = 16;
+    info.current_target[0] = 606;
+    assert(!aoe_ai_info_target_far_ror(&info, 0, &ops));
+    info.age_allowed[0][1] = 1;
+    assert(aoe_ai_info_target_far_ror(&info, 0, &ops) && aoe_ai_info_food_far_ror(&info, &ops));
+    info.current_target[0] = 605; /* another zone */
+    assert(!aoe_ai_info_target_far_ror(&info, 0, &ops) && !aoe_ai_info_food_far_ror(&info, &ops));
+    center_exists = 0;
+    assert(aoe_ai_info_target_far_ror(&info, 0, &ops));
+    center_exists = 1;
+    info.best_distance[0] = 10;
+    info.current_target[0] = 606;
+    assert(!aoe_ai_info_target_far_ror(&info, 0, &ops) && !aoe_ai_info_food_far_ror(&info, &ops));
+    age4 = 9.0f;
+    info.best_distance[2] = 50;
+    info.age_allowed[2][3] = 1;
+    info.current_target[2] = 606;
+    assert(aoe_ai_info_target_far_ror(&info, 2, &ops));
+
+    /* Map scan over 4x4 tiles. */
+    info.map_width = info.map_height = 4;
+    memset(info.cells, 0, sizeof info.cells);
+    memset(grid, 0xff, sizeof grid);
+    aoe_ai_info_scan_map_ror(&info, &ops);
+    assert(info.cells[0][0][0] == 1 && info.cells[3][3][0] == 1 && grid[3][3] == 0 &&
+           info.field_560 == 1 && info.list_118.count == 3 && info.list_128.count == 1);
+    aoe_ai_int_list_release_ror(&info.list_128);
+
+    free(info.objects);
+    for (k = 0; k < 4; ++k) free(info.targets[k]);
+    aoe_ai_int_list_release_ror(&info.list_118);
+    aoe_ai_int_list_release_ror(&info.list_148);
+}
+
 int main(void) {
     static AoeAiInfoRor info;
     AoeAiInfoOpsRor ops;
@@ -578,6 +716,7 @@ int main(void) {
     free(info.targets[2]);
     dropsite_tests();
     sighting_tests();
+    choice_tests();
     puts("ai info ok");
     return 0;
 }

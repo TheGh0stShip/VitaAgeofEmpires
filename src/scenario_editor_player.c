@@ -3,6 +3,9 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+
+#include "aoe_stream.h"
 
 /* Info fields of food, wood, stone and gold. */
 static const int info_field[4] = {2, 1, 3, 0};
@@ -102,4 +105,36 @@ void aoe_scenario_player_defaults_ror(AoeScenarioInfoRor *info,
         info->starting_age[s] = 0;
     }
     obj->value_18cc[0] = 1;
+}
+
+void aoe_scenario_record_ex_init_ror(AoeScenarioRecordExRor *r, const char *text, int32_t now,
+                                     AoeScenarioInfoRor *info, const AoeScenarioObjectRor *obj) {
+    aoe_scenario_record_init_ror(&r->base, text, now);
+    r->has_conditions = aoe_scenario_has_conditions_ror(info, obj);
+    r->players = obj ? aoe_scenario_active_players_ror(obj) : 0;
+}
+
+void aoe_scenario_record_ex_read_ror(AoeScenarioRecordExRor *r, AoeOutcomeStream *in) {
+    aoe_scenario_record_read_ror(&r->base, in);
+    r->has_conditions = 0;
+    r->players = 0;
+    if (!r->base.error) {
+        r->has_conditions = aoe_stream_i32(in);
+        r->players = aoe_stream_i32(in);
+    }
+}
+
+int32_t aoe_scenario_record_ex_size_ror(const AoeScenarioRecordExRor *r) {
+    return aoe_scenario_record_size_ror(&r->base) + 8;
+}
+
+void aoe_scenario_record_ex_write_ror(const AoeScenarioRecordExRor *r, AoeOutcomeStream *out) {
+    int32_t n = r->base.text ? (int32_t)strlen(r->base.text) + 1 : 0;
+    aoe_stream_put_i32(out, aoe_scenario_record_ex_size_ror(r));
+    aoe_stream_put_i32(out, r->base.version);
+    if (r->base.version > 1) aoe_stream_put_i32(out, r->base.stamp);
+    aoe_stream_put_i32(out, n);
+    if (r->base.text) aoe_stream_put(out, r->base.text, (size_t)n);
+    aoe_stream_put_i32(out, r->has_conditions);
+    aoe_stream_put_i32(out, r->players);
 }

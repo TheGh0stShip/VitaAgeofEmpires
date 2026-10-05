@@ -327,5 +327,26 @@ int main(void) {
                dob.value_18cc[0] == 1 && dob.value_18cc[1] == 0);
         assert(di.allied_victory[3] == 0);
     }
+    {
+        /* 0x00506710 / 0x00506770 / 0x00506800 the RoR scenario record. */
+        static AoeScenarioInfoRor ri;
+        static AoeScenarioObjectRor ro;
+        AoeScenarioRecordExRor a, b;
+        uint8_t buf[64];
+        AoeOutcomeStream s = {buf, sizeof buf, 0, 0};
+        ro.value_194c[1] = ro.value_194c[2] = 1;
+        ri.conditions[2][0].type = 4;
+        aoe_scenario_record_ex_init_ror(&a, "Hi", 77, &ri, &ro);
+        assert(a.has_conditions == 1 && a.players == 2);
+        assert(aoe_scenario_record_ex_size_ror(&a) == 0xc + 3 + 8);
+        aoe_scenario_record_ex_write_ror(&a, &s);
+        assert(s.pos == 4 + 4 + 4 + 4 + 3 + 8 && buf[0] == 0xc + 3 + 8);
+        s.size = s.pos;
+        s.pos = 0;
+        aoe_scenario_record_ex_read_ror(&b, &s);
+        assert(b.base.stamp == 77 && !strcmp(b.base.text, "Hi") && b.players == 2 && b.has_conditions);
+        aoe_scenario_record_free_ror(&a.base);
+        aoe_scenario_record_free_ror(&b.base);
+    }
     return 0;
 }

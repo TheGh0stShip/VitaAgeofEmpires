@@ -112,9 +112,8 @@ const char *aoe_scenario_player_file_ror(AoeScenarioObjectRor *s, int kind, int3
    reads one (size, version, the stamp when the version is above 1, the
    text length and text; a failed allocation sets +0x04); 0x00474ba0
    frees it; 0x00474bd0 its size (12, plus the text and its NUL);
-   0x00474bf0 writes it. The derived record adds two dwords (+0x14,
-   +0x18): 0x005067f0 its size (8 more), 0x00506800 its write (the base
-   record, then those two). */
+   0x00474bf0 writes it (its size through the virtual size). The derived
+   record is AoeScenarioRecordExRor (scenario_editor_player.h). */
 #include "aoe_stream.h"
 typedef struct {
     int32_t error;      /* +0x04 */

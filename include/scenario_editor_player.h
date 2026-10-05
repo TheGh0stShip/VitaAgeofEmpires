@@ -77,4 +77,21 @@ void aoe_scenario_player_defaults_ror(AoeScenarioInfoRor *info,
 int aoe_scenario_has_conditions_ror(AoeScenarioInfoRor *info,
                                     const AoeScenarioObjectRor *obj);
 
+/* The RoR scenario record (vtable 0x0054a3c0): the base record and two
+   dwords, whether the scenario has conditions (+0x14) and its active
+   player count (+0x18). 0x00506710 builds one from a scenario (the base
+   0x00474a40, then 0x00507e00 and 0x00476a90); 0x00506770 reads one (the
+   base 0x00474ae0, then the two dwords unless the base failed); the tribe
+   game's 0x00500210 / 0x005001b0 allocate them. Size 0x005067f0 and write
+   0x00506800 (the size written first is this record's, the base +8). */
+typedef struct {
+    AoeScenarioRecordRor base;
+    int32_t has_conditions, players;
+} AoeScenarioRecordExRor;
+void aoe_scenario_record_ex_init_ror(AoeScenarioRecordExRor *r, const char *text, int32_t now,
+                                     AoeScenarioInfoRor *info, const AoeScenarioObjectRor *obj);
+void aoe_scenario_record_ex_read_ror(AoeScenarioRecordExRor *r, AoeOutcomeStream *in);
+int32_t aoe_scenario_record_ex_size_ror(const AoeScenarioRecordExRor *r);
+void aoe_scenario_record_ex_write_ror(const AoeScenarioRecordExRor *r, AoeOutcomeStream *out);
+
 #endif

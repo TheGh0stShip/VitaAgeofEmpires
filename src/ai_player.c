@@ -347,3 +347,230 @@ int aoe_ai_player_message_ror(AoeAiPlayerAiRor *ai, int32_t player,
     if (ops->dip_changeable) ops->dip_changeable(ops->context, a, 0);
     return 1;
 }
+
+static void module_update(const AoeAiPlayerOpsRor *ops, int module) {
+    if (ops->module_update) ops->module_update(ops->context, module);
+}
+
+static uint32_t now(const AoeAiPlayerOpsRor *ops) {
+    return ops->world_time ? ops->world_time(ops->context) : 0;
+}
+
+static int32_t field_4(const AoeAiPlayerOpsRor *ops, int32_t p) {
+    return ops->player_field_4 ? ops->player_field_4(ops->context, p) : 0;
+}
+
+static void p54(const AoeAiPlayerOpsRor *ops, int32_t player, int32_t cmd,
+                int32_t a, int32_t b) {
+    if (ops->player_54) ops->player_54(ops->context, player, cmd, a, b);
+}
+
+static void chat_n(const AoeAiPlayerOpsRor *ops, int32_t id, int32_t value) {
+    if (ops->chat_n) ops->chat_n(ops->context, player_sn(ops, 0x80), id, value);
+}
+
+static void first_update(AoeAiPlayerAiRor *ai, const AoeAiPlayerOpsRor *ops) {
+    static const int32_t dumps[4][2] = {{0x8a, 0}, {0x8b, 3}, {0x8c, 2}, {0x8d, 1}};
+    int32_t i, v;
+    ai->setup_pending = 0;
+    aoe_ai_log_ror(&ai->decision.module, "Initial Diplomacy Settings:");
+    for (i = 1; i < ops->player_count; ++i) {
+        int32_t n = ops->dip_get ? ops->dip_get(ops->context, i, 1) : -1;
+        int32_t like = ops->dip_get ? ops->dip_get(ops->context, i, 2) : -1;
+        int32_t dislike = ops->dip_get ? ops->dip_get(ops->context, i, 0) : -1;
+        aoe_ai_log_ror(&ai->decision.module,
+                       "  Player #%d: Dislike=%d, Like=%d, Ambivalence=%d.", i,
+                       dislike, like, n);
+    }
+    module_update(ops, AOE_AI_MOD_STRATEGY);
+    if (ops->build_augment) ops->build_augment(ops->context);
+    if (ops->info_setup) ops->info_setup(ops->context);
+    aoe_ai_player_roll_delay_ror(ai, ops);
+    if (player_sn(ops, 0x81) == 1 && player_sn(ops, 0x7d) == 0) {
+        ai->field_1258c = 1;
+        ai->field_12598 = 0;
+    }
+    for (i = 0; i < 4; ++i) {
+        v = player_sn(ops, dumps[i][0]);
+        if (v != 0 && ops->add_resource)
+            ops->add_resource(ops->context, dumps[i][1], (float)v);
+    }
+}
+
+static void end_demand(AoeAiPlayerAiRor *ai, const AoeAiPlayerOpsRor *ops) {
+    ai->field_1258c = 0;
+    ai->field_12584 = (int32_t)now(ops);
+    ai->field_12594 = player_sn(ops, 0x84) == 0;
+}
+
+static void demands(AoeAiPlayerAiRor *ai, const AoeAiPlayerOpsRor *ops) {
+    int32_t p;
+    uint32_t elapsed = now(ops) - (uint32_t)ai->field_12584;
+    if (player_sn(ops, 0x7c) <= 0 || ai->field_12594 != 0) return;
+    if (elapsed / 1000 < (uint32_t)ai->tribute_delay || player_sn(ops, 0x7d) < 1) {
+        if (ai->field_1258c != 1) return;
+        ai->field_12590 -= ops->world_step ? ops->world_step(ops->context) : 0;
+        p = player_sn(ops, 0x80);
+        if (ai->field_12590 < 1) {
+            if (player_sn(ops, 0x82) == 1) {
+                if (ops->dip_set) {
+                    ops->dip_set(ops->context, p, 0, 100);
+                    ops->dip_set(ops->context, p, 2, 0);
+                }
+                if (ops->tribe_28) ops->tribe_28(ops->context, p, 3);
+                if (ops->chat) ops->chat(ops->context, p, 0x901);
+                ai->field_1258c = 0;
+                ai->field_12594 = 1;
+                ai->field_12584 = (int32_t)now(ops);
+            } else if (player_sn(ops, 0x81) == 1) {
+                if (ops->chat) ops->chat(ops->context, p, 0x900);
+                end_demand(ai, ops);
+            }
+        } else if (player_sn(ops, 0x7c) <= ai->field_12598) {
+            if (player_sn(ops, 0x81) == 1) {
+                if (ops->dip_set) {
+                    ops->dip_set(ops->context, p, 0, 0);
+                    ops->dip_set(ops->context, p, 2, 100);
+                }
+                if (ops->tribe_28) ops->tribe_28(ops->context, p, 0);
+                if (ops->chat) ops->chat(ops->context, p, 0x8ff);
+                end_demand(ai, ops);
+            } else if (player_sn(ops, 0x82) == 1) {
+                if (ops->chat) ops->chat(ops->context, p, 0x8fe);
+                end_demand(ai, ops);
+            }
+        }
+        return;
+    }
+    if (ai->field_1258c == 0) {
+        ai->field_1258c = 1;
+        ai->field_12598 = 0;
+        ai->field_12590 = player_sn(ops, 0x7f) * 1000;
+    }
+    ai->field_12584 = (int32_t)now(ops);
+    if (player_sn(ops, 0x82) == 1) {
+        if (ai->field_12598 > 0)
+            chat_n(ops, 0x902, player_sn(ops, 0x7c) - ai->field_12598);
+        else
+            chat_n(ops, 0x903, player_sn(ops, 0x7c));
+    } else if (player_sn(ops, 0x81) == 1) {
+        if (ai->field_12598 > 0)
+            chat_n(ops, 0x904, player_sn(ops, 0x7c));
+        else
+            chat_n(ops, 0x905, player_sn(ops, 0x7c) - ai->field_12598);
+    }
+    aoe_ai_player_roll_delay_ror(ai, ops);
+}
+
+static int picked(const int32_t *list, int32_t n, int32_t p) {
+    int32_t i;
+    for (i = 0; i < n; ++i)
+        if (list[i] == p) return 1;
+    return 0;
+}
+
+static void teams(AoeAiPlayerAiRor *ai, const AoeAiPlayerOpsRor *ops) {
+    int32_t passing[9] = {0}, list[9], n_list = 0, i, j;
+    int32_t others = 0, zeros = 0, pass = 0, target, delay = 2000, r;
+    uint8_t stats;
+    ai->field_1259c = 1;
+    for (i = 1; i < ops->player_count && i < 9; ++i) {
+        if (field_4(ops, i) == 0) {
+            ++zeros;
+        } else {
+            ++others;
+            passing[i] = ops->player_24 && ops->player_24(ops->context, i) == 1;
+            pass += passing[i];
+        }
+    }
+    stats = ops->stats_player ? ops->stats_player(ops->context) : 0;
+    if (stats == 0xff && ops->set_stats_player) {
+        if (others == 1) {
+            ops->set_stats_player(ops->context, (uint8_t)ops->self);
+        } else if (others > 0) {
+            r = (ops->rand ? ops->rand(ops->context) : 0) % others + 1;
+            for (i = 1; i < ops->player_count; ++i)
+                if (field_4(ops, i) == 1 && --r == 0)
+                    ops->set_stats_player(ops->context, (uint8_t)i);
+        }
+        stats = ops->stats_player(ops->context);
+    }
+    if (stats != (uint8_t)ops->self) return;
+    target = (others - zeros) / 2;
+    if (target < 0) target = 0;
+    if (target > pass) target = pass;
+    if (ops->settings_ae5 && ops->settings_ae5(ops->context) == 1) target = 0;
+    if (target > pass || pass <= 0) return;
+    for (i = 1; i < ops->player_count && i < 9; ++i)
+        if (field_4(ops, i) != 0 && passing[i] && i != stats && n_list < target &&
+            !picked(list, n_list, i))
+            list[n_list++] = i;
+    r = ops->rand ? ops->rand(ops->context) : 0;
+    switch (ops->game_kind ? ops->game_kind(ops->context) : -1) {
+    case 0: delay = r % 500 + 1400; break;
+    case 1: delay = r % 400 + 1000; break;
+    case 2: delay = r % 300 + 700; break;
+    case 3: delay = r % 200 + 450; break;
+    case 4: delay = r % 100 + 300; break;
+    default: break;
+    }
+    for (i = 1; i < ops->player_count && i < 9; ++i) {
+        if (field_4(ops, i) == 0 || !passing[i]) continue;
+        if (picked(list, n_list, i)) {
+            p54(ops, i, 7, delay, 0);
+            delay *= 2;
+        }
+        for (j = 1; j < ops->player_count; ++j) {
+            if (j == i) continue;
+            if (field_4(ops, j) == 0 && !picked(list, n_list, i))
+                p54(ops, i, 6, j, 0);
+            else if (field_4(ops, j) == 1)
+                p54(ops, i, 6, j, 2);
+        }
+    }
+}
+
+static void alliance_timeout(const AoeAiPlayerOpsRor *ops) {
+    int32_t limit = (player_sn(ops, 0x68) - 3) * 1000, i, k;
+    if (limit < 0) limit = 0;
+    if (!(now(ops) > (uint32_t)limit)) return;
+    if (ops->set_sn) ops->set_sn(ops->context, 0xd9, 0);
+    for (i = 1; i < ops->player_count; ++i)
+        if (field_4(ops, i) != 1) break;
+    if (i >= ops->player_count) return;
+    if (!stance(ops, ops->self, 0x18, i)) p54(ops, ops->self, 6, i, 0);
+    for (k = 1; k < ops->player_count; ++k) {
+        if (k == ops->self || k == i) continue;
+        if (stance(ops, k, 0x18, i) == 1) {
+            p54(ops, ops->self, 6, k, 2);
+            if (field_4(ops, k) == 1) p54(ops, k, 6, ops->self, 2);
+        } else if (stance(ops, k, 0x1c, i) == 1) {
+            p54(ops, ops->self, 6, k, 0);
+        }
+    }
+}
+
+int aoe_ai_player_update_ror(AoeAiPlayerAiRor *ai,
+                             const AoeAiPlayerOpsRor *ops) {
+    int paused;
+    if (!ai || !ops) return 1;
+    paused = ops->world_1d ? ops->world_1d(ops->context) : 0;
+    if (!paused && ai->setup_pending == 1) first_update(ai, ops);
+    if (++ai->update_count > 0x13) {
+        module_update(ops, AOE_AI_MOD_STRATEGY);
+        ai->update_count = 0;
+    }
+    module_update(ops, AOE_AI_MOD_INFO);
+    if ((now(ops) - (uint32_t)ai->diplomacy_time) / 1000 > 0x3b) {
+        module_update(ops, AOE_AI_MOD_DIPLOMACY);
+        ai->diplomacy_time = (int32_t)now(ops);
+    }
+    demands(ai, ops);
+    if (ai->field_1259c == 0 && now(ops) > 10000) teams(ai, ops);
+    if (player_sn(ops, 0xd9) == 1) alliance_timeout(ops);
+    if (!paused && ops->world_fc && ops->world_fc(ops->context) == ops->self) {
+        module_update(ops, AOE_AI_MOD_TACTICAL);
+        ai->field_12580 = (int32_t)now(ops);
+    }
+    return 1;
+}

@@ -156,6 +156,140 @@ static void handler_tests(void) {
            ai.field_125a0 == 900);
 }
 
+/* 0x004c71a0 */
+static int32_t u_sn[256];
+static uint32_t u_time;
+static uint8_t u_stats = 0xff;
+static int32_t u_f4[9];
+static int u_24[9];
+static int32_t us_sn(void *c, int32_t i) { (void)c; return i >= 0 && i < 256 ? u_sn[i] : -1; }
+static void u_setsn(void *c, int32_t i, int32_t v) { (void)c; u_sn[i] = v; hn("sn", i, v, 0); }
+static void u_mod(void *c, int m) { (void)c; hn("mod", m, 0, 0); }
+static void u_aug(void *c) { (void)c; hn("aug", 0, 0, 0); }
+static void u_setup(void *c) { (void)c; hn("setup", 0, 0, 0); }
+static uint32_t u_now(void *c) { (void)c; return u_time; }
+static int32_t u_step(void *c) { (void)c; return 1000; }
+static int32_t u_fc(void *c) { (void)c; return 1; }
+static uint8_t u_getstats(void *c) { (void)c; return u_stats; }
+static void u_setstats(void *c, uint8_t p) { (void)c; u_stats = p; hn("stats", p, 0, 0); }
+static void u_res(void *c, int32_t r, float a) { (void)c; hn("res", r, (int)a, 0); }
+static int u_p24(void *c, int32_t p) { (void)c; return u_24[p]; }
+static int32_t u_pf4(void *c, int32_t p) { (void)c; return u_f4[p]; }
+static void u_p54(void *c, int32_t p, int32_t cmd, int32_t a, int32_t b) {
+    char x[48];
+    (void)c;
+    snprintf(x, sizeof x, "p54(%d:%d,%d,%d) ", p, cmd, a, b);
+    strncat(ht, x, sizeof ht - strlen(ht) - 1);
+}
+static void u_chatn(void *c, int32_t to, int32_t id, int32_t v) { (void)c; hn("chatn", to, id, v); }
+static int32_t u_rand(void *c) { (void)c; return 7; }
+static int u_stance(void *c, int32_t from, int slot, int32_t to) {
+    (void)c;
+    return slot == 0x18 && from == 3 && to == 2;
+}
+
+static void update_tests(void) {
+    static AoeAiPlayerAiRor ai;
+    AoeAiPlayerOpsRor ops;
+    memset(&ops, 0, sizeof ops);
+    ops.sn = us_sn; ops.set_sn = u_setsn; ops.module_update = u_mod;
+    ops.build_augment = u_aug; ops.info_setup = u_setup; ops.world_time = u_now;
+    ops.world_step = u_step; ops.world_fc = u_fc; ops.stats_player = u_getstats;
+    ops.set_stats_player = u_setstats; ops.add_resource = u_res;
+    ops.player_24 = u_p24; ops.player_field_4 = u_pf4; ops.player_54 = u_p54;
+    ops.chat_n = u_chatn; ops.chat = h_chat; ops.dip_set = h_set; ops.tribe_28 = h_t28;
+    ops.rand = u_rand; ops.stance_test = u_stance; ops.game_kind = h_kind;
+    ops.self = 1;
+    ops.player_count = 4;
+
+    /* The first call: setup, a demand primed, resource 0 gets 50; the
+       information AI and (as world +0xfc is us) the tactical AI update. */
+    ai.setup_pending = 1;
+    ai.update_count = 19;
+    u_sn[0x81] = 1;
+    u_sn[0x8a] = 50;
+    u_sn[0x7d] = 0;
+    u_time = 5000;
+    ht[0] = 0;
+    assert(aoe_ai_player_update_ror(&ai, &ops) == 1);
+    assert(strcmp(ht, "mod(6,0,0) aug(0,0,0) setup(0,0,0) res(0,50,0) mod(6,0,0) "
+                      "mod(4,0,0) mod(7,0,0) ") == 0);
+    assert(ai.setup_pending == 0 && ai.field_1258c == 1 && ai.update_count == 0 &&
+           ai.tribute_delay == 0 && ai.field_12580 == 5000);
+
+    /* A demand (number 124 = 500 gold): number 129's request, nothing
+       paid: string 2309 with 500; the time is number 127 s. */
+    ai.field_1258c = 0;
+    u_sn[0x7c] = 500;
+    u_sn[0x7d] = 5;
+    u_sn[0x7f] = 30;
+    u_sn[0x80] = 2;
+    ai.tribute_delay = 5;
+    ai.diplomacy_time = 0;
+    u_time = 9000;
+    ht[0] = 0;
+    aoe_ai_player_update_ror(&ai, &ops);
+    assert(strcmp(ht, "mod(4,0,0) chatn(2,2309,500) mod(7,0,0) ") == 0);
+    assert(ai.field_1258c == 1 && ai.field_12590 == 30000 && ai.field_12584 == 9000);
+    /* Paid within the time: friendly, string 2303; +0x12594 is number
+       132 == 0. */
+    ai.field_12598 = 500;
+    u_sn[0x84] = 1;
+    u_sn[0x8a] = 0;
+    ai.field_1259c = 1;
+    u_time = 9500;
+    ht[0] = 0;
+    aoe_ai_player_update_ror(&ai, &ops);
+    assert(strcmp(ht, "mod(4,0,0) set(2,0,0) set(2,2,100) t28(2,0,0) chat(2,2303,0) "
+                      "mod(7,0,0) ") == 0);
+    assert(ai.field_1258c == 0 && ai.field_12594 == 0 && ai.field_12590 == 29000);
+
+    /* After 10 s, once: players 2 and 3 have +4 = 1 (both pass +0x24);
+       the statistics player is the 7 % 2 + 1 = 2nd, player 3. Not us:
+       nothing else. Then the diplomacy update after 60 s. */
+    ai.field_1259c = 0;
+    u_sn[0x7c] = 0;
+    u_f4[2] = u_f4[3] = 1;
+    u_24[2] = u_24[3] = 1;
+    u_time = 61000;
+    ht[0] = 0;
+    aoe_ai_player_update_ror(&ai, &ops);
+    assert(strcmp(ht, "mod(4,0,0) mod(2,0,0) stats(3,0,0) mod(7,0,0) ") == 0);
+    assert(ai.field_1259c == 1 && ai.diplomacy_time == 61000);
+    /* With us as the statistics player and three +4 players (we have
+       +4 0): (3 - 1) / 2 = 1, the first passing one other than us (2) is
+       picked: command 7 with 300 + 7 % 100; the unpicked 3 turns stance
+       0 toward us. */
+    ai.field_1259c = 0;
+    u_stats = 1;
+    ops.player_count = 5;
+    u_f4[4] = 1;
+    u_24[4] = 0;
+    ht[0] = 0;
+    aoe_ai_player_update_ror(&ai, &ops);
+    assert(strcmp(ht, "mod(4,0,0) p54(2:7,307,0) p54(2:6,3,2) p54(2:6,4,2) "
+                      "p54(3:6,1,0) p54(3:6,2,2) p54(3:6,4,2) mod(7,0,0) ") == 0);
+
+    /* Number 217 only after (number 104 - 3) s; then the first player
+       whose +4 is not 1 (2) gets peace from us, and 3, its enemy, an
+       alliance both ways (3's +4 is 1). */
+    u_sn[0xd9] = 1;
+    u_sn[0x68] = 50;
+    u_time = 47000;
+    ai.diplomacy_time = 47000;
+    ht[0] = 0;
+    aoe_ai_player_update_ror(&ai, &ops);
+    assert(strcmp(ht, "mod(4,0,0) mod(7,0,0) ") == 0);
+    u_time = 47001;
+    ai.diplomacy_time = 47001;
+    u_f4[1] = 1;
+    u_f4[2] = 0;
+    ht[0] = 0;
+    aoe_ai_player_update_ror(&ai, &ops);
+    assert(strcmp(ht, "mod(4,0,0) sn(217,0,0) p54(1:6,2,0) p54(1:6,3,2) "
+                      "p54(3:6,1,2) mod(7,0,0) ") == 0);
+}
+
 int main(void) {
     static AoeAiPlayerAiRor ai, back;
     static uint8_t buf[512];
@@ -164,6 +298,7 @@ int main(void) {
     size_t n;
 
     handler_tests();
+    update_tests();
     memset(&ops, 0, sizeof ops);
     ops.module_init = m_init;
     ops.module_owner = m_owner;

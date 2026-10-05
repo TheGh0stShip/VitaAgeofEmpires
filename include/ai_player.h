@@ -116,6 +116,30 @@ typedef struct {
     int32_t (*player_field_4)(void *context, int32_t player);
     void (*command_sub5)(void *context, int32_t flag);
     int16_t self, player_count;
+    /* For the update: a module's vtable +0x30 (its update, with 0); the
+       Build AI's list augmentation (0x004b7930) and the information AI's
+       setup (0x004bb840); a Diplomacy AI value (0x0040a9a0); the world's
+       +0x1d byte, time (+4), step (+0xc), +0xfc and statistics player byte
+       (+0x11d); our vtable +0xb4 (resource, amount); a player's vtable
+       +0x24 and +0x54 (our index, command, a, b, 0); chat with a number;
+       the settings' 0x005054e0. */
+    void (*module_update)(void *context, int module);
+    void (*build_augment)(void *context);
+    void (*info_setup)(void *context);
+    int32_t (*dip_get)(void *context, int32_t player, int kind);
+    int (*world_1d)(void *context);
+    uint32_t (*world_time)(void *context);
+    int32_t (*world_step)(void *context);
+    int32_t (*world_fc)(void *context);
+    uint8_t (*stats_player)(void *context);
+    void (*set_stats_player)(void *context, uint8_t player);
+    void (*add_resource)(void *context, int32_t resource, float amount);
+    int (*player_24)(void *context, int32_t player);
+    void (*player_54)(void *context, int32_t player, int32_t command,
+                      int32_t a, int32_t b);
+    void (*chat_n)(void *context, int32_t to, int32_t string_id,
+                   int32_t value);
+    int (*settings_ae5)(void *context);
 } AoeAiPlayerOpsRor;
 
 /* 0x004c6960: the Main Decision AI, the nine modules (each constructed,
@@ -213,5 +237,50 @@ void aoe_ai_player_befriend_ror(AoeAiPlayerAiRor *ai,
 int aoe_ai_player_message_ror(AoeAiPlayerAiRor *ai, int32_t player,
                               int32_t kind, int32_t a, int32_t b, int32_t c,
                               const AoeAiPlayerOpsRor *ops);
+/* 0x004c71a0 (vtable +0x30): the computer player's update. Always 1.
+   - First (world +0x1d clear, setup pending): logs "Initial Diplomacy
+     Settings:" and each player's "  Player #%d: Dislike=%d, Like=%d,
+     Ambivalence=%d." (the neutrality value), updates the Strategy AI,
+     augments the build list, sets up the information AI, rolls the
+     tribute delay; numbers 129 = 1
+     with 125 = 0 start a demand (+0x1258c 1, +0x12598 0); numbers 138,
+     139, 140 and 141, when nonzero, are added to resources 0, 3, 2, 1.
+   - The Strategy AI updates every 20th call; the information AI every
+     call; the Diplomacy AI once 60 s have passed since +0x1257c.
+   - Tribute demands (number 124 above 0, +0x12594 clear) toward number
+     128's player: before the delay (+0x12588 s since +0x12584) or with
+     number 125 below 1, a running demand's time (+0x12590) runs down by
+     the world step; at 0 number 130 = 1 turns hostile (dislike 100, like
+     0, tribe +0x28 3, string 2305, done) or number 129 = 1 gives up
+     (string 2304); while time is left, paying number 124 (+0x12598)
+     makes number 129 = 1 friendly (dislike 0, like 100, tribe +0x28 0,
+     string 2303) or number 130 = 1 just thanks (string 2302). Ending sets
+     +0x12584 to now and, except for the hostile turn (+0x12594 1),
+     +0x12594 to whether number 132 is 0. Otherwise a new demand starts
+     (number 127 s), +0x12584 is now, number 130 = 1 sends string 2307
+     with number 124 when nothing was paid, else 2306 with what is left,
+     or number 129 = 1 string 2309 with what is left when nothing was
+     paid, else 2308 with number 124; the delay is rolled again.
+   - Once, after 10 s (+0x1259c): of the players, those with +4 zero and
+     the others (with how many pass vtable +0x24) are counted; an unset
+     statistics player becomes us (with exactly one +4 player) or the
+     rand() % count + 1'th player whose +4 is 1 (with no +4 player the
+     original divides by zero; the port leaves it unset). When it is us, up to
+     min((others - zeros) / 2, passing) (0 when the settings' 0x005054e0
+     is 1) passing players other than the statistics player are picked
+     in order; with any passing, each passing player: a picked one gets
+     command 7 with a delay (by game kind 0..4: 1400 + rand() % 500,
+     1000 + % 400, 700 + % 300, 450 + % 200, 300 + % 100; else 2000;
+     doubled after each pick), then command 6 toward every other player:
+     stance 0 toward a +4-zero one unless picked, 2 toward a +4-one one.
+   - Number 217 set and the time past (number 104 - 3) s (at least 0):
+     number 217 is cleared, and toward the first player whose +4 is not 1
+     we make peace (command 6, 0) unless already enemies; every other
+     player that is its enemy is allied (command 6, 2) and, when its +4
+     is 1, it allies us; one naming it ally gets stance 0.
+   - With world +0x1d clear and world +0xfc us, the tactical AI updates
+     and +0x12580 takes the time. */
+int aoe_ai_player_update_ror(AoeAiPlayerAiRor *ai,
+                             const AoeAiPlayerOpsRor *ops);
 
 #endif

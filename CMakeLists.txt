@@ -650,7 +650,8 @@ add_library(aoe_ui_panel STATIC src/ui_panel.c src/ui_button.c src/command_butto
             src/ui_dropdown.c
             src/ui_ez.c
             src/ui_dialog.c
-            src/ui_edit.c)
+            src/ui_edit.c
+            src/scenario_editor_ui.c)
 target_include_directories(aoe_ui_panel PUBLIC include)
 target_link_libraries(aoe_ui_panel PUBLIC aoe_palette_fade aoe_draw_prims aoe_shape)
 target_compile_options(aoe_ui_panel PRIVATE -Wall -Wextra)

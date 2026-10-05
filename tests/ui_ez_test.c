@@ -2,6 +2,7 @@
    scrollbars 0x00468360..0x00468540. */
 #include "ui_dialog.h"
 #include "ui_ez.h"
+#include "scenario_editor_ui.h"
 #include "palette_fade.h"
 #include "shape.h"
 
@@ -674,6 +675,21 @@ int main(void) {
         aoe_shape_free_ror(&shape, &sops);
         ez.panel.clip = clip;
         area.surface = NULL;
+    }
+    {
+        AoeScenarioEditorUiRor ed = {&ez, 1, {1, 2, 3, 4, 5, 6}};
+        AoeUiButtonRor *b = NULL;
+        AoeUiTextRor *t = NULL;
+        AoeUiEditRor *e = NULL;
+        char buf[32];
+        assert(aoe_scenario_editor_button_ror(&ed, &ez.panel, &b, "A", NULL, "Two", NULL));
+        assert(b && !b->panel.active && b->bevel_type == 3 && b->bevel[5] == 6);
+        assert(aoe_scenario_editor_text_ror(&ed, &ez.panel, &t, "Hi") && t && !t->panel.active);
+        assert(aoe_scenario_editor_text_id_ror(&ed, &ez.panel, &t, 7) && !t->panel.active);
+        /* Without edit ops here the edit cannot be made: 0, nothing hidden. */
+        if (aoe_scenario_editor_edit_ror(&ed, &ez.panel, &e, "x", 10, 0, 0, 0))
+            assert(!e->panel.active);
+        (void)aoe_scenario_editor_string_ror(&ed, buf, 7, sizeof buf);
     }
     aoe_ui_ez_release_ror(&ez);
     return 0;

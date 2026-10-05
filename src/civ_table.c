@@ -14,10 +14,11 @@ static void p16(AoeOutcomeStream *s, int16_t v) {
     aoe_stream_put(s, b, 2);
 }
 
-int aoe_civ_from_text_ror(AoeCivRor *c, FILE *f) {
+int aoe_civ_from_text_ror(AoeCivRor *c, FILE *f, uint8_t ror) {
     int16_t listed = 0, i, index = 0, b = 0;
     float v = 0.0f;
     memset(c, 0, sizeof *c);
+    c->ror = ror;
     if (fscanf(f, "%20s %hd %hd", c->name, &c->field_2a, &c->value_count) != 3) c->value_count = 0;
     if (c->value_count > 0) {
         c->values = calloc((size_t)c->value_count, sizeof *c->values);
@@ -32,10 +33,11 @@ int aoe_civ_from_text_ror(AoeCivRor *c, FILE *f) {
     return 1;
 }
 
-int aoe_civ_read_ror(AoeCivRor *c, AoeOutcomeStream *s) {
+int aoe_civ_read_ror(AoeCivRor *c, AoeOutcomeStream *s, uint8_t ror) {
     const uint8_t *name;
     int16_t i;
     memset(c, 0, sizeof *c);
+    c->ror = ror;
     name = aoe_stream_take(s, 20);
     if (name) memcpy(c->name, name, 20);
     c->value_count = g16(s);
@@ -58,7 +60,8 @@ int aoe_civ_set_template_count_ror(AoeCivRor *c, int16_t count) {
     return 1;
 }
 
-static int known_type(uint8_t type) {
+static int known_type(const AoeCivRor *c, uint8_t type) {
+    if (c->ror && (type == 70 || type == 80 || type == 90)) return 1;
     return type == 10 || type == 20 || type == 25 || type == 30 || type == 40 || type == 50 ||
            type == 60;
 }
@@ -67,7 +70,7 @@ int aoe_civ_read_template_ror(AoeCivRor *c, AoeOutcomeStream *s, uint8_t type, v
                               void **sounds, int16_t slot, float version,
                               const AoeTemplateOpsRor *ops) {
     AoeTemplateRor *t;
-    if (!known_type(type)) return 1;
+    if (!known_type(c, type)) return 1;
     t = calloc(1, sizeof *t);
     if (t && !aoe_template_load_ror(t, type, s, sprites, sounds, version, ops)) {
         aoe_template_release_ror(t, ops);
@@ -97,7 +100,7 @@ int aoe_civ_read_templates_ror(AoeCivRor *c, AoeOutcomeStream *s, void **sprites
         if (present[i]) {
             uint8_t type = aoe_stream_u8(s);
             if (!aoe_civ_read_template_ror(c, s, type, sprites, sounds, i, version, ops) &&
-                known_type(type))
+                known_type(c, type))
                 ok = 0;
         }
     free(present);
@@ -107,7 +110,7 @@ int aoe_civ_read_templates_ror(AoeCivRor *c, AoeOutcomeStream *s, void **sprites
 int aoe_civ_text_template_ror(AoeCivRor *c, FILE *f, uint8_t type, void **sprites, void **sounds,
                               int16_t slot, const AoeTemplateOpsRor *ops) {
     AoeTemplateRor *t;
-    if (!known_type(type)) return 1;
+    if (!known_type(c, type)) return 1;
     t = calloc(1, sizeof *t);
     if (t && !aoe_template_text_ror(t, type, f, sprites, sounds, slot, ops)) {
         aoe_template_release_ror(t, ops);
@@ -121,7 +124,7 @@ int aoe_civ_text_template_ror(AoeCivRor *c, FILE *f, uint8_t type, void **sprite
 void aoe_civ_save_ror(const AoeCivRor *c, AoeOutcomeStream *s, const AoeTemplateOpsRor *ops) {
     char name[20];
     int16_t i;
-    aoe_stream_put_u8(s, c->field_29);
+    aoe_stream_put_u8(s, c->ror);
     memset(name, 0, sizeof name);
     memcpy(name, c->name, strnlen(c->name, sizeof name));
     aoe_stream_put(s, name, sizeof name);

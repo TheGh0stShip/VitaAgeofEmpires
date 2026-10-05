@@ -19,7 +19,7 @@ typedef struct {
     int16_t value_count;         /* +0x20 */
     float *values;               /* +0x24 */
     uint8_t field_28;            /* +0x28 */
-    uint8_t field_29;            /* +0x29 */
+    uint8_t ror;                 /* +0x29: 1 for the RoR civilisation */
     int16_t field_2a;            /* +0x2a */
 } AoeCivRor;
 
@@ -27,8 +27,12 @@ typedef struct {
    listed, then "%hd %f" index and value each; "%hd" +0x28), no
    templates; 0x0044f2a0 binary (name 20, i16 value count, i16 +0x2a, the
    values, u8 +0x28). 0 on a failed allocation. */
-int aoe_civ_from_text_ror(AoeCivRor *c, FILE *f);
-int aoe_civ_read_ror(AoeCivRor *c, AoeOutcomeStream *s);
+/* The RoR civilisation (vtable 0x00549a28): the same, marked +0x29 = 1
+   (0x004ef4b0 text, 0x004ef4f0 binary); its template slots +0x08
+   0x004ef520 and +0x10 0x004ef680 also make types 70, 80 and 90; its
+   destructor 0x004ef510 (deleting 0x004ef4d0) is the base one. */
+int aoe_civ_from_text_ror(AoeCivRor *c, FILE *f, uint8_t ror);
+int aoe_civ_read_ror(AoeCivRor *c, AoeOutcomeStream *s, uint8_t ror);
 /* +0x0c 0x0044f700: the template table of `count` (empty slots).
    +0x04 0x0044f3a0: i16 count, a presence dword per slot, then per
    present slot its type byte and +0x08 0x0044f440: a template of that
@@ -43,7 +47,7 @@ int aoe_civ_read_template_ror(AoeCivRor *c, AoeOutcomeStream *s, uint8_t type, v
                               const AoeTemplateOpsRor *ops);
 int aoe_civ_text_template_ror(AoeCivRor *c, FILE *f, uint8_t type, void **sprites, void **sounds,
                               int16_t slot, const AoeTemplateOpsRor *ops);
-/* +0x14 0x0044fa10: u8 +0x29, name 20, i16 value count, i16 +0x2a, the
+/* +0x14 0x0044fa10 (both): u8 +0x29, name 20, i16 value count, i16 +0x2a, the
    values, u8 +0x28, i16 template count, a presence dword per slot (1 or
    0 here: the original writes its pointers) and each present
    template's save. */

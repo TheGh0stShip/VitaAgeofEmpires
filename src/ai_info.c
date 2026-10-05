@@ -2812,3 +2812,103 @@ int aoe_ai_info_ring_site_ror(AoeAiInfoRor *info, struct AoeValueGridRor *grid,
     }
     return best != -1;
 }
+
+void aoe_ai_info_force_ror(const AoeAiInfoRor *info, AoeAiInfoForceRor *out,
+                           uint32_t player, int32_t id, int32_t *mobile,
+                           int32_t *land, const AoeAiInfoOpsRor *ops) {
+    AoeAiWorldObjectRor unit, obj;
+    int32_t i;
+    uint8_t zone;
+    *mobile = 0;
+    *land = 0;
+    memset(out, 0, sizeof *out);
+    if (!info || !ops || !ops->object || !ops->object(ops->context, id, &unit))
+        return;
+    zone = ops->zone ? ops->zone(ops->context, id) : 0;
+    for (i = 0; i < info->object_count; ++i) {
+        const AoeAiInfoObjectRor *e = &info->objects[i];
+        int32_t ox, oy, dx, dy;
+        double d;
+        if (e->owner != player || !ops->object(ops->context, e->id, &obj)) continue;
+        if ((ops->zone ? ops->zone(ops->context, e->id) : 0) != zone) {
+            int32_t pt[2];
+            pt[0] = aoe_ftol32(obj.x);
+            pt[1] = aoe_ftol32(obj.y);
+            if (!ops->zone_reaches ||
+                ops->zone_reaches(ops->context, id, zone,
+                                  ops->range ? (float)ops->range(ops->context, id) : 0.0f,
+                                  pt) != 1)
+                continue;
+        }
+        ox = aoe_ftol32(obj.x);
+        oy = aoe_ftol32(obj.y);
+        dx = e->x - ox;
+        if (dx < 0) dx = -dx;
+        dy = e->y - oy;
+        if (dy < 0) dy = -dy;
+        if (!((dx < 6 && dy < 6) ||
+              (ops->vision && ops->vision(ops->context, ox, oy) == 0xf)))
+            continue;
+        if (e->type_class != 3 && e->type_class != 0x1b) ++*mobile;
+        if (e->type_class != 2 && e->type_class != 0x15 && e->type_class != 0x16 &&
+            e->type_class != 0x14 && e->type_id != 0x2d)
+            ++*land;
+        d = ops->distance ? ops->distance(ops->context, id, (float)e->x, (float)e->y,
+                                          (float)e->z)
+                          : 0.0;
+        if ((double)out->max_distance < d) out->max_distance = aoe_ftol32(d);
+        if ((int16_t)e->hp > out->hp) out->hp = (int16_t)e->hp;
+        if (e->field_10 > 0) out->hp = (int16_t)e->field_10;
+        if (e->field_14 != 0) out->hp = e->field_14;
+        if (e->field_18 > out->field_18) out->field_18 = e->field_18;
+        if (e->field_1c > out->field_1c) out->field_1c = e->field_1c;
+        if (e->range > out->range) out->range = e->range;
+    }
+}
+
+AoeAiInfoObjectRor *aoe_ai_info_wonder_ror(const AoeAiInfoRor *info,
+                                           int32_t player,
+                                           const AoeAiInfoOpsRor *ops) {
+    AoeAiInfoObjectRor *best = NULL;
+    uint32_t best_state = 0xffffffffu;
+    float best_timer = 0.0f, best_hp = 0.0f;
+    int32_t i;
+    if (!info || !ops) return NULL;
+    for (i = 0; i < info->object_count; ++i) {
+        AoeAiInfoObjectRor *e = &info->objects[i];
+        AoeAiWorldObjectRor obj;
+        int16_t type;
+        uint8_t state;
+        float timer;
+        int take = 0;
+        if (e->type_id != 0x114) continue;
+        if (player == -1) {
+            if (!ops->is_enemy || !ops->is_enemy(ops->context, e->owner)) continue;
+        } else if (e->owner != (uint32_t)player) {
+            continue;
+        }
+        if (!ops->object || !ops->object(ops->context, e->id, &obj) || obj.state >= 3)
+            continue;
+        if (!ops->head_action ||
+            !ops->head_action(ops->context, e->id, &type, &state, &timer) || type != 0x78)
+            continue;
+        if (!best) {
+            take = 1;
+        } else if (best_state == 6) {
+            if (state != 2 && state == best_state && timer < best_timer) take = 1;
+        } else if (best_state == 2 && state == 6) {
+            take = 1;
+        } else if (state == best_state) {
+            if (best_state == 2 ? obj.hp > best_hp
+                                : best_state == 6 && timer < best_timer)
+                take = 1;
+        }
+        if (take) {
+            best = e;
+            best_state = state;
+            best_timer = timer;
+            best_hp = obj.hp;
+        }
+    }
+    return best;
+}

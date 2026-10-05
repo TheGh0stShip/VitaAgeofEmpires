@@ -256,7 +256,23 @@ typedef struct {
        pair, 1): nonzero when it passes. */
     int (*reach_test)(void *context, int32_t id, const int32_t from[2],
                       const int32_t to[2], float range);
+    /* The head of an object's action list (+0x184): its type (vtable
+       +0x18), state byte (+0xc) and +0x2c; 0 for an empty list. */
+    int (*head_action)(void *context, int32_t id, int16_t *type,
+                       uint8_t *state, float *field_2c);
 } AoeAiInfoOpsRor;
+
+/* The 36-byte summary 0x004c2de0 fills: the farthest distance, two words
+   it never sets (left 0 here), the hit points word (the upper half never
+   set), +0x10 (0), a byte (0) and the largest of the three floats. */
+typedef struct {
+    int32_t max_distance;
+    int32_t unset_4, unset_8;
+    int16_t hp;
+    int32_t field_10;
+    uint8_t field_14;
+    float field_18, field_1c, range;
+} AoeAiInfoForceRor;
 
 /* 0x004ba1c0: the constructor's state (the base part, 0x0040b470, is the
    diplomacy AI's): no owner, map size -1, 500 free objects (ID, type and
@@ -529,6 +545,25 @@ int aoe_ai_info_ring_site_ror(AoeAiInfoRor *info, struct AoeValueGridRor *grid,
                               const int32_t centre[2], int32_t size,
                               int32_t outer, int32_t inner, int32_t unit,
                               int32_t out[2], const AoeAiInfoOpsRor *ops);
+/* 0x004c2de0: for our unit `id`, a summary of the remembered objects
+   seen as `player`'s that still exist, are in the unit's zone (or within
+   its range of a tile of that zone) and are within 5 tiles of where they
+   were seen or on a visible tile: `mobile` counts those not of class 3 or
+   0x1b, `land` those not of class 2, 0x15, 0x16 or 0x14 nor type 0x2d;
+   the summary keeps the farthest ftol(unit distance to the seen tile),
+   the largest hit points (then +0x10 when positive, then +0x14 when
+   nonzero, replacing it) and the largest floats. */
+void aoe_ai_info_force_ror(const AoeAiInfoRor *info, AoeAiInfoForceRor *out,
+                           uint32_t player, int32_t id, int32_t *mobile,
+                           int32_t *land, const AoeAiInfoOpsRor *ops);
+/* 0x004c5980: a remembered wonder (type 0x114) of `player` (-1: of any
+   player we are the enemy of) that still exists below state 3 and whose
+   first action is of type 0x78: the first found, then one in action state
+   6 over one in state 2, among state 2 the most hit points, among state 6
+   the smallest action +0x2c. NULL for none. */
+AoeAiInfoObjectRor *aoe_ai_info_wonder_ror(const AoeAiInfoRor *info,
+                                           int32_t player,
+                                           const AoeAiInfoOpsRor *ops);
 int32_t aoe_ai_info_pick_target_ror(AoeAiInfoRor *info, int32_t k,
                                     int32_t id, float pos[2], int32_t *drop,
                                     const int32_t *exclude,

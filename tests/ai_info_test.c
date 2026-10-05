@@ -1085,6 +1085,82 @@ static void dock_and_ring_tests(void) {
     aoe_value_grid_free_ror(&g);
 }
 
+static int force_object(void *c, int32_t id, AoeAiWorldObjectRor *o) {
+    (void)c;
+    if (id == 34) return 0;
+    memset(o, 0, sizeof *o);
+    o->id = id;
+    o->x = o->y = id == 35 ? 20.0f : 2.5f;
+    o->state = (uint8_t)(id == 46 ? 3 : 2);
+    o->hp = id == 42 ? 50.0f : 10.0f;
+    return 1;
+}
+static uint8_t force_zone(void *c, int32_t id) { (void)c; return (uint8_t)(id == 36 ? 4 : 1); }
+static uint8_t force_vision(void *c, int32_t x, int32_t y) { (void)c; (void)y; return (uint8_t)(x == 20 ? 0xf : 0); }
+static double force_dist(void *c, int32_t id, float x, float y, float z) { (void)c; (void)id; (void)y; (void)z; return x * 1.5; }
+static int force_enemy(void *c, int32_t p) { (void)c; return p == 2; }
+static int force_head(void *c, int32_t id, int16_t *t, uint8_t *st, float *tm) {
+    (void)c;
+    *t = (int16_t)(id == 47 ? 0x77 : 0x78);
+    *st = (uint8_t)(id == 41 || id == 42 ? 2 : 6);
+    *tm = id == 43 ? 5.0f : 9.0f;
+    return 1;
+}
+
+static void force_and_wonder_tests(void) {
+    static AoeAiInfoRor info;
+    static AoeAiInfoObjectRor objs[8];
+    AoeAiInfoOpsRor ops;
+    AoeAiInfoForceRor f;
+    int32_t mobile, land;
+    memset(&ops, 0, sizeof ops);
+    ops.object = force_object;
+    ops.zone = force_zone;
+    ops.vision = force_vision;
+    ops.distance = force_dist;
+    /* 0x004c2de0 for player 2: 31 wall (class 0x1b) near its sighting,
+       32 boat (class 2) with +0x10 7, 33 another player's, 34 gone, 35
+       moved far but visible, 36 another zone (no reach op). */
+    objs[0].id = 31; objs[0].owner = 2; objs[0].type_class = 0x1b; objs[0].x = 2; objs[0].y = 3; objs[0].hp = 40;
+    objs[1].id = 32; objs[1].owner = 2; objs[1].type_class = 2; objs[1].x = 4; objs[1].field_10 = 7;
+    objs[1].range = 6.0f;
+    objs[2].id = 33; objs[2].owner = 3;
+    objs[3].id = 34; objs[3].owner = 2;
+    objs[4].id = 35; objs[4].owner = 2; objs[4].x = 1; objs[4].field_18 = 2.0f;
+    objs[5].id = 36; objs[5].owner = 2;
+    info.objects = objs;
+    info.object_count = 6;
+    aoe_ai_info_force_ror(&info, &f, 2, 7, &mobile, &land, &ops);
+    assert(mobile == 2 && land == 2);
+    assert(f.max_distance == 6 && f.hp == 7 && f.range == 6.0f && f.field_18 == 2.0f &&
+           f.unset_4 == 0 && f.field_14 == 0);
+    aoe_ai_info_force_ror(&info, &f, 2, 34, &mobile, &land, &ops);
+    assert(mobile == 0 && f.max_distance == 0);
+
+    /* 0x004c5980: wonders 41 (state 2, hp 10), 42 (state 2, hp 50),
+       43 (state 6, 5.0), 44 (state 6, 9.0), 45 (player 3), 46 (state 3),
+       47 (another action). */
+    memset(objs, 0, sizeof objs);
+    {
+        int i;
+        for (i = 0; i < 7; ++i) {
+            objs[i].id = 41 + i;
+            objs[i].type_id = 0x114;
+            objs[i].owner = 2;
+        }
+    }
+    objs[4].owner = 3;
+    info.object_count = 7;
+    ops.head_action = force_head;
+    ops.is_enemy = force_enemy;
+    assert(aoe_ai_info_wonder_ror(&info, 2, &ops) == &objs[2]);
+    assert(aoe_ai_info_wonder_ror(&info, -1, &ops) == &objs[2]);
+    assert(aoe_ai_info_wonder_ror(&info, 3, &ops) == &objs[4]);
+    info.object_count = 2;
+    assert(aoe_ai_info_wonder_ror(&info, 2, &ops) == &objs[1]);
+    assert(aoe_ai_info_wonder_ror(&info, 5, &ops) == NULL);
+}
+
 static void lifecycle_tests(void) {
     static AoeAiInfoRor a, b;
     static uint8_t buf[200000];
@@ -1211,6 +1287,7 @@ int main(void) {
     pick_target_tests();
     resource_tests();
     dock_and_ring_tests();
+    force_and_wonder_tests();
     memset(&ops, 0, sizeof ops);
     ops.self = 1;
     ops.object = object;

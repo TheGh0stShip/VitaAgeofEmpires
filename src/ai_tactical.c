@@ -1815,3 +1815,37 @@ void aoe_ai_tactical_setup_soldier_groups_ror(AoeAiTacticalRor *ai,
     }
     free(doomed.data);
 }
+
+void aoe_ai_tactical_send_explorer_ror(AoeAiTacticalRor *ai, int32_t unit,
+                                       int32_t explore,
+                                       const AoeAiTacticalOpsRor *ops,
+                                       AoeAiInfoRor *info,
+                                       const AoeAiInfoOpsRor *info_ops) {
+    int32_t pt[2];
+    if (!ai) return;
+    aoe_ai_int_list_add_unique_ror(&ai->list_d58, unit);
+    if (explore == 1 &&
+        aoe_ai_tactical_explore_spot_ror(ai, unit, pt, ops, info, info_ops) == 1) {
+        aoe_ai_tactical_order_explore_ror(ai, unit, (float)pt[0], (float)pt[1], 1, ops);
+        return;
+    }
+    aoe_ai_tactical_order_explore_ror(ai, unit, -1.0f, -1.0f, explore == 1, ops);
+}
+
+void aoe_ai_tactical_send_scout_ror(AoeAiTacticalRor *ai, int32_t unit, float x,
+                                    float y, const AoeAiTacticalOpsRor *ops,
+                                    AoeAiInfoRor *info,
+                                    const AoeAiInfoOpsRor *info_ops) {
+    int32_t i, pt[2];
+    if (!ai) return;
+    aoe_ai_int_list_add_unique_ror(&ai->list_d58, unit);
+    for (i = 0; i < ai->lists[0].count; ++i)
+        if (ai->lists[0].data[i] == unit) {
+            if (aoe_ai_tactical_explore_spot_ror(ai, unit, pt, ops, info, info_ops) == 1)
+                aoe_ai_tactical_order_explore_ror(ai, unit, (float)pt[0], (float)pt[1], 1, ops);
+            else
+                aoe_ai_tactical_order_explore_ror(ai, unit, x, y, 1, ops);
+            return;
+        }
+    aoe_ai_tactical_order_explore_ror(ai, unit, x, y, 0, ops);
+}

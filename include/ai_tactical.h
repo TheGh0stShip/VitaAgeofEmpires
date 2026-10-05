@@ -487,6 +487,20 @@ int aoe_ai_tactical_order_2ca_ror(AoeAiTacticalRor *ai, int32_t unit, float x, f
 void aoe_ai_tactical_setup_soldier_groups_ror(AoeAiTacticalRor *ai,
                                               const AoeAiTacticalOpsRor *ops,
                                               const AoeAiUnitGroupOpsRor *group_ops);
+/* 0x004db580: `unit` is marked tasked; with `explore` 1 it explores the
+   spot 0x004e1620 finds (else (-1, -1)) as an explorer, otherwise it is
+   sent to (-1, -1) without joining list 1 (0x004db800). 0x004db6a0: the
+   same with (x, y) as the fallback, as an explorer only when it is on
+   list 0 (searched over the count). */
+void aoe_ai_tactical_send_explorer_ror(AoeAiTacticalRor *ai, int32_t unit,
+                                       int32_t explore,
+                                       const AoeAiTacticalOpsRor *ops,
+                                       AoeAiInfoRor *info,
+                                       const AoeAiInfoOpsRor *info_ops);
+void aoe_ai_tactical_send_scout_ror(AoeAiTacticalRor *ai, int32_t unit, float x,
+                                    float y, const AoeAiTacticalOpsRor *ops,
+                                    AoeAiInfoRor *info,
+                                    const AoeAiInfoOpsRor *info_ops);
 /* 0x004dc650: ftol(number 34 / f), at most 99. */
 int32_t aoe_ai_tactical_effort_ror(const AoeAiTacticalRor *ai, float f);
 /* 0x004e2f90: +0xd68[i] (0..3, else -1). 0x004e2f30 / 0x004e2f60 /

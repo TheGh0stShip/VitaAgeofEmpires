@@ -682,6 +682,29 @@ static void soldier_group_tests(void) {
     tnow = 300000;
 }
 
+static void scout_tests(void) {
+    static AoeAiTacticalRor ai;
+    AoeAiTacticalOpsRor ops;
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    memset(&ops, 0, sizeof ops);
+    ops.order = order;
+    orders = 0;
+    /* No town centre and no information AI: no spot. */
+    aoe_ai_tactical_send_explorer_ror(&ai, 40, 1, &ops, NULL, NULL);
+    assert(orders == 1 && last_order.a == -1.0f &&
+           aoe_ai_int_list_contains_ror(&ai.lists[1], 40));
+    aoe_ai_tactical_send_explorer_ror(&ai, 41, 0, &ops, NULL, NULL);
+    assert(!aoe_ai_int_list_contains_ror(&ai.lists[1], 41));
+    aoe_ai_int_list_add_unique_ror(&ai.lists[0], 42);
+    aoe_ai_tactical_send_scout_ror(&ai, 42, 5.0f, 6.0f, &ops, NULL, NULL);
+    assert(last_order.a == 5.0f && aoe_ai_int_list_contains_ror(&ai.lists[1], 42));
+    aoe_ai_tactical_send_scout_ror(&ai, 43, 7.0f, 6.0f, &ops, NULL, NULL);
+    assert(last_order.a == 7.0f && !aoe_ai_int_list_contains_ror(&ai.lists[1], 43) &&
+           orders == 4);
+    orders = 0;
+    aoe_ai_tactical_release_ror(&ai);
+}
+
 static void to_object_tests(void) {
     static AoeAiTacticalRor ai;
     AoeAiTacticalOpsRor ops;
@@ -920,6 +943,7 @@ int main(void) {
     to_object_tests();
     point_attack_train_tests();
     soldier_group_tests();
+    scout_tests();
 
     aoe_ai_tactical_init_ror(&ai, 3, NULL);
     assert(ai.module.id == 0x3f1 && !strcmp(ai.module.name, "TacAI"));

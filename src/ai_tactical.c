@@ -2156,3 +2156,98 @@ void aoe_ai_tactical_setup_boat_groups_ror(AoeAiTacticalRor *ai,
     }
     free(doomed.data);
 }
+
+/* 0x004e13c0: see the header. */
+int aoe_ai_tactical_defend_object_ror(AoeAiTacticalRor *ai, int32_t enemy, int32_t ours,
+                                      const AoeAiTacticalOpsRor *ops) {
+    AoeAiWorldObjectRor e, o, u;
+    int32_t tile[2], unit, sent = 0, i;
+    if (!ai || !ops || !ops->world_object || !ops->world_object(ops->context, enemy, &e) ||
+        !ops->world_object(ops->context, ours, &o))
+        return 0;
+    for (i = 0; i < ai->lists[1].count && i < ai->lists[1].capacity; ++i)
+        if (ai->lists[1].data[i] == o.id) return 0;
+    tile[0] = aoe_ftol32(o.x);
+    tile[1] = aoe_ftol32(o.y);
+    unit = aoe_ai_tactical_pick_unit_ror(ai, tile, 1, 0x2bc, 0x2c9, 0x2c9, 1, ops);
+    if (unit == -1) return 0;
+    do {
+        float r;
+        if (sent >= ai->sn[100] || !ops->object || !ops->object(ops->context, unit, &u)) break;
+        r = ops->range ? (float)ops->range(ops->context, unit) : 0.0f;
+        if (!ops->can_reach ||
+            !ops->can_reach(ops->context, unit, aoe_ftol32(e.x), aoe_ftol32(e.y),
+                            aoe_ftol32(e.z), r, e.id))
+            break;
+        aoe_ai_tactical_order_attack_ror(ai, unit, e.x, e.y, e.id, e.owner, NULL, 0, 0, ops);
+        ++sent;
+        unit = aoe_ai_tactical_pick_unit_ror(ai, tile, 1, 0x2bc, 0x2c9, 0x2c9, 1, ops);
+    } while (unit != -1);
+    return sent > 0;
+}
+
+/* 0x004e2b70: see the header. */
+static int research_in_age(AoeAiTacticalRor *ai, int32_t age, int32_t next, int32_t type,
+                           int32_t food, int32_t gold, const AoeAiTacticalOpsRor *ops,
+                           AoeAiBuildItemRor **item) {
+    *item = NULL;
+    if (!aoe_ai_tactical_age_is_ror(ops, age) || ai->sn[180 + age] != 1 || !ops->age_open ||
+        !ops->age_open(ops->context, next) || !ops->resource_amount ||
+        ops->resource_amount(ops->context, 0) < food ||
+        (gold && ops->resource_amount(ops->context, 3) < gold))
+        return 0;
+    *item = ops->build_pending ? ops->build_pending(ops->context, type, 1, 4) : NULL;
+    return 1;
+}
+
+void aoe_ai_tactical_research_ages_ror(AoeAiTacticalRor *ai,
+                                       const AoeAiTacticalOpsRor *ops) {
+    AoeAiBuildItemRor *item;
+    if (!ai || !ops) return;
+    /* Original quirk: when the age-1 test passes but no 0x65 item is
+       pending, the age-2 test is skipped (it is only the else branch). */
+    if (research_in_age(ai, 1, 2, 0x65, 500, 0, ops, &item) ||
+        research_in_age(ai, 2, 3, 0x66, 800, 0, ops, &item)) {
+        if (item) aoe_ai_tactical_research_ror(ai, item, ops);
+    }
+    if (research_in_age(ai, 3, 4, 0x67, 900, 700, ops, &item) && item)
+        aoe_ai_tactical_research_ror(ai, item, ops);
+}
+
+/* 0x004e1d00: see the header. */
+static void plan_costed(int32_t type, int32_t cap, int32_t position,
+                        int32_t limit, const AoeAiTacticalOpsRor *ops) {
+    AoeAiCountersRor costs;
+    int32_t i;
+    aoe_ai_counters_init_ror(&costs, 4);
+    /* Original quirk: the (still zero) costs are scaled by `cap` for the
+       first `cap` slots before they are filled, so nothing is scaled. */
+    for (i = 0; i < cap; ++i)
+        aoe_ai_counters_set_ror(&costs, i, aoe_ai_counters_get_ror(&costs, i) * cap);
+    if (ops->type_costs) ops->type_costs(ops->context, type, &costs);
+    if (ops->can_afford && ops->can_afford(ops->context, &costs) && ops->template_usable &&
+        ops->template_usable(ops->context, type) && ops->build_all_started &&
+        ops->build_all_started(ops->context, 0, 0) && ops->build_started &&
+        ops->build_started(ops->context, type, 0) < limit && ops->build_add)
+        ops->build_add(ops->context, type, cap, position);
+    aoe_ai_counters_release_ror(&costs);
+}
+
+void aoe_ai_tactical_plan_building_ror(AoeAiTacticalRor *ai, int32_t type, int32_t cap,
+                                       int32_t position, const AoeAiTacticalOpsRor *ops) {
+    if (!ai || !ops) return;
+    if (type == 0x32) {
+        if (ai->sn[206] == 1 && aoe_ai_tactical_age_is_ror(ops, 4))
+            plan_costed(0x32, cap, position, ai->sn[220], ops);
+    } else if (type == 0x44) {
+        int32_t total = 0, unbuilt = 0, need, dist;
+        if (ai->sn[205] != 1 || !ops->info_best_distance) return;
+        dist = ops->info_best_distance(ops->context, 0);
+        if (dist == -1) return;
+        need = aoe_ai_tactical_need_pit_ror(ai, &total, &unbuilt, ops);
+        if (unbuilt > 0 || need < 1 || ai->sn[163] >= dist) return;
+        if (ops->build_add) ops->build_add(ops->context, 0x44, cap, position);
+    } else if (type == 0x4f) {
+        if (ai->sn[207] == 1) plan_costed(0x4f, cap, position, ai->sn[222], ops);
+    }
+}

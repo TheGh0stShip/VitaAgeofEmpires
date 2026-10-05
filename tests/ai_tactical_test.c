@@ -1092,6 +1092,182 @@ static void nearest_group_tests(void) {
     aoe_ai_tactical_release_ror(&ai);
 }
 
+static int d_object(void *c, int32_t id, AoeAiWorldObjectRor *o) {
+    (void)c;
+    memset(o, 0, sizeof *o);
+    o->id = id;
+    o->x = (float)id;
+    if (id == 60) { o->x = 30.6f; o->y = 40.2f; o->z = 1.7f; o->owner = 3; }
+    if (id == 61) { o->x = 5.5f; o->y = 5.5f; }
+    return id > 0;
+}
+static int d_action(void *c, int32_t id, int32_t *a) { (void)c; (void)id; *a = 0; return 1; }
+static int d_task(void *c, int32_t id, int32_t *t) { (void)c; (void)id; *t = 0; return 1; }
+static double d_dist(void *c, int32_t id, float x, float y, float z) {
+    (void)c; (void)y; (void)z; return fabs((double)id - x);
+}
+static double d_range(void *c, int32_t id) { (void)c; (void)id; return 2.0; }
+static int d_reach(void *c, int32_t id, int32_t x, int32_t y, int32_t z, float r, int32_t t) {
+    (void)c;
+    assert(x == 30 && y == 40 && z == 1 && r == 2.0f && t == 60);
+    return id != 13;
+}
+static int32_t rp_types[8], rp_n;
+static AoeAiBuildItemRor *rp_item;
+static AoeAiBuildItemRor *d_pending(void *c, int32_t type, int32_t a, int32_t b) {
+    (void)c; assert(a == 1 && b == 4); rp_types[rp_n++] = type; return rp_item;
+}
+static int32_t rp_food = 1000, rp_gold = 1000;
+static int32_t d_amount(void *c, int32_t i) { (void)c; return i == 0 ? rp_food : rp_gold; }
+static int d_age_open(void *c, int32_t age) { (void)c; (void)age; return 1; }
+
+static void defend_and_research_tests(void) {
+    static AoeAiTacticalRor ai;
+    static AoeAiBuildItemRor item;
+    AoeAiTacticalOpsRor ops;
+    float saved_age = tres[6];
+    memset(&ops, 0, sizeof ops);
+    ops.object = ops.world_object = d_object;
+    ops.unit_action = d_action;
+    ops.unit_task = d_task;
+    ops.distance = d_dist;
+    ops.object_distance = t_odist;
+    ops.range = d_range;
+    ops.can_reach = d_reach;
+    ops.order = order;
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[0], 11);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[0], 12);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[0], 13);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[0], 14);
+    ai.sn[100] = 5;
+    /* 0x004e13c0: 5 nearest at tile (5, 5): 11, 12, then 13 fails. */
+    orders = 0;
+    assert(aoe_ai_tactical_defend_object_ror(&ai, 60, 61, &ops) == 1);
+    assert(orders == 2 && last_order.unit == 12 && last_order.action == 0x2bc &&
+           last_order.target == 60 && last_order.target2 == 3);
+    /* The cap of number 100. */
+    ai.list_d58.count = 0;
+    ai.sn[100] = 1;
+    orders = 0;
+    assert(aoe_ai_tactical_defend_object_ror(&ai, 60, 61, &ops) == 1 && orders == 1);
+    ai.sn[100] = 0;
+    assert(aoe_ai_tactical_defend_object_ror(&ai, 60, 61, &ops) == 0);
+    /* Listed in list 1: refused. */
+    ai.sn[100] = 5;
+    aoe_ai_int_list_add_unique_ror(&ai.lists[1], 61);
+    assert(aoe_ai_tactical_defend_object_ror(&ai, 60, 61, &ops) == 0);
+
+    /* 0x004e2b70 */
+    ops.resource = tresource;
+    ops.resource_amount = d_amount;
+    ops.age_open = d_age_open;
+    ops.build_pending = d_pending;
+    ops.find_producer = t_producer;
+    ops.research_order = t_train;
+    ai.sn[181] = ai.sn[182] = ai.sn[183] = 1;
+    tres[6] = 1.0f;
+    rp_n = 0;
+    aoe_ai_tactical_research_ages_ror(&ai, &ops);
+    assert(rp_n == 1 && rp_types[0] == 0x65);
+    /* Age 1 but too little food: falls to the age-2 test (fails too). */
+    rp_food = 499;
+    rp_n = 0;
+    aoe_ai_tactical_research_ages_ror(&ai, &ops);
+    assert(rp_n == 0);
+    rp_food = 1000;
+    /* Age 2 researches the pending 0x66 item. */
+    tres[6] = 2.0f;
+    aoe_ai_build_item_init_ror(&item);
+    item.plan.type = 0x66;
+    item.build_from = 0x6d;
+    rp_item = &item;
+    tr_type = -1;
+    aoe_ai_tactical_research_ages_ror(&ai, &ops);
+    assert(rp_n == 1 && rp_types[0] == 0x66 && tr_type == 0x66);
+    /* Age 3 needs 700 gold. */
+    tres[6] = 3.0f;
+    rp_n = 0;
+    rp_gold = 699;
+    aoe_ai_tactical_research_ages_ror(&ai, &ops);
+    assert(rp_n == 0);
+    rp_gold = 700;
+    aoe_ai_tactical_research_ages_ror(&ai, &ops);
+    assert(rp_n == 1 && rp_types[0] == 0x67);
+    rp_item = NULL;
+    tres[6] = saved_age;
+    aoe_ai_tactical_release_ror(&ai);
+}
+
+static int32_t pb_type = -1, pb_cap, pb_pos, pb_started;
+static int pb_afford = 1;
+static void pb_add(void *c, int32_t t, int32_t cap, int32_t pos) { (void)c; pb_type = t; pb_cap = cap; pb_pos = pos; }
+static void pb_costs(void *c, int32_t t, AoeAiCountersRor *k) { (void)c; aoe_ai_counters_set_ror(k, 0, t); }
+static int pb_can(void *c, const AoeAiCountersRor *k) {
+    (void)c; assert(k->count == 4 && (k->values[0] == 0x32 || k->values[0] == 0x4f)); return pb_afford;
+}
+static int pb_yes(void *c, int32_t t) { (void)c; (void)t; return 1; }
+static int pb_all(void *c, int32_t a, int32_t b) { (void)c; assert(a == 0 && b == 0); return 1; }
+static int32_t pb_count(void *c, int32_t t, int32_t k) { (void)c; (void)t; assert(k == 0); return pb_started; }
+static int32_t pb_dist(void *c, int32_t k) { (void)c; assert(k == 0); return 20; }
+
+static void plan_building_tests(void) {
+    static AoeAiTacticalRor ai;
+    AoeAiTacticalOpsRor ops;
+    float saved_age = tres[6], saved_food = tres[0];
+    memset(&ops, 0, sizeof ops);
+    ops.resource = tresource;
+    ops.type_costs = pb_costs;
+    ops.can_afford = pb_can;
+    ops.template_usable = pb_yes;
+    ops.build_all_started = pb_all;
+    ops.build_started = pb_count;
+    ops.build_add = pb_add;
+    ops.info_best_distance = pb_dist;
+    ops.food_far = tfood;
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    /* 0x32 needs age 4 and number 206. */
+    ai.sn[206] = 1;
+    ai.sn[220] = 2;
+    tres[6] = 3.0f;
+    aoe_ai_tactical_plan_building_ror(&ai, 0x32, 9, -1, &ops);
+    assert(pb_type == -1);
+    tres[6] = 4.0f;
+    aoe_ai_tactical_plan_building_ror(&ai, 0x32, 9, -1, &ops);
+    assert(pb_type == 0x32 && pb_cap == 9 && pb_pos == -1);
+    pb_type = -1;
+    pb_started = 2;
+    aoe_ai_tactical_plan_building_ror(&ai, 0x32, 9, -1, &ops);
+    assert(pb_type == -1);
+    /* 0x4f with number 207 and the limit 222. */
+    ai.sn[207] = 1;
+    ai.sn[222] = 3;
+    aoe_ai_tactical_plan_building_ror(&ai, 0x4f, 1, 4, &ops);
+    assert(pb_type == 0x4f && pb_pos == 4);
+    pb_type = -1;
+    pb_afford = 0;
+    aoe_ai_tactical_plan_building_ror(&ai, 0x4f, 1, 4, &ops);
+    assert(pb_type == -1);
+    /* 0x44: food 100 below number 190, number 151 unset, the food test
+       9, number 163 below the distance 20. */
+    ai.sn[205] = 1;
+    ai.sn[190] = 500;
+    ai.sn[163] = 20;
+    aoe_ai_tactical_plan_building_ror(&ai, 0x44, 2, 5, &ops);
+    assert(pb_type == -1);
+    ai.sn[163] = 19;
+    aoe_ai_tactical_plan_building_ror(&ai, 0x44, 2, 5, &ops);
+    assert(pb_type == 0x44 && pb_cap == 2 && pb_pos == 5);
+    pb_type = -1;
+    aoe_ai_tactical_plan_building_ror(&ai, 0x45, 2, 5, &ops);
+    assert(pb_type == -1);
+    pb_afford = 1;
+    pb_started = 0;
+    tres[6] = saved_age;
+    tres[0] = saved_food;
+    aoe_ai_tactical_release_ror(&ai);
+}
+
 int main(void) {
     static AoeAiTacticalRor ai, back;
     static uint8_t buf[1 << 16];
@@ -1287,6 +1463,8 @@ int main(void) {
     share_tests();
     collect_tests();
     pick_tests();
+    defend_and_research_tests();
+    plan_building_tests();
     puts("ai tactical ok");
     return 0;
 }

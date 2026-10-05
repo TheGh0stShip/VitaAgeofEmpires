@@ -317,6 +317,21 @@ typedef struct {
        (the 0x0040bab0 result): nonzero when it held the object, its +0xc
        is that holder and its type's +4 byte is 'P' or 'F'. */
     int (*release_object)(void *context, int32_t id);
+    /* The Build AI's first item of plan type `type` (either category)
+       neither built nor in progress (0x004b95e0); NULL for none. */
+    AoeAiBuildItemRor *(*build_pending)(void *context, int32_t type, int32_t category_a,
+                                        int32_t category_b);
+    /* A type's costs from the tribe player's templates (player +0x1256c,
+       four resources), the resource AI's test of them (0x004c8c90), the
+       template test (0x004f20c0), the Build AI's 0x004b9440 (categories 0
+       and 0), its vtable +0x48 count (0x004b93d0) and adding an item
+       (0x004b9050 with type, cap, position). */
+    void (*type_costs)(void *context, int32_t type, AoeAiCountersRor *costs);
+    int (*can_afford)(void *context, const AoeAiCountersRor *costs);
+    int (*template_usable)(void *context, int32_t type);
+    int (*build_all_started)(void *context, int32_t category_a, int32_t category_b);
+    int32_t (*build_started)(void *context, int32_t type, int32_t category);
+    void (*build_add)(void *context, int32_t type, int32_t cap, int32_t position);
 } AoeAiTacticalOpsRor;
 
 /* 0x004e0630: in list order, the group with task `task` and +0x180
@@ -767,5 +782,36 @@ int aoe_ai_tactical_explore_spot_ror(AoeAiTacticalRor *ai, int32_t unit,
 struct AoeValueGridRor;
 void aoe_ai_tactical_block_sites_ror(const AoeAiTacticalRor *ai, const AoeAiInfoRor *info,
                                      struct AoeValueGridRor *grid, const AoeAiInfoOpsRor *ops);
+
+/* 0x004e13c0(enemy, ours): unless `ours` is in list 1 (searched to its
+   capacity), up to number 100 units picked nearest to its truncated tile
+   (0x004d9760: skipping actions 0x2bc and 0x2c9, type 0x103 allowed) are
+   sent at `enemy` (0x004dbe10 at its position, with its owner as the
+   second target, kind 0) while each still exists and its path test to
+   the enemy's truncated position within its range passes; the first
+   failure ends the loop. 1 when any was sent. */
+int aoe_ai_tactical_defend_object_ror(AoeAiTacticalRor *ai, int32_t enemy, int32_t ours,
+                                      const AoeAiTacticalOpsRor *ops);
+/* 0x004e2b70: age research. In age 1 with number 181 at 1, age 2 open
+   (0x004b94b0) and 500 food (0x004c8c60), the pending 0x65 item; else in
+   age 2 with number 182, age 3 and 800 food, the pending 0x66 item; it is
+   researched (0x004dc1a0). Then in age 3 with number 183, age 4, 900 food
+   and 700 gold, the pending 0x67 item. Quirk: the age-1 test passing
+   without a pending 0x65 item skips the age-2 test. */
+void aoe_ai_tactical_research_ages_ror(AoeAiTacticalRor *ai,
+                                       const AoeAiTacticalOpsRor *ops);
+
+/* 0x004e1d00(type, cap, position): plans a building.
+   - 0x32 with number 206 at 1 in age 4, and 0x4f with number 207 at 1:
+     the type's costs (four counters) must be affordable (0x004c8c90),
+     the template usable (0x004f20c0), every item started (0x004b9440)
+     and the started count (0x004b93d0) below number 220 (0x32) or 222
+     (0x4f); then the item is added (0x004b9050). Quirk: the counters are
+     scaled by `cap` (first `cap` slots) before the costs fill them.
+   - 0x44 with number 205 at 1 and the best distance (0) not -1: when no
+     pit is unbuilt, 0x004e1c00 asks for one and number 163 is below that
+     distance. Other types do nothing. */
+void aoe_ai_tactical_plan_building_ror(AoeAiTacticalRor *ai, int32_t type, int32_t cap,
+                                       int32_t position, const AoeAiTacticalOpsRor *ops);
 
 #endif

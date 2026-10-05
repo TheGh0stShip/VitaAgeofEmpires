@@ -10,7 +10,31 @@ static float unit_speed = 1.0f;
 static float speed(void *c, void *u) { (void)c; (void)u; return unit_speed; }
 static void clear_path(void *c, void *u) { (void)c; (void)u; ++cleared; }
 
+static void test_collect_nearby(void) {
+    AoePathfinderRor path;
+    int32_t ids[5] = {7, 8, 7, 9, 42};
+    AoePathIdListRor out = {NULL, 0, 0};
+
+    memset(&path, 0, sizeof(path));
+    path.nearby_ids = ids;
+    path.nearby_count = 4;
+    path.nearby_capacity = 5;
+    /* Index 4 (one past the count) is read too: a stale ID. */
+    assert(aoe_path_collect_nearby_ror(&path, &out));
+    assert(out.count == 4 && out.capacity == 4);
+    assert(out.ids[0] == 42 && out.ids[1] == 9 && out.ids[2] == 7 &&
+           out.ids[3] == 8);
+    /* Beyond the capacity it is skipped; existing IDs are not repeated. */
+    path.nearby_capacity = 4;
+    path.nearby_count = 4;
+    ids[0] = 5;
+    assert(aoe_path_collect_nearby_ror(&path, &out));
+    assert(out.count == 5 && out.ids[4] == 5);
+    free(out.ids);
+}
+
 int main(void) {
+    test_collect_nearby();
     int32_t table[256];
     AoePathfinderRor path;
     AoePathPrecheckOps ops = {0, speed, clear_path};

@@ -50,6 +50,15 @@ size_t aoe_command_build_order_alternate_ids_ror(uint8_t *out,
                                                  int32_t count,
                                                  int32_t target_id, float x,
                                                  float y);
+/* 0x0042b9f0, opcode 3: the same layout as opcode 2 from objects (units
+   from +0x1c, target ID +4, x +8, y +0xc). */
+size_t aoe_command_build_order_target_ror(
+    uint8_t *out, size_t out_size, const AoeCommandObjectRor *const *units,
+    int16_t count, const AoeCommandObjectRor *target, float x, float y);
+/* 0x0042b850, opcode 1 (stop): count +1, unit IDs from +2. */
+size_t aoe_command_build_stop_ror(uint8_t *out, size_t out_size,
+                                  const AoeCommandObjectRor *const *units,
+                                  int16_t count);
 /* 0x0042bb60, opcode 6: count (+4 as count & 0xff), pattern +8. */
 size_t aoe_command_build_arrange_ror(uint8_t *out, size_t out_size,
                                      const AoeCommandObjectRor *const *units,

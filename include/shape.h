@@ -72,6 +72,7 @@ typedef struct {
     int32_t pitch;
     int32_t direction;         /* 1 top-down, else bottom-up */
     int32_t clip_left, clip_top, clip_right, clip_bottom;
+    const uint8_t *shade;      /* +0xc8: the shading object's table */
 } AoeShapeSurfaceRor;
 
 /* The SHP blitters for a frame entirely inside the surface at (x, y):

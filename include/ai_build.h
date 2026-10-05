@@ -489,4 +489,29 @@ int aoe_ai_ror_build_failed_ror(AoeAiRorBuildListRor *list, const AoeAiRorBuildF
                                 int32_t reason, int32_t object, int32_t unique_id, float x,
                                 float y, int32_t arg);
 
+/* 0x004b7930, after the RoR list loads, from the tactical AI's numbers
+   (`sn`): counting buildings (houses 0x46, docks 0x2d), units (0xd;
+   0x11 / 0x12; 0x13 / 0xfa / 0x115) and the unique IDs of researches
+   0x65, 0x66, 0x67 (and whether 5, 7, 8 are listed):
+   - docks up to number 0xd4 when 0xd0 is 1, spread at the 0x66 (else
+     0x65, else 10) ID divided by the number missing (0x004b9050);
+   - boats 0xd up to 0xd5 when 0xd1 is 1, the same way;
+   - boats 0x11 up to 0xd6 when 0xd2 is 1, spread over the rest of the
+     list from the 0x65 (else 0x66) ID; then research 8 after 0x67 + 2
+     unless listed (0x004b9300);
+   - research 0x13 up to number 0xe0 when 0xdf is 1 and 0x67 or 0x66 is
+     listed, spread from that ID (through 0x004b9300, which refuses that
+     type: nothing is added, as in the original); then research 5 after
+     0x66 + 5 and 7 after 0x67 + 5 unless listed;
+   - with no houses and number 0xb4 1, houses wherever the units listed
+     so far outnumber four per town centre (0x6d) and house, until the
+     capacity passes number 0x98 + 50;
+   - with number 0xa0 nonzero, every number 0x9b + 4 items (gather
+     settings excepted) the four resources' shares of their costs (0x00
+     40ec40 counters) become gather settings (0x004b93a0) of 0xa0 split by
+     those shares, placed at the running position. */
+int aoe_ai_ror_build_list_augment_ror(AoeAiRorBuildListRor *list, AoeAiObjectFn objects,
+                                      void *context, int32_t (*sn)(void *context, int32_t i),
+                                      AoeAiCostFn research_cost, AoeAiCostFn object_cost);
+
 #endif

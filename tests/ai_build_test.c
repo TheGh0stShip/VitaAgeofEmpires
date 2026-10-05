@@ -57,6 +57,7 @@ static void fail_note(void *c, float x, float y, int32_t f) { (void)c; (void)x; 
 static void fail_mark(void *c, int32_t t, int32_t x, int32_t y, uint8_t s) {
     (void)c; (void)t; (void)x; (void)y; fail_mark_state = s;
 }
+static int32_t aug_sn(void *c, int32_t i) { (void)c; return i == 0xb4 ? 1 : 0; }
 static int32_t extra_count(void *c, int32_t type) { (void)c; return type == 0x67 ? 10 : 0; }
 static int32_t retry_count(void *c, int32_t type, int32_t category) {
     (void)c; (void)type; (void)category; return 0;
@@ -302,6 +303,22 @@ int main(void) {
                 assert(aoe_ai_ror_build_failed_ror(&rl, &fo, -1, 5, a->plan.unique_id, 1.0f, 1.0f, -1));
                 assert(fail_notes == 1 && fail_mark_state == 0);
             }
+        }
+        {
+            /* 0x004b7930: a house once the units outnumber the room. */
+            AoeAiRorBuildListRor al;
+            int houses = 0;
+            aoe_ai_ror_build_list_init_ror(&al, 3, &sink);
+            assert(aoe_ai_build_list_load_text_ror(&al.base, "aug.ai",
+                                                   "B109 Centre 1 -1\nU83 A 1 -1\nU83 B 1 -1\n"
+                                                   "U83 C 1 -1\nU83 D 1 -1\nU83 E 1 -1\n",
+                                                   objects, NULL));
+            assert(al.base.count == 6);
+            aoe_ai_ror_build_list_augment_ror(&al, objects, NULL, aug_sn, NULL, NULL);
+            for (AoeAiBuildItemRor *it = al.base.sentinel.next; it != &al.base.sentinel; it = it->next)
+                houses += it->plan.type == 0x46;
+            assert(houses == 1 && al.base.count == 7);
+            aoe_ai_ror_build_list_release_ror(&al);
         }
         aoe_ai_ror_build_list_release_ror(&rl);
     }

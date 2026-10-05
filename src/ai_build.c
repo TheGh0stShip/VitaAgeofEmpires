@@ -1302,3 +1302,120 @@ int aoe_ai_ror_build_failed_ror(AoeAiRorBuildListRor *list, const AoeAiRorBuildF
     }
     return 1;
 }
+
+int aoe_ai_ror_build_list_augment_ror(AoeAiRorBuildListRor *list, AoeAiObjectFn objects,
+                                      void *context, int32_t (*sn)(void *context, int32_t i),
+                                      AoeAiCostFn research_cost, AoeAiCostFn object_cost) {
+    AoeAiBuildListRor *l = &list->base;
+    int32_t houses = 0, docks = 0, boats_d = 0, boats_11 = 0, boats_13 = 0;
+    int32_t u65 = -1, u66 = -1, u67 = -1, n, step, pos, i;
+    int has5 = 0, has7 = 0, has8 = 0;
+#define SN(i) (sn ? sn(context, (i)) : 0)
+    for (AoeAiBuildItemRor *it = l->sentinel.next; it && it != &l->sentinel; it = it->next) {
+        int32_t ty = it->plan.type;
+        if (it->category == 0) {
+            if (ty == 0x46) ++houses;
+            else if (ty == 0x2d) ++docks;
+        } else if (it->category == 2) {
+            if (ty == 0xd) ++boats_d;
+            else if (ty == 0x11 || ty == 0x12) ++boats_11;
+            else if (ty == 0x13 || ty == 0xfa || ty == 0x115) ++boats_13;
+        } else if (it->category == 1 || it->category == 4) {
+            if (ty == 0x65) u65 = it->plan.unique_id;
+            else if (ty == 0x66) u66 = it->plan.unique_id;
+            else if (ty == 0x67) u67 = it->plan.unique_id;
+            else if (ty == 5) has5 = 1;
+            else if (ty == 7) has7 = 1;
+            else if (ty == 8) has8 = 1;
+        }
+    }
+    if (docks < SN(0xd4) && SN(0xd0) == 1) {
+        n = SN(0xd4) - docks;
+        step = u66 != -1 ? u66 / n : u65 != -1 ? u65 / n : 10;
+        for (pos = step, i = 0; i < n; ++i, pos += step)
+            aoe_ai_build_list_add_item_ror(l, objects, context, 0x2d, -1, pos);
+    }
+    if (boats_d < SN(0xd5) && SN(0xd1) == 1) {
+        n = SN(0xd5) - boats_d;
+        if (n > 0) {
+            step = u66 != -1 ? u66 / n : u65 != -1 ? u65 / n : 10;
+            for (pos = step, i = 0; i < n; ++i, pos += step)
+                aoe_ai_build_list_add_item_ror(l, objects, context, 0xd, -1, pos);
+        }
+    }
+    if (boats_11 < SN(0xd6) && SN(0xd2) == 1) {
+        n = SN(0xd6) - boats_11;
+        if (u65 == -1) {
+            if (u66 == -1) step = 10, pos = 0;
+            else step = (l->count - u66) / (n * 2), pos = -1;
+        } else {
+            step = (l->count - u65) / (n * 2);
+            pos = u66;
+        }
+        for (i = 0; i < n; ++i) {
+            pos += step;
+            aoe_ai_build_list_add_item_ror(l, objects, context, 0x11, -1, pos);
+        }
+        if (!has8 && u67 != -1) aoe_ai_build_list_add_research_ror(l, objects, context, 8, u67 + 2);
+    }
+    if (boats_13 < SN(0xe0) && SN(0xdf) == 1 && (u67 != -1 || u66 != -1)) {
+        int32_t base = u67 != -1 ? u67 : u66;
+        n = SN(0xe0) - boats_13;
+        step = base / n;
+        for (pos = step, i = 0; i < n; ++i, pos += step)
+            aoe_ai_build_list_add_research_ror(l, objects, context, 0x13, pos);
+        if (!has5 && u66 != -1) aoe_ai_build_list_add_research_ror(l, objects, context, 5, u66 + 5);
+        if (!has7 && u67 != -1) aoe_ai_build_list_add_research_ror(l, objects, context, 7, u67 + 5);
+    }
+    if (houses == 0 && SN(0xb4) == 1) {
+        int32_t index = 0, room = 0, units = 0;
+        for (AoeAiBuildItemRor *it = l->sentinel.next; it && it != &l->sentinel; it = it->next) {
+            if (it->category == 0 && it->plan.type == 0x6d) room += 4;
+            if (it->category == 2) ++units;
+            if (room < units &&
+                aoe_ai_build_list_add_item_ror(l, objects, context, 0x46, -1,
+                                               index < 2 ? 1 : index - 1) == 1)
+                room += 4;
+            if (SN(0x98) + 0x32 < room) break;
+            ++index;
+        }
+    }
+    {
+        int32_t share = SN(0xa0), group = SN(0x9b);
+        if (share) {
+            AoeAiCountersRor costs;
+            int32_t k = 0, at = 0;
+            aoe_ai_counters_init_ror(&costs, 4);
+            aoe_ai_counters_fill_ror(&costs, 0);
+            for (AoeAiBuildItemRor *it = l->sentinel.next; it && it != &l->sentinel; it = it->next) {
+                int16_t pairs[6] = {-1, 0, -1, 0, -1, 0};
+                if (it->category == 6) {
+                    ++k;
+                    continue;
+                }
+                if (it->category == 1 || it->category == 4) {
+                    if (research_cost) research_cost(context, it->plan.type, pairs);
+                } else if (object_cost) {
+                    object_cost(context, it->plan.type, pairs);
+                }
+                for (i = 0; i < 3; ++i) aoe_ai_counters_add_ror(&costs, pairs[2 * i], pairs[2 * i + 1]);
+                if (group + 4 <= ++k) {
+                    int32_t sum = 0;
+                    for (i = 0; i < 4; ++i) sum += aoe_ai_counters_get_ror(&costs, i);
+                    if (sum > 0) {
+                        for (i = 0; i < 4; ++i)
+                            aoe_ai_build_list_add_gather_ror(
+                                l, objects, context, i,
+                                aoe_ai_counters_get_ror(&costs, i) * share / sum, at);
+                        aoe_ai_counters_fill_ror(&costs, 0);
+                        at += group + 4;
+                        k = 0;
+                    }
+                }
+            }
+            aoe_ai_counters_release_ror(&costs);
+        }
+    }
+#undef SN
+    return 1;
+}

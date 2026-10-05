@@ -74,7 +74,8 @@ void aoe_ui_scrollbar_place_parts_ror(AoeUiScrollbarRor *s) {
     }
 }
 
-static void set_rect(AoeUiPanelRor *p, int32_t x, int32_t y, int32_t w, int32_t h) {
+void aoe_ui_scrollbar_set_rect_slot_ror(AoeUiPanelRor *p, int32_t x, int32_t y,
+                                        int32_t w, int32_t h) {
     AoeUiScrollbarRor *s = S(p);
     aoe_ui_panel_set_rect_ror(p, x, y, w, h);
     if (s->horizontal == 1) {
@@ -338,7 +339,166 @@ const AoeUiPanelVtblRor aoe_ui_scrollbar_vtable_ror = {
     destroy,
     aoe_ui_panel_setup_ror,
     aoe_ui_panel_set_rect_ltrb_ror,
-    set_rect,
+    aoe_ui_scrollbar_set_rect_slot_ror,
+    aoe_ui_panel_set_color_ror,
+    aoe_ui_panel_set_active_ror,
+    aoe_ui_panel_set_position_mode_ror,
+    aoe_ui_panel_set_fixed_position_ror,
+    aoe_ui_panel_set_redraw_ror,
+    aoe_ui_panel_redraw_overlaps_ror,
+    aoe_ui_panel_begin_draw_ror,
+    aoe_ui_panel_end_draw_ror,
+    aoe_ui_panel_draw_ror,
+    aoe_ui_panel_draw_rect_ror,
+    aoe_ui_panel_draw_offset_ror,
+    aoe_ui_panel_draw_parent_rect_ror,
+    aoe_ui_panel_draw_parent_offset_ror,
+    aoe_ui_panel_validate_ror,
+    aoe_ui_panel_handle_message_ror,
+    idle,
+    aoe_ui_panel_handle_size_ror,
+    aoe_ui_panel_handle_paint_ror,
+    aoe_ui_panel_key_down_ror,
+    aoe_ui_panel_char_ror,
+    aoe_ui_panel_ignore_ror,
+    aoe_ui_panel_ignore_ror,
+    aoe_ui_panel_ignore_ror,
+    aoe_ui_panel_ignore_ror,
+    aoe_ui_panel_mouse_down_ror,
+    aoe_ui_panel_mouse_move_ror,
+    aoe_ui_panel_mouse_up_ror,
+    aoe_ui_panel_mouse_dbl_ror,
+    {aoe_ui_panel_no_action_ror, left_down, aoe_ui_panel_no_action_ror,
+     left_drag, left_up, aoe_ui_panel_no_action_ror,
+     aoe_ui_panel_no_action_ror, aoe_ui_panel_no_action_ror,
+     aoe_ui_panel_no_action_ror, aoe_ui_panel_no_action_ror,
+     aoe_ui_panel_no_action_ror},
+    no_key_action,
+    aoe_ui_panel_zero_ror,
+    aoe_ui_panel_no_char_action_ror,
+    aoe_ui_panel_action_ror,
+    aoe_ui_panel_get_true_rect_ror,
+    aoe_ui_panel_is_inside_ror,
+    aoe_ui_panel_set_focus_ror,
+    aoe_ui_panel_set_tab_order_ror,
+    aoe_ui_panel_get_help_ror,
+    aoe_ui_panel_stop_sound_ror,
+    aoe_ui_panel_restart_sound_ror,
+    aoe_ui_panel_slot_e0_ror,
+};
+
+
+/* ---- value scrollbars ---- */
+
+void aoe_ui_value_scrollbar_init_ror(AoeUiValueScrollbarRor *v,
+                                     AoeUiSystemRor *system,
+                                     int32_t horizontal) {
+    if (!v) return;
+    aoe_ui_scrollbar_init_ror(&v->bar, system);
+    v->field_1c4 = 1;
+    v->field_1c8 = 0;
+    v->bar.panel.vt = horizontal ? &aoe_ui_hscroll_vtable_ror
+                                 : &aoe_ui_vscroll_vtable_ror;
+}
+
+void aoe_ui_value_scrollbar_release_ror(AoeUiValueScrollbarRor *v) {
+    if (v) aoe_ui_scrollbar_release_ror(&v->bar);
+}
+
+static void value_destroy(AoeUiPanelRor *p) {
+    aoe_ui_value_scrollbar_release_ror((AoeUiValueScrollbarRor *)p);
+}
+
+int aoe_ui_value_scrollbar_setup_ror(AoeUiValueScrollbarRor *v,
+                                     AoeUiAreaRor *area, AoeUiPanelRor *parent,
+                                     int32_t x, int32_t y, int32_t w,
+                                     int32_t h, int32_t thumb_size,
+                                     int32_t range, int32_t line_step,
+                                     int32_t page_step, int32_t field_1c4,
+                                     int32_t field_1c8) {
+    if (!v) return 0;
+    v->field_1c4 = field_1c4;
+    v->field_1c8 = field_1c8;
+    if (!aoe_ui_scrollbar_setup_ror(&v->bar, area, parent, x, y, w, h, 0,
+                                    thumb_size, NULL, range,
+                                    v->bar.panel.vt == &aoe_ui_hscroll_vtable_ror))
+        return 0;
+    v->bar.line_step = line_step;
+    v->bar.page_step = page_step;
+    return 1;
+}
+
+static void hscroll_set_rect(AoeUiPanelRor *p, int32_t x, int32_t y,
+                             int32_t w, int32_t h) {
+    AoeUiScrollbarRor *s = S(p);
+    int32_t left, right;
+    aoe_ui_scrollbar_set_rect_slot_ror(p, x, y, w, h);
+    left = p->x;
+    right = p->width - 1 + left;
+    s->back.left = s->back.right = left;
+    s->forward.left = s->forward.right = right;
+    s->thumb_min_x = s->thumb_x = left + 1;
+    s->thumb_max_x = right - p->height + 2;
+    aoe_ui_scrollbar_place_parts_ror(s);
+}
+
+const AoeUiPanelVtblRor aoe_ui_vscroll_vtable_ror = {
+    value_destroy,
+    aoe_ui_panel_setup_ror,
+    aoe_ui_panel_set_rect_ltrb_ror,
+    aoe_ui_scrollbar_set_rect_slot_ror,
+    aoe_ui_panel_set_color_ror,
+    aoe_ui_panel_set_active_ror,
+    aoe_ui_panel_set_position_mode_ror,
+    aoe_ui_panel_set_fixed_position_ror,
+    aoe_ui_panel_set_redraw_ror,
+    aoe_ui_panel_redraw_overlaps_ror,
+    aoe_ui_panel_begin_draw_ror,
+    aoe_ui_panel_end_draw_ror,
+    aoe_ui_panel_draw_ror,
+    aoe_ui_panel_draw_rect_ror,
+    aoe_ui_panel_draw_offset_ror,
+    aoe_ui_panel_draw_parent_rect_ror,
+    aoe_ui_panel_draw_parent_offset_ror,
+    aoe_ui_panel_validate_ror,
+    aoe_ui_panel_handle_message_ror,
+    idle,
+    aoe_ui_panel_handle_size_ror,
+    aoe_ui_panel_handle_paint_ror,
+    aoe_ui_panel_key_down_ror,
+    aoe_ui_panel_char_ror,
+    aoe_ui_panel_ignore_ror,
+    aoe_ui_panel_ignore_ror,
+    aoe_ui_panel_ignore_ror,
+    aoe_ui_panel_ignore_ror,
+    aoe_ui_panel_mouse_down_ror,
+    aoe_ui_panel_mouse_move_ror,
+    aoe_ui_panel_mouse_up_ror,
+    aoe_ui_panel_mouse_dbl_ror,
+    {aoe_ui_panel_no_action_ror, left_down, aoe_ui_panel_no_action_ror,
+     left_drag, left_up, aoe_ui_panel_no_action_ror,
+     aoe_ui_panel_no_action_ror, aoe_ui_panel_no_action_ror,
+     aoe_ui_panel_no_action_ror, aoe_ui_panel_no_action_ror,
+     aoe_ui_panel_no_action_ror},
+    no_key_action,
+    aoe_ui_panel_zero_ror,
+    aoe_ui_panel_no_char_action_ror,
+    aoe_ui_panel_action_ror,
+    aoe_ui_panel_get_true_rect_ror,
+    aoe_ui_panel_is_inside_ror,
+    aoe_ui_panel_set_focus_ror,
+    aoe_ui_panel_set_tab_order_ror,
+    aoe_ui_panel_get_help_ror,
+    aoe_ui_panel_stop_sound_ror,
+    aoe_ui_panel_restart_sound_ror,
+    aoe_ui_panel_slot_e0_ror,
+};
+
+const AoeUiPanelVtblRor aoe_ui_hscroll_vtable_ror = {
+    value_destroy,
+    aoe_ui_panel_setup_ror,
+    aoe_ui_panel_set_rect_ltrb_ror,
+    hscroll_set_rect,
     aoe_ui_panel_set_color_ror,
     aoe_ui_panel_set_active_ror,
     aoe_ui_panel_set_position_mode_ror,

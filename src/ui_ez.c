@@ -1,0 +1,1042 @@
+#include "ui_ez.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <strings.h>
+
+#define EZ(p) ((AoeUiEzRor *)(p))
+#define EZ_VT(ez) ((const AoeUiEzVtblRor *)(ez)->panel.vt)
+#define TEXT_VT(t) ((const AoeUiTextVtblRor *)(t)->panel.vt)
+
+static void copy_name(char *dst, size_t size, const char *src) {
+    size_t n = strlen(src);
+    if (n >= size) n = size - 1;
+    memcpy(dst, src, n);
+    dst[n] = '\0';
+}
+
+void aoe_ui_ez_reset_ror(AoeUiEzRor *ez) {
+    if (!ez) return;
+    ez->ref_w = 640;
+    ez->ref_h = 480;
+    ez->info_name[0] = '\0';
+    ez->info_id = -1;
+    ez->background = NULL;
+    ez->background2 = NULL;
+    ez->palette = 0;
+    ez->pointer_name[0] = '\0';
+    ez->pointer_id = -1;
+    ez->background_mode = 0;
+    ez->bevel_on = 0;
+    memset(ez->bevel, 0, sizeof(ez->bevel));
+    ez->text_color = 0xffffff;
+    ez->text_shadow = 0;
+    ez->focus_color = 0xffff;
+    ez->focus_shadow = 0;
+    ez->hot_color = 0xffffff;
+    ez->hot_shadow = 0;
+    ez->popup_name[0] = '\0';
+    ez->popup_id = -1;
+    ez->button_pictures = NULL;
+    ez->shadow_table = NULL;
+    ez->fill_color = 0;
+    ez->fill_color2 = 0;
+    ez->ime_toggle = 0;
+    ez->help_armed = 0;
+    ez->stock_brush = 0;
+    ez->brush = 0;
+    ez->field_468 = 0;
+    ez->shadow_amount = 0;
+    ez->shadow_panel = NULL;
+    ez->saved_pointer = 0;
+}
+
+int aoe_ui_ez_init_named_ror(AoeUiEzRor *ez, AoeUiSystemRor *system,
+                             const AoeUiEzOpsRor *ops, const char *name) {
+    int ok;
+    if (!ez) return 0;
+    ok = aoe_ui_panel_init_named_ror(&ez->panel, system, name);
+    ez->panel.vt = &aoe_ui_ez_vtable_ror.base;
+    ez->ops = ops;
+    ez->field_470 = 0;
+    aoe_ui_ez_reset_ror(ez);
+    return ok;
+}
+
+void aoe_ui_ez_init_ror(AoeUiEzRor *ez, AoeUiSystemRor *system,
+                        const AoeUiEzOpsRor *ops) {
+    if (!ez) return;
+    aoe_ui_panel_init_ror(&ez->panel, system);
+    ez->panel.vt = &aoe_ui_ez_vtable_ror.base;
+    ez->ops = ops;
+    ez->field_470 = 0;
+    aoe_ui_ez_reset_ror(ez);
+}
+
+static void free_shape(AoeUiEzRor *ez, void **shape) {
+    if (*shape && ez->ops && ez->ops->free_shape)
+        ez->ops->free_shape(ez->ops->context, *shape);
+    *shape = NULL;
+}
+
+static void free_shadow_table(AoeUiEzRor *ez) {
+    if (ez->shadow_table && ez->ops && ez->ops->free_shadow)
+        ez->ops->free_shadow(ez->ops->context, ez->shadow_table);
+    ez->shadow_table = NULL;
+}
+
+void aoe_ui_ez_free_ror(AoeUiEzRor *ez) {
+    if (!ez) return;
+    /* The shadow panel (0x004383d0) belongs to the untranslated shadow
+       area; whoever builds it through the callback frees it. */
+    ez->shadow_panel = NULL;
+    ez->brush = 0; /* the original deletes a brush that is not stock */
+    free_shape(ez, &ez->background);
+    free_shape(ez, &ez->background2);
+    if (ez->palette) {
+        aoe_ui_palette_release_ror(ez->panel.system, ez->palette);
+        ez->palette = 0;
+    }
+    free_shadow_table(ez);
+    free_shape(ez, &ez->button_pictures);
+}
+
+void aoe_ui_ez_release_ror(AoeUiEzRor *ez) {
+    if (!ez) return;
+    aoe_ui_ez_free_ror(ez);
+    aoe_ui_panel_release_ror(&ez->panel);
+}
+
+static void ez_destroy(AoeUiPanelRor *p) { aoe_ui_ez_release_ror(EZ(p)); }
+
+/* ---- settings ---- */
+
+void aoe_ui_ez_set_info_ror(AoeUiEzRor *ez, const char *name, int32_t id) {
+    if (!ez) return;
+    if (!name) ez->info_name[0] = '\0';
+    else copy_name(ez->info_name, sizeof(ez->info_name), name);
+    ez->info_id = id;
+}
+
+static void set_reference(AoeUiEzRor *ez, int32_t w, int32_t h) {
+    ez->ref_w = w;
+    ez->ref_h = h;
+}
+
+/* 0x00455470 / 0x004555e0 / 0x00455a50. */
+static int load_picture(AoeUiEzRor *ez, void **slot, const char *name,
+                        int32_t id) {
+    char file[0x104];
+    free_shape(ez, slot);
+    if (!name || !*name || strcasecmp(name, "none") == 0) {
+        if (id == -1) return *slot != NULL;
+        file[0] = '\0';
+    } else {
+        snprintf(file, sizeof(file), strchr(name, '.') ? "%s" : "%s.shp", name);
+    }
+    if (ez->ops && ez->ops->load_shape)
+        *slot = ez->ops->load_shape(ez->ops->context, file, id);
+    return *slot != NULL;
+}
+
+int aoe_ui_ez_set_background_ror(AoeUiEzRor *ez, const char *name,
+                                 int32_t id) {
+    return ez ? load_picture(ez, &ez->background, name, id) : 0;
+}
+
+int aoe_ui_ez_set_background2_ror(AoeUiEzRor *ez, const char *name,
+                                  int32_t id) {
+    return ez ? load_picture(ez, &ez->background2, name, id) : 0;
+}
+
+void aoe_ui_ez_set_button_pictures_ror(AoeUiEzRor *ez, const char *name,
+                                       int32_t id) {
+    if (ez) load_picture(ez, &ez->button_pictures, name, id);
+}
+
+#define AOE_UI_EZ_BLACK_BRUSH 4 /* GetStockObject(BLACK_BRUSH) */
+
+void aoe_ui_ez_set_fill_color_ror(AoeUiEzRor *ez, uint8_t color) {
+    if (!ez) return;
+    ez->panel.vt->set_color(&ez->panel, color);
+    ez->fill_color = color;
+    ez->fill_color2 = color;
+    ez->brush = AOE_UI_EZ_BLACK_BRUSH;
+    ez->stock_brush = 1;
+    ez->field_468 = 0;
+}
+
+static void *create_shadow(AoeUiEzRor *ez) {
+    if (!ez->ops || !ez->ops->create_shadow) return NULL;
+    return ez->ops->create_shadow(ez->ops->context, ez->panel.area,
+                                  ez->shadow_amount, ez->palette);
+}
+
+int aoe_ui_ez_set_palette_ror(AoeUiEzRor *ez, const char *name, int32_t id) {
+    if (!ez) return 0;
+    if (ez->palette) {
+        aoe_ui_palette_release_ror(ez->panel.system, ez->palette);
+        ez->palette = 0;
+    }
+    free_shadow_table(ez);
+    if (id == -1 && (!name || !*name || strcasecmp(name, "none") == 0))
+        return 1;
+    ez->palette = aoe_ui_palette_ror(ez->panel.system, name, id);
+    if (!ez->palette || ez->shadow_amount < 1) return 0;
+    ez->shadow_table = create_shadow(ez);
+    return 1;
+}
+
+int aoe_ui_ez_set_pointer_ror(AoeUiEzRor *ez, const char *name, int32_t id) {
+    if (!ez) return 0;
+    copy_name(ez->pointer_name, sizeof(ez->pointer_name), name ? name : "");
+    ez->pointer_id = id;
+    return 1;
+}
+
+void aoe_ui_ez_set_bevel_on_ror(AoeUiEzRor *ez, int32_t on) {
+    if (ez) ez->bevel_on = on;
+}
+
+void aoe_ui_ez_set_background_mode_ror(AoeUiEzRor *ez, int32_t mode) {
+    if (ez) ez->background_mode = mode;
+}
+
+void aoe_ui_ez_set_bevel_colors_ror(AoeUiEzRor *ez, const uint8_t colors[6]) {
+    if (ez && colors) memcpy(ez->bevel, colors, sizeof(ez->bevel));
+}
+
+void aoe_ui_ez_set_text_colors_ror(AoeUiEzRor *ez, uint32_t color,
+                                   uint32_t shadow) {
+    if (!ez) return;
+    ez->text_color = color;
+    ez->text_shadow = shadow;
+}
+
+void aoe_ui_ez_set_focus_colors_ror(AoeUiEzRor *ez, uint32_t color,
+                                    uint32_t shadow) {
+    if (!ez) return;
+    ez->focus_color = color;
+    ez->focus_shadow = shadow;
+}
+
+void aoe_ui_ez_set_hot_colors_ror(AoeUiEzRor *ez, uint32_t color,
+                                  uint32_t shadow) {
+    if (!ez) return;
+    ez->hot_color = color;
+    ez->hot_shadow = shadow;
+}
+
+void aoe_ui_ez_set_popup_ror(AoeUiEzRor *ez, const char *name, int32_t id) {
+    if (!ez) return;
+    if (!name) ez->popup_name[0] = '\0';
+    else copy_name(ez->popup_name, sizeof(ez->popup_name), name);
+    ez->popup_id = id;
+}
+
+void aoe_ui_ez_set_shadow_amount_ror(AoeUiEzRor *ez, int32_t amount) {
+    if (!ez) return;
+    ez->shadow_amount = amount == -1 ? 0 : amount;
+    free_shadow_table(ez);
+    if (ez->palette && ez->shadow_amount > 0) ez->shadow_table = create_shadow(ez);
+    if (ez->panel.has_focus) ez->panel.vt->set_redraw(&ez->panel, 2);
+}
+
+const char *aoe_ui_ez_info_name_ror(const AoeUiEzRor *ez) {
+    return ez ? ez->info_name : NULL;
+}
+
+int32_t aoe_ui_ez_info_id_ror(const AoeUiEzRor *ez) { return ez ? ez->info_id : -1; }
+
+uintptr_t aoe_ui_ez_palette_ror(const AoeUiEzRor *ez) { return ez ? ez->palette : 0; }
+
+const char *aoe_ui_ez_popup_name_ror(const AoeUiEzRor *ez) {
+    return ez ? ez->popup_name : NULL;
+}
+
+int32_t aoe_ui_ez_popup_id_ror(const AoeUiEzRor *ez) { return ez ? ez->popup_id : -1; }
+
+/* ---- setup and the info file ---- */
+
+#define EZ_NAME 0x104
+
+typedef struct {
+    char label[0x100];
+    char bg[3][EZ_NAME], bg2[3][EZ_NAME];
+    int32_t bg_id[3], bg2_id[3];
+    char palette[EZ_NAME], pointer[EZ_NAME], pictures[EZ_NAME], popup[EZ_NAME];
+    int32_t palette_id, pointer_id, shadow, pictures_id, popup_id, mode, fill;
+    int32_t bevel[6];
+    int32_t rgb[6][3];
+} EzInfo;
+
+static uint32_t rgb(const int32_t c[3]) {
+    return (uint32_t)(c[0] & 0xff) | (uint32_t)(c[1] & 0xff) << 8 |
+           (uint32_t)(c[2] & 0xff) << 16;
+}
+
+static void apply_info(AoeUiEzRor *ez, const char *text) {
+    EzInfo in;
+    int set;
+    memset(&in, 0, sizeof(in));
+    /* The original format with field widths for the port's buffers. */
+    if (sscanf(text,
+               "%255s %259s %259s %d %d   %255s %259s %259s %d %d   "
+               "%255s %259s %259s %d %d   %255s %259s %d   %255s %259s %d   "
+               "%255s %255s %d   %255s %259s %d   %255s %259s %d   "
+               "%255s %d   %255s %d    %255s %d %d %d %d %d %d   "
+               "%255s %d %d %d   %255s %d %d %d   %255s %d %d %d   "
+               "%255s %d %d %d  %255s %d %d %d  %255s %d %d %d",
+               in.label, in.bg[0], in.bg2[0], &in.bg_id[0], &in.bg2_id[0],
+               in.label, in.bg[1], in.bg2[1], &in.bg_id[1], &in.bg2_id[1],
+               in.label, in.bg[2], in.bg2[2], &in.bg_id[2], &in.bg2_id[2],
+               in.label, in.palette, &in.palette_id, in.label, in.pointer,
+               &in.pointer_id, in.label, in.label, &in.shadow, in.label,
+               in.pictures, &in.pictures_id, in.label, in.popup, &in.popup_id,
+               in.label, &in.mode, in.label, &in.fill, in.label, &in.bevel[0],
+               &in.bevel[1], &in.bevel[2], &in.bevel[3], &in.bevel[4],
+               &in.bevel[5], in.label, &in.rgb[0][0], &in.rgb[0][1],
+               &in.rgb[0][2], in.label, &in.rgb[1][0], &in.rgb[1][1],
+               &in.rgb[1][2], in.label, &in.rgb[2][0], &in.rgb[2][1],
+               &in.rgb[2][2], in.label, &in.rgb[3][0], &in.rgb[3][1],
+               &in.rgb[3][2], in.label, &in.rgb[4][0], &in.rgb[4][1],
+               &in.rgb[4][2], in.label, &in.rgb[5][0], &in.rgb[5][1],
+               &in.rgb[5][2]) == EOF)
+        return;
+    aoe_ui_ez_set_bevel_on_ror(ez, 1);
+    {
+        int32_t width = ez->panel.area ? ez->panel.area->width : 0;
+        if (width < 800 || strcasecmp(in.bg[1], "none") == 0) set = 0;
+        else if (width < 0x400) set = 1;
+        else set = 2;
+    }
+    aoe_ui_ez_set_background_ror(ez, in.bg[set], in.bg_id[set]);
+    aoe_ui_ez_set_background2_ror(ez, in.bg2[set], in.bg2_id[set]);
+    aoe_ui_ez_set_shadow_amount_ror(ez, in.shadow);
+    aoe_ui_ez_set_palette_ror(ez, in.palette, in.palette_id);
+    aoe_ui_ez_set_pointer_ror(ez, in.pointer, in.pointer_id);
+    aoe_ui_ez_set_background_mode_ror(ez, in.mode);
+    aoe_ui_ez_set_fill_color_ror(ez, (uint8_t)in.fill);
+    {
+        uint8_t bevel[6];
+        int i;
+        for (i = 0; i < 6; ++i) bevel[i] = (uint8_t)in.bevel[i];
+        aoe_ui_ez_set_bevel_colors_ror(ez, bevel);
+    }
+    aoe_ui_ez_set_text_colors_ror(ez, rgb(in.rgb[0]), rgb(in.rgb[1]));
+    aoe_ui_ez_set_focus_colors_ror(ez, rgb(in.rgb[2]), rgb(in.rgb[3]));
+    aoe_ui_ez_set_hot_colors_ror(ez, rgb(in.rgb[4]), rgb(in.rgb[5]));
+    aoe_ui_ez_set_button_pictures_ror(ez, in.pictures, in.pictures_id);
+    aoe_ui_ez_set_popup_ror(ez, in.popup, in.popup_id);
+}
+
+int aoe_ui_ez_setup_ror(AoeUiEzRor *ez, AoeUiAreaRor *area,
+                        AoeUiPanelRor *parent, const char *info_name,
+                        int32_t info_id, int32_t full, int32_t x, int32_t y,
+                        int32_t w, int32_t h, int32_t field_470) {
+    char *text = NULL;
+    if (!ez) return 0;
+    ez->field_470 = field_470;
+    aoe_ui_ez_set_info_ror(ez, info_name, info_id);
+    if (!full) {
+        if (w > 0 && h > 0 && area) {
+            if (x == -1) x = area->width / 2 - w / 2;
+            if (y == -1) y = area->height / 2 - h / 2;
+        }
+    } else {
+        x = y = 0;
+        w = area ? area->width : 0;
+        h = area ? area->height : 0;
+    }
+    if (!aoe_ui_panel_setup_ror(&ez->panel, area, parent, x, y, w, h, 0))
+        return 0;
+    EZ_VT(ez)->set_reference(ez, w, h);
+    if (info_name)
+        ez->panel.vt->set_position_mode(&ez->panel, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+                                        NULL, NULL, NULL, NULL);
+    if (!ez->ops || !ez->ops->load_info) return 1;
+    if (ez->ops->loose_files && ez->info_name[0]) {
+        char file[0x104];
+        snprintf(file, sizeof(file),
+                 strchr(ez->info_name, '.') ? "%s" : "%s.sin", ez->info_name);
+        text = ez->ops->load_info(ez->ops->context, file, -1);
+    }
+    if (!text) {
+        if (ez->info_id == -1) return 1;
+        text = ez->ops->load_info(ez->ops->context, NULL, ez->info_id);
+        if (!text) return 1;
+    }
+    apply_info(ez, text);
+    free(text);
+    return 1;
+}
+
+/* ---- creators ---- */
+
+static int32_t sx(const AoeUiEzRor *ez, int32_t v) {
+    return ez->ref_w ? ez->panel.width * v / ez->ref_w : v;
+}
+
+static int32_t sy(const AoeUiEzRor *ez, int32_t v) {
+    return ez->ref_h ? ez->panel.height * v / ez->ref_h : v;
+}
+
+static int font_of(AoeUiEzRor *ez, int32_t index, uintptr_t *font,
+                   int32_t *w, int32_t *h) {
+    *font = 0;
+    *w = *h = 0;
+    return ez->ops && ez->ops->font &&
+           ez->ops->font(ez->ops->context, index, font, w, h);
+}
+
+static int fail(AoeUiEzRor *ez) {
+    ez->panel.field_d8 = 1;
+    return 0;
+}
+
+static AoeUiButtonRor *new_button(AoeUiEzRor *ez, AoeUiPanelRor *parent,
+                                  AoeUiButtonRor **out, int32_t x, int32_t y,
+                                  int32_t w, int32_t h, int32_t draw_type,
+                                  int32_t sound_id, int32_t command) {
+    AoeUiButtonRor *b = calloc(1, sizeof(*b));
+    void *sound = NULL;
+    if (b) aoe_ui_button_init_ror(b, ez->panel.system,
+                                  ez->ops ? ez->ops->button_ops : NULL);
+    *out = b;
+    if (!b || b->panel.field_d8) return NULL;
+    if (sound_id >= 0 && ez->ops && ez->ops->sound)
+        sound = ez->ops->sound(ez->ops->context, sound_id);
+    if (!aoe_ui_button_setup_ror(b, ez->panel.area, parent, sx(ez, x),
+                                 sy(ez, y), sx(ez, w), sy(ez, h), draw_type,
+                                 sound, 1, command))
+        return NULL;
+    aoe_ui_button_set_sound_id_ror(b, sound_id);
+    return b;
+}
+
+static void button_bevel(AoeUiEzRor *ez, AoeUiButtonRor *b) {
+    if (ez->bevel_on) aoe_ui_button_set_bevel_ror(b, 4, ez->bevel);
+}
+
+static void two_state_colors(AoeUiEzRor *ez, AoeUiButtonRor *b) {
+    aoe_ui_button_set_text_color_ror(b, 0, ez->text_color, ez->text_shadow);
+    aoe_ui_button_set_focus_color_ror(b, 0, ez->focus_color, ez->focus_shadow);
+    aoe_ui_button_set_text_color_ror(b, 1, ez->hot_color, ez->hot_shadow);
+    aoe_ui_button_set_focus_color_ror(b, 1, ez->focus_color, ez->focus_shadow);
+}
+
+int aoe_ui_ez_create_button_ror(AoeUiEzRor *ez, AoeUiPanelRor *parent,
+                                AoeUiButtonRor **out, const char *text,
+                                const char *text2, int32_t x, int32_t y,
+                                int32_t w, int32_t h, int32_t font,
+                                int32_t sound_id, int32_t command) {
+    AoeUiButtonRor *b;
+    uintptr_t f;
+    int32_t fw, fh, i;
+    if (!ez || !out) return 0;
+    b = new_button(ez, parent, out, x, y, w, h, 3, sound_id, command);
+    if (!b) return fail(ez);
+    font_of(ez, font < 0 ? 10 : font, &f, &fw, &fh);
+    aoe_ui_button_set_text_info_ror(b, text, f, fw, fh, -1, -1);
+    if (text2) aoe_ui_button_set_text_ror(b, 1, text2);
+    button_bevel(ez, b);
+    for (i = 0; i < 9; ++i) {
+        aoe_ui_button_set_text_color_ror(b, i, ez->text_color, ez->text_shadow);
+        aoe_ui_button_set_focus_color_ror(b, i, ez->focus_color, ez->focus_shadow);
+    }
+    aoe_ui_button_set_text_color_ror(b, 1, ez->hot_color, ez->hot_shadow);
+    aoe_ui_button_set_focus_color_ror(b, 1, ez->focus_color, ez->focus_shadow);
+    return 1;
+}
+
+int aoe_ui_ez_create_button_id_ror(AoeUiEzRor *ez, AoeUiPanelRor *parent,
+                                   AoeUiButtonRor **out, int32_t text_id,
+                                   int32_t text2_id, int32_t x, int32_t y,
+                                   int32_t w, int32_t h, int32_t font,
+                                   int32_t sound_id, int32_t command) {
+    char text[0x78], text2[0x78];
+    if (!ez) return 0;
+    text[0] = text2[0] = '\0';
+    aoe_ui_string_ror(ez->panel.system, text_id, text, sizeof(text));
+    aoe_ui_string_ror(ez->panel.system, text2_id, text2, sizeof(text2));
+    return aoe_ui_ez_create_button_ror(ez, parent, out, text, text2, x, y, w,
+                                       h, font, sound_id, command);
+}
+
+/* Check and radio buttons: the button pictures at two frames, or an
+   "X" on a text button. */
+static void mark_button(AoeUiEzRor *ez, AoeUiButtonRor *b, int32_t frame0,
+                        int32_t frame1, int text_first) {
+    uintptr_t f;
+    int32_t fw, fh;
+    if (!ez->button_pictures) {
+        if (!text_first) aoe_ui_button_set_draw_type_ror(b, 3);
+        font_of(ez, 0, &f, &fw, &fh);
+        aoe_ui_button_set_text_info_ror(b, " ", f, fw, fh, -1, -1);
+        aoe_ui_button_set_text_ror(b, 1, "X");
+        if (text_first) aoe_ui_button_set_draw_type_ror(b, 3);
+    } else {
+        aoe_ui_button_set_draw_type_ror(b, 6);
+        aoe_ui_button_set_picture_ror(b, 0, ez->button_pictures, (int16_t)frame0);
+        aoe_ui_button_set_picture_ror(b, 1, ez->button_pictures, (int16_t)frame1);
+    }
+}
+
+int aoe_ui_ez_create_check_ror(AoeUiEzRor *ez, AoeUiPanelRor *parent,
+                               AoeUiButtonRor **out, int32_t x, int32_t y,
+                               int32_t w, int32_t h, int32_t sound_id,
+                               int32_t command) {
+    AoeUiButtonRor *b;
+    if (!ez || !out) return 0;
+    b = new_button(ez, parent, out, x, y, w, h, 6, sound_id, command);
+    if (!b) return fail(ez);
+    aoe_ui_button_set_cycle_ror(b, 2);
+    mark_button(ez, b, 0, 2, 1);
+    button_bevel(ez, b);
+    two_state_colors(ez, b);
+    return 1;
+}
+
+int aoe_ui_ez_create_radio_ror(AoeUiEzRor *ez, AoeUiPanelRor *parent,
+                               AoeUiButtonRor **out, int32_t x, int32_t y,
+                               int32_t w, int32_t h, int32_t sound_id,
+                               int32_t command) {
+    AoeUiButtonRor *b;
+    if (!ez || !out) return 0;
+    b = new_button(ez, parent, out, x, y, w, h, 2, sound_id, command);
+    if (!b) return fail(ez);
+    mark_button(ez, b, 4, 6, 0);
+    button_bevel(ez, b);
+    two_state_colors(ez, b);
+    return 1;
+}
+
+static void text_colors(AoeUiEzRor *ez, AoeUiTextRor *t) {
+    aoe_ui_text_set_colors_ror(t, ez->text_color, ez->text_shadow);
+    aoe_ui_text_set_focus_colors_ror(t, ez->focus_color, ez->focus_shadow);
+}
+
+static AoeUiTextRor *new_text(AoeUiEzRor *ez, AoeUiPanelRor *parent,
+                              AoeUiTextRor **out, int32_t x, int32_t y,
+                              int32_t w, int32_t h, int32_t font) {
+    AoeUiTextRor *t = calloc(1, sizeof(*t));
+    uintptr_t f;
+    int32_t fw, fh;
+    if (t) aoe_ui_text_init_ror(t, ez->panel.system);
+    *out = t;
+    if (!t || t->panel.field_d8) return NULL;
+    font_of(ez, font < 0 ? 10 : font, &f, &fw, &fh);
+    if (!aoe_ui_text_setup_ror(t, ez->panel.area, parent, sx(ez, x), sy(ez, y),
+                               sx(ez, w), sy(ez, h), f, fw, fh, NULL, 0, 0, 0,
+                               0, 0, 0, 0, NULL))
+        return NULL;
+    return t;
+}
+
+static void text_alignment(AoeUiTextRor *t, int32_t centred, int32_t middle) {
+    aoe_ui_text_set_alignment_ror(t, middle ? 0 : 3, centred ? 0 : 1);
+}
+
+int aoe_ui_ez_create_text_ror(AoeUiEzRor *ez, AoeUiPanelRor *parent,
+                              AoeUiTextRor **out, const char *text, int32_t x,
+                              int32_t y, int32_t w, int32_t h, int32_t font,
+                              int32_t centred, int32_t middle, int32_t wrap) {
+    AoeUiTextRor *t;
+    if (!ez || !out) return 0;
+    t = new_text(ez, parent, out, x, y, w, h, font);
+    if (!t) return fail(ez);
+    text_alignment(t, centred, middle);
+    aoe_ui_text_set_wrap_ror(t, wrap);
+    TEXT_VT(t)->set_text(t, text);
+    text_colors(ez, t);
+    return 1;
+}
+
+int aoe_ui_ez_create_text_id_ror(AoeUiEzRor *ez, AoeUiPanelRor *parent,
+                                 AoeUiTextRor **out, int32_t text_id,
+                                 int32_t x, int32_t y, int32_t w, int32_t h,
+                                 int32_t font, int32_t centred,
+                                 int32_t middle, int32_t wrap) {
+    char text[0x100];
+    if (!ez) return 0;
+    text[0] = '\0';
+    aoe_ui_string_ror(ez->panel.system, text_id, text, sizeof(text));
+    return aoe_ui_ez_create_text_ror(ez, parent, out, text, x, y, w, h, font,
+                                     centred, middle, wrap);
+}
+
+int aoe_ui_ez_create_lines_ror(AoeUiEzRor *ez, AoeUiPanelRor *parent,
+                               AoeUiTextRor **out, const char *const *lines,
+                               int16_t count, int32_t x, int32_t y, int32_t w,
+                               int32_t h, int32_t font, int32_t centred,
+                               int32_t middle) {
+    AoeUiTextRor *t;
+    if (!ez || !out) return 0;
+    t = new_text(ez, parent, out, x, y, w, h, font);
+    if (!t) return fail(ez);
+    TEXT_VT(t)->set_lines(t, lines, count);
+    aoe_ui_text_scroll_ror(t, 6, 0, 1);
+    text_alignment(t, centred, middle);
+    text_colors(ez, t);
+    return 1;
+}
+
+int aoe_ui_ez_create_input_ror(AoeUiEzRor *ez, AoeUiPanelRor *parent,
+                               AoeUiInputRor **out, const char *text,
+                               int16_t max, int32_t format, int32_t x,
+                               int32_t y, int32_t w, int32_t h, int32_t font) {
+    AoeUiInputRor *in;
+    uintptr_t f;
+    int32_t fw, fh;
+    if (!ez || !out) return 0;
+    in = calloc(1, sizeof(*in));
+    if (in)
+        aoe_ui_input_init_ror(in, ez->panel.system,
+                              ez->ops ? ez->ops->input_ops : NULL,
+                              ez->ops ? ez->ops->caret_blink_ms : 0);
+    *out = in;
+    if (!in || in->text.panel.field_d8) return fail(ez);
+    font_of(ez, font < 0 ? 10 : font, &f, &fw, &fh);
+    if (!aoe_ui_input_setup_ror(in, ez->panel.area, parent, sx(ez, x),
+                                sy(ez, y), sx(ez, w), sy(ez, h), f, fw, fh,
+                                NULL, 0, 0, 0, 0, 1, 0xff, 0xff, max, NULL,
+                                text, format))
+        return fail(ez);
+    if (ez->bevel_on) TEXT_VT(&in->text)->set_bevel(&in->text, 3, ez->bevel);
+    text_colors(ez, &in->text);
+    return 1;
+}
+
+static const char *const one_space[1] = {" "};
+
+int aoe_ui_ez_create_dropdown_ror(AoeUiEzRor *ez, AoeUiPanelRor *parent,
+                                  AoeUiDropdownRor **out, int32_t list_w,
+                                  int32_t list_h, int32_t x, int32_t y,
+                                  int32_t w, int32_t h, int32_t font) {
+    AoeUiDropdownRor *d;
+    uintptr_t f;
+    int32_t fw, fh, h_px, side;
+    if (!ez || !out) return 0;
+    h_px = sy(ez, h);
+    side = sx(ez, 18);
+    /* Port choice: the original reads the table entry before the first
+       for a negative index here. */
+    font_of(ez, font < 0 ? 10 : font, &f, &fw, &fh);
+    if (ez->panel.field_d8) return 0;
+    d = calloc(1, sizeof(*d));
+    if (d) aoe_ui_dropdown_init_ror(d, ez->panel.system,
+                                    ez->ops ? ez->ops->dropdown_ops : NULL);
+    *out = d;
+    if (!d || d->panel.field_d8) return fail(ez);
+    if (!aoe_ui_dropdown_setup_ror(d, ez->panel.area, parent, f, fw, fh, 0, 0,
+                                   1, 0xff, sx(ez, x), sy(ez, y), sx(ez, w),
+                                   h_px, 0, 0, side, h_px, sx(ez, list_w),
+                                   sy(ez, list_h), one_space, 1, side, side,
+                                   side))
+        return fail(ez);
+    if (ez->button_pictures)
+        aoe_ui_dropdown_set_pictures_ror(d, ez->button_pictures, 0xe, -1, 8,
+                                         10, 0xc);
+    if (ez->bevel_on) aoe_ui_dropdown_set_bevel_ror(d, 3, ez->bevel);
+    aoe_ui_dropdown_set_colors_ror(d, ez->text_color, ez->text_shadow);
+    text_colors(ez, &d->list->text);
+    TEXT_VT(d->text)->set_bevel(d->text, 3, ez->bevel);
+    return 1;
+}
+
+int aoe_ui_ez_create_list_ror(AoeUiEzRor *ez, AoeUiPanelRor *parent,
+                              AoeUiListRor **out, int32_t x, int32_t y,
+                              int32_t w, int32_t h, int32_t font) {
+    AoeUiListRor *l = NULL;
+    uintptr_t f;
+    int32_t fw, fh;
+    if (!ez || !out) return 0;
+    font_of(ez, font < 0 ? 10 : font, &f, &fw, &fh);
+    if (!ez->panel.field_d8) {
+        l = calloc(1, sizeof(*l));
+        if (l) aoe_ui_list_init_ror(l, ez->panel.system);
+        *out = l;
+        if (l && !l->text.panel.field_d8 &&
+            aoe_ui_text_setup_lines_ror(&l->text, ez->panel.area, parent,
+                                        sx(ez, x), sy(ez, y), sx(ez, w),
+                                        sy(ez, h), f, fw, fh, NULL, 0, 0, 0, 0,
+                                        1, 0xff, 0, one_space, 1))
+            aoe_ui_list_move_ror(l, 1, 0, 1);
+        else
+            ez->panel.field_d8 = 1;
+    }
+    /* Port guard: the original styles *out even when nothing was made. */
+    l = *out;
+    if (l) {
+        if (ez->bevel_on) TEXT_VT(&l->text)->set_bevel(&l->text, 3, ez->bevel);
+        text_colors(ez, &l->text);
+    }
+    return 1;
+}
+
+static void scrollbar_style(AoeUiEzRor *ez, AoeUiScrollbarRor *s) {
+    if (ez->button_pictures)
+        aoe_ui_scrollbar_set_pictures_ror(s, ez->button_pictures, -1, 8, 10, 0xc);
+    if (ez->bevel_on) aoe_ui_scrollbar_set_bevel_ror(s, 3, ez->bevel);
+}
+
+int aoe_ui_ez_create_scrollbar_ror(AoeUiEzRor *ez, AoeUiPanelRor *parent,
+                                   AoeUiScrollbarRor **out,
+                                   AoeUiTextRor *target, int32_t range,
+                                   int32_t x, int32_t y, int32_t width,
+                                   int32_t h) {
+    AoeUiScrollbarRor *s;
+    if (!ez || !out) return 0;
+    s = calloc(1, sizeof(*s));
+    if (s) aoe_ui_scrollbar_init_ror(s, ez->panel.system);
+    *out = s;
+    if (!s || s->panel.field_d8 ||
+        !aoe_ui_scrollbar_setup_ror(s, ez->panel.area, parent, sx(ez, x),
+                                    sy(ez, y), width, sy(ez, h), width, width,
+                                    target ? &target->panel : NULL, range, 0))
+        return 0;
+    if (target) aoe_ui_text_set_scrollbar_ror(target, &s->panel, 0);
+    scrollbar_style(ez, s);
+    return 1;
+}
+
+int aoe_ui_ez_create_text_scrollbar_ror(AoeUiEzRor *ez,
+                                        AoeUiScrollbarRor **out,
+                                        AoeUiTextRor *target, int32_t width) {
+    if (!ez || !target) return 0;
+    if (!aoe_ui_ez_create_scrollbar_ror(ez, target->panel.parent, out, target,
+                                        0, 0, 0, width, 0))
+        return 0;
+    aoe_ui_text_set_scrollbar_ror(target, &(*out)->panel, 1);
+    return 1;
+}
+
+int aoe_ui_ez_create_value_scrollbar_ror(AoeUiEzRor *ez,
+                                         AoeUiPanelRor *parent,
+                                         AoeUiValueScrollbarRor **out,
+                                         int32_t horizontal, int32_t range,
+                                         int32_t line_step, int32_t page_step,
+                                         int32_t x, int32_t y, int32_t w,
+                                         int32_t h) {
+    AoeUiValueScrollbarRor *v;
+    if (!ez || !out) return 0;
+    v = calloc(1, sizeof(*v));
+    if (v) aoe_ui_value_scrollbar_init_ror(v, ez->panel.system, horizontal);
+    *out = v;
+    if (!v || v->bar.panel.field_d8 ||
+        !aoe_ui_value_scrollbar_setup_ror(v, ez->panel.area, parent, sx(ez, x),
+                                          sy(ez, y), sx(ez, w), sy(ez, h), 0,
+                                          range, line_step, page_step, 1, 0))
+        return 0;
+    scrollbar_style(ez, &v->bar);
+    return 1;
+}
+
+void aoe_ui_ez_place_ror(AoeUiEzRor *ez, AoeUiPanelRor *child, int32_t x,
+                         int32_t y, int32_t w, int32_t h) {
+    if (!ez || !child) return;
+    child->vt->set_fixed_position(child, sx(ez, x), sy(ez, y), sx(ez, w),
+                                  sy(ez, h));
+}
+
+/* ---- dialogs ---- */
+
+static void dialog(AoeUiEzRor *ez, const char *name, int32_t x, int32_t y,
+                   int32_t type, const char *text, int32_t w, int32_t h) {
+    if (ez->ops && ez->ops->dialog)
+        ez->ops->dialog(ez->ops->context, ez, name, ez->popup_name,
+                        ez->popup_id, x, y, type, text, w, h);
+}
+
+static void close_existing(AoeUiEzRor *ez, const char *name) {
+    if (ez->ops && ez->ops->panel_exists && ez->ops->close_panel &&
+        ez->ops->panel_exists(ez->ops->context, name))
+        ez->ops->close_panel(ez->ops->context, name);
+}
+
+void aoe_ui_ez_help_dialog_ror(AoeUiEzRor *ez, const char *text,
+                               const char *name, int32_t x, int32_t y) {
+    uint8_t *mode;
+    char copy[0x100];
+    if (!ez || !ez->ops || !ez->ops->help_mode) return;
+    mode = ez->ops->help_mode;
+    if (*mode == 1) {
+        if (ez->ops->win_help) ez->ops->win_help(ez->ops->context);
+        return;
+    }
+    if (*mode == 2) return;
+    *mode = 2;
+    copy_name(copy, sizeof(copy), name && *name ? name : "OKDialog");
+    close_existing(ez, copy);
+    dialog(ez, copy, x, y, 5, text, 0x5a, 0x1e);
+}
+
+void aoe_ui_ez_ok_dialog_ror(AoeUiEzRor *ez, const char *text,
+                             const char *name, int32_t x, int32_t y) {
+    char copy[0x100];
+    if (!ez) return;
+    copy_name(copy, sizeof(copy), name && *name ? name : "OKDialog");
+    close_existing(ez, copy);
+    dialog(ez, copy, x, y, 0, text, 0x5a, 0x1e);
+}
+
+void aoe_ui_ez_yes_no_dialog_ror(AoeUiEzRor *ez, const char *text,
+                                 const char *name, int32_t x, int32_t y) {
+    if (ez) dialog(ez, name && *name ? name : "YesNoDialog", x, y, 2, text,
+                   0x5a, 0x1e);
+}
+
+void aoe_ui_ez_yes_no_cancel_dialog_ror(AoeUiEzRor *ez, const char *text,
+                                        const char *name, int32_t x,
+                                        int32_t y) {
+    if (ez) dialog(ez, name && *name ? name : "YesNoCancelDialog", x, y, 4,
+                   text, 0x78, 0x19);
+}
+
+static const char *string_of(AoeUiEzRor *ez, int32_t id, char *buf, int size) {
+    buf[0] = '\0';
+    aoe_ui_string_ror(ez->panel.system, id, buf, size);
+    return buf;
+}
+
+void aoe_ui_ez_help_dialog_id_ror(AoeUiEzRor *ez, int32_t text_id,
+                                  const char *name, int32_t x, int32_t y) {
+    char text[0x100];
+    if (ez) aoe_ui_ez_help_dialog_ror(ez, string_of(ez, text_id, text, sizeof(text)),
+                                      name, x, y);
+}
+
+void aoe_ui_ez_ok_dialog_id_ror(AoeUiEzRor *ez, int32_t text_id,
+                                const char *name, int32_t x, int32_t y) {
+    char text[0x100];
+    if (ez) aoe_ui_ez_ok_dialog_ror(ez, string_of(ez, text_id, text, sizeof(text)),
+                                    name, x, y);
+}
+
+void aoe_ui_ez_yes_no_dialog_id_ror(AoeUiEzRor *ez, int32_t text_id,
+                                    const char *name, int32_t x, int32_t y) {
+    char text[0x100];
+    if (ez) aoe_ui_ez_yes_no_dialog_ror(ez, string_of(ez, text_id, text, sizeof(text)),
+                                        name, x, y);
+}
+
+void aoe_ui_ez_yes_no_cancel_dialog_id_ror(AoeUiEzRor *ez, int32_t text_id,
+                                           const char *name, int32_t x,
+                                           int32_t y) {
+    char text[0x100];
+    if (ez)
+        aoe_ui_ez_yes_no_cancel_dialog_ror(
+            ez, string_of(ez, text_id, text, sizeof(text)), name, x, y);
+}
+
+/* ---- help mode ---- */
+
+static void cursor(AoeUiEzRor *ez, int help, int32_t mode) {
+    if (ez->ops && ez->ops->cursor) ez->ops->cursor(ez->ops->context, help, mode);
+}
+
+static void set_pointer_state(AoeUiEzRor *ez, int32_t state) {
+    if (ez->ops && ez->ops->set_pointer_state)
+        ez->ops->set_pointer_state(ez->ops->context, state);
+}
+
+void aoe_ui_ez_help_mode_on_ror(AoeUiEzRor *ez) {
+    if (!ez) return;
+    ez->help_armed = 1;
+    cursor(ez, 1, 6);
+    ez->saved_pointer = ez->ops && ez->ops->pointer_state
+                            ? ez->ops->pointer_state(ez->ops->context)
+                            : 0;
+    set_pointer_state(ez, 0);
+}
+
+void aoe_ui_ez_help_mode_off_ror(AoeUiEzRor *ez) {
+    if (!ez) return;
+    ez->help_armed = 0;
+    cursor(ez, 0, 0);
+    set_pointer_state(ez, ez->saved_pointer);
+}
+
+int32_t aoe_ui_ez_help_press_ror(AoeUiEzRor *ez, uint8_t button, int32_t x,
+                                 int32_t y) {
+    char text[1000];
+    int32_t page = 0;
+    if (!ez || ez->help_armed != 1) return 0;
+    ez->help_armed = 0;
+    cursor(ez, 0, 0);
+    set_pointer_state(ez, ez->saved_pointer);
+    if (button == 1) {
+        text[0] = '\0';
+        if (ez->panel.vt->get_help(&ez->panel, text, &page, x, y) &&
+            ez->ops && ez->ops->help_popup)
+            ez->ops->help_popup(ez->ops->context, ez->panel.name, text, page,
+                                x, y);
+    }
+    return 1;
+}
+
+/* ---- slots ---- */
+
+static void ez_begin_draw(AoeUiPanelRor *p, int32_t clear) {
+    aoe_ui_panel_begin_draw_ror(p, clear);
+}
+
+static void ez_draw(AoeUiPanelRor *p) {
+    AoeUiEzRor *ez = EZ(p);
+    if (p->need_restore) {
+        if (ez->shadow_panel && ez->ops && ez->ops->shadow_area)
+            ez->ops->shadow_area(ez->ops->context, ez, 1);
+        p->need_restore = 0;
+    }
+    EZ_VT(ez)->draw_background(ez, p->parent_rect ? 1 : 0);
+}
+
+static int32_t ez_mouse_down(AoeUiPanelRor *p, uint8_t button, int32_t x,
+                             int32_t y, int32_t c, int32_t s) {
+    if (aoe_ui_ez_help_press_ror(EZ(p), button, x, y)) return 1;
+    return aoe_ui_panel_mouse_down_ror(p, button, x, y, c, s);
+}
+
+static int32_t ez_action(AoeUiPanelRor *p, AoeUiPanelRor *from, int32_t code,
+                         int32_t value, int32_t extra) {
+    AoeUiEzRor *ez = EZ(p);
+    static const struct { const char *name; int32_t codes; } dialogs[] = {
+        {"OKDialog", 2}, {"YesNoDialog", 2}, {"YesNoCancelDialog", 3}};
+    size_t i;
+    if (from) {
+        const char *name = aoe_ui_panel_name_ror(from);
+        for (i = 0; name && i < sizeof(dialogs) / sizeof(dialogs[0]); ++i) {
+            if (strcmp(name, dialogs[i].name) != 0) continue;
+            if (code >= 0 && code < dialogs[i].codes && ez->ops &&
+                ez->ops->close_panel)
+                ez->ops->close_panel(ez->ops->context, dialogs[i].name);
+            return 1;
+        }
+    }
+    return aoe_ui_panel_action_ror(p, from, code, value, extra);
+}
+
+static void ez_set_focus(AoeUiPanelRor *p, int32_t focus) {
+    AoeUiEzRor *ez = EZ(p);
+    const AoeUiEzOpsRor *ops = ez->ops;
+    aoe_ui_panel_set_focus_ror(p, focus);
+    if (p->has_focus && ops) {
+        uintptr_t pal;
+        if ((ez->pointer_name[0] || ez->pointer_id >= 0) && ops->has_pointer &&
+            ops->has_pointer(ops->context) && ops->set_pointer)
+            ops->set_pointer(ops->context, ez->pointer_name, ez->pointer_id);
+        pal = ez->palette;
+        if (!pal && ops->default_palette) pal = ops->default_palette(ops->context);
+        if (p->area && p->area->window && pal && ops->area_palette &&
+            ops->area_palette(ops->context, p->area) != pal &&
+            ops->set_area_palette) {
+            ops->set_area_palette(ops->context, p->area, pal);
+            p->vt->set_redraw(p, 2);
+        }
+    }
+    if (ez->ime_toggle && ops && ops->ime) ops->ime(ops->context, p->has_focus != 0);
+}
+
+static int32_t no_key_action(AoeUiPanelRor *p, int32_t a, int32_t b,
+                             int32_t c, int32_t d, int32_t e) {
+    (void)p; (void)a; (void)b; (void)c; (void)d; (void)e;
+    return 0;
+}
+
+/* Background drawing 0x00454fd0 is not translated. */
+static void ez_draw_background(AoeUiEzRor *ez, int32_t parent_rect) {
+    (void)ez;
+    (void)parent_rect;
+}
+
+#define EZ_PANEL_SLOTS(destroy_fn, paint_fn, help_fn)                         \
+    {destroy_fn,                                                              \
+     aoe_ui_panel_setup_ror,                                                  \
+     aoe_ui_panel_set_rect_ltrb_ror,                                          \
+     aoe_ui_panel_set_rect_ror,                                               \
+     aoe_ui_panel_set_color_ror,                                              \
+     aoe_ui_panel_set_active_ror,                                             \
+     aoe_ui_panel_set_position_mode_ror,                                      \
+     aoe_ui_panel_set_fixed_position_ror,                                     \
+     aoe_ui_panel_set_redraw_ror,                                             \
+     aoe_ui_panel_redraw_overlaps_ror,                                        \
+     ez_begin_draw,                                                           \
+     aoe_ui_panel_end_draw_ror,                                               \
+     ez_draw,                                                                 \
+     aoe_ui_panel_draw_rect_ror,                                              \
+     aoe_ui_panel_draw_offset_ror,                                            \
+     aoe_ui_panel_draw_parent_rect_ror,                                       \
+     aoe_ui_panel_draw_parent_offset_ror,                                     \
+     aoe_ui_panel_validate_ror,                                               \
+     aoe_ui_panel_handle_message_ror,                                         \
+     aoe_ui_panel_handle_idle_ror,                                            \
+     aoe_ui_panel_handle_size_ror,                                            \
+     paint_fn,                                                                \
+     aoe_ui_panel_key_down_ror,                                               \
+     aoe_ui_panel_char_ror,                                                   \
+     aoe_ui_panel_ignore_ror,                                                 \
+     aoe_ui_panel_ignore_ror,                                                 \
+     aoe_ui_panel_ignore_ror,                                                 \
+     aoe_ui_panel_ignore_ror,                                                 \
+     ez_mouse_down,                                                           \
+     aoe_ui_panel_mouse_move_ror,                                             \
+     aoe_ui_panel_mouse_up_ror,                                               \
+     aoe_ui_panel_mouse_dbl_ror,                                              \
+     {aoe_ui_panel_no_action_ror, aoe_ui_panel_no_action_ror,                 \
+      aoe_ui_panel_no_action_ror, aoe_ui_panel_no_action_ror,                 \
+      aoe_ui_panel_no_action_ror, aoe_ui_panel_no_action_ror,                 \
+      aoe_ui_panel_no_action_ror, aoe_ui_panel_no_action_ror,                 \
+      aoe_ui_panel_no_action_ror, aoe_ui_panel_no_action_ror,                 \
+      aoe_ui_panel_no_action_ror},                                            \
+     no_key_action,                                                           \
+     help_fn,                                                                 \
+     aoe_ui_panel_no_char_action_ror,                                         \
+     ez_action,                                                               \
+     aoe_ui_panel_get_true_rect_ror,                                          \
+     aoe_ui_panel_is_inside_ror,                                              \
+     ez_set_focus,                                                            \
+     aoe_ui_panel_set_tab_order_ror,                                          \
+     aoe_ui_panel_get_help_ror,                                               \
+     aoe_ui_panel_stop_sound_ror,                                             \
+     aoe_ui_panel_restart_sound_ror,                                          \
+     aoe_ui_panel_slot_e0_ror}
+
+const AoeUiEzVtblRor aoe_ui_ez_vtable_ror = {
+    EZ_PANEL_SLOTS(ez_destroy, aoe_ui_panel_handle_paint_ror,
+                   aoe_ui_panel_zero_ror),
+    ez_draw_background,
+    set_reference,
+};
+
+/* ---- the screen subclass ---- */
+
+int aoe_ui_screen_init_ror(AoeUiEzRor *ez, AoeUiSystemRor *system,
+                           const AoeUiEzOpsRor *ops, const char *name) {
+    int ok = aoe_ui_ez_init_named_ror(ez, system, ops, name);
+    if (ez) ez->panel.vt = &aoe_ui_screen_vtable_ror.base;
+    return ok;
+}
+
+int aoe_ui_screen_setup_ror(AoeUiEzRor *ez, AoeUiAreaRor *area,
+                            const char *info_name, int32_t info_id,
+                            int32_t field_470) {
+    return aoe_ui_ez_setup_ror(ez, area, NULL, info_name, info_id, 1, 0, 0, 0,
+                               0, field_470) != 0;
+}
+
+static int32_t screen_paint(AoeUiPanelRor *p) {
+    aoe_ui_panel_handle_paint_ror(p);
+    return 0;
+}
+
+static int32_t screen_help(AoeUiPanelRor *p) {
+    aoe_ui_ez_help_dialog_id_ror(EZ(p), 120055, NULL, 450, 100);
+    return 0;
+}
+
+const AoeUiEzVtblRor aoe_ui_screen_vtable_ror = {
+    EZ_PANEL_SLOTS(ez_destroy, screen_paint, screen_help),
+    ez_draw_background,
+    set_reference,
+};

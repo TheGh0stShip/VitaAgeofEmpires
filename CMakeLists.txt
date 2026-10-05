@@ -573,7 +573,8 @@ add_library(aoe_ui_panel STATIC src/ui_panel.c src/ui_button.c
             src/ui_message.c
             src/ui_picture.c
             src/ui_input.c
-            src/ui_dropdown.c)
+            src/ui_dropdown.c
+            src/ui_ez.c)
 target_include_directories(aoe_ui_panel PUBLIC include)
 target_compile_options(aoe_ui_panel PRIVATE -Wall -Wextra)
 
@@ -1294,6 +1295,10 @@ else()
   target_link_libraries(ui_dropdown_test PRIVATE aoe_ui_panel)
   target_compile_options(ui_dropdown_test PRIVATE -UNDEBUG)
   add_test(NAME original_ui_dropdown COMMAND ui_dropdown_test)
+  add_executable(ui_ez_test tests/ui_ez_test.c)
+  target_link_libraries(ui_ez_test PRIVATE aoe_ui_panel)
+  target_compile_options(ui_ez_test PRIVATE -UNDEBUG)
+  add_test(NAME original_ui_ez COMMAND ui_ez_test)
   add_executable(ui_message_test tests/ui_message_test.c)
   target_link_libraries(ui_message_test PRIVATE aoe_ui_panel)
   target_compile_options(ui_message_test PRIVATE -UNDEBUG)

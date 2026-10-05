@@ -70,4 +70,35 @@ void aoe_ui_scrollbar_scroll_ror(AoeUiScrollbarRor *s, int32_t code,
    part), +0x8c 0x004676a0 (drag: arrows and pages re-arm, the thumb maps
    to a position), +0x90 0x00467aa0 (release: tell the parent, code 5). */
 
+/* +0x0c 0x00467010 as a slot for subclasses. */
+void aoe_ui_scrollbar_set_rect_slot_ror(AoeUiPanelRor *p, int32_t x, int32_t y,
+                                        int32_t w, int32_t h);
+
+/* Value scrollbars (no target; the range, line and page steps given):
+   vertical 0x00468360 (vtable 0x005458c8; destructors 0x004683b0 /
+   0x00468390, setup 0x004683c0, +0x0c 0x00468440 the scrollbar's) and
+   horizontal 0x00468470 (vtable 0x005459ac; destructors 0x004684b0 /
+   0x00468490, setup 0x004684c0, +0x0c 0x00468540: no arrow buttons, the
+   thumb runs from x + 1 to x + w - h + 1). Their drawing (0x00468460, the
+   scrollbar's 0x00467bb0) is not translated. */
+typedef struct {
+    AoeUiScrollbarRor bar;
+    int32_t field_1c4, field_1c8;  /* +0x1c4 1, +0x1c8 0 */
+} AoeUiValueScrollbarRor;
+
+extern const AoeUiPanelVtblRor aoe_ui_vscroll_vtable_ror;
+extern const AoeUiPanelVtblRor aoe_ui_hscroll_vtable_ror;
+
+void aoe_ui_value_scrollbar_init_ror(AoeUiValueScrollbarRor *v,
+                                     AoeUiSystemRor *system,
+                                     int32_t horizontal);
+void aoe_ui_value_scrollbar_release_ror(AoeUiValueScrollbarRor *v);
+int aoe_ui_value_scrollbar_setup_ror(AoeUiValueScrollbarRor *v,
+                                     AoeUiAreaRor *area, AoeUiPanelRor *parent,
+                                     int32_t x, int32_t y, int32_t w,
+                                     int32_t h, int32_t thumb_size,
+                                     int32_t range, int32_t line_step,
+                                     int32_t page_step, int32_t field_1c4,
+                                     int32_t field_1c8);
+
 #endif

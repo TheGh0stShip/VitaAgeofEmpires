@@ -9,6 +9,7 @@
 #include "aoe_ftol.h"
 #include "aoe_stream.h"
 #include "movement.h"
+#include "unit_class.h"
 
 static void fill(int32_t *v, int n, int32_t value) {
     int i;
@@ -4206,4 +4207,200 @@ void aoe_ai_tactical_group_tasks_ror(AoeAiTacticalRor *ai, uint32_t start, uint3
         if (ops->real_ms && ops->real_ms(ops->context) - start >= budget) return;
     }
     ai->field_f84 = -1;
+}
+
+static int32_t gt_now_ops(const AoeAiTacticalOpsRor *ops) {
+    return ops->game_time ? (int32_t)ops->game_time(ops->context) : 0;
+}
+
+/* 0x004d7880: the attacker's owner turns enemy. */
+static void notify_turn_enemy(AoeAiDiplomacyRor *dip, const AoeAiDiplomacyOps *dip_ops,
+                              int32_t p) {
+    aoe_ai_diplomacy_set_changeable_ror(dip, dip_ops, p, 1);
+    aoe_ai_diplomacy_set_ror(dip, dip_ops, p, AOE_AI_DISLIKE, 100);
+    aoe_ai_diplomacy_request_ror(dip, dip_ops, p, 3);
+    aoe_ai_diplomacy_set_changeable_ror(dip, dip_ops, p, 0);
+}
+
+static int notify_reach(const AoeAiTacticalOpsRor *ops, int32_t id, const AoeAiWorldObjectRor *a) {
+    double r = ops->range ? ops->range(ops->context, id) : 0.0;
+    return ops->can_reach && ops->can_reach(ops->context, id, aoe_ftol32(a->x), aoe_ftol32(a->y),
+                                            aoe_ftol32(a->z), (float)r, a->id) == 1;
+}
+
+/* 0x004d7880: see the header. */
+void aoe_ai_tactical_notify_ror(AoeAiTacticalRor *ai, int32_t unit, int32_t code, int32_t other,
+                                const AoeAiTacticalOpsRor *ops,
+                                const AoeAiUnitGroupOpsRor *group_ops, AoeAiInfoRor *info,
+                                const AoeAiInfoOpsRor *info_ops, AoeAiDiplomacyRor *dip,
+                                const AoeAiDiplomacyOps *dip_ops) {
+    AoeAiWorldObjectRor ours, a, tc, cmd;
+    int have_ours, have_tc = 0;
+    uint32_t start;
+    int32_t n, sent, k, e, centre, pt[2];
+    AoeAiUnitGroupRor *g;
+    if (!ai || !ops || !ops->world_object) return;
+    have_ours = ops->world_object(ops->context, unit, &ours);
+    if (code != 0x72 && code != 0x74 && !have_ours) return;
+    start = ops->real_ms ? ops->real_ms(ops->context) : 0;
+    if (code == 0x72 || code == 0x74) {
+        AoeAiInfoObjectRor *t;
+        int32_t limit;
+        if (!info) return;
+        t = code == 0x72 ? aoe_ai_info_best_9f_ror(info, (uint32_t)-1, info_ops)
+                         : aoe_ai_info_best_9e_ror(info, (uint32_t)-1, info_ops);
+        if (!t) return;
+        n = aoe_ai_tactical_collect_by_order_ror(ai, 100, -1, 1, ops);
+        limit = n > 3 ? 3 : n;
+        sent = 0;
+        for (k = 0; k < ai->list_d48.count && sent < limit; ++k) {
+            AoeAiWorldObjectRor o;
+            int32_t task, id = ai->list_d48.data[k];
+            if (!ops->world_object(ops->context, id, &o) || !ops->unit_task ||
+                !ops->unit_task(ops->context, id, &task) || !ops->can_engage ||
+                !ops->can_engage(ops->context, id, t->id, 2.0f))
+                continue;
+            if (aoe_ai_tactical_order_2bd_ror(ai, id, t->id, 2.0f, 100, ops) == 1) {
+                aoe_ai_tactical_ungroup_ror(ai, ai->list_d48.data[k], group_ops);
+                ++sent;
+            }
+        }
+        return;
+    }
+    if (code != 0x201) return;
+    if (!ops->world_object(ops->context, other, &a) || a.owner == ops->self) return;
+    if (a.owner == 0 && (ai->field_fa4 == 0 || (a.type_id != 0x7e && a.type_id != 0x59)) &&
+        aoe_ai_tactical_defend_object_ror(ai, a.id, ours.id, ops) == 1)
+        return;
+    if (a.owner != 0) {
+        int in0 = aoe_ai_int_list_contains_ror(&ai->lists[0], unit);
+        int alarm = 1;
+        if (!in0 || aoe_ai_int_list_contains_ror(&ai->lists[1], unit)) {
+            int32_t action = -1, task;
+            alarm = ops->unit_task && ops->unit_task(ops->context, unit, &task) &&
+                    ops->unit_action && ops->unit_action(ops->context, unit, &action) &&
+                    action != 0x2c1;
+        }
+        if (alarm) {
+            int32_t d = ops->world_100 ? ops->world_100(ops->context) : 0;
+            if (d == 3) ai->sn[104] -= 2;
+            else if (d == 4) --ai->sn[104];
+            else aoe_ai_tactical_arm_e18_ror(ai, 3);
+            aoe_ai_tactical_upgrades_ror(ai, a.owner, ops, info, info_ops);
+        }
+    }
+    e = a.owner;
+    if (e >= 0 && e < 9) ++ai->block_fd8[e];
+    if ((ops->player_field_4 ? ops->player_field_4(ops->context, e) : 0) == 0) {
+        if (ops->is_ally && ops->is_ally(ops->context, e) == 1 && e >= 0 && e < 9 &&
+            ai->block_fd8[e] >= ai->sn[221] && ai->sn[215] == 1)
+            notify_turn_enemy(dip, dip_ops, e);
+        else {
+            aoe_ai_diplomacy_add_ror(dip, dip_ops, e, AOE_AI_LIKE, ai->sn[178]);
+            aoe_ai_diplomacy_add_ror(dip, dip_ops, e, AOE_AI_DISLIKE, ai->sn[178]);
+        }
+    } else if (ops->is_ally && ops->is_ally(ops->context, e) == 1 && ops->player_18 &&
+               ops->player_18(ops->context, e) == 1) {
+        notify_turn_enemy(dip, dip_ops, e);
+    }
+    if (ai->sn[124] > 0 && ai->sn[128] == e && ai->sn[133] == 1 && ops->befriend)
+        ops->befriend(ops->context);
+    if (info)
+        aoe_ai_info_add_tile_area_ror(info, 0, (uint8_t)aoe_ftol32(ours.x),
+                                      (uint8_t)aoe_ftol32(ours.y), (uint8_t)a.owner,
+                                      (uint8_t)ops->self, 0, 0,
+                                      ops->game_time ? ops->game_time(ops->context) : 0, -1,
+                                      info_ops);
+    if (ai->field_d14 != 0 &&
+        (uint32_t)(gt_now_ops(ops) - ai->field_d14) / 1000u <
+            (uint32_t)aoe_ai_tactical_d24_limit_ror(ai, 0x30))
+        return;
+    pt[0] = aoe_ftol32(a.x);
+    pt[1] = aoe_ftol32(a.y);
+    if (aoe_class_is_boat_ror(a.type_class) == 1) {
+        g = aoe_ai_tactical_ready_group_ror(ai, 0x67, ai->sn[20], pt, group_ops);
+    } else {
+        g = aoe_ai_tactical_ready_group_ror(ai, 100, ai->sn[20], pt, group_ops);
+        if (!g) g = aoe_ai_tactical_ready_group_ror(ai, 0x67, ai->sn[20], pt, group_ops);
+    }
+    if (g && ops->world_object(ops->context, g->commander, &cmd) && notify_reach(ops, cmd.id, &a)) {
+        g->field_184 = other;
+        g->field_188 = a.type_id;
+        aoe_ai_unit_group_set_location_ror(g->loc_18c, a.x, a.y, a.z);
+        g->field_180 = 2;
+        aoe_ai_unit_group_update_ror(g, group_ops, 2, 1, 0);
+        ai->field_d14 = gt_now_ops(ops);
+        if (ai->sn[71] == 1) ai->field_d0c = gt_now_ops(ops);
+        return;
+    }
+    centre = ops->first_center ? ops->first_center(ops->context) : -1;
+    if (centre != -1 && ops->object && ops->object(ops->context, centre, &tc)) have_tc = 1;
+    if (have_tc &&
+        aoe_ftol32(sqrt((double)(tc.x - a.x) * (tc.x - a.x) + (double)(tc.y - a.y) * (tc.y - a.y))) < 20) {
+        n = aoe_ai_tactical_collect_support_ror(ai, 100, -1, ops) +
+            aoe_ai_tactical_collect_by_order_ror(ai, 100, -1, 0, ops);
+        if (n == 0 && aoe_class_is_boat_ror(a.type_class) == 0 && ai->sn[225] == 1 &&
+            (uint32_t)gt_now_ops(ops) / 1000u < (uint32_t)ai->sn[104]) {
+            for (k = 0; k < ai->lists[0].count; ++k) {
+                int32_t *slot = aoe_ai_int_list_at_ror(&ai->lists[0], k);
+                if (slot) aoe_ai_int_list_add_unique_ror(&ai->list_d48, *slot);
+            }
+            n = ai->lists[0].count;
+        }
+    } else {
+        if (aoe_class_is_boat_ror(a.type_class) == 1)
+            n = aoe_ai_tactical_collect_support_ror(ai, ai->sn[20], -1, ops);
+        else
+            n = aoe_ai_tactical_collect_support_ror(ai, ai->sn[20], -1, ops) +
+                aoe_ai_tactical_collect_by_order_ror(ai, ai->sn[20], -1, 0, ops);
+        n = ai->sn[19] * n / 100;
+    }
+    if (have_tc)
+        aoe_ai_tactical_share_with_allies_ror(ai, a.owner, aoe_ftol32(tc.x), aoe_ftol32(tc.y), ops);
+    else
+        aoe_ai_tactical_share_with_allies_ror(ai, a.owner, aoe_ftol32(a.x), aoe_ftol32(a.y), ops);
+    sent = 0;
+    for (k = 0; k < ai->list_d48.count && sent < n; ++k) {
+        AoeAiWorldObjectRor m;
+        int32_t id, task, v = 0;
+        if (k > 1 && ops->real_ms && ops->real_ms(ops->context) - start > 10) break;
+        id = ai->list_d48.data[k];
+        if (!ops->world_object(ops->context, id, &m) || !ops->unit_task ||
+            !ops->unit_task(ops->context, id, &task))
+            continue;
+        if (task == 600) {
+            int32_t t = -1;
+            if (ops->unit_ai_target) ops->unit_ai_target(ops->context, id, &t);
+            if (t != -1) {
+                AoeAiWorldObjectRor to;
+                if (t == a.id) {
+                    ++sent;
+                    continue;
+                }
+                if (ops->world_object(ops->context, t, &to)) {
+                    int32_t *first = aoe_ai_int_list_at_ror(&ai->list_d28, 0);
+                    if (first && to.owner == *first) continue;
+                }
+            }
+        }
+        if (ops->unit_2c) ops->unit_2c(ops->context, id, &v);
+        if (id == unit) {
+            if (v == 100 || !notify_reach(ops, id, &a)) continue;
+            if (aoe_ai_tactical_order_attack_ror(ai, ai->list_d48.data[k], a.x, a.y, a.id, a.owner,
+                                                 NULL, 0, 0, ops) == 1) {
+                ai->field_d14 = gt_now_ops(ops);
+                if (ai->sn[71] == 1) ai->field_d0c = gt_now_ops(ops);
+                ++sent;
+            }
+        } else {
+            float d = (float)(ops->object_distance ? ops->object_distance(ops->context, unit, id)
+                                                   : 0.0);
+            int32_t eff = aoe_ai_tactical_effort_ror(ai, d);
+            if (!((float)ai->sn[20] > d) || v >= eff || eff <= 0 || !notify_reach(ops, id, &a))
+                continue;
+            if (aoe_ai_tactical_order_attack_ror(ai, ai->list_d48.data[k], a.x, a.y, a.id, a.owner,
+                                                 NULL, 0, 0, ops) == 1)
+                ++sent;
+        }
+    }
 }

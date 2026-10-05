@@ -1317,6 +1317,47 @@ static void group_tasks_tests(void) {
     aoe_ai_tactical_release_ror(&ai);
 }
 
+static int nt_object(void *c, int32_t id, AoeAiWorldObjectRor *o) {
+    (void)c;
+    memset(o, 0, sizeof *o);
+    o->id = id;
+    o->owner = id == 900 ? 2 : 1;
+    o->type_class = 3;
+    return id > 0;
+}
+static int32_t nt_world_100(void *c) { (void)c; return 3; }
+static int nt_task(void *c, int32_t id, int32_t *t) { (void)c; (void)id; *t = -1; return 1; }
+static int nt_action(void *c, int32_t id, int32_t *a) { (void)c; (void)id; *a = 0x2c0; return 1; }
+
+static void notify_tests(void) {
+    static AoeAiTacticalRor ai;
+    AoeAiTacticalOpsRor ops;
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    memset(&ops, 0, sizeof ops);
+    ops.self = 1;
+    ops.object = nt_object;
+    ops.world_object = nt_object;
+    ops.world_100 = nt_world_100;
+    ops.unit_task = nt_task;
+    ops.unit_action = nt_action;
+    ops.game_time = ttime;
+    ai.sn[104] = 50;
+    ai.sn[19] = 100;
+    /* Our soldier 40 attacked by player 2's unit 900: the alarm moves
+       (difficulty 3: number 104 less 2) and the attacker's tally rises. */
+    aoe_ai_tactical_notify_ror(&ai, 40, 0x201, 900, &ops, NULL, NULL, NULL, NULL, NULL);
+    assert(ai.sn[104] == 48 && ai.block_fd8[2] == 1);
+    /* Attacks by our own units are ignored. */
+    aoe_ai_tactical_notify_ror(&ai, 40, 0x201, 41, &ops, NULL, NULL, NULL, NULL, NULL);
+    assert(ai.sn[104] == 48 && ai.block_fd8[1] == 0);
+    /* A missing unit ends any other notice; 0x72 without information
+       finds no target. */
+    aoe_ai_tactical_notify_ror(&ai, -5, 0x201, 900, &ops, NULL, NULL, NULL, NULL, NULL);
+    aoe_ai_tactical_notify_ror(&ai, -5, 0x72, 900, &ops, NULL, NULL, NULL, NULL, NULL);
+    assert(ai.block_fd8[2] == 1);
+    aoe_ai_tactical_release_ror(&ai);
+}
+
 static uint32_t rg_ms;
 static uint32_t rg_real(void *c) { (void)c; return rg_ms += 4; }
 static int32_t rg_centre(void *c) { (void)c; return 60; }
@@ -1846,6 +1887,7 @@ int main(void) {
     fill_boat_groups_tests();
     fill_soldier_groups_tests();
     group_tasks_tests();
+    notify_tests();
 
     aoe_ai_tactical_init_ror(&ai, 3, NULL);
     assert(ai.module.id == 0x3f1 && !strcmp(ai.module.name, "TacAI"));

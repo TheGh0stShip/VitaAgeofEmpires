@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 
+#include "ai_diplomacy.h"
 #include "ai_info.h" /* AoeAiWorldObjectRor */
 #include "ai_module.h"
 #include "ai_strategy.h"   /* AoeAiIntListRor, AOE_AI_SN_COUNT */
@@ -398,6 +399,10 @@ typedef struct {
        listed active unit (0x004c81a0). */
     int32_t (*build_count)(void *context);
     int (*active_unit)(void *context, int32_t id);
+    /* Player `player`'s vtable +0x18 with our index, and the computer
+       player's 0x004c8540 (befriending number 128's player). */
+    int (*player_18)(void *context, int32_t player);
+    void (*befriend)(void *context);
 } AoeAiTacticalOpsRor;
 
 /* 0x004e0630: in list order, the group with task `task` and +0x180
@@ -934,6 +939,45 @@ int aoe_ai_tactical_defend_object_ror(AoeAiTacticalRor *ai, int32_t enemy, int32
    without a pending 0x65 item skips the age-2 test. */
 void aoe_ai_tactical_research_ages_ror(AoeAiTacticalRor *ai,
                                        const AoeAiTacticalOpsRor *ops);
+/* 0x004d7880(unit, code, other): a notification about our `unit`.
+   - 0x72 / 0x74: the best remembered type-0x9f (0x004c5d10) or 0x9e /
+     0xa3 (0x004c5b80) object of any enemy; up to three (at most the
+     collected count) list-2 units idle or below +0x2c 100 (0x004d8960
+     with mode -1, reset) that can engage it within 2.0 (+0x194) go to it
+     (0x004db9f0 with 2.0 and 100) and leave their groups.
+   - 0x201, attacked by `other` (an existing object of another player):
+     by gaia (not type 0x7e / 0x59 while +0xfa4 is set), the defence
+     (0x004e13c0) may answer alone. By a player: a soldier or villager on
+     list 1 whose action is not 0x2c1, or any other villager, moves the
+     alarm (number 104 less 2 at world difficulty 3, less 1 at 4, else
+     +0xe18 armed with 3) and the upgrades run (0x004e22b0). The
+     attacker's +0xfd8 tally rises; a player without its +4 that we call
+     an ally turns enemy (changeable set, dislike 100, stance 3, fixed)
+     once the tally reaches number 221 with number 215 at 1, else like
+     and dislike each gain number 178; a player with +4 turns enemy when
+     ally to us and its vtable +0x18 says so. Number 128's player with
+     numbers 124 and 133 set is befriended. A one-tile area is recorded
+     at our unit. Within 0x004e0bc0(0x30) seconds of +0xd14 nothing more.
+     A ready group (0x004e07f0 within number 20; boats task 0x67, else
+     100 then 0x67) whose commander can reach the attacker takes it as
+     target (+0x180 2, updated; +0xd14 and with number 71 +0xd0c).
+     Otherwise defenders are collected: near (under 20 tiles) our town
+     centre list 5, priests, siege and list 2 at 100 (0x004d8be0,
+     0x004d8960), with none, a land attacker and number 225 at 1 before
+     number 104 seconds, all villagers; elsewhere the same within number
+     20 (boats only list 5 and support) scaled by number 19 percent.
+     Allies hear of it (0x004e2cd0, the centre's tile or the attacker's).
+     Then while fewer than that many are sent (and, after two, within 10
+     ms): a unit tasked 600 already on the attacker counts; one on an
+     object of +0xd28's first player stays; our unit itself (unless its
+     +0x2c is 100), or one nearer than number 20 whose +0x2c is below the
+     effort for that distance (0x004dc650), that can reach the attacker
+     attacks it (0x004dbe10 with its owner). */
+void aoe_ai_tactical_notify_ror(AoeAiTacticalRor *ai, int32_t unit, int32_t code, int32_t other,
+                                const AoeAiTacticalOpsRor *ops,
+                                const AoeAiUnitGroupOpsRor *group_ops, AoeAiInfoRor *info,
+                                const AoeAiInfoOpsRor *info_ops, AoeAiDiplomacyRor *dip,
+                                const AoeAiDiplomacyOps *dip_ops);
 /* 0x004d3ab0: the group tasks, resuming after the group whose ID is
    +0xf84 (from the first when none matches); groups of task 0x6a, 0x6b,
    0x6c or with +0x180 0 or 1 are passed over. An unsettled group

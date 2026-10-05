@@ -180,6 +180,16 @@ typedef struct {
     const AoeCampaignOpsRor *(*campaign_file_ops)(void *context);
     void (*refresh_campaigns)(void *context);
     int (*file_writable)(void *context, const char *path);
+    /* The player file: the player names with the chosen one's ID
+       (0x0043cd00; as for the campaign titles), choosing (0x0043cc80),
+       adding (0x0043cc00, then chosen) and removing (0x0043cef0) a player
+       by ID; the "Campaign Selection Screen" made and registered
+       (0x0047a7c0). */
+    int32_t (*campaign_player_names)(void *context, char ***names, int32_t *chosen);
+    void (*choose_campaign_player)(void *context, int32_t id);
+    void (*add_campaign_player)(void *context, const char *name);
+    void (*remove_campaign_player)(void *context, int32_t id);
+    void (*open_campaign_selection)(void *context);
 } AoeGameUiOpsRor;
 
 typedef struct {
@@ -842,5 +852,54 @@ void aoe_campaign_editor_fill_names_ror(AoeCampaignEditorRor *c);
 void aoe_campaign_editor_fill_available_ror(AoeCampaignEditorRor *c);
 void aoe_campaign_editor_open_ror(AoeCampaignEditorRor *c);
 void aoe_campaign_editor_save_ror(AoeCampaignEditorRor *c);
+
+/* The "Name Selection Screen" (vtable 0x00546fd4, 0x0048dec0..0x0048e470;
+   "scr2" / 50052): the title (10750), "players" (10751) over the player
+   names with a scroll bar, New (10752), Delete (10753), OK, Cancel
+   (Escape) and the hidden close button; help 30300..30302, 30001, 30002.
+   0x0048dec0 constructor (0x0048e2b0 clears the fields first);
+   0x0048e1d0 destructor (deleting 0x0048e1b0; the "New Name Dialog"
+   shown first); 0x0048e2f0 fills the names (sorted, the chosen one
+   picked); 0x0048e3b0 disables Delete and OK without names and sets the
+   Tab order (list, New, then Delete and OK when there are names, Cancel)
+   and the focus (New without names, else the list). +0xb8 0x0048e470: OK
+   chooses the picked player and opens the campaign selection; Cancel the
+   single player menu; close quits; a double-click is OK; New opens the
+   "New Name Dialog" over this screen; Delete asks (10754 with the name);
+   a yes removes the player. The new-name dialog closing refills the names
+   after an OK; either answer re-runs 0x0048e3b0.
+
+   The "New Name Dialog" (vtable 0x00547100, 0x0048e800..0x0048eaa0; 500 x
+   230 over its parent): the title (10755), "name" (10756), the name edit
+   (15 characters), OK and Cancel (Escape); Tab over edit, OK, Cancel.
+   0x0048ea10 destructor (deleting 0x0048e9f0). +0xb8 0x0048eaa0: OK (or
+   Enter in the edit) with a name adds the player and opens the campaign
+   selection, closing the dialog and the name screen (an empty name
+   refocuses the edit); Cancel (or Escape in the edit) returns to the name
+   screen when it is registered, else to the single player menu. */
+typedef struct {
+    AoeUiEzRor ez;
+    AoeUiTextRor *title, *label;              /* +0x478, +0x47c */
+    AoeUiListRor *list;                       /* +0x480 */
+    AoeUiScrollbarRor *list_bar;              /* +0x484 */
+    AoeUiButtonRor *add, *del, *ok, *cancel, *close; /* +0x488..+0x498 */
+    int32_t field_49c;                        /* +0x49c */
+    AoeGameUiRor *ui;
+} AoeNameSelectionRor;
+
+typedef struct {
+    AoeUiDialogRor dialog;
+    AoeUiTextRor *title, *label;              /* +0x490, +0x494 */
+    AoeUiEditRor *name;                       /* +0x498 */
+    AoeUiButtonRor *ok, *cancel;              /* +0x49c, +0x4a0 */
+    AoeGameUiRor *ui;
+} AoeNewNameDialogRor;
+
+extern const AoeUiEzVtblRor aoe_name_selection_vtable_ror;
+extern const AoeUiEzVtblRor aoe_new_name_dialog_vtable_ror;
+int aoe_name_selection_init_ror(AoeNameSelectionRor *n, AoeGameUiRor *ui, AoeUiAreaRor *area);
+void aoe_name_selection_fill_ror(AoeNameSelectionRor *n);
+void aoe_name_selection_update_ror(AoeNameSelectionRor *n);
+int aoe_new_name_dialog_init_ror(AoeNewNameDialogRor *d, AoeGameUiRor *ui, AoeUiPanelRor *parent);
 
 #endif

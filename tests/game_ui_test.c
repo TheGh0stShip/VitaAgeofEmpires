@@ -196,6 +196,20 @@ static int camp_slots(void *c, int32_t active[9], int32_t kind[9]) {
 }
 static void camp_state(void *c, int32_t slot, int32_t state) { (void)c; camp_states[slot] = state + 1; }
 static int camp_start(void *c) { (void)c; ++camp_started; return 1; }
+static int32_t pif_count = 2, pif_chosen = 1, pif_removed = -1, camp_opens;
+static char pif_added[32];
+static int32_t pif_names(void *c, char ***names, int32_t *chosen) {
+    static const char *const n[] = {"Ann", "Bob", "Cid"};
+    (void)c;
+    if (!pif_count) return 0;
+    *names = names_of(n, pif_count);
+    *chosen = pif_chosen;
+    return pif_count;
+}
+static void pif_choose(void *c, int32_t id) { (void)c; pif_chosen = id; }
+static void pif_add(void *c, const char *name) { (void)c; snprintf(pif_added, sizeof pif_added, "%s", name); }
+static void pif_remove(void *c, int32_t id) { (void)c; pif_removed = id; --pif_count; }
+static void open_camp(void *c) { (void)c; ++camp_opens; }
 static const char *idx_name(void *c, int32_t i) { (void)c; return i == 0 ? "Gaul.scn" : i == 1 ? "Egypt.scx" : NULL; }
 static int idx_info(void *c, int32_t id, const char **d, int32_t *f, int32_t *pl) {
     (void)c; *d = id == 0 ? "About Gaul" : "About Egypt"; *f = id == 0; *pl = id == 0 ? 3 : 4; return 1;
@@ -768,6 +782,41 @@ int main(void) {
         aoe_ui_system_close_ror(&sys, "Campaign Editor Screen");
         ops.file_exists = old_exists;
         ops.delete_file = old_delete;
+    }
+    /* The name selection screen and the new name dialog. */
+    {
+        AoeNameSelectionRor *ns = calloc(1, sizeof *ns);
+        AoeUiPanelRor *np = &ns->ez.panel;
+        AoeNewNameDialogRor *nd;
+        ops.campaign_player_names = pif_names;
+        ops.choose_campaign_player = pif_choose;
+        ops.add_campaign_player = pif_add;
+        ops.remove_campaign_player = pif_remove;
+        ops.open_campaign_selection = open_camp;
+        assert(aoe_name_selection_init_ror(ns, &ui, &area));
+        /* The buttons are set before the names arrive (a new list holds
+           one blank line). */
+        assert(aoe_ui_text_count_ror(&ns->list->text) == 2);
+        assert(aoe_ui_text_selected_id_ror(&ns->list->text) == 1);
+        aoe_name_selection_update_ror(ns);
+        assert(!ns->ok->disabled && np->current == &ns->list->text.panel);
+        /* Delete asks, yes removes. */
+        np->vt->action(np, &ns->del->panel, 1, 0, 0);
+        assert(aoe_ui_system_find_ror(&sys, "YesNoDialog"));
+        np->vt->action(np, aoe_ui_system_find_ror(&sys, "YesNoDialog"), 0, 0, 0);
+        assert(pif_removed == 1 && aoe_ui_text_count_ror(&ns->list->text) == 1);
+        assert(!aoe_ui_system_find_ror(&sys, "YesNoDialog"));
+        /* New opens the dialog; an empty name is refused, a name goes on. */
+        np->vt->action(np, &ns->add->panel, 1, 0, 0);
+        nd = (AoeNewNameDialogRor *)aoe_ui_system_find_ror(&sys, "New Name Dialog");
+        assert(nd);
+        nd->dialog.ez.panel.vt->action(&nd->dialog.ez.panel, &nd->ok->panel, 1, 0, 0);
+        assert(aoe_ui_system_find_ror(&sys, "New Name Dialog") && !pif_added[0]);
+        aoe_ui_edit_set_text_ror(nd->name, "Dee");
+        nd->dialog.ez.panel.vt->action(&nd->dialog.ez.panel, &nd->ok->panel, 1, 0, 0);
+        assert(!strcmp(pif_added, "Dee") && camp_opens == 1);
+        assert(!aoe_ui_system_find_ror(&sys, "New Name Dialog"));
+        assert(!aoe_ui_system_find_ror(&sys, "Name Selection Screen"));
     }
     /* The game settings screen (single player, random map). */
     {

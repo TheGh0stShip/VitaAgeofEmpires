@@ -3196,16 +3196,31 @@ static int32_t group_index(const AoeAiTacticalRor *ai, const AoeAiUnitGroupRor *
     return -1;
 }
 
+/* 0x004dee90 / 0x004dcf40: the candidate filter of the soldier version:
+   the unit must be in zone `zone` (a commander's own zone; -1, when the
+   group has none, matches nothing). FILL_ANY_ZONE: no filter (boats). */
+enum { FILL_ANY_ZONE = -2 };
+static int fill_zone_ok(int32_t zone, int32_t id, const AoeAiInfoOpsRor *info_ops) {
+    if (zone == FILL_ANY_ZONE) return 1;
+    return info_ops && info_ops->zone && (int32_t)info_ops->zone(info_ops->context, id) == zone;
+}
+
 /* 0x004dee90 / 0x004dcf40: +0xd48's candidates join `g`: all of them, or
    (`nearest`) the nearest to its +0x19c location one at a time until it
    is full; `move` takes each out of its group first (0x004e0930). */
 static void fill_from_d48(AoeAiTacticalRor *ai, AoeAiUnitGroupRor *g, int nearest, int move,
-                          const AoeAiTacticalOpsRor *ops, const AoeAiUnitGroupOpsRor *group_ops) {
+                          int32_t zone, const AoeAiTacticalOpsRor *ops,
+                          const AoeAiUnitGroupOpsRor *group_ops, const AoeAiInfoOpsRor *info_ops) {
     int32_t j, *slot;
     if (!nearest) {
         for (j = 0; j < ai->list_d48.count; ++j) {
+            AoeAiWorldObjectRor o;
             slot = aoe_ai_int_list_at_ror(&ai->list_d48, j);
             if (!slot) break;
+            if (zone != FILL_ANY_ZONE &&
+                (!ops->object || !ops->object(ops->context, *slot, &o) ||
+                 !fill_zone_ok(zone, *slot, info_ops)))
+                continue;
             if (move) aoe_ai_tactical_ungroup_ror(ai, *slot, group_ops);
             slot = aoe_ai_int_list_at_ror(&ai->list_d48, j);
             if (slot) aoe_ai_unit_group_add_ror(g, *slot, group_ops);
@@ -3220,7 +3235,9 @@ static void fill_from_d48(AoeAiTacticalRor *ai, AoeAiUnitGroupRor *g, int neares
             AoeAiWorldObjectRor o;
             float d;
             slot = aoe_ai_int_list_at_ror(&ai->list_d48, j);
-            if (!slot || !ops->object || !ops->object(ops->context, *slot, &o)) continue;
+            if (!slot || !ops->object || !ops->object(ops->context, *slot, &o) ||
+                !fill_zone_ok(zone, *slot, info_ops))
+                continue;
             d = (float)(ops->distance ? ops->distance(ops->context, *slot, g->loc_19c[0],
                                                       g->loc_19c[1], g->loc_19c[2])
                                       : 0.0);
@@ -3259,14 +3276,17 @@ static int lead_group(AoeAiTacticalRor *ai, AoeAiUnitGroupRor *g, int32_t list, 
 /* 0x004dee90 / 0x004dcf40: a short group takes ungrouped units of `list`,
    then the surplus. */
 static void top_up_group(AoeAiTacticalRor *ai, AoeAiUnitGroupRor *g, int32_t list, int boats,
-                         const AoeAiTacticalOpsRor *ops, const AoeAiUnitGroupOpsRor *group_ops) {
+                         int32_t zone, const AoeAiTacticalOpsRor *ops,
+                         const AoeAiUnitGroupOpsRor *group_ops, const AoeAiInfoOpsRor *info_ops) {
     int32_t n;
     if (aoe_ai_unit_group_count_ror(g) >= g->field_160) return;
     n = aoe_ai_tactical_collect_ungrouped_ror(ai, list);
-    fill_from_d48(ai, g, n > g->field_160 - aoe_ai_unit_group_count_ror(g), 0, ops, group_ops);
+    fill_from_d48(ai, g, n > g->field_160 - aoe_ai_unit_group_count_ror(g), 0, zone, ops,
+                  group_ops, info_ops);
     if (aoe_ai_unit_group_count_ror(g) >= g->field_160) return;
     n = aoe_ai_tactical_collect_surplus_ror(ai, boats);
-    fill_from_d48(ai, g, n > g->field_160 - aoe_ai_unit_group_count_ror(g), 1, ops, group_ops);
+    fill_from_d48(ai, g, n > g->field_160 - aoe_ai_unit_group_count_ror(g), 1, zone, ops,
+                  group_ops, info_ops);
 }
 
 /* 0x004dee90: see the header. */
@@ -3286,7 +3306,7 @@ void aoe_ai_tactical_fill_boat_groups_ror(AoeAiTacticalRor *ai, const AoeAiTacti
             for (i = 0; i < ai->groups_len; ++i) {
                 AoeAiUnitGroupRor *g = ai->groups[i];
                 if (g->task != t) continue;
-                top_up_group(ai, g, 4, 1, ops, group_ops);
+                top_up_group(ai, g, 4, 1, FILL_ANY_ZONE, ops, group_ops, NULL);
                 i = group_index(ai, g);
                 if (i < 0) break;
             }
@@ -3317,6 +3337,85 @@ void aoe_ai_tactical_fill_boat_groups_ror(AoeAiTacticalRor *ai, const AoeAiTacti
                 if ((g->task == 0x67 && n >= ai->sn[60]) || (g->task == 0x68 && n >= ai->sn[69]) ||
                     (g->task == 0x69 && n >= ai->sn[63]))
                     continue;
+                if (!best || n - g->field_160 < best_v) {
+                    best = g;
+                    best_v = n - g->field_160;
+                }
+            }
+            if (!best) return;
+        }
+        slot = aoe_ai_int_list_at_ror(&ai->list_d48, j);
+        if (slot) aoe_ai_unit_group_add_ror(best, *slot, group_ops);
+    }
+}
+
+static int soldier_task(int32_t t) { return t == 100 || t == 0x65 || t == 0x66; }
+
+/* 0x004dcf40: a group's commander zone for the candidate filter. */
+static int32_t commander_zone(const AoeAiUnitGroupRor *g, const AoeAiTacticalOpsRor *ops,
+                              const AoeAiInfoOpsRor *info_ops) {
+    AoeAiWorldObjectRor o;
+    if (!ops->object || !ops->object(ops->context, g->commander, &o) || !info_ops ||
+        !info_ops->zone)
+        return -1;
+    return info_ops->zone(info_ops->context, g->commander);
+}
+
+/* 0x004dcf40: see the header. */
+void aoe_ai_tactical_fill_soldier_groups_ror(AoeAiTacticalRor *ai, const AoeAiTacticalOpsRor *ops,
+                                             const AoeAiUnitGroupOpsRor *group_ops,
+                                             const AoeAiInfoOpsRor *info_ops) {
+    int32_t i, t, j;
+    if (!ai || !ops) return;
+    aoe_ai_tactical_collect_ungrouped_ror(ai, 2);
+    aoe_ai_tactical_collect_surplus_ror(ai, 0);
+    for (i = 0; i < ai->groups_len; ++i) {
+        AoeAiUnitGroupRor *g = ai->groups[i];
+        if (!soldier_task(g->task) || g->commander != -1) continue;
+        if (!lead_group(ai, g, 2, 0, ops, group_ops)) return;
+    }
+    if (ai->sn[40] == 0) {
+        for (t = 100; t <= 0x66; ++t) {
+            for (i = 0; i < ai->groups_len; ++i) {
+                AoeAiUnitGroupRor *g = ai->groups[i];
+                if (g->task != t || aoe_ai_unit_group_count_ror(g) >= g->field_160 || g->type == 1)
+                    continue;
+                top_up_group(ai, g, 2, 0, commander_zone(g, ops, info_ops), ops, group_ops,
+                             info_ops);
+                i = group_index(ai, g);
+                if (i < 0) break;
+            }
+        }
+    }
+    if (aoe_ai_tactical_collect_ungrouped_ror(ai, 2) == 0) return;
+    for (j = 0; j < ai->list_d48.count; ++j) {
+        AoeAiUnitGroupRor *best = NULL;
+        AoeAiWorldObjectRor o;
+        int32_t best_v = 0, zone, *slot = aoe_ai_int_list_at_ror(&ai->list_d48, j);
+        if (!slot || !ops->object || !ops->object(ops->context, *slot, &o)) continue;
+        zone = info_ops && info_ops->zone ? info_ops->zone(info_ops->context, *slot) : 0;
+        for (i = 0; i < ai->groups_len; ++i) {
+            AoeAiUnitGroupRor *g = ai->groups[i];
+            int32_t n = aoe_ai_unit_group_count_ror(g);
+            if (!soldier_task(g->task) || g->type == 1 || commander_zone(g, ops, info_ops) != zone ||
+                n >= g->field_160 || (g->field_180 != 1 && g->field_180 != 0))
+                continue;
+            if (!best || g->field_160 - n > best_v) {
+                best = g;
+                best_v = g->field_160 - n;
+            }
+        }
+        if (!best) {
+            for (i = 0; i < ai->groups_len; ++i) {
+                AoeAiUnitGroupRor *g = ai->groups[i];
+                int32_t n = aoe_ai_unit_group_count_ror(g);
+                if (!soldier_task(g->task) || g->type == 1 ||
+                    (g->field_180 != 1 && g->field_180 != 0))
+                    continue;
+                if ((g->task == 100 && n >= ai->sn[26]) || (g->task == 0x65 && n >= ai->sn[28]) ||
+                    (g->task == 0x66 && n >= ai->sn[44]))
+                    continue;
+                if (commander_zone(g, ops, info_ops) != zone) continue;
                 if (!best || n - g->field_160 < best_v) {
                     best = g;
                     best_v = n - g->field_160;

@@ -1241,6 +1241,41 @@ static void fill_boat_groups_tests(void) {
     aoe_ai_tactical_release_ror(&ai);
 }
 
+static uint8_t fs_zone(void *c, int32_t id) { (void)c; return id == 302 ? 5 : 0; }
+
+static void fill_soldier_groups_tests(void) {
+    static AoeAiTacticalRor ai;
+    AoeAiTacticalOpsRor ops;
+    AoeAiInfoOpsRor iops;
+    AoeAiUnitGroupRor *a, *b;
+    int32_t i;
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    memset(&ops, 0, sizeof ops);
+    memset(&iops, 0, sizeof iops);
+    ops.object = tobject;
+    ops.world_object = tobject;
+    iops.zone = fs_zone;
+    for (i = 300; i < 304; ++i) aoe_ai_int_list_add_unique_ror(&ai.lists[2], i);
+    a = aoe_ai_tactical_new_group_ror(&ai, 1);
+    a->task = 100;
+    a->field_160 = 3;
+    a->commander = 300;
+    aoe_ai_unit_group_add_ror(a, 300, NULL);
+    b = aoe_ai_tactical_new_group_ror(&ai, 1);
+    b->task = 0x65;
+    b->field_160 = 5;
+    b->type = 1;
+    b->commander = 303;
+    aoe_ai_unit_group_add_ror(b, 303, NULL);
+    ai.sn[40] = 0;
+    aoe_ai_tactical_fill_soldier_groups_ror(&ai, &ops, NULL, &iops);
+    /* 301 shares A's zone and joins; 302 is in another zone; B (type 1)
+       takes nothing. */
+    assert(aoe_ai_unit_group_count_ror(a) == 2 && aoe_ai_unit_group_contains_ror(a, 301));
+    assert(aoe_ai_unit_group_count_ror(b) == 1);
+    aoe_ai_tactical_release_ror(&ai);
+}
+
 static uint32_t rg_ms;
 static uint32_t rg_real(void *c) { (void)c; return rg_ms += 4; }
 static int32_t rg_centre(void *c) { (void)c; return 60; }
@@ -1768,6 +1803,7 @@ int main(void) {
     villager_round_tests();
     boat_groups_tests();
     fill_boat_groups_tests();
+    fill_soldier_groups_tests();
 
     aoe_ai_tactical_init_ror(&ai, 3, NULL);
     assert(ai.module.id == 0x3f1 && !strcmp(ai.module.name, "TacAI"));

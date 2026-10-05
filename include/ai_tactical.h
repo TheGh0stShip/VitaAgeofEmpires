@@ -908,6 +908,15 @@ int aoe_ai_tactical_defend_object_ror(AoeAiTacticalRor *ai, int32_t enemy, int32
    without a pending 0x65 item skips the age-2 test. */
 void aoe_ai_tactical_research_ages_ror(AoeAiTacticalRor *ai,
                                        const AoeAiTacticalOpsRor *ops);
+/* 0x004dcf40: fills the soldier groups (tasks 100, 0x65, 0x66) as
+   0x004dee90 does the boats, from list 2 (0x004ddd30) and the soldier
+   surplus (0x004ddf30), with these differences: groups of type 1 are
+   never topped up nor given units; a candidate must exist and share the
+   group commander's own zone (no commander: none qualify); the caps are
+   number 26 (100), 28 (0x65) and 44 (0x66). */
+void aoe_ai_tactical_fill_soldier_groups_ror(AoeAiTacticalRor *ai, const AoeAiTacticalOpsRor *ops,
+                                             const AoeAiUnitGroupOpsRor *group_ops,
+                                             const AoeAiInfoOpsRor *info_ops);
 /* 0x004dee90: fills the boat groups. The candidates are collected first
    (0x004df9f0 list 4, 0x004dfbf0 surplus; unused).
    - Each group of task 0x67..0x69 without a commander: with members, the

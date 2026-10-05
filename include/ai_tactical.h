@@ -574,6 +574,19 @@ void aoe_ai_tactical_path_waypoints_ror(AoeAiUnitGroupRor *g, AoeUnitPathRor *pa
      other branch wants +0x180 0x10 there and so never acts. */
 void aoe_ai_tactical_upkeep_ror(AoeAiTacticalRor *ai, const AoeAiTacticalOpsRor *ops,
                                 const AoeAiUnitGroupOpsRor *group_ops);
+/* 0x004de320 ("Setup BoatGroups"), the boat counterpart of 0x004dc670:
+   empty groups of tasks 0x67..0x69 are deleted; ungrouped units of list
+   6, then 7, then 8 (0x004dfe00, 0x004e0000, 0x004e0200) each get a new
+   numbered group of task 0x6b / 0x6c / 0x6a with +0x160 number 65 / 64
+   / 66 plus 1, the unit as member and commander and all its locations
+   at the unit (the same stale +0xd48 index as 0x004dc670); a failed zone
+   test for list 4's first boat deletes the task-0x69 groups and zeroes
+   number 61. From the list-5 count, as there: task 0x67 by numbers 59
+   (size) / 58 (cap), 0x68 by 68 / 67, 0x69 by 62 / 61, retasking 0x68
+   then 0x69 groups into 0x67 and 0x69 into 0x68. */
+void aoe_ai_tactical_setup_boat_groups_ror(AoeAiTacticalRor *ai,
+                                           const AoeAiTacticalOpsRor *ops,
+                                           const AoeAiUnitGroupOpsRor *group_ops);
 /* 0x004dc650: ftol(number 34 / f), at most 99. */
 int32_t aoe_ai_tactical_effort_ror(const AoeAiTacticalRor *ai, float f);
 /* 0x004e2f90: +0xd68[i] (0..3, else -1). 0x004e2f30 / 0x004e2f60 /

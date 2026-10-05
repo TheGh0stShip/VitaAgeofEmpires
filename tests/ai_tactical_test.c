@@ -820,6 +820,34 @@ static void upkeep_tests(void) {
     aoe_ai_tactical_release_ror(&ai);
 }
 
+static void boat_group_tests(void) {
+    static AoeAiTacticalRor ai;
+    AoeAiTacticalOpsRor ops;
+    AoeAiUnitGroupRor *g;
+    int32_t i;
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    memset(&ops, 0, sizeof ops);
+    ops.object = tobject;
+    ops.info_zone_open = zone_ok;
+    aoe_ai_int_list_add_unique_ror(&ai.lists[6], 61);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[7], 62);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[8], 63);
+    for (i = 0; i < 5; ++i) aoe_ai_int_list_add_unique_ror(&ai.lists[5], 70 + i);
+    ai.sn[40] = 0;
+    ai.sn[64] = 1; ai.sn[65] = 2; ai.sn[66] = 3;
+    ai.sn[59] = 2; ai.sn[58] = 1; ai.sn[68] = 2; ai.sn[67] = 2; ai.sn[62] = 1; ai.sn[61] = 0;
+    aoe_ai_tactical_setup_boat_groups_ror(&ai, &ops, NULL);
+    g = aoe_ai_tactical_find_group_ror(&ai, -1, 0x6b, -1, -1);
+    assert(g && g->field_160 == 3 && aoe_ai_unit_group_contains_ror(g, 61));
+    assert(aoe_ai_tactical_find_group_ror(&ai, -1, 0x6c, -1, -1)->field_160 == 2);
+    assert(aoe_ai_tactical_find_group_ror(&ai, -1, 0x6a, -1, -1)->field_160 == 4);
+    /* Five boats: one 0x67 group (cap 1), then ceil(3 / 2) = 2 of 0x68. */
+    assert(aoe_ai_tactical_count_groups_ror(&ai, 0x67, -1) == 1 &&
+           aoe_ai_tactical_count_groups_ror(&ai, 0x68, -1) == 2 &&
+           aoe_ai_tactical_count_groups_ror(&ai, 0x69, -1) == 0);
+    aoe_ai_tactical_release_ror(&ai);
+}
+
 static void scout_tests(void) {
     static AoeAiTacticalRor ai;
     AoeAiTacticalOpsRor ops;
@@ -1085,6 +1113,7 @@ int main(void) {
     villager_plan_tests();
     group_misc_tests();
     upkeep_tests();
+    boat_group_tests();
 
     aoe_ai_tactical_init_ror(&ai, 3, NULL);
     assert(ai.module.id == 0x3f1 && !strcmp(ai.module.name, "TacAI"));

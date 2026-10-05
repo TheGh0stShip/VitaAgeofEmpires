@@ -2401,3 +2401,91 @@ void aoe_ai_tactical_tribute_surplus_ror(AoeAiTacticalRor *ai,
             ops->tribute(ops->context, best, k, (float)(have - ai->sn[190 + k]));
     }
 }
+
+/* The statistics player chosen when unset (as 0x004c71a0 does). */
+static void pick_stats_player(const AoeAiTacticalOpsRor *ops) {
+    int32_t p, computers = 0, r;
+    if (!ops->stats_player || ops->stats_player(ops->context) != 0xff || !ops->set_stats_player)
+        return;
+    for (p = 1; p < ops->player_count; ++p)
+        if (ops->player_field_4 && ops->player_field_4(ops->context, p) == 1) ++computers;
+    if (ops->player_count > 1 && computers == 1) {
+        ops->set_stats_player(ops->context, (uint8_t)ops->self);
+        return;
+    }
+    if (computers <= 0) return;
+    r = (ops->rand ? ops->rand(ops->context) : 0) % computers + 1;
+    for (p = 1; p < ops->player_count; ++p)
+        if (ops->player_field_4 && ops->player_field_4(ops->context, p) == 1 && --r == 0)
+            ops->set_stats_player(ops->context, (uint8_t)p);
+}
+
+void aoe_ai_tactical_ask_allies_ror(AoeAiTacticalRor *ai, const AoeAiTacticalOpsRor *ops) {
+    int32_t now, k, p, budget;
+    uint8_t stats;
+    if (!ai || !ops || ai->sn[186] == -1) return;
+    now = ops->game_time ? (int32_t)ops->game_time(ops->context) : 0;
+    if ((now - ai->field_f98) / 1000 < ai->sn[186]) return;
+    ai->field_f98 = now;
+    pick_stats_player(ops);
+    stats = ops->stats_player ? ops->stats_player(ops->context) : 0xff;
+    if (stats != (uint8_t)ops->self) return;
+    budget = ai->sn[187];
+    for (k = 0; k < 4; ++k) {
+        int32_t r = ai->field_d88[k];
+        if (budget < 1) return;
+        if (r < 0 || r > 3) continue;
+        if (!((ops->resource_amount ? ops->resource_amount(ops->context, r) : 0) <
+              ai->sn[190 + r]))
+            continue;
+        if (!(ai->field_d98[k] < 0)) continue;
+        for (p = 1; p < ops->player_count; ++p) {
+            int32_t amount;
+            if (p == ops->self || !ops->player_field_4 || !ops->player_field_4(ops->context, p) ||
+                !ops->is_ally || !ops->is_ally(ops->context, p) || !ops->names_us_ally ||
+                !ops->names_us_ally(ops->context, p))
+                continue;
+            if (!((ops->self < p && p != stats) || ops->self == stats)) continue;
+            amount = aoe_ftol32(ops->player_resource ? ops->player_resource(ops->context, p, r)
+                                                     : 0.0f);
+            if (amount <= 0x32) continue;
+            if (amount > budget) amount = budget;
+            budget -= amount;
+            if (ops->player_54) ops->player_54(ops->context, p, ops->self, 1, r, amount, 0);
+        }
+    }
+}
+
+void aoe_ai_tactical_start_play_ror(AoeAiTacticalRor *ai, const AoeAiTacticalOpsRor *ops,
+                                    const AoeAiUnitGroupOpsRor *group_ops) {
+    int32_t ids[50], cast[50], n = 0, i, play = -1, cast_n = 0, leader = -1, target, *first;
+    AoeAiWorldObjectRor l;
+    AoeAiUnitGroupRor *g;
+    if (!ai || !ops || ai->sn[162] == 0) return;
+    for (i = 0; i < ai->lists[2].count; ++i) {
+        int32_t *v = aoe_ai_int_list_at_ror(&ai->lists[2], i);
+        AoeAiUnitGroupRor *in;
+        if (!v) continue;
+        in = aoe_ai_tactical_group_of_ror(ai, *v);
+        if (in && in->task == 100) continue;
+        if (n < 50) ids[n++] = *v;
+    }
+    if (n == 0 || !ops->choose_play) return;
+    first = aoe_ai_int_list_at_ror(&ai->list_d28, 0);
+    target = ops->choose_play(ops->context, first ? *first : 0, ids, n, &play, cast, &cast_n,
+                              &leader);
+    if (target == -1 || !ops->object || !ops->object(ops->context, leader, &l)) return;
+    if (!(g = aoe_ai_tactical_new_group_ror(ai, 1))) return;
+    g->task = 100;
+    g->field_160 = cast_n;
+    for (i = 0; i < cast_n && i < 50; ++i) aoe_ai_unit_group_add_ror(g, cast[i], group_ops);
+    aoe_ai_unit_group_set_commander_ror(g, leader, group_ops);
+    aoe_ai_unit_group_set_location_ror(g->location, l.x, l.y, l.z);
+    aoe_ai_unit_group_set_location_ror(g->loc_19c, l.x, l.y, l.z);
+    aoe_ai_unit_group_set_location_ror(g->loc_1ac, l.x, l.y, l.z);
+    g->field_184 = target;
+    g->field_1d0 = play;
+    g->field_180 = 2;
+    g->type = 1;
+    aoe_ai_unit_group_update_ror(g, group_ops, 2, 1, 1);
+}

@@ -346,6 +346,12 @@ typedef struct {
     float (*player_resource)(void *context, int32_t player, int32_t i);
     int32_t (*player_3c)(void *context, int32_t player, int32_t value);
     void (*tribute)(void *context, int32_t to, int32_t resource, float amount);
+    /* The information AI's play choice (0x004bf530) against `player` for
+       `ids`: the target entry's ID (-1 for none), with the play index, the
+       cast and the leader filled in. */
+    int32_t (*choose_play)(void *context, int32_t player, const int32_t *ids,
+                           int32_t count, int32_t *play, int32_t *cast,
+                           int32_t *cast_count, int32_t *leader);
 } AoeAiTacticalOpsRor;
 
 /* 0x004e0630: in list order, the group with task `task` and +0x180
@@ -651,6 +657,26 @@ void aoe_ai_tactical_send_gatherers_ror(AoeAiTacticalRor *ai, int32_t first, int
    furthest below its own +0x3c(0xbe + resource) gets the surplus. */
 void aoe_ai_tactical_tribute_surplus_ror(AoeAiTacticalRor *ai,
                                          const AoeAiTacticalOpsRor *ops);
+/* 0x004e25a0: asking allies for resources: with number 186 set, every
+   that many seconds since +0xf98 (then reset), the statistics player is
+   chosen when unset; when it is us, a budget of number 187 is shared out
+   in +0xd88 order: for the k-th resource r that is below our number 190
+   + r while +0xd98[k] (by position, not by resource) is negative, each
+   computer player who is a mutual ally and either ranks above us (and is
+   not the statistics player) or we are the statistics player, holding
+   more than 50 (truncated) of r, is asked through its vtable +0x54 (our
+   index, 1, r, that much at most the budget left, 0). It stops when the
+   budget is gone. */
+void aoe_ai_tactical_ask_allies_ror(AoeAiTacticalRor *ai, const AoeAiTacticalOpsRor *ops);
+/* 0x004d6060: with number 162 set, the list-2 units that are ungrouped
+   or in a group whose task is not 100 (at most 50) are offered to the
+   information AI's play choice against +0xd28's first player; a target
+   with a living leader makes a numbered task-100 group of the cast (size
+   their count) led by it, all locations at the leader, +0x184 the target,
+   +0x1d0 the play, +0x180 2 and type 1, which is then updated
+   (0x004cd2d0 with task 2, recording, forced). */
+void aoe_ai_tactical_start_play_ror(AoeAiTacticalRor *ai, const AoeAiTacticalOpsRor *ops,
+                                    const AoeAiUnitGroupOpsRor *group_ops);
 /* 0x004dc650: ftol(number 34 / f), at most 99. */
 int32_t aoe_ai_tactical_effort_ror(const AoeAiTacticalRor *ai, float f);
 /* 0x004e2f90: +0xd68[i] (0..3, else -1). 0x004e2f30 / 0x004e2f60 /

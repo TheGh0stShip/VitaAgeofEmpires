@@ -907,7 +907,7 @@ static void insert_and_trade_tests(void) {
 static int ts_market(void *c) { (void)c; return 1; }
 static int32_t ts_f4(void *c, int32_t p) { (void)c; return p != 3; }
 static int ts_ally(void *c, int32_t p) { (void)c; return p != 4; }
-static float ts_res(void *c, int32_t p, int32_t i) { (void)c; (void)i; return p == 2 ? 50.0f : 10.0f; }
+static float ts_res(void *c, int32_t p, int32_t i) { (void)c; (void)i; return p == 2 ? 60.0f : 10.0f; }
 static int32_t ts_3c(void *c, int32_t p, int32_t v) { (void)c; (void)p; assert(v >= 0xbe); return 100; }
 static int32_t ts_to = -1, ts_k = -1;
 static float ts_amt;
@@ -952,6 +952,55 @@ static void surplus_tests(void) {
     ai.field_9cc = 3;
     aoe_ai_tactical_send_gatherers_ror(&ai, 5, 2, 50, &ops);
     assert(p124_unit == -1 && p124_target == 50);
+    aoe_ai_tactical_release_ror(&ai);
+}
+
+static int32_t ask_to = -1, ask_r = -1, ask_n;
+static void ask_54(void *c, int32_t p, int32_t from, int32_t kind, int32_t a, int32_t b, int32_t cc) {
+    (void)c; (void)from; (void)cc; assert(kind == 1); ask_to = p; ask_r = a; ask_n = b;
+}
+static int32_t sp_play(void *c, int32_t player, const int32_t *ids, int32_t count, int32_t *play,
+                       int32_t *cast, int32_t *cast_n, int32_t *leader) {
+    (void)c; (void)player;
+    assert(count == 2 && ids[0] == 90);
+    *play = 3; cast[0] = ids[0]; cast[1] = ids[1]; *cast_n = 2; *leader = ids[1];
+    return 61;
+}
+
+static void ask_and_play_tests(void) {
+    static AoeAiTacticalRor ai;
+    AoeAiTacticalOpsRor ops;
+    AoeAiUnitGroupRor *g;
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    memset(&ops, 0, sizeof ops);
+    ops.game_time = ttime;
+    ops.player_count = 3;
+    ops.self = 1;
+    ops.player_field_4 = ts_f4;
+    ops.is_ally = ts_ally;
+    ops.names_us_ally = ts_ally;
+    ops.player_resource = ts_res;
+    ops.resource_amount = tr_amount;
+    ops.stats_player = ts_get;
+    ops.player_54 = ask_54;
+    ai.sn[186] = 10;
+    ai.sn[187] = 30;
+    ai.sn[190] = 100; ai.sn[191] = 0; ai.sn[192] = 0; ai.sn[193] = 0;
+    ai.field_d88[0] = 0;
+    ai.field_d98[0] = -5;
+    /* Food 50 < 100: player 2 holds 60 and is asked for the budget, 30. */
+    aoe_ai_tactical_ask_allies_ror(&ai, &ops);
+    assert(ask_to == 2 && ask_r == 0 && ask_n == 30);
+    /* 0x004d6060: units 90 and 91 form a task-100 group led by 91. */
+    ops.object = tobject;
+    ops.choose_play = sp_play;
+    ai.sn[162] = 1;
+    aoe_ai_int_list_add_unique_ror(&ai.lists[2], 90);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[2], 91);
+    aoe_ai_tactical_start_play_ror(&ai, &ops, NULL);
+    g = aoe_ai_tactical_find_group_ror(&ai, -1, 100, -1, -1);
+    assert(g && g->commander == 91 && g->field_184 == 61 && g->field_1d0 == 3 && g->type == 1 &&
+           aoe_ai_unit_group_count_ror(g) == 2);
     aoe_ai_tactical_release_ror(&ai);
 }
 
@@ -1399,6 +1448,7 @@ int main(void) {
     boat_group_tests();
     insert_and_trade_tests();
     surplus_tests();
+    ask_and_play_tests();
 
     aoe_ai_tactical_init_ror(&ai, 3, NULL);
     assert(ai.module.id == 0x3f1 && !strcmp(ai.module.name, "TacAI"));

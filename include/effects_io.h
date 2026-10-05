@@ -33,5 +33,9 @@ void aoe_effects_tribe_release_ror(DatEffects *effects);
 
 /* 0x00450e00: underscores become spaces, in place. */
 void aoe_text_underscores_to_spaces_ror(char *text);
+/* 0x00450ea0: *field becomes a new copy of `text` (the old one freed);
+   0x00450e20: a new copy of a followed by b. */
+void aoe_text_set_ror(char **field, const char *text);
+void aoe_text_set_joined_ror(char **field, const char *a, const char *b);
 
 #endif

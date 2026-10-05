@@ -157,3 +157,21 @@ DatEffects *aoe_effects_tribe_destroy_ror(DatEffects *effects, int heap) {
     }
     return effects;
 }
+
+void aoe_text_set_ror(char **field, const char *text) {
+    size_t n = strlen(text) + 1;
+    free(*field);
+    *field = calloc(n, 1);
+    if (*field) memcpy(*field, text, n);
+}
+
+void aoe_text_set_joined_ror(char **field, const char *a, const char *b) {
+    size_t na = strlen(a), nb = strlen(b);
+    char *t = calloc(na + nb + 1, 1);
+    if (t) {
+        memcpy(t, a, na);
+        memcpy(t + na, b, nb);
+    }
+    free(*field);
+    *field = t;
+}

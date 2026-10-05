@@ -5,6 +5,8 @@
 #include <string.h>
 
 #include "unit_vtable_defaults.h"
+#include "effects_io.h"
+#include <stdlib.h>
 
 static void unit_defaults(void) {
     static AoeLiveUnit u;
@@ -18,8 +20,18 @@ static void unit_defaults(void) {
     assert(aoe_unit_animation_rate_ror(&u) == 1.25f && aoe_unit_rotation_ror(&u) == 3.5f);
 }
 
+static void text_helpers(void) {
+    char *f = NULL;
+    aoe_text_set_ror(&f, "abc");
+    assert(strcmp(f, "abc") == 0);
+    aoe_text_set_joined_ror(&f, "dir/", "file");
+    assert(strcmp(f, "dir/file") == 0);
+    free(f);
+}
+
 int main(void) {
     unit_defaults();
+    text_helpers();
     puts("small functions ok");
     return 0;
 }

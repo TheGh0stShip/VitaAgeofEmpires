@@ -66,7 +66,8 @@ typedef struct {
 int aoe_game_parse_command_line_ror(AoeGameStartupRor *g);
 
 /* The registry values read at start-up (0x004166b0) and written at
-   shutdown (0x00416e40). `get` returns -1 for a missing value. */
+   shutdown (0x00416e40, the start-up object's destructor; deleting
+   0x00416690). `get` returns -1 for a missing value. */
 typedef struct {
     void *context;
     int32_t (*get)(void *context, const char *name);

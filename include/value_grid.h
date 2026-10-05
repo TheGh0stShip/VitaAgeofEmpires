@@ -83,7 +83,8 @@ uint8_t aoe_value_grid_max_ror(const AoeValueGridRor *g);
 /* The three global grids built before WinMain: 0x004ba0e0 254 x 254
    (0x007c04a0), 0x004ba130 and 0x004ba180 50 x 50 (0x007c0478,
    0x007c04c8), all filled with 0; 0x004ba150 / 0x004ba1a0 register their
-   frees (0x0043d4e0) for exit. Nonzero when all were made. */
+   frees (0x0043d4e0) for exit, as 0x004ba100 does for the big one;
+   0x004ba0d0, 0x004ba120 and 0x004ba170 run each build and registration. Nonzero when all were made. */
 int aoe_value_grids_static_init_ror(AoeValueGridRor *big, AoeValueGridRor *a, AoeValueGridRor *b);
 void aoe_value_grids_static_free_ror(AoeValueGridRor *big, AoeValueGridRor *a, AoeValueGridRor *b);
 

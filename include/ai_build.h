@@ -267,7 +267,8 @@ typedef struct {
 } AoeAiConPlanRor;
 
 /* 0x00409420: empty, origin -1, map -1 x -1. Destructor 0x00409a50
-   (deleting 0x00409520) clears the plan list. */
+   (deleting 0x00409520) clears the plan list; the derived plan of vtable
+   0x00548b18 destructs the same (0x004b96e0, deleting 0x004b9690). */
 void aoe_ai_con_plan_init_ror(AoeAiConPlanRor *plan, int32_t player,
                               AoeAiLogRor *log);
 void aoe_ai_con_plan_release_ror(AoeAiConPlanRor *plan);

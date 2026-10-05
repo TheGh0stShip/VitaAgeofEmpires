@@ -147,7 +147,9 @@ const AoeUiPanelVtblRor *aoe_info_panel_vtable_ror(void);
 
 /* 0x004f83d0: setup (area, parent, font), the unit and building
    pictures, the player, then health.shp and itemicon.shp; 0 when setup
-   fails. 0x004f8650 destructor (deleting 0x004f8630). */
+   fails. 0x004f8650 destructor (deleting 0x004f8630); a derived panel
+   (vtable 0x00547cc0) has the same destructor 0x004a4310 (deleting
+   0x004a42f0). */
 int aoe_info_panel_init_ror(AoeInfoPanelRor *i, AoeUiSystemRor *system,
                             const AoeInfoPanelOpsRor *ops, AoeUiAreaRor *area,
                             AoeUiPanelRor *parent, uintptr_t font,

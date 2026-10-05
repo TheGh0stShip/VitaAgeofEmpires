@@ -121,4 +121,24 @@ void aoe_tribe_sample_score_ror(const AoeTribeForwardOpsRor *ops, float score);
    +0x08 (in that order) after the empty base save (0x004ed890). */
 void aoe_tribe_save_record_ror(const int32_t record[4], AoeOutcomeStream *s);
 
+/* 0x004f0ac0: after unit `after` (when given) the next unit of
+   template `id` (+0x10) in the player's list that is below state 3;
+   otherwise the first one in state 2; NULL when none. */
+typedef struct {
+    void *unit;
+    int16_t template_id;
+    uint8_t state;
+} AoeTribeListUnitRor;
+void *aoe_tribe_next_of_template_ror(const AoeTribeListUnitRor *units, int32_t count, int16_t id,
+                                     const void *after);
+/* Vtable 0x00549b80 +0x7c 0x004f7360: the 30-step cycle counter (+0x850)
+   advances once per whole second of world time accumulated at +0x84c,
+   then the base list update (0x0045d040). */
+void aoe_tribe_cycle_tick_ror(float *seconds, int32_t *counter, float tick);
+/* +0x70 0x004f73d0: after the base block load (0x0045c6a0), an
+   attribute 50 above 0 sets +0x104 and refreshes the world's shared
+   vision (0x00520c60). Returns whether it did. */
+int aoe_tribe_shared_vision_check_ror(float attribute_50, int32_t *flag_104,
+                                      void (*refresh)(void *context), void *context);
+
 #endif

@@ -202,3 +202,38 @@ int aoe_tribe_player_delete_id_ror(const AoeTribePlayerOpsRor *ops,
     const AoeTribeCommandUnitRor *o = lookup(ops->context, id);
     return o && aoe_tribe_player_delete_ror(ops, o, 1) == 1; /* the player's own list */
 }
+
+void *aoe_tribe_next_of_template_ror(const AoeTribeListUnitRor *units, int32_t count, int16_t id,
+                                     const void *after) {
+    int32_t i;
+    if (after) {
+        int seen = 0;
+        for (i = 0; i < count; ++i) {
+            if (!units[i].unit) continue;
+            if (seen) {
+                if (units[i].template_id == id && units[i].state < 3) return units[i].unit;
+            } else if (units[i].unit == after) {
+                seen = 1;
+            }
+        }
+    }
+    for (i = 0; i < count; ++i)
+        if (units[i].unit && units[i].template_id == id && units[i].state == 2) return units[i].unit;
+    return NULL;
+}
+
+void aoe_tribe_cycle_tick_ror(float *seconds, int32_t *counter, float tick) {
+    *seconds += tick;
+    while (1.0f < *seconds) {
+        *seconds -= 1.0f;
+        if (++*counter == 0x1e) *counter = 0;
+    }
+}
+
+int aoe_tribe_shared_vision_check_ror(float attribute_50, int32_t *flag_104,
+                                      void (*refresh)(void *context), void *context) {
+    if (!(0.0f < attribute_50)) return 0;
+    *flag_104 = 1;
+    refresh(context);
+    return 1;
+}

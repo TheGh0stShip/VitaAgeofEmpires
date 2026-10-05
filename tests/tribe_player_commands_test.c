@@ -29,6 +29,7 @@ static uint8_t queued[0x200];
 static size_t qsize;
 static int queue(void *c, const uint8_t *cmd, size_t n) { (void)c; memcpy(queued, cmd, n); qsize = n; return 1; }
 
+static void count_refresh(void *c) { ++*(int32_t *)c; }
 static const AoeTribeCommandUnitRor *lookup_target;
 static const AoeTribeCommandUnitRor *lookup_fn(void *c, int32_t id) { (void)c; (void)id; return lookup_target; }
 static int f_kicks, f_added, f_trained[4], f_ids[3], f_tributes, f_sample = -9;
@@ -138,6 +139,21 @@ int main(void) {
         assert(f_sample == 9);
         aoe_tribe_save_record_ror(rec, &st);
         assert(st.pos == 16 && buf[0] == 1 && buf[4] == 2 && buf[8] == 4 && buf[12] == 3);
+    }
+    {
+        int a, b, c;
+        AoeTribeListUnitRor u[4] = {{&a, 5, 2}, {&b, 6, 2}, {NULL, 5, 2}, {&c, 5, 1}};
+        float secs = 0.5f;
+        int32_t ctr = 29, flag = 0, refreshes = 0;
+        assert(aoe_tribe_next_of_template_ror(u, 4, 5, &a) == &c);
+        assert(aoe_tribe_next_of_template_ror(u, 4, 5, &c) == &a);
+        assert(aoe_tribe_next_of_template_ror(u, 4, 5, NULL) == &a);
+        assert(aoe_tribe_next_of_template_ror(u, 4, 7, NULL) == NULL);
+        aoe_tribe_cycle_tick_ror(&secs, &ctr, 1.75f);
+        assert(ctr == 1 && secs == 0.25f);
+        assert(!aoe_tribe_shared_vision_check_ror(0.0f, &flag, count_refresh, &refreshes) && !flag);
+        assert(aoe_tribe_shared_vision_check_ror(1.0f, &flag, count_refresh, &refreshes));
+        assert(flag == 1 && refreshes == 1);
     }
     return 0;
 }

@@ -320,3 +320,47 @@ int aoe_combat_melee_hit_tribe_ror(AoeLiveUnit *attacker, AoeLiveUnit *target,
     }
     return aoe_combat_melee_hit_ror(attacker, target, x, y, z, ops);
 }
+
+double aoe_combat_plain_damage_ror(const DatUnitAttackArmor *attacks, int32_t attack_count,
+                                   float multiplier) {
+    double total = 0.0;
+    int32_t i;
+    for (i = 0; i < attack_count; ++i) total = (double)attacks[i].amount * multiplier + total;
+    return total;
+}
+
+float aoe_combat_plain_hit_ror(AoeLiveUnit *target, double damage,
+                               void (*die)(void *context, AoeLiveUnit *unit), void *context) {
+    double hp = (double)target->core.hit_points - damage;
+    target->core.hit_points = (float)hp;
+    if ((double)target->core.hit_points < 1.0) {
+        target->core.hit_points = 0.0f;
+        die(context, target);
+    }
+    return target->core.hit_points;
+}
+
+void aoe_combat_melee_readout_ror(const DatUnit *t, int16_t *attack, int16_t *armor) {
+    uint16_t i;
+    *attack = t->base_armor;
+    for (i = 0; i < t->attack_count; ++i)
+        if (t->attacks[i].class_id == 4 && *attack < t->attacks[i].amount) *attack = t->attacks[i].amount;
+    *armor = t->displayed_melee_armor;
+}
+
+void aoe_combat_pierce_readout_ror(const DatUnit *t, int16_t *attack, int16_t *armor) {
+    uint16_t i;
+    *attack = 0;
+    for (i = 0; i < t->attack_count; ++i)
+        if (t->attacks[i].class_id == 3 && *attack < t->attacks[i].amount) *attack = t->attacks[i].amount;
+    *armor = t->displayed_pierce_armor;
+}
+
+int16_t aoe_combat_panel_pierce_ror(const DatUnit *t) {
+    int16_t amount = 0;
+    uint16_t i;
+    if (!t || t->type != 70) return 0;
+    for (i = 0; i < t->attack_count; ++i)
+        if (t->attacks[i].class_id == 3) amount = t->attacks[i].amount;
+    return amount;
+}

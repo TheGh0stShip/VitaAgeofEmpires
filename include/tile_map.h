@@ -70,6 +70,9 @@ AoeMapTileRor *aoe_tilemap_tiles_ror(const AoeTileMapRor *m);
    0xcc and +0x0a to `flag`. */
 void aoe_tilemap_invalidate_ror(AoeTileMapRor *m, int32_t x0, int32_t y0, int32_t x1, int32_t y1,
                                 uint8_t flag);
+/* 0x004ac340 (a unit's sprites changed): tiles x - 2 .. x + 1 and
+   y - 2 .. y + 1 around its truncated position, flag 0. */
+void aoe_tilemap_invalidate_around_ror(AoeTileMapRor *m, float x, float y);
 /* 0x00444aa0: each tile's screen position from the clamped rectangle:
    x (x + y) * half width, y (y - x) * half height less the elevation
    (one more step for shapes 2, 6, 8, 10, 14, 15 and 16). */

@@ -197,4 +197,24 @@ int aoe_combat_blast_ror(AoeLiveUnit *attacker, float x, float y, float z,
                          AoeLiveUnit *source, AoeLiveUnit *excluded,
                          int tribe, const AoeCombatBlastOps *ops);
 
+/* The root action unit's own (vtable 0x00542748 and the classes that
+   keep it): +0x74 0x004aac60 the damage is each attack amount times the
+   multiplier, summed, no armor; +0x70 0x004aac10 hit points drop by
+   +0x74's damage and below 1.0 become 0 with the death call
+   (0x004ac380(0)). Returns the new hit points. */
+double aoe_combat_plain_damage_ror(const DatUnitAttackArmor *attacks, int32_t attack_count,
+                                   float multiplier);
+float aoe_combat_plain_hit_ror(AoeLiveUnit *target, double damage,
+                               void (*die)(void *context, AoeLiveUnit *unit), void *context);
+
+/* The tribe readouts (types 80 / 70, vtables 0x00547fa0 / 0x0054820c):
+   +0x230 0x004aee00 the melee attack (the base armor byte raised to the
+   largest class 4 attack) and the displayed melee armor (+0x13c); +0x248
+   0x004aee70 the largest class 3 attack (0 base) and the displayed
+   pierce armor (+0x160). 0x004a4b90 (the object panel): a type 70
+   template's last class 3 attack amount, else 0. */
+void aoe_combat_melee_readout_ror(const DatUnit *t, int16_t *attack, int16_t *armor);
+void aoe_combat_pierce_readout_ror(const DatUnit *t, int16_t *attack, int16_t *armor);
+int16_t aoe_combat_panel_pierce_ror(const DatUnit *t);
+
 #endif

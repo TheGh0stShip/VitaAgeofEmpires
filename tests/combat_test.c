@@ -90,6 +90,11 @@ static int same(void *c, AoeLiveUnit *a, AoeLiveUnit *b) {
 }
 static void killed(void *c, AoeLiveUnit *v) { (void)c; (void)v; ++killed_count; }
 
+static void count_death(void *c, AoeLiveUnit *u) {
+    (void)u;
+    ++*(int *)c;
+}
+
 int main(void) {
     DatUnit at, tt;
     AoeLiveUnit attacker, target;
@@ -343,6 +348,34 @@ int main(void) {
         at.blast_width = 0.0f;
         assert(aoe_combat_blast_ror(&attacker, 5.5f, 5.5f, 0, NULL, NULL, 0,
                                     &bops) == 0);
+    }
+    {
+        DatUnitAttackArmor at[3] = {{4, 6}, {3, 2}, {4, 9}};
+        DatUnit t;
+        AoeLiveUnit u;
+        int16_t a, b;
+        int deaths = 0;
+        memset(&t, 0, sizeof t);
+        memset(&u, 0, sizeof u);
+        assert(aoe_combat_plain_damage_ror(at, 3, 0.5f) == 8.5);
+        u.core.hit_points = 10.0f;
+        assert(aoe_combat_plain_hit_ror(&u, 8.5, count_death, &deaths) == 1.5f && deaths == 0);
+        assert(aoe_combat_plain_hit_ror(&u, 0.75, count_death, &deaths) == 0.0f && deaths == 1);
+        t.attacks = at;
+        t.attack_count = 3;
+        t.base_armor = 7;
+        t.displayed_melee_armor = 2;
+        t.displayed_pierce_armor = 5;
+        aoe_combat_melee_readout_ror(&t, &a, &b);
+        assert(a == 9 && b == 2);
+        t.base_armor = 12;
+        aoe_combat_melee_readout_ror(&t, &a, &b);
+        assert(a == 12);
+        aoe_combat_pierce_readout_ror(&t, &a, &b);
+        assert(a == 2 && b == 5);
+        assert(aoe_combat_panel_pierce_ror(&t) == 0);
+        t.type = 70;
+        assert(aoe_combat_panel_pierce_ror(&t) == 2 && aoe_combat_panel_pierce_ror(NULL) == 0);
     }
     return 0;
 }

@@ -224,3 +224,8 @@ void aoe_tilemap_pick_terrain_ror(uint8_t terrain, uint8_t *cell, const AoeTileM
 }
 
 void aoe_tilemap_nothing_ror(AoeTileMapRor *m) { (void)m; }
+
+void aoe_tilemap_invalidate_around_ror(AoeTileMapRor *m, float x, float y) {
+    int32_t tx = (int32_t)x, ty = (int32_t)y;
+    aoe_tilemap_invalidate_ror(m, tx - 2, ty - 2, tx + 1, ty + 1, 0);
+}

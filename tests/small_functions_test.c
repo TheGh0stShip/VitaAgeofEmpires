@@ -8,6 +8,11 @@
 #include "effects_io.h"
 #include <stdlib.h>
 
+static void root_state(void *c, AoeLiveUnit *u, uint8_t st) { (void)u; (void)st; ++((int *)c)[0]; }
+static void special_state(void *c, AoeLiveUnit *u) { (void)u; ++((int *)c)[1]; }
+static int pay_check(void *c, int16_t id, float f) { (void)c; return id == 12 && f == 0.25f; }
+
+
 static void unit_defaults(void) {
     static AoeLiveUnit u;
     assert(aoe_unit_default_false_ror() == 0 && aoe_unit_default_true_ror() == 1);
@@ -23,6 +28,31 @@ static void unit_defaults(void) {
         AoeObjectUpdateList *l = aoe_unit_new_list_ror();
         assert(l && !l->head && l->count == 0);
         free(l);
+    }
+    u.core.scenario_frame = 2;
+    aoe_unit_turn_ror(&u, -3, 8);
+    assert(u.core.scenario_frame == 7);
+    aoe_unit_turn_ror(&u, 10, 8);
+    assert(u.core.scenario_frame == 1);
+    {
+        static DatUnit t;
+        int calls[2] = {0, 0};
+        t.unit_class = 1;
+        t.hit_points = 40;
+        t.id = 12;
+        u.core.unit_template = &t;
+        u.core.state = 2;
+        u.core.hit_points = 30.0f;
+        aoe_unit_set_state_70_ror(&u, 3, 0, root_state, special_state, calls);
+        assert(calls[1] == 1 && calls[0] == 0);
+        aoe_unit_set_state_70_ror(&u, 3, 1, root_state, special_state, calls);
+        assert(calls[0] == 1);
+        aoe_unit_set_state_70_ror(&u, 2, 0, root_state, special_state, calls);
+        assert(calls[0] == 2);
+        assert(aoe_unit_can_pay_repair_ror(&u, pay_check, NULL));
+        u.core.hit_points = 0.0f;
+        assert(!aoe_unit_can_pay_repair_ror(&u, pay_check, NULL));
+        u.core.unit_template = (const DatUnit *)&u;
     }
     aoe_unit_set_byte_86_ror(&u, 9);
     assert(aoe_unit_byte_86_ror(&u) == 9);

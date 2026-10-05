@@ -60,6 +60,8 @@ int main(void) {
     assert(m.tiles[1 * 5 + 4].dirty == 0xcc && m.tiles[0 * 5 + 3].draw_flag == 5);
     assert(m.tiles[2 * 5 + 4].dirty == 0 && m.tiles[0].dirty == 0);
     aoe_tilemap_invalidate_ror(&m, 6, 6, 9, 9, 1); /* outside */
+    aoe_tilemap_invalidate_around_ror(&m, 0.9f, 4.5f);
+    assert(m.tiles[2 * 5 + 1].dirty == 0xcc && m.tiles[2 * 5 + 2].dirty == 0 && m.tiles[4 * 5].dirty == 0xcc);
 
     /* Positions with elevation and a raised shape. */
     setE(&m, 1, 2, 2);

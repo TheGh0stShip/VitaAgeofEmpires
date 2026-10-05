@@ -189,7 +189,8 @@ int aoe_unit_ai_object_ror(const AoeUnitAiOpsRor *ops, int32_t id,
 int aoe_unit_ai_resize_ids_ror(int32_t **data, int32_t *capacity,
                                int32_t size);
 
-/* 0x0040ef80 the destructor (deleting 0x0040ef60): the +0x18, +0x24,
+/* 0x0040ef80 the destructor (deleting 0x0040ef60; 0x004e5bf0 is a thunk
+   to it): the +0x18, +0x24,
    +0x124 and +0x12c arrays freed and the group (+0x60, its count and
    capacity) freed and emptied. Here: the group and the class list. */
 void aoe_unit_ai_release_ror(AoeUnitAiRor *ai);

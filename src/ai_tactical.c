@@ -8,6 +8,7 @@
 
 #include "aoe_ftol.h"
 #include "aoe_stream.h"
+#include "movement.h"
 
 static void fill(int32_t *v, int n, int32_t value) {
     int i;
@@ -1891,4 +1892,80 @@ void aoe_ai_tactical_plan_villagers_ror(AoeAiTacticalRor *ai,
         if (ai->sn[5] != -1 && ai->field_9d0 > ai->sn[5]) ai->field_9d0 = ai->sn[5];
     }
     aoe_ai_tactical_plan_gatherers_ror(ai, ops);
+}
+
+int32_t aoe_ai_tactical_enemy_seen_ror(AoeAiTacticalRor *ai,
+                                       const AoeAiTacticalOpsRor *ops) {
+    int32_t *first;
+    if (!ai) return 0;
+    first = aoe_ai_int_list_at_ror(&ai->list_d28, 0);
+    return ops && ops->info_count_owned
+               ? ops->info_count_owned(ops->context, first ? *first : 0)
+               : 0;
+}
+
+AoeAiUnitGroupRor *aoe_ai_tactical_ready_group_ror(AoeAiTacticalRor *ai, int32_t task,
+                                                   int32_t max, const int32_t pt[2],
+                                                   const AoeAiUnitGroupOpsRor *group_ops) {
+    AoeAiUnitGroupRor *best = NULL;
+    int32_t best_d = -1, i;
+    if (!ai) return NULL;
+    for (i = 0; i < ai->groups_len; ++i) {
+        AoeAiUnitGroupRor *g = ai->groups[i];
+        int32_t dx, dy, d;
+        if (task != -1 && g->task != task) continue;
+        if (g->field_160 > aoe_ai_unit_group_count_ror(g)) continue;
+        if (!aoe_ai_unit_group_in_range_ror(g, group_ops) ||
+            !aoe_ai_unit_group_settled_ror(g, group_ops, 1))
+            continue;
+        dy = pt[1] - aoe_ftol32(g->loc_19c[1]);
+        dx = pt[0] - aoe_ftol32(g->loc_19c[0]);
+        d = aoe_ftol32(sqrt((double)(dy * dy + dx * dx)));
+        if ((d < max && best_d == -1) || d < best_d) {
+            best = g;
+            best_d = d;
+        }
+    }
+    return best;
+}
+
+int aoe_ai_tactical_rally_group_ror(AoeAiTacticalRor *ai, AoeAiUnitGroupRor *g,
+                                    const AoeAiTacticalOpsRor *ops) {
+    AoeAiWorldObjectRor cmd, c;
+    int32_t centre, pt[2], out[2];
+    if (!ai || !g || !ops || !ops->object || !ops->object(ops->context, g->commander, &cmd))
+        return 0;
+    centre = ops->first_center ? ops->first_center(ops->context) : -1;
+    if (centre != -1 && ops->object(ops->context, centre, &c)) {
+        pt[0] = aoe_ftol32(c.x);
+        pt[1] = aoe_ftol32(c.y);
+        if (ops->ring_site &&
+            ops->ring_site(ops->context, pt, g->field_160, ai->sn[22], ai->sn[72], cmd.id,
+                           out) == 1) {
+            aoe_ai_unit_group_set_all_locations_ror(g, (float)out[0], (float)out[1], cmd.z);
+            return 1;
+        }
+    }
+    aoe_ai_unit_group_set_all_locations_ror(g, cmd.x, cmd.y, cmd.z);
+    return 1;
+}
+
+void aoe_ai_tactical_path_waypoints_ror(AoeAiUnitGroupRor *g, AoeUnitPathRor *path) {
+    float step, acc;
+    int few, i;
+    if (!g || !path) return;
+    step = (float)(aoe_unit_path_length_ror(path) * (double)0.2f);
+    if (step < 10.0f) step = 10.0f;
+    aoe_unit_path_rewind_ror(path);
+    acc = (float)aoe_unit_path_segment_ror(path);
+    aoe_unit_path_advance_ror(path);
+    few = aoe_unit_path_count_ror(path) <= 5;
+    for (i = 1; i < aoe_unit_path_count_ror(path) - 1; ++i) {
+        if (!(acc < (few ? 5.0f : step))) {
+            const AoePathWaypointRor *w = aoe_unit_path_current_ror(path);
+            if (w) aoe_ai_unit_group_add_waypoint_ror(g, w->x, w->y);
+        }
+        acc = (float)(aoe_unit_path_segment_ror(path) + (double)acc);
+        aoe_unit_path_advance_ror(path);
+    }
 }

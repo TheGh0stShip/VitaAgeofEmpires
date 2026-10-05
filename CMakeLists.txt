@@ -737,7 +737,7 @@ target_compile_options(aoe_tribe_civ_setup PRIVATE -Wall -Wextra)
 add_library(aoe_ai_ror STATIC src/unit_ai_base.c src/ai_strategy.c src/ai_tactical.c src/ai_player.c src/ai_unit_ai.c
             src/ai_info.c)
 target_include_directories(aoe_ai_ror PUBLIC include)
-target_link_libraries(aoe_ai_ror PUBLIC aoe_ai_build aoe_value_grid aoe_unit_class m)
+target_link_libraries(aoe_ai_ror PUBLIC aoe_ai_build aoe_value_grid aoe_unit_class aoe_movement m)
 target_compile_options(aoe_ai_ror PRIVATE -Wall -Wextra)
 # --- end AI worker ---
 

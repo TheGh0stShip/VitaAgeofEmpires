@@ -712,6 +712,62 @@ static void villager_plan_tests(void) {
     aoe_ai_tactical_release_ror(&ai);
 }
 
+static int ring_ok(void *c, const int32_t centre[2], int32_t size, int32_t outer,
+                   int32_t inner, int32_t unit, int32_t out[2]) {
+    (void)c; (void)unit;
+    assert(centre[0] == 0 && size == 3 && outer == 8 && inner == 4);
+    out[0] = 44; out[1] = 45;
+    return 1;
+}
+
+static void group_misc_tests(void) {
+    static AoeAiTacticalRor ai;
+    static AoeAiUnitGroupRor g;
+    AoeAiTacticalOpsRor ops;
+    AoeUnitPathRor path;
+    int32_t i;
+    float wp[3];
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    memset(&ops, 0, sizeof ops);
+    ops.info_count_owned = seen_n;
+    assert(aoe_ai_tactical_enemy_seen_ror(&ai, &ops) == 3 && ai.list_d28.capacity >= 1);
+    /* 0x004e0c60 */
+    aoe_ai_unit_group_init_ror(&g);
+    ops.object = tobject;
+    ops.first_center = centre_id;
+    ops.ring_site = ring_ok;
+    g.commander = 7;
+    g.field_160 = 3;
+    ai.sn[22] = 8; ai.sn[72] = 4;
+    assert(aoe_ai_tactical_rally_group_ror(&ai, &g, &ops) == 1 && g.location[0] == 44.0f &&
+           g.loc_19c[1] == 45.0f && g.loc_1ac[0] == 44.0f);
+    g.commander = -1;
+    assert(aoe_ai_tactical_rally_group_ror(&ai, &g, &ops) == 0);
+    /* 0x004e21c0: eight points 5 apart; the step is 10 (a fifth of 35,
+       raised), reached at point 2, after which every inner point is added. */
+    memset(&path, 0, sizeof path);
+    for (i = 0; i < 8; ++i) aoe_unit_path_append_ror(&path, 5.0f * (float)i, 0.0f, 0.0f, 0);
+    aoe_ai_tactical_path_waypoints_ror(&g, &path);
+    assert(g.flag_1d4 == 5 && aoe_ai_unit_group_waypoint_ror(&g, 0, wp) && wp[0] == 10.0f &&
+           aoe_ai_unit_group_waypoint_ror(&g, 4, wp) && wp[0] == 30.0f);
+    aoe_unit_path_free_ror(&path);
+    {
+        /* 0x004e07f0: empty groups are in range and settled; the one
+           of +0x160 1 is too small. */
+        AoeAiUnitGroupRor *a = aoe_ai_tactical_new_group_ror(&ai, 1);
+        AoeAiUnitGroupRor *b = aoe_ai_tactical_new_group_ror(&ai, 1);
+        int32_t pt[2] = {0, 0};
+        a->task = b->task = 100;
+        a->loc_19c[0] = 6.0f;
+        b->loc_19c[0] = 3.0f;
+        assert(aoe_ai_tactical_ready_group_ror(&ai, 100, 10, pt, NULL) == b);
+        assert(aoe_ai_tactical_ready_group_ror(&ai, 100, 2, pt, NULL) == NULL);
+        b->field_160 = 1;
+        assert(aoe_ai_tactical_ready_group_ror(&ai, -1, 10, pt, NULL) == a);
+    }
+    aoe_ai_tactical_release_ror(&ai);
+}
+
 static void scout_tests(void) {
     static AoeAiTacticalRor ai;
     AoeAiTacticalOpsRor ops;
@@ -975,6 +1031,7 @@ int main(void) {
     soldier_group_tests();
     scout_tests();
     villager_plan_tests();
+    group_misc_tests();
 
     aoe_ai_tactical_init_ror(&ai, 3, NULL);
     assert(ai.module.id == 0x3f1 && !strcmp(ai.module.name, "TacAI"));

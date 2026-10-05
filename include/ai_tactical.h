@@ -9,6 +9,7 @@
 #include "ai_tactics.h"    /* AoeAiCountersRor */
 #include "ai_unit_group.h"
 #include "player_outcome.h" /* AoeOutcomeStream */
+#include "pathfinder_search.h" /* AoeUnitPathRor */
 
 /* Patched Rise of Rome 1.0a tactical AI ("TacAI", module 0x3f1, vtable
    0x00548cf4): its state, strategic numbers, unit groups and the small
@@ -296,6 +297,11 @@ typedef struct {
     /* The information AI's live remembered objects of `owner` (0x004bcc10
        with any seen owner). */
     int32_t (*info_count_owned)(void *context, int32_t owner);
+    /* The information AI's ring site (0x004c1bf0) around `centre` for a
+       footprint `size` between `outer` and `inner`, for `unit`; 1 with
+       `out` set. */
+    int (*ring_site)(void *context, const int32_t centre[2], int32_t size,
+                     int32_t outer, int32_t inner, int32_t unit, int32_t out[2]);
     /* The tactical AI's gathering order (0x004d99f0), run by
        0x004e1a80. */
     void (*rebalance)(void *context);
@@ -519,6 +525,31 @@ void aoe_ai_tactical_send_scout_ror(AoeAiTacticalRor *ai, int32_t unit, float x,
    number 5 (when set). */
 void aoe_ai_tactical_plan_villagers_ror(AoeAiTacticalRor *ai,
                                         const AoeAiTacticalOpsRor *ops);
+/* 0x004e0a70: the live remembered objects of +0xd28's first player
+   (0x004bcc10 with any seen owner; +0xd28 grown to hold one). */
+int32_t aoe_ai_tactical_enemy_seen_ror(AoeAiTacticalRor *ai,
+                                       const AoeAiTacticalOpsRor *ops);
+/* 0x004e07f0: in list order, the group of `task` (-1 any) at least as big
+   as its +0x160 whose members are in range (0x004ce950) and settled
+   (0x004cea40 with 1), nearest to tile `pt` by ftol(sqrt) of the squared
+   tile distance from its truncated +0x19c: taken when nearer than `max`
+   with none taken, or nearer than the one taken. NULL for none. */
+AoeAiUnitGroupRor *aoe_ai_tactical_ready_group_ror(AoeAiTacticalRor *ai, int32_t task,
+                                                   int32_t max, const int32_t pt[2],
+                                                   const AoeAiUnitGroupOpsRor *group_ops);
+/* 0x004e0c60: a gathering point for a group with a commander: with a
+   town centre, the ring site around its truncated tile for the group's
+   +0x160 between number 22 and number 72 (0x004c1bf0) at the commander's
+   height, else the commander's own position, goes to all three
+   locations (0x004cd170). 0 without a commander. */
+int aoe_ai_tactical_rally_group_ror(AoeAiTacticalRor *ai, AoeAiUnitGroupRor *g,
+                                    const AoeAiTacticalOpsRor *ops);
+/* 0x004e21c0: waypoints for a group from a path: the step is a fifth of
+   its length (at least 10; 5 for a path of at most five points); going
+   along from the first segment, every inner point reached once the
+   summed length is at least the step is added (0x004ceb30). The sum is
+   never reset, so after the first point every later one is added. */
+void aoe_ai_tactical_path_waypoints_ror(AoeAiUnitGroupRor *g, AoeUnitPathRor *path);
 /* 0x004dc650: ftol(number 34 / f), at most 99. */
 int32_t aoe_ai_tactical_effort_ror(const AoeAiTacticalRor *ai, float f);
 /* 0x004e2f90: +0xd68[i] (0..3, else -1). 0x004e2f30 / 0x004e2f60 /

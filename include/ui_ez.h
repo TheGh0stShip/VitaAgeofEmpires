@@ -307,7 +307,9 @@ int32_t aoe_ui_ez_help_press_ror(AoeUiEzRor *ez, uint8_t button, int32_t x,
    0x00468170 / 0x00468130 destructors, 0x00468180 setup (full area, no
    parent), +0x54 0x004681b0 (paint, then 0), +0xb0 0x00468340 (the help
    popup, string 120055 at 450, 100), +0x30 0x004300c0 (forwards to the
-   easy panel's draw). Its fading focus is not translated. */
+   easy panel's draw), +0xc4 0x004681c0 (the fading focus: a screen that
+   gains focus on a full-screen or memory-surface display fades to black
+   and back in, once until another screen takes over). */
 extern const AoeUiEzVtblRor aoe_ui_screen_vtable_ror;
 int aoe_ui_screen_init_ror(AoeUiEzRor *ez, AoeUiSystemRor *system,
                            const AoeUiEzOpsRor *ops, const char *name);

@@ -14,6 +14,8 @@ int32_t aoe_ui_ez_mouse_down_slot_ror(AoeUiPanelRor *p, uint8_t button,
 int32_t aoe_ui_ez_action_slot_ror(AoeUiPanelRor *p, AoeUiPanelRor *from,
                                   int32_t code, int32_t value, int32_t extra);
 void aoe_ui_ez_set_focus_slot_ror(AoeUiPanelRor *p, int32_t focus);
+/* The screen subclass's fading focus (0x004681c0). */
+void aoe_ui_screen_focus_slot_ror(AoeUiPanelRor *p, int32_t focus);
 int32_t aoe_ui_ez_no_key_action_ror(AoeUiPanelRor *p, int32_t a, int32_t b,
                                     int32_t c, int32_t d, int32_t e);
 void aoe_ui_ez_draw_background_slot_ror(AoeUiEzRor *ez, int32_t parent_rect);

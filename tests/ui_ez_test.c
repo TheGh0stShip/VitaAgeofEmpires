@@ -2,6 +2,7 @@
    scrollbars 0x00468360..0x00468540. */
 #include "ui_dialog.h"
 #include "ui_ez.h"
+#include "palette_fade.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -9,6 +10,26 @@
 #include <string.h>
 
 static uint32_t now(void *c) { (void)c; return 0; }
+static uint32_t ticks;
+static uint32_t ticking(void *c) { (void)c; return ticks += 50; }
+static int palette_sets, fills, presents;
+static int32_t fake_palette_set(void *c, void *p, int32_t s, int32_t n,
+                                const uint8_t *in) {
+    (void)c; (void)p; (void)s; (void)n; (void)in;
+    ++palette_sets;
+    return 0;
+}
+static int32_t fake_fill(void *c, void *s, const int32_t *r, uint32_t color) {
+    (void)c; (void)s; (void)r; (void)color;
+    ++fills;
+    return 0;
+}
+static int32_t fake_blt(void *c, void *d, const int32_t dr[4], void *s,
+                        const int32_t sr[4], int keyed) {
+    (void)c; (void)d; (void)dr; (void)s; (void)sr; (void)keyed;
+    ++presents;
+    return 0;
+}
 static int32_t width(void *c, uintptr_t f, const char *t, int32_t n) { (void)c; (void)f; (void)t; return n * 8; }
 static void string(void *c, int32_t id, char *out, int size) {
     (void)c;
@@ -454,6 +475,35 @@ int main(void) {
            message(&sys, "OKDialog")->dialog.ez.panel.width == 450 &&
            strcmp(message(&sys, "OKDialog")->text->lines->text, "Help text") == 0);
     aoe_ui_system_close_ror(&sys, "OKDialog");
+
+    /* The fading focus on a full-screen display: out to black, clear and
+       show, then back in; only once until another screen fades in. */
+    {
+        static const AoeDrawOpsRor dops = {.palette_set = fake_palette_set,
+                                           .fill = fake_fill,
+                                           .blt = fake_blt};
+        static AoeDrawSystemRor d;
+        static AoeDrawSurfaceRor back;
+        aoe_draw_clear_ror(&d, &dops);
+        d.type = 2;
+        d.screen = 2;
+        d.palette_object = &d;
+        d.primary_surface = &d;
+        d.back = &back;
+        back.system = &d;
+        back.surface = &back;
+        area.surface = &back;
+        pf.now_ms = ticking;
+        ez.panel.vt->set_focus(&ez.panel, 1);
+        assert(sys.faded_screen == &ez.panel);
+        assert(palette_sets >= 6 && fills >= 1 && presents == 2);
+        ez.panel.vt->set_focus(&ez.panel, 0);
+        palette_sets = presents = 0;
+        ez.panel.vt->set_focus(&ez.panel, 1);
+        assert(palette_sets == 0 && presents == 0);
+        area.surface = NULL;
+        pf.now_ms = now;
+    }
     aoe_ui_ez_release_ror(&ez);
     return 0;
 }

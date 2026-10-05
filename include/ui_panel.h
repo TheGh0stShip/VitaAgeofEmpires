@@ -18,10 +18,15 @@ typedef struct {
     int32_t left, top, right, bottom;
 } AoeUiRectRor;
 
-/* A drawing area (+0x20): the window (+4) and its size (+0x18/+0x1c). */
+struct AoeDrawSurfaceRor;
+
+/* A drawing area (+0x20): the window (+4) and its size (+0x18/+0x1c).
+   In the original it is a draw surface; `surface` links that surface
+   (whose +0 is the draw system) where the platform provides one. */
 typedef struct {
     void *window;
     int32_t width, height;
+    struct AoeDrawSurfaceRor *surface;
 } AoeUiAreaRor;
 
 typedef struct {
@@ -76,6 +81,7 @@ struct AoeUiSystemRor {
     int32_t enabled;                      /* +0xac8 */
     int32_t app_active;                   /* game +0x18 */
     const AoeUiPlatformRor *platform;
+    AoeUiPanelRor *faded_screen;          /* global 0x007bfabc */
 };
 
 /* Vtable slots by original offset. Mouse arguments are x, y, then the

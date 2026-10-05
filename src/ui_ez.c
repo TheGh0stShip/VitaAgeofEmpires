@@ -1,4 +1,6 @@
 #include "ui_ez.h"
+
+#include "palette_fade.h"
 #include "ui_ez_slots.h"
 #include "ui_dialog.h"
 
@@ -1011,8 +1013,54 @@ static int32_t screen_help(AoeUiPanelRor *p) {
     return 0;
 }
 
+static uint32_t screen_clock(void *context) {
+    const AoeUiPlatformRor *pf = context;
+    return pf->now_ms ? pf->now_ms(pf->context) : 0;
+}
+
+/* +0xc4 0x004681c0: a screen gaining focus (other than the last one
+   faded in) on a full-screen or memory-surface display fades to black
+   over 0.13 s and clears, takes the focus, then paints at full black
+   and fades back in from its palette. */
+void aoe_ui_screen_focus_slot_ror(AoeUiPanelRor *p, int32_t focus) {
+    AoeUiEzRor *ez = EZ(p);
+    AoeUiSystemRor *s = p->system;
+    struct AoeDrawSurfaceRor *surf = p->area ? p->area->surface : NULL;
+    AoeDrawSystemRor *d = surf ? surf->system : NULL;
+    int32_t was = p->has_focus;
+    uint8_t entries[1024];
+    const AoeUiPlatformRor *pf = s ? s->platform : NULL;
+    int fade = d && pf && focus && p != s->faded_screen &&
+               (d->screen == 2 || d->type == 1);
+    if (fade) {
+        memset(entries, 0, sizeof entries);
+        if (!ez->palette || !d->ops->window_palette ||
+            !d->ops->window_palette(d->ops->context, (void *)ez->palette,
+                                    entries))
+            aoe_surface_palette_ror(surf, entries);
+        aoe_palette_fade_ror(d, 0, 0.13f, 1, NULL, -1, -1, screen_clock,
+                             (void *)pf);
+        aoe_surface_fill_ror(surf, NULL, 0);
+        aoe_draw_present_ror(d, NULL);
+    }
+    aoe_ui_ez_set_focus_slot_ror(p, focus);
+    if (fade) {
+        aoe_palette_fade_ror(d, 0, 0.0f, 2, entries, -1, -1, screen_clock,
+                             (void *)pf);
+        p->vt->handle_paint(p);
+        aoe_palette_fade_ror(d, 0, 0.0f, 1, NULL, -1, -1, screen_clock,
+                             (void *)pf);
+        aoe_draw_present_ror(d, NULL);
+        aoe_palette_fade_ror(d, 0, 0.13f, 2, entries, -1, -1, screen_clock,
+                             (void *)pf);
+    }
+    if (focus != was && p->has_focus && s) s->faded_screen = p;
+}
+
 const AoeUiEzVtblRor aoe_ui_screen_vtable_ror = {
-    AOE_UI_EZ_DEFAULT_SLOTS(aoe_ui_ez_destroy_slot_ror, screen_paint, screen_help),
+    AOE_UI_EZ_SLOTS(aoe_ui_ez_destroy_slot_ror, aoe_ui_panel_handle_idle_ror,
+                    screen_paint, aoe_ui_ez_no_key_action_ror, screen_help,
+                    aoe_ui_ez_action_slot_ror, aoe_ui_screen_focus_slot_ror),
     aoe_ui_ez_draw_background_slot_ror,
     aoe_ui_ez_set_reference_slot_ror,
 };

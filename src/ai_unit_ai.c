@@ -194,3 +194,38 @@ int32_t aoe_ai_unit_ai_7e_d4_ror(AoeAiUnitAiRor *ai,
     }
     return 5;
 }
+
+int32_t aoe_ai_unit_ai_class10_cc_ror(int32_t target, int32_t message_type,
+                                      void *message, int32_t arg,
+                                      const AoeAiUnitAiOpsRor *ops) {
+    AoeAiUnitViewRor me, o;
+    if (!ops) return 0;
+    if (message_type == 0x1fc) {
+        if (ops->object && ops->object(ops->context, target, &o) && ops->self) {
+            double d = ops->distance_to ? ops->distance_to(ops->context, target) : 0.0;
+            ops->self(ops->context, &me);
+            /* fcomp; test ah, 0x41: only "greater" skips, NaN passes. */
+            if (!(d > (double)me.type_28)) {
+                if (ops->call_5c) ops->call_5c(ops->context, target, 1);
+                return 3;
+            }
+        }
+        if (ops->clear_target) ops->clear_target(ops->context);
+        if (ops->call_58) ops->call_58(ops->context, 1);
+        if (ops->call_1c) ops->call_1c(ops->context, message);
+    }
+    return ops->base_cc ? ops->base_cc(ops->context, message, arg) : 0;
+}
+
+int32_t aoe_ai_unit_ai_priest_5c_ror(int32_t field_28, int32_t id,
+                                     int32_t value,
+                                     const AoeAiUnitAiOpsRor *ops) {
+    if (!ops) return 0;
+    if (ops->call_c4 && ops->call_c4(ops->context, id))
+        return ops->call_6c ? ops->call_6c(ops->context, id, value) : 0;
+    if (field_28 == -1 && ops->owner_field_4 && ops->owner_field_4(ops->context)) {
+        float f = (float)(ops->unit_10c ? ops->unit_10c(ops->context, value) : 0.0);
+        return ops->call_94 ? ops->call_94(ops->context, id, f) : 0;
+    }
+    return 0;
+}

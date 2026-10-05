@@ -70,6 +70,16 @@ typedef struct {
     int32_t (*difficulty)(void *context);
     int32_t settings_8fc, settings_97d;
     double (*distance_to)(void *context, int32_t id);
+    /* 0x00412ed0 (clear the target), base vtable +0x58 (1), +0x1c
+       (message), the base class's own +0xcc (message, arg), +0x6c (id,
+       value), +0x94 (id, f) and the unit's vtable +0x10c (value). */
+    void (*clear_target)(void *context);
+    void (*call_58)(void *context, int32_t value);
+    void (*call_1c)(void *context, void *message);
+    int32_t (*base_cc)(void *context, void *message, int32_t arg);
+    int32_t (*call_6c)(void *context, int32_t id, int32_t value);
+    int32_t (*call_94)(void *context, int32_t id, float f);
+    double (*unit_10c)(void *context, int32_t value);
 } AoeAiUnitAiOpsRor;
 
 /* The constructors: the base, then the target-class table (and, for
@@ -114,5 +124,21 @@ int32_t aoe_ai_unit_ai_back_off_ror(const AoeAiUnitAiRor *ai,
    else 5. */
 int32_t aoe_ai_unit_ai_7e_d4_ror(AoeAiUnitAiRor *ai,
                                  const AoeAiUnitAiOpsRor *ops);
+
+/* 0x004e3fb0 (class 10, vtable +0xcc): for message 0x1fc (+8) with the
+   target (+0x34) present and within the unit type's +0x28 reach (an
+   unordered, NaN distance counts as within): +0x5c(target, 1), 3.
+   Otherwise for 0x1fc: clear the target, +0x58(1), +0x1c(message). Then
+   the base's +0xcc(message, arg). */
+int32_t aoe_ai_unit_ai_class10_cc_ror(int32_t target, int32_t message_type,
+                                      void *message, int32_t arg,
+                                      const AoeAiUnitAiOpsRor *ops);
+/* 0x004e4f50 (priest, +0x5c): convertible (+0xc4) targets go to
+   +0x6c(id, value); else with no current action (+0x28 == -1) and an
+   owner with +4 set, +0x94(id, (float)unit +0x10c(value)); else 0. The
+   +0x6c and +0x94 results are returned. */
+int32_t aoe_ai_unit_ai_priest_5c_ror(int32_t field_28, int32_t id,
+                                     int32_t value,
+                                     const AoeAiUnitAiOpsRor *ops);
 
 #endif

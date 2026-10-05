@@ -1,4 +1,4 @@
-/* Patched RoR 1.0a per-class unit AIs (0x004e3b50..0x004e5f00). */
+/* Patched RoR 1.0a per-class unit AIs (0x004e3b50..0x004e5dc0). */
 #include "ai_unit_ai.h"
 
 #include <assert.h>

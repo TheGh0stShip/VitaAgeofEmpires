@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-/* Patched Rise of Rome 1.0a per-class unit AIs (0x004e3b50..0x004e5f00):
+/* Patched Rise of Rome 1.0a per-class unit AIs (0x004e3b50..0x004e5dc0):
    the classes the unit factory (0x004afbe0) gives units of a class, built
    over the shared unit AI base. This file keeps what the derived classes
    add: their target-class tables, timers and small overrides. The base

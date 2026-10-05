@@ -68,8 +68,11 @@ typedef struct {
     int16_t view_tile_x, view_tile_y; /* +0x120, +0x122 */
     AoePlayerSelectionRor selection;  /* +0x124..+0x220; its `units`
                                          is the +0x28 unit list */
+    void *lists[3];              /* +0x28, +0x2c, +0x30 unit lists */
     void *conditions;            /* +0x34 condition object */
     void *view;                  /* +0x38 view object */
+    void *table;                 /* +0x40 table object */
+    void *memory;                /* +0x114 object */
     const AoePlayerWorldRor *world;   /* +0x3c */
 } AoePlayerObjectRor;
 

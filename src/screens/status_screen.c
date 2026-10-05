@@ -65,3 +65,18 @@ const AoeUiEzVtblRor aoe_status_screen_vtable_ror = {
 void aoe_status_screen_set_text_ror(AoeStatusScreenRor *st, const char *text) {
     if (st->text) ((const AoeUiTextVtblRor *)st->text->panel.vt)->set_text(st->text, text);
 }
+
+int aoe_status_screen_show_ror(AoeGameUiRor *ui, AoeUiAreaRor *area, const char *text,
+                               const char *info_name, int32_t info_id) {
+    static const char *const name = "Status Screen";
+    AoeStatusScreenRor *st = (AoeStatusScreenRor *)aoe_ui_system_find_ror(ui->system, name);
+    if (!st) {
+        st = calloc(1, sizeof *st);
+        if (!st) return 0;
+        aoe_status_screen_init_ror(st, ui, area, name, text, -1, info_name, info_id);
+    } else {
+        aoe_status_screen_set_text_ror(st, text);
+    }
+    aoe_ui_system_show_named_ror(ui->system, name, 0);
+    return 1;
+}

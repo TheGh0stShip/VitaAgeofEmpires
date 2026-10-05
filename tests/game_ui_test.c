@@ -651,6 +651,14 @@ int main(void) {
         assert(aoe_ui_ez_info_id_ror(&st->ez) == 0xc384 &&
                !strcmp(aoe_ui_ez_info_name_ror(&st->ez), "scr2"));
         aoe_ui_system_close_ror(&sys, "Wait Screen");
+        /* 0x005002e0: made once, then only its message changes. */
+        assert(aoe_status_screen_show_ror(&ui, &area, "Loading", NULL, -1));
+        st = (AoeStatusScreenRor *)aoe_ui_system_find_ror(&sys, "Status Screen");
+        assert(st && !strcmp(st->text->lines->text, "Loading"));
+        assert(aoe_status_screen_show_ror(&ui, &area, "Saving", NULL, -1));
+        assert((AoeStatusScreenRor *)aoe_ui_system_find_ror(&sys, "Status Screen") == st);
+        assert(!strcmp(st->text->lines->text, "Saving"));
+        aoe_ui_system_close_ror(&sys, "Status Screen");
     }
     /* The single player menu. */
     {

@@ -528,6 +528,12 @@ int aoe_status_screen_init_ror(AoeStatusScreenRor *st, AoeGameUiRor *ui, AoeUiAr
                                const char *info_name, int32_t info_id);
 /* 0x0049ebe0: a new message. */
 void aoe_status_screen_set_text_ror(AoeStatusScreenRor *st, const char *text);
+/* The tribe game's 0x005002e0(text, info name, info ID): a new "Status
+   Screen" when none is registered (the original then also updates the
+   window, 0x00419ba0, for an existing one: not needed here), else its
+   message replaced; then it is shown. 0 when it could not be made. */
+int aoe_status_screen_show_ror(AoeGameUiRor *ui, AoeUiAreaRor *area, const char *text,
+                               const char *info_name, int32_t info_id);
 
 /* The single player menu "Single Player Menu" (vtable 0x0054793c,
    0x0049e040..0x0049e330): title 9220 and six 300 x 40 buttons at x 170

@@ -37,4 +37,23 @@ int aoe_player_set_stance_ror(AoePlayerDiplomacyRor *player, int32_t other,
                               uint8_t stance,
                               const AoePlayerDiplomacyOps *ops);
 
+/* Stance predicates over players 1..player_count-1 (world +0x3c); the
+   player itself and player 0 never match. Port: an index outside the host
+   stance table is treated as not matching.
+   0x0045bd50 (vtable +0x18): stance 3 (enemy).
+   0x0045bd90 (vtable +0x1c): the player itself, or stance 0 (ally).
+   0x0045bdd0 (vtable +0x20): stance 1 (neutral). */
+int aoe_player_is_enemy_ror(const AoePlayerDiplomacyRor *player,
+                            int16_t player_count, int32_t other);
+int aoe_player_is_ally_ror(const AoePlayerDiplomacyRor *player,
+                           int16_t player_count, int32_t other);
+int aoe_player_is_neutral_ror(const AoePlayerDiplomacyRor *player,
+                              int16_t player_count, int32_t other);
+
+/* 0x0045be10 (vtable +0x24): whether vtable +0x20 holds for every other
+   player 1..n-1. All three player vtables keep 0x0045bdd0 at +0x20, so the
+   neutral test is applied directly. */
+int aoe_player_all_neutral_ror(const AoePlayerDiplomacyRor *player,
+                               int16_t player_count);
+
 #endif

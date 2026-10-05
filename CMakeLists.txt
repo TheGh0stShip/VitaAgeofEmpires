@@ -624,6 +624,10 @@ target_link_libraries(aoe_player_orders PUBLIC aoe_player_selection
   aoe_command_object aoe_command_player)
 target_compile_options(aoe_player_orders PRIVATE -Wall -Wextra)
 
+add_library(aoe_player_victory STATIC src/player_victory.c)
+target_include_directories(aoe_player_victory PUBLIC include)
+target_compile_options(aoe_player_victory PRIVATE -Wall -Wextra)
+
 if(VITA)
   include("${VITASDK}/share/vita.cmake" REQUIRED)
 else()
@@ -1429,6 +1433,11 @@ else()
   target_link_libraries(player_orders_test PRIVATE aoe_player_orders m)
   target_compile_options(player_orders_test PRIVATE -UNDEBUG)
   add_test(NAME original_ror_player_orders COMMAND player_orders_test)
+  add_executable(player_victory_test tests/player_victory_test.c)
+  target_link_libraries(player_victory_test PRIVATE aoe_player_victory
+    aoe_player_diplomacy)
+  target_compile_options(player_victory_test PRIVATE -UNDEBUG)
+  add_test(NAME original_ror_player_victory COMMAND player_victory_test)
   add_executable(cdtrack_tool tools/cdtrack_tool.c)
   add_executable(cpx_tool tools/cpx_tool.c)
   target_link_libraries(cpx_tool PRIVATE aoe_cpx)

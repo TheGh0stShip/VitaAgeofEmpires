@@ -108,13 +108,25 @@ static void base_mouse(void *c, int32_t a, int32_t b, int32_t d, int32_t e, int3
 }
 static void focus(void *c, int32_t v) { (void)c; f.last_arg = v; }
 
+static int pc_which = -1, toggles, chats, state5, is_paused, is_net;
+static uint32_t pc_value, clock_ms;
+static char chat_text[64];
+static void pcommand(void *c, int w, uint32_t v) { (void)c; pc_which = w; pc_value = v; }
+static int32_t gstate(void *c) { (void)c; return state5 ? 5 : 1; }
+static int gpaused(void *c) { (void)c; return is_paused; }
+static int gnet(void *c) { (void)c; return is_net; }
+static void gtoggle(void *c) { (void)c; ++toggles; }
+static void gchat(void *c, const char *t) { (void)c; ++chats; snprintf(chat_text, sizeof chat_text, "%s", t); }
+static uint32_t gnow(void *c) { (void)c; return clock_ms; }
+
 static const AoeGameScreenOpsRor ops = {
     NULL, set_active, redraw, set_text_id, set_text, active, text, help, message, message_hide,
     b_dis, b_set_dis, b_id, b_val, b_none, b_none, b_pic, b_state, b_lines, b_help_line,
     b_used, b_set_used, b_fields, timer_set, comm, action, format, string, soft, place, alt,
     set_alt, chat_line, wonder, wmode, pcount, palive, ptimer, stance, age, afford, tflag,
     sel_count, selected, current, set_current, object, g_int, g_int, g_none, g_none, g_none,
-    vpos, vtile, sel_ids, free_ids, pcall, busy, lcount, lid, whas, ready, base_mouse};
+    vpos, vtile, sel_ids, free_ids, pcall, busy, lcount, lid, whas, ready, base_mouse,
+    pcommand, gstate, gpaused, gnet, gtoggle, gchat, gnow};
 
 static void setup(AoeGameScreenRor *s) {
     int i;
@@ -272,5 +284,29 @@ int main(void) {
     aoe_game_screen_focus_ror(&s, focus, 4);
     assert(f.last_arg == 4 && f.ncount == 0);
     puts("game_screen_test: ok");
+    /* Delete, opcode 0x6d and the pause key. */
+    f.comm = 1;
+    aoe_game_screen_delete_ror(&s);
+    assert(pc_which == -1);
+    f.comm = 0;
+    aoe_game_screen_delete_ror(&s);
+    assert(pc_which == 0);
+    aoe_game_screen_command_6d_ror(&s, 9);
+    assert(pc_which == 1 && pc_value == 9);
+    s.pause_time = 0;
+    clock_ms = 5000;
+    is_net = 1;
+    aoe_game_screen_pause_ror(&s);
+    assert(toggles == 1 && chats == 1 && !strcmp(chat_text, "str") && s.pause_time == 5000);
+    clock_ms = 5500;
+    aoe_game_screen_pause_ror(&s);
+    assert(toggles == 1);
+    is_paused = 1;
+    aoe_game_screen_pause_ror(&s);
+    assert(toggles == 2 && chats == 2);
+    state5 = 1;
+    clock_ms = 9000;
+    aoe_game_screen_pause_ror(&s);
+    assert(toggles == 2 && s.pause_time == 9000);
     return 0;
 }

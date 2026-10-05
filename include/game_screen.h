@@ -133,6 +133,18 @@ typedef struct {
     int (*object_ready)(void *context, int32_t id);
     /* The base screen: 0x004553a0 (help mode, then the panel's). */
     void (*base_mouse)(void *context, int32_t a, int32_t b, int32_t c, int32_t d, int32_t e);
+    /* The viewed player's commands: 0x004f1240 delete the selected
+       object (0), 0x004f12c0 opcode 0x6d with a value (1). */
+    void (*player_command)(void *context, int which, uint32_t value);
+    /* The game: its state (+0x1b0), paused (0x0041b750), a networked
+       game (0x0041b760), the pause toggle (0x00419a40), a chat line to
+       everyone (0x004213e0) and the time. */
+    int32_t (*game_state)(void *context);
+    int (*paused)(void *context);
+    int (*networked)(void *context);
+    void (*toggle_pause)(void *context);
+    void (*send_chat)(void *context, const char *text);
+    uint32_t (*now)(void *context);
 } AoeGameScreenOpsRor;
 
 typedef struct {
@@ -149,6 +161,7 @@ typedef struct {
     int32_t chat_next;                           /* +0x724 */
     int32_t field_78;                            /* +0x78 */
     int32_t dialog;                              /* +0x7b4 */
+    uint32_t pause_time;                         /* +0x7c0 */
     int32_t idle_id;                             /* +0x7c4 */
     int32_t alt_bar_held;                        /* 0x007c0648 */
     const AoeGameScreenOpsRor *ops;
@@ -237,5 +250,13 @@ void aoe_game_screen_focus_ror(AoeGameScreenRor *s, void (*focus)(void *context,
 /* 0x00485b90: the next idle unit after `after` (categories 4, 0x15, 0x13,
    2; +0x210 and +0x20 clear), its ID kept at +0x7c4. -1 for none. */
 int32_t aoe_game_screen_next_idle_ror(AoeGameScreenRor *s, int32_t after);
+
+/* 0x00484980: delete the selected object; 0x004858b0: opcode 0x6d with
+   `value` (both nothing while the comm waits). 0x00485260: the pause
+   key, at most once a second unless paused: outside state 5 a networked
+   game first tells everyone (string 0xbf4), then the pause toggles. */
+void aoe_game_screen_delete_ror(AoeGameScreenRor *s);
+void aoe_game_screen_command_6d_ror(AoeGameScreenRor *s, uint32_t value);
+void aoe_game_screen_pause_ror(AoeGameScreenRor *s);
 
 #endif

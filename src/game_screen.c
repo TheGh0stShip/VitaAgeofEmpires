@@ -1,5 +1,7 @@
 #include "game_screen.h"
 
+#include <stdio.h>
+
 #include <string.h>
 
 #define OPS (s->ops)
@@ -343,4 +345,29 @@ int32_t aoe_game_screen_next_idle_ror(AoeGameScreenRor *s, int32_t after) {
         }
     }
     return -1;
+}
+
+void aoe_game_screen_delete_ror(AoeGameScreenRor *s) {
+    if (s->ops->comm_waiting(s->ops->context)) return;
+    s->ops->player_command(s->ops->context, 0, 0);
+}
+
+void aoe_game_screen_command_6d_ror(AoeGameScreenRor *s, uint32_t value) {
+    if (s->ops->comm_waiting(s->ops->context)) return;
+    s->ops->player_command(s->ops->context, 1, value);
+}
+
+void aoe_game_screen_pause_ror(AoeGameScreenRor *s) {
+    const AoeGameScreenOpsRor *o = s->ops;
+    uint32_t now = o->now(o->context);
+    if (now - s->pause_time < 1000 && !o->paused(o->context)) return;
+    s->pause_time = now;
+    if (o->game_state(o->context) == 5) return;
+    if (o->networked(o->context)) {
+        char line[256];
+        const char *text = o->string(o->context, 0xbf4);
+        snprintf(line, sizeof line, "%s", text ? text : "");
+        o->send_chat(o->context, line);
+    }
+    o->toggle_pause(o->context);
 }

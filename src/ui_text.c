@@ -1,5 +1,8 @@
 #include "ui_text.h"
 
+#include "draw_prims.h"
+#include "draw_system.h"
+
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
@@ -438,6 +441,180 @@ void aoe_ui_text_set_rect_slot_ror(AoeUiPanelRor *p, int32_t x, int32_t y, int32
                                              ry, t->scrollbar_width, p->height);
     }
     aoe_ui_text_layout_ror(t, 1);
+    if (t->column_x != 0) {
+        t->has_column_clip = 0;
+        if (p->visible) {
+            int32_t right = p->rect.left - 10 + t->column_x;
+            if (right > p->clip.right) right = p->clip.right;
+            t->column_clip.left = p->clip.left;
+            t->column_clip.top = p->clip.top;
+            t->column_clip.right = right;
+            t->column_clip.bottom = p->clip.bottom;
+            t->has_column_clip = 1;
+        }
+    }
+}
+
+/* ---- drawing ---- */
+
+static const AoeUiPlatformRor *platform(const AoeUiTextRor *t) {
+    return t->panel.system ? t->panel.system->platform : NULL;
+}
+
+/* The area's surface locked for drawing, or NULL. */
+static AoeShapeSurfaceRor *lock_area(AoeUiTextRor *t) {
+    struct AoeDrawSurfaceRor *s = t->panel.area ? t->panel.area->surface : NULL;
+    if (!s || !aoe_surface_lock_ror(s, 1)) return NULL;
+    return &s->view;
+}
+
+static void unlock_area(AoeUiTextRor *t) {
+    struct AoeDrawSurfaceRor *s = t->panel.area ? t->panel.area->surface : NULL;
+    if (s) aoe_surface_unlock_ror(s);
+}
+
+static void draw_background(AoeUiTextRor *t) {
+    AoeUiPanelRor *p = &t->panel;
+    if (t->background) {
+        const AoeUiPlatformRor *pf = platform(t);
+        int16_t cols, rows = 0, i, j;
+        if (!lock_area(t)) return;
+        if (t->background_w < p->width) {
+            cols = (int16_t)(p->width / t->background_w);
+            if (cols * t->background_w < p->width) ++cols;
+        } else {
+            cols = 1;
+        }
+        /* The original only counts rows when the panel is no taller than
+           a tile (so a taller panel gets none). */
+        if (p->height <= t->background_h) {
+            rows = (int16_t)(p->height / t->background_h);
+            if (rows * t->background_h < p->height) ++rows;
+        }
+        for (j = 0; j < rows; ++j)
+            for (i = 0; i < cols; ++i)
+                if (pf && pf->draw_shape)
+                    pf->draw_shape(pf->context, p->area, t->background,
+                                   t->background_w * i + p->x,
+                                   t->background_h * j + p->y);
+        unlock_area(t);
+        return;
+    }
+    if (t->fill) {
+        AoeShapeSurfaceRor *v = lock_area(t);
+        if (!v) return;
+        aoe_draw_fill_ror(v, p->x, p->y, p->width - 1 + p->x,
+                          p->height - 1 + p->y, t->fill_color);
+        unlock_area(t);
+        return;
+    }
+    if (p->parent) {
+        if (t->bevel_type > 1 && t->bevel_type < 8) {
+            p->parent->vt->draw_parent_rect(p->parent, &p->clip);
+            return;
+        }
+        if (!p->parent->painting) p->parent->vt->draw_rect(p->parent, &p->clip);
+    }
+}
+
+static void draw_border(AoeUiTextRor *t) {
+    AoeUiPanelRor *p = &t->panel;
+    AoeShapeSurfaceRor *v;
+    const uint8_t *b = t->bevel;
+    int32_t l = p->x, top = p->y, r = p->width - 1 + p->x,
+            bot = p->height - 1 + p->y;
+    if (t->bevel_type == 0) return;
+    v = lock_area(t);
+    if (v) {
+        uint8_t c[6];
+        switch (t->bevel_type) {
+        case 1:
+            aoe_draw_rect_ror(v, l, top, r, bot, t->border_color);
+            break;
+        case 2:
+            aoe_draw_bevel1_ror(v, l, top, r, bot, b[5], b[0]);
+            break;
+        case 5:
+            aoe_draw_bevel1_ror(v, l, top, r, bot, b[0], b[5]);
+            break;
+        case 3:
+            c[0] = b[5], c[1] = b[4], c[2] = b[1], c[3] = b[0];
+            aoe_draw_bevel2_ror(v, l, top, r, bot, c);
+            break;
+        case 6:
+            c[0] = b[0], c[1] = b[1], c[2] = b[4], c[3] = b[5];
+            aoe_draw_bevel2_ror(v, l, top, r, bot, c);
+            break;
+        case 4:
+            c[0] = b[5], c[1] = b[4], c[2] = b[3], c[3] = b[2], c[4] = b[1],
+            c[5] = b[0];
+            aoe_draw_bevel3_ror(v, l, top, r, bot, c);
+            break;
+        case 7:
+            aoe_draw_bevel3_ror(v, l, top, r, bot, b);
+            break;
+        }
+    }
+    unlock_area(t);
+}
+
+/* One string with the panel's shadow style. */
+static void out(const AoeUiPlatformRor *pf, int32_t style, int32_t x,
+                int32_t y, const char *text, int32_t n, uint32_t color,
+                uint32_t shadow) {
+    if (style == 1) {
+        pf->text_out(pf->context, x - 1, y + 1, text, n, color);
+        pf->text_out(pf->context, x, y, text, n, shadow);
+    } else if (style == 2) {
+        pf->text_out(pf->context, x - 1, y + 1, text, n, shadow);
+        pf->text_out(pf->context, x, y, text, n, color);
+    } else if (style == 0) {
+        pf->text_out(pf->context, x, y, text, n, color);
+    }
+}
+
+static void draw_line(AoeUiTextRor *t, int16_t row, int16_t line,
+                      uint32_t color, uint32_t shadow) {
+    const AoeUiPlatformRor *pf = platform(t);
+    const char *a = aoe_ui_text_line_ror(t, line);
+    const char *b = aoe_ui_text_column_ror(t, line);
+    AoeUiRectRor rect;
+    int32_t offset, x, x2;
+    if (!a && !b) return;
+    aoe_ui_text_line_rect_ror(t, row, line, &rect, &offset);
+    x = rect.left;
+    if (t->align != 0 && t->align != 6) x = rect.left + 5;
+    x2 = t->column_x + x;
+    if (t->has_column_clip) pf->text_clip(pf->context, &t->column_clip);
+    if (a) out(pf, t->shadow_style, x, rect.top, a, (int32_t)strlen(a), color,
+               shadow);
+    if (b) {
+        if (t->has_column_clip) pf->text_clip(pf->context, &t->panel.clip);
+        out(pf, t->shadow_style, x2, rect.top, b, (int32_t)strlen(b), color,
+            shadow);
+    }
+}
+
+void aoe_ui_text_draw_slot_ror(AoeUiPanelRor *p) {
+    AoeUiTextRor *t = T(p);
+    const AoeUiPlatformRor *pf = platform(t);
+    int16_t line, row = 0;
+    p->redraw = 0;
+    if (!p->area || !p->visible || !p->active) return;
+    draw_background(t);
+    p->vt->begin_draw(p, 0);
+    if (pf && pf->text_begin && pf->text_begin(pf->context, p->area, &p->clip,
+                                               t->font)) {
+        for (line = t->top; line <= t->bottom; ++line, ++row) {
+            int focus = !((p->tab_stop == 0 || p->has_focus == 0) &&
+                          p->captured == 0);
+            draw_line(t, row, line, focus ? t->focus_color : t->color,
+                      focus ? t->focus_shadow : t->shadow);
+        }
+        pf->text_end(pf->context);
+    }
+    draw_border(t);
+    p->vt->end_draw(p);
 }
 
 void aoe_ui_text_set_active_slot_ror(AoeUiPanelRor *p, int32_t active) {
@@ -688,7 +865,7 @@ const AoeUiTextVtblRor aoe_ui_text_vtable_ror = {
      aoe_ui_panel_redraw_overlaps_ror,
      aoe_ui_panel_begin_draw_ror,
      aoe_ui_panel_end_draw_ror,
-     aoe_ui_panel_draw_ror,
+     aoe_ui_text_draw_slot_ror,
      aoe_ui_panel_draw_rect_ror,
      aoe_ui_panel_draw_offset_ror,
      aoe_ui_panel_draw_parent_rect_ror,

@@ -70,6 +70,8 @@ struct AoeUiTextRor {
     int32_t scrollbar_shown;      /* +0x16c */
     int32_t bevel_type;           /* +0x170 */
     uint8_t bevel[6];             /* +0x174 */
+    AoeUiRectRor column_clip;     /* +0x17c: region of the first column */
+    int32_t has_column_clip;
     int32_t margin;               /* +0x180 */
     int32_t spacing;              /* +0x184 */
     const AoeUiTextScrollOpsRor *scroll;
@@ -126,7 +128,9 @@ void aoe_ui_text_scroll_ror(AoeUiTextRor *t, uint8_t how, int16_t value,
    0x00469070 / 0x00469090 colours; 0x004690b0 background picture (via
    the loader); 0x00469190 border (bevel type 1 when on); 0x004691e0 bevel (+0xf0); 0x004692a0
    spacing; 0x0046a740 sorted; 0x00468a30 scrollbar. Slots: +0x0c
-   0x00468910 (remember the full width, re-place the scrollbar, lay out),
+   0x00468910 (remember the full width, re-place the scrollbar, lay out,
+   and with a second column clip the first one to end 10 pixels before
+   it),
    +0x14 0x004692c0 (the scrollbar follows), +0x84 0x0046a090 (left press
    notifies the parent, action 1). */
 void aoe_ui_text_set_font_ror(AoeUiTextRor *t, uintptr_t font, int32_t width,
@@ -189,6 +193,15 @@ void aoe_ui_text_set_alignment_ror(AoeUiTextRor *t, int32_t vertical,
 /* +0x84 0x0046a090: a left press notifies the parent (action 1). */
 int32_t aoe_ui_text_left_down_ror(AoeUiPanelRor *p, int32_t x, int32_t y,
                                   int32_t c, int32_t s);
+/* Drawing (+0x30 0x00469750): the background (0x00469860: tiled picture,
+   which the original only tiles when the panel is no taller than a tile;
+   or a fill; or the parent's rect), then the visible lines (0x00469be0:
+   left-aligned 5 pixels in except alignments 0 and 6, a second column at
+   column_x, shadow style 1 or 2 drawing a copy one pixel down-left), in
+   the focus colours when the panel has focus or is captured, then the
+   border (0x004699f0: bevel types 1..7). 0x0046a0f0 and 0x0046a6c0 are
+   thunks to the line text 0x0046a600 and the clear 0x0046a6d0. */
+void aoe_ui_text_draw_slot_ror(AoeUiPanelRor *p);
 /* Text vtable slots shared with subclasses: +0x0c 0x00468910, +0x14
    0x004692c0, +0xac 0x004695c0 keys, +0xb8 0x00469690 action, +0xe4
    0x00468fc0 lines, +0xf0 0x004691e0 bevel. */

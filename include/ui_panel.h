@@ -57,6 +57,20 @@ typedef struct {
                           int32_t count);
     /* UpdateWindow of the main window (optional). */
     void (*update_window)(void *context);
+    /* Text output on an area, standing for the original's device context
+       (GetDC, SelectClipRgn, SelectObject, SetBkMode transparent,
+       SetTextColor, TextOutA, ReleaseDC): begin with a clip rectangle and
+       a font (0 when no context can be had), change the clip, draw
+       `count` bytes in a colour with the top-left at (x, y), end. */
+    int (*text_begin)(void *context, AoeUiAreaRor *area,
+                      const AoeUiRectRor *clip, uintptr_t font);
+    void (*text_clip)(void *context, const AoeUiRectRor *clip);
+    void (*text_out)(void *context, int32_t x, int32_t y, const char *text,
+                     int32_t count, uint32_t color);
+    void (*text_end)(void *context);
+    /* Frame 0 of a picture's shape with its hotspot at (x, y). */
+    void (*draw_shape)(void *context, AoeUiAreaRor *area, void *shape,
+                       int32_t x, int32_t y);
 } AoeUiPlatformRor;
 
 typedef struct AoeUiNodeRor {

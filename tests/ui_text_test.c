@@ -1,8 +1,36 @@
 /* Patched RoR 1.0a text panel 0x004685b0..0x0046a760. */
 #include "ui_text.h"
 
+#include "draw_system.h"
+
 #include <assert.h>
+#include <stdio.h>
 #include <string.h>
+
+static char outs[16][32];
+static int nouts, begun, ended, clips;
+static int text_begin(void *c, AoeUiAreaRor *a, const AoeUiRectRor *r,
+                      uintptr_t f) {
+    (void)c; (void)a; (void)r; (void)f;
+    ++begun;
+    return 1;
+}
+static void text_clip(void *c, const AoeUiRectRor *r) {
+    (void)c; (void)r;
+    ++clips;
+}
+static void text_out(void *c, int32_t x, int32_t y, const char *t, int32_t n,
+                     uint32_t color) {
+    (void)c;
+    if (nouts < 16)
+        snprintf(outs[nouts], sizeof outs[0], "%d,%d,%.*s,%x", (int)x, (int)y,
+                 (int)n, t, (unsigned)color);
+    ++nouts;
+}
+static void text_end(void *c) {
+    (void)c;
+    ++ended;
+}
 
 static int32_t width(void *c, uintptr_t font, const char *text, int32_t n) {
     (void)c; (void)font; (void)text;
@@ -102,6 +130,51 @@ int main(void) {
     assert(t.margin == 3 && t.bevel[5] == 6 && t.visible == 4);
     assert(aoe_ui_text_char_kind_ror((const uint8_t *)"\xb1", NULL) == 1 &&
            aoe_ui_text_char_kind_ror((const uint8_t *)"a", NULL) == 0);
+
+    /* Drawing: shadow style 2 draws the shadow one pixel down-left first;
+       left alignment adds 5; the bevel lands on the area's surface. */
+    {
+        static uint8_t bits[640 * 4];
+        static AoeDrawSystemRor d;
+        static AoeDrawSurfaceRor surf;
+        static uint8_t *rows[4];
+        pf.text_begin = text_begin;
+        pf.text_clip = text_clip;
+        pf.text_out = text_out;
+        pf.text_end = text_end;
+        d.type = 1;
+        surf.system = &d;
+        surf.view.bits = bits;
+        surf.view.width = 640;
+        surf.view.height = 4;
+        surf.view.pitch = 640;
+        surf.view.direction = 1;
+        surf.view.clip_right = 639;
+        surf.view.clip_bottom = 3;
+        for (int i = 0; i < 4; ++i) rows[i] = bits + 640 * i;
+        surf.rows = rows;
+        area.surface = &surf;
+        aoe_ui_text_set_text_ror(&t, "abc");
+        t.align = 1;
+        t.vertical = 3;
+        t.shadow_style = 2;
+        t.color = 0x11;
+        t.shadow = 0x22;
+        t.panel.vt->draw(&t.panel);
+        assert(begun == 1 && ended == 1 && nouts == 2);
+        /* The line starts at the 3-pixel bevel margin, plus 5 when left-aligned. */
+        assert(!strcmp(outs[0], "7,4,abc,22") && !strcmp(outs[1], "8,3,abc,11"));
+        /* Bevel type 4: the outer top line is colour c[5] (bevel +0x179). */
+        assert(bits[1] == 6 && bits[640 + 2] == 5);
+        assert(t.panel.redraw == 0);
+        /* Inactive panels draw nothing. */
+        t.panel.active = 0;
+        nouts = 0;
+        t.panel.vt->draw(&t.panel);
+        assert(nouts == 0);
+        t.panel.active = 1;
+        area.surface = NULL;
+    }
     aoe_ui_text_release_ror(&t);
     assert(!t.lines);
     return 0;

@@ -172,5 +172,82 @@ int main(void) {
     assert(count_kind(&w.managers[2], 6, 8) == 2 &&
            count_kind(&w.managers[2], 7, 8) == 1);
     for (int p = 0; p < 4; ++p) aoe_outcome_manager_release_ror(&w.managers[p]);
+
+    {
+        /* Editor victory pages 0x004954c0, 0x004957e0, 0x00495d90,
+           0x00496140 and 0x00496420. */
+        static AoeScenarioInfoRor e;
+        AoeScenarioGoalsFormRor g = {0};
+        AoeScenarioConditionFormRor f = {0};
+        AoeOutcomeUnitRef u = {0}, v = {0};
+        float area[4];
+        int32_t ally[8] = {1}, neutral[8] = {0, 1}, enemy[8] = {0, 0, 1};
+        g.tool_victory = 2;
+        g.radio[2] = 1;
+        g.score = 4000;
+        g.time_limit = 600;
+        g.all_required = 5;
+        g.conquest_alt = 1;
+        g.goal_check[0] = 1; g.goal_text[0] = "250";
+        g.goal_check[1] = 0; g.goal_text[1] = "7";
+        g.goal_check[4] = 1; g.goal_text[4] = "1500";
+        aoe_scenario_store_goals_ror(&e, &g);
+        assert(e.victory_type == 2 && e.score == 4000 && e.time_limit == 600);
+        assert(e.all_custom_required == 1 && e.custom_conquest == 0);
+        assert(e.explore == 100 && e.ruins == 0 && e.gold == 1500);
+        g.goal_text[0] = "0";
+        g.radio[2] = 0;
+        aoe_scenario_store_goals_ror(&e, &g);
+        assert(e.explore == 1 && e.victory_type == 4);
+        assert(aoe_scenario_victory_tool_ror(&e) == 5);
+
+        u.id04 = 41; v.id04 = 9;
+        f.kind = 1; f.unit = &u; f.target = &v;
+        f.area[0] = 2; f.area[2] = 6;
+        aoe_scenario_store_condition_ror(&e, 0, &g, &f, area);
+        assert(area[0] == 2.0f && area[2] == 6.0f);
+        assert(e.conditions[0][0].type == 3 &&
+               e.conditions[0][0].unit_ref == 42 &&
+               e.conditions[0][0].target_ref == 10);
+        assert(aoe_scenario_condition_kind_ror(&e.conditions[0][0]) == 1);
+        f.kind = 1; f.target = NULL;
+        aoe_scenario_store_condition_ror(&e, 0, &g, &f, NULL);
+        assert(e.conditions[0][0].type == 0 &&
+               e.conditions[0][0].unit_ref == 0);
+        f.kind = 5; f.player_line = 2; f.object_class = 70;
+        f.amount_text = "0";
+        aoe_scenario_store_condition_ror(&e, 1, &g, &f, NULL);
+        assert(e.conditions[0][1].type == 0);
+        f.amount_text = "12";
+        aoe_scenario_store_condition_ror(&e, 1, &g, &f, NULL);
+        assert(e.conditions[0][1].type == 1 && e.conditions[0][1].player == 3
+               && e.conditions[0][1].amount == 12);
+        assert(aoe_scenario_condition_kind_ror(&e.conditions[0][1]) == 5);
+        f.kind = 4;
+        aoe_scenario_store_condition_ror(&e, 2, &g, &f, NULL);
+        assert(e.conditions[0][2].type == 2 &&
+               e.conditions[0][2].area[2] == 6.0f);
+        assert(aoe_scenario_condition_kind_ror(&e.conditions[0][2]) == 4);
+        for (int32_t k = 10; k <= 16; k++) {
+            f.kind = k; f.tech_line = 4;
+            aoe_scenario_store_condition_ror(&e, 3, &g, &f, NULL);
+            assert(e.conditions[0][3].type == 4);
+            assert(aoe_scenario_condition_kind_ror(&e.conditions[0][3]) == k);
+        }
+        assert(e.conditions[0][3].subtype == 6);
+        f.kind = 15;
+        aoe_scenario_store_condition_ror(&e, 3, &g, &f, NULL);
+        assert(e.conditions[0][3].amount == 5);
+        f.kind = 18; f.relic_id = 3;
+        aoe_scenario_store_condition_ror(&e, 4, &g, &f, NULL);
+        assert(e.conditions[0][4].type == 7 && e.conditions[0][4].subtype == 3);
+        assert(aoe_scenario_condition_kind_ror(&e.conditions[0][4]) == 18);
+
+        aoe_scenario_reset_diplomacy_ror(&e);
+        aoe_scenario_store_diplomacy_page_ror(&e, 1, ally, neutral, enemy, 1);
+        assert(e.diplomacy[1][0] == 0 && e.diplomacy[1][1] == 1 &&
+               e.diplomacy[1][2] == 3 && e.diplomacy[1][3] == 3);
+        assert(e.allied_victory[1] == 1);
+    }
     return 0;
 }

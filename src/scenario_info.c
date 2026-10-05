@@ -1,5 +1,6 @@
 #include "scenario_info.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 static int slot_ok(int32_t slot) {
@@ -352,4 +353,175 @@ int aoe_scenario_install_ror(const AoeScenarioInfoRor *info, int apply,
                 install_record(&info->conditions[s][i], m, ops);
     }
     return 1;
+}
+
+static int32_t form_atoi(const char *text) { return text ? atoi(text) : 0; }
+
+static void store_required(AoeScenarioInfoRor *info,
+                           const AoeScenarioGoalsFormRor *g) {
+    aoe_scenario_set_all_custom_required_ror(info, g->all_required != 0);
+    aoe_scenario_set_goal_ror(info, AOE_SCENARIO_GOAL_CONQUEST,
+                              !(g->conquest_off == 0 && g->conquest_alt));
+}
+
+void aoe_scenario_store_goals_ror(AoeScenarioInfoRor *info,
+                                  const AoeScenarioGoalsFormRor *g) {
+    static const int goals[5] = {
+        AOE_SCENARIO_GOAL_EXPLORE, AOE_SCENARIO_GOAL_RUINS,
+        AOE_SCENARIO_GOAL_ARTIFACTS, AOE_SCENARIO_GOAL_DISCOVERIES,
+        AOE_SCENARIO_GOAL_GOLD};
+    int32_t type = 4;
+    if (!info || !g) return;
+    if (g->tool_victory >= 1 && g->tool_victory <= 4)
+        type = g->tool_victory - 1;
+    aoe_scenario_set_victory_type_ror(info, type);
+    for (type = 0; type < 4 && !g->radio[type]; type++) {
+    }
+    aoe_scenario_set_victory_type_ror(info, type);
+    aoe_scenario_set_score_ror(info, g->score);
+    aoe_scenario_set_time_limit_ror(info, g->time_limit);
+    store_required(info, g);
+    for (int i = 0; i < 5; i++) {
+        int32_t v = form_atoi(g->goal_text[i]);
+        if (!g->goal_check[i]) v = 0;
+        else if (i == 0) v = v < 1 ? 1 : v > 100 ? 100 : v;
+        aoe_scenario_set_goal_ror(info, goals[i], v);
+    }
+}
+
+void aoe_scenario_store_condition_ror(AoeScenarioInfoRor *info,
+                                      int32_t index,
+                                      const AoeScenarioGoalsFormRor *goals,
+                                      const AoeScenarioConditionFormRor *f,
+                                      float area_out[4]) {
+    static const int32_t sub[5] = {0, 3, 1, 2, 4};
+    AoeScenarioConditionRor *c;
+    float a[4];
+    int32_t amount, player;
+    if (!info || !goals) return;
+    store_required(info, goals);
+    if (index < 0 || !f) return;
+    amount = form_atoi(f->amount_text);
+    player = f->player_line + 1;
+    for (int i = 0; i < 4; i++) a[i] = (float)f->area[i];
+    if (area_out) memcpy(area_out, a, sizeof a);
+    aoe_scenario_clear_condition_ror(info, index);
+    c = aoe_scenario_condition_ror(info, index);
+    if (!c) return;
+    switch (f->kind) {
+    case 1:
+        if (!f->unit || !f->target) return;
+        c->type = 3;
+        aoe_scenario_set_condition_unit_ror(info, index, f->unit);
+        aoe_scenario_set_condition_target_ror(info, index, f->target);
+        return;
+    case 2:
+        if (!f->unit) return;
+        c->type = 3;
+        aoe_scenario_set_condition_unit_ror(info, index, f->unit);
+        aoe_scenario_set_condition_area_ror(info, index, a[0], a[1], a[2],
+                                            a[3]);
+        return;
+    case 3:
+    case 4:
+        c->type = 2;
+        c->object_class = f->object_class;
+        c->amount = amount;
+        if (f->kind == 4)
+            aoe_scenario_set_condition_area_ror(info, index, a[0], a[1],
+                                                a[2], a[3]);
+        return;
+    case 5:
+        if (player < 1 || player > 8 || !amount) return;
+        c->type = 1;
+        c->player = player;
+        c->object_class = f->object_class;
+        c->amount = amount;
+        return;
+    case 6:
+    case 9:
+        if (!f->unit) return;
+        c->type = f->kind == 6 ? 1 : 5;
+        aoe_scenario_set_condition_unit_ror(info, index, f->unit);
+        return;
+    case 7:
+    case 8:
+        if (player < 1 || player > 8) return;
+        c->type = 1;
+        c->player = player;
+        if (f->kind == 7) {
+            c->object_class = f->object_class;
+            c->all_flag = 1;
+        }
+        return;
+    case 10: case 11: case 12: case 13: case 14:
+        c->type = 4;
+        c->subtype = sub[f->kind - 10];
+        c->amount = amount;
+        return;
+    case 15:
+        c->type = 4;
+        c->subtype = 5;
+        c->amount = f->tech_line + 1;
+        return;
+    case 16:
+        c->type = 4;
+        c->subtype = 6;
+        c->amount = amount;
+        return;
+    case 17:
+        c->type = 6;
+        c->subtype = f->subtype_id;
+        c->amount = amount;
+        return;
+    case 18:
+        c->type = 7;
+        c->subtype = f->relic_id;
+        return;
+    default:
+        return;
+    }
+}
+
+int32_t aoe_scenario_condition_kind_ror(const AoeScenarioConditionRor *c) {
+    static const int32_t by_sub[7] = {10, 12, 13, 11, 14, 15, 16};
+    if (!c) return -1;
+    switch (c->type) {
+    case 0: return 0;
+    case 1:
+        if (c->amount) return 5;
+        if (c->unit_ref) return 6;
+        return c->all_flag ? 7 : 8;
+    case 2: return c->area[2] <= 0.0f ? 3 : 4;
+    case 3: return c->target_ref ? 1 : 2;
+    case 4:
+        return c->subtype >= 0 && c->subtype <= 6 ? by_sub[c->subtype] : -1;
+    case 5: return c->unit_ref ? 9 : -1;
+    case 6: return 17;
+    case 7: return 18;
+    default: return -1;
+    }
+}
+
+int32_t aoe_scenario_victory_tool_ror(const AoeScenarioInfoRor *info) {
+    int32_t type = aoe_scenario_victory_type_ror(info);
+    return type >= 0 && type <= 3 ? type + 1 : 5;
+}
+
+void aoe_scenario_store_diplomacy_page_ror(AoeScenarioInfoRor *info,
+                                           int32_t slot,
+                                           const int32_t ally[8],
+                                           const int32_t neutral[8],
+                                           const int32_t enemy[8],
+                                           int32_t allied_victory) {
+    if (!info || slot < 0) return;
+    for (int32_t t = 0; t < 8; t++) {
+        if (ally[t] == 1)
+            aoe_scenario_set_diplomacy_ror(info, slot, t, 0);
+        else if (neutral[t] == 1)
+            aoe_scenario_set_diplomacy_ror(info, slot, t, 1);
+        else if (enemy[t] == 1)
+            aoe_scenario_set_diplomacy_ror(info, slot, t, 3);
+    }
+    aoe_scenario_set_allied_victory_ror(info, slot, allied_victory);
 }

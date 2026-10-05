@@ -211,4 +211,83 @@ typedef struct {
 int aoe_scenario_install_ror(const AoeScenarioInfoRor *info, int apply,
                              const AoeScenarioInstallOps *ops);
 
+/* Scenario editor victory pages (editor vtable 0x00547360). The controls
+   are read by the caller; these carry their values. */
+typedef struct {
+    int32_t tool_victory;     /* editor +0x4ac, 1..4 standard, else custom */
+    int32_t radio[4];         /* +0x6e0..+0x6ec states: conquest, score,
+                                 time limit, ruins/artifacts standard */
+    int32_t score;            /* +0x6f8 selected ID */
+    int32_t time_limit;       /* +0x700 selected ID */
+    int32_t all_required;     /* +0x684 state */
+    int32_t conquest_off;     /* +0x668 state */
+    int32_t conquest_alt;     /* +0x6f0 state */
+    /* Explore, ruins, artifacts, discoveries and gold: check +0x66c..
+       +0x67c and edit +0x6b8..+0x6c8. */
+    int32_t goal_check[5];
+    const char *goal_text[5];
+} AoeScenarioGoalsFormRor;
+
+/* 0x004954c0: victory type from the tool (1..4 -> 0..3, else 4), then
+   again from the first set radio (else 4); score and time limit (each
+   stored twice in the original); all-required = state != 0; custom
+   conquest 0 only when +0x668 is clear and +0x6f0 set; each goal is
+   atoi(text) when checked, else 0, explore clamped to 1..100. */
+void aoe_scenario_store_goals_ror(AoeScenarioInfoRor *info,
+                                  const AoeScenarioGoalsFormRor *form);
+
+/* Condition page values (0x004957e0). */
+typedef struct {
+    const char *amount_text;  /* edit +0x76c */
+    int32_t kind;             /* list +0x734 line, 1..18 */
+    int32_t player_line;      /* list +0x740 line (player = line + 1) */
+    int32_t object_class;     /* dropdown +0x738 selected ID */
+    int32_t subtype_id;       /* dropdown +0x744 selected ID (kind 17) */
+    int32_t tech_line;        /* list +0x748 line (kind 15) */
+    int32_t relic_id;         /* dropdown +0x74c selected ID (kind 18) */
+    const AoeOutcomeUnitRef *unit;   /* editor +0x480 */
+    const AoeOutcomeUnitRef *target; /* editor +0x484 */
+    int32_t area[4];          /* view tiles (0x00510070) */
+} AoeScenarioConditionFormRor;
+
+/* 0x004957e0: all-required and custom conquest as in the goals store;
+   for index >= 0 the area becomes floats in `area_out` (editor +0x488..
+   +0x494; may be NULL), the record is cleared and filled per kind:
+   1 type 3 unit+target (both needed), 2 type 3 unit+area, 3 type 2
+   class+amount, 4 that plus area, 5 type 1 player 1..8 + class + nonzero
+   amount, 6 type 1 unit, 7 type 1 player + class + all flag, 8 type 1
+   player, 9 type 5 unit, 10..14 type 4 subtypes 0,3,1,2,4 + amount,
+   15 type 4 subtype 5 amount tech_line + 1, 16 type 4 subtype 6 + amount,
+   17 type 6 subtype_id + amount, 18 type 7 subtype relic_id. A record
+   whose requirements fail stays cleared. */
+void aoe_scenario_store_condition_ror(AoeScenarioInfoRor *info,
+                                      int32_t index,
+                                      const AoeScenarioGoalsFormRor *goals,
+                                      const AoeScenarioConditionFormRor *form,
+                                      float area_out[4]);
+
+/* 0x00495d90's choice of the condition list line for a record: type 0
+   -> 0; type 1 -> 5 with an amount, 6 with a unit, else 7 with the all
+   flag or 8; type 2 -> 4 when x1 > 0 else 3; type 3 -> 1 with a target
+   else 2; type 4 -> 10,12,13,11,14,15,16 by subtype 0..6; type 5 -> 9
+   with a unit; type 6 -> 17; type 7 -> 18. -1 means the original leaves
+   the list unchanged (unknown values, or type 5 without a unit). The
+   original tests the resolved unit and target; this tests the stored
+   references (equal for references that resolve). */
+int32_t aoe_scenario_condition_kind_ror(const AoeScenarioConditionRor *c);
+
+/* 0x00496140's victory radio for the stored type: 0..3 -> tool 1..4,
+   else 5. Its score and time defaults are 900 and 9000 when 0. */
+int32_t aoe_scenario_victory_tool_ror(const AoeScenarioInfoRor *info);
+
+/* 0x00496420: for slot >= 0 and targets 0..7 the first of the ally,
+   neutral and enemy buttons whose state is 1 stores stance 0, 1 or 3
+   (none leaves the cell); then allied victory from the slot's button. */
+void aoe_scenario_store_diplomacy_page_ror(AoeScenarioInfoRor *info,
+                                           int32_t slot,
+                                           const int32_t ally[8],
+                                           const int32_t neutral[8],
+                                           const int32_t enemy[8],
+                                           int32_t allied_victory);
+
 #endif

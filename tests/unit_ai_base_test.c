@@ -183,5 +183,21 @@ int main(void) {
         aoe_unit_ai_release_ror(&n);
         assert(!n.group && !n.group_count);
     }
+    {
+        /* 0x00414b00 / 0x00414d90 the queues. */
+        AoeUnitAiNotesRor q = {malloc(sizeof(int32_t[9])), 0, 1};
+        AoeUnitAiOutRor o = {malloc(sizeof(int32_t[6])), 0, 1};
+        const int32_t v[6] = {1, 2, 3, 4, 5, 6};
+        assert(aoe_unit_ai_note_ror(&q, 10, 20, 30, v, 0) && q.count == 1);
+        assert(aoe_unit_ai_note_ror(&q, 11, 21, 31, v, 0) && q.capacity == 2);
+        assert(aoe_unit_ai_note_ror(&q, 12, 22, 32, v, 1) && q.count == 3);
+        /* The front insert smeared the old first record forward. */
+        assert(q.records[0][0] == 12 && q.records[1][0] == 10 && q.records[2][0] == 10);
+        assert(q.records[0][2] == 32 && q.records[0][8] == 6);
+        assert(aoe_unit_ai_send_ror(&o, v) && aoe_unit_ai_send_ror(&o, v) && o.count == 2 &&
+               o.records[1][5] == 6);
+        free(q.records);
+        free(o.records);
+    }
     return 0;
 }

@@ -1,6 +1,7 @@
 #include "unit_ai_base.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 #include <math.h>
 #include <stddef.h>
@@ -334,4 +335,47 @@ int aoe_unit_ai_notify_filter_ror(const AoeUnitAiRor *ai, uint8_t unit_state, in
     if (code == 0x1fb) return value == ai->order ? 2 : 0;
     if (code == 0x1fa && value == 0x262 && ai->order != 0x262 && ai->order != 0x268) return 1;
     return 2;
+}
+
+int aoe_unit_ai_note_ror(AoeUnitAiNotesRor *q, int32_t sender, int32_t code, int32_t extra,
+                         const int32_t values[6], int front) {
+    int32_t *r;
+    if (q->count == q->capacity) {
+        int32_t (*grown)[9];
+        if (!q->capacity) return 0;
+        grown = malloc((size_t)q->capacity * 2 * sizeof *grown);
+        if (!grown) return 0;
+        memcpy(grown, q->records, (size_t)q->count * sizeof *grown);
+        free(q->records);
+        q->records = grown;
+        q->capacity *= 2;
+    }
+    if (front && q->count) {
+        for (int32_t i = 0; i < q->count; ++i) memcpy(q->records[i + 1], q->records[i], sizeof q->records[0]);
+        r = q->records[0];
+    } else {
+        r = q->records[q->count];
+    }
+    r[0] = sender;
+    r[1] = code;
+    r[2] = extra;
+    for (int i = 0; i < 6; ++i) r[3 + i] = values[i];
+    q->count++;
+    return 1;
+}
+
+int aoe_unit_ai_send_ror(AoeUnitAiOutRor *q, const int32_t values[6]) {
+    if (q->count == q->capacity) {
+        int32_t (*grown)[6];
+        if (!q->capacity) return 0;
+        grown = malloc((size_t)q->capacity * 2 * sizeof *grown);
+        if (!grown) return 0;
+        memcpy(grown, q->records, (size_t)q->count * sizeof *grown);
+        free(q->records);
+        q->records = grown;
+        q->capacity *= 2;
+    }
+    memcpy(q->records[q->count], values, sizeof q->records[0]);
+    q->count++;
+    return 1;
 }

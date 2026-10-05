@@ -315,7 +315,11 @@ int aoe_ai_con_plan_load_text_ror(AoeAiConPlanRor *plan, const char *file,
                                   const char *text, int32_t width,
                                   int32_t height, float x, float y,
                                   float z);
-/* Save 0x00409ad0 and load constructor 0x00409540. */
+/* Save 0x00409ad0 and load constructor 0x00409540. The derived plan of
+   vtable 0x00548b18 builds on 0x00409420 (0x004b9660) or 0x00409540
+   (0x004b96b0), clearing its own +0x314, which 0x004b96f0 sets.
+   0x004ba0a0: of two plans the one with the lower counter (0x004093b0;
+   the first on a tie). */
 int aoe_ai_con_plan_save_ror(const AoeAiConPlanRor *plan,
                              AoeOutcomeStream *out);
 int aoe_ai_con_plan_load_ror(AoeAiConPlanRor *plan, int32_t player,
@@ -325,7 +329,8 @@ int aoe_ai_con_plan_load_ror(AoeAiConPlanRor *plan, int32_t player,
    computer player it belongs to (+0x5bc). 0x004b7650 / 0x004b76a0
    construct it as the base (0x00407bf0 / load 0x00407d50) with no
    owner; 0x004b76d0 releases it (0x004081f0; deleting 0x004b7680); 0x004b76e0 sets the owner.
-   0x004b8fb0: the item with this unique ID (if any) is no longer in
+   0x004b8fb0 (a player's 0x004f2cb0 when it has the list, +0x23c): the
+   item with this unique ID (if any) is no longer in
    progress; always 1. */
 typedef struct {
     AoeAiBuildListRor base;

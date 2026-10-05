@@ -267,7 +267,9 @@ typedef struct {
 int aoe_outcome_manager_save_ror(const AoeOutcomeManager *manager,
                                  AoeOutcomeStream *out);
 
-/* Load constructor 0x0050d380. `owner` is +0xc; `has_version` reads the
+/* Constructor 0x0050d6d0 (owner +0xc, every other field 0) and load
+   constructor 0x0050d380 (the derived vtable 0x0054a3e4 one, 0x005084c0,
+   wraps it). `owner` is +0xc; `has_version` reads the
    leading f32 (otherwise 0.0). Conditions keep their saved order. Unit
    +0x24 is looked up in each world player's list until found, unit +0x28
    in the owner's list, and when that misses, in the saved player's list;

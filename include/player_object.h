@@ -206,7 +206,8 @@ void aoe_player_conditions_create_ror(AoePlayerObjectRor *player,
 
 /* Base player vtable defaults that ignore their arguments (the derived
    player vtables override each):
-   0x0045bd40 (+0x14, one argument) returns 0;
+   0x0045bd40 (+0x14, one argument) returns 0 (the RoR player's
+   0x00509850 answers 1 first for an object of template class 0x2d);
    0x0045bcd0 (+0x38, one argument) does nothing;
    0x0045bce0 (+0x3c and +0x58, one argument) returns -1;
    0x0045bcf0 (+0x5c, three arguments) does nothing;

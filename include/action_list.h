@@ -49,7 +49,12 @@ int aoe_action_list_update_ror(AoeActionList *list, const AoeActionTickOps *ops,
                                 uint8_t *result);
 /* 0x00404360 (list vtable +0x08, the update while attached) is the same
    walk with the head's +0x20 in place of +0x28: pass that slot as
-   update_head. 0x004045b0: the head action (NULL when empty); 0x00404580
+   update_head. 0x00404520: the list is not empty. 0x004045b0: the head
+   action (NULL when empty); a unit (list +0x184) asks: 0x00406610 is
+   the head's state +0x0c one of 0, 1, 2, 3, 13, 14 (1 without a head),
+   0x00406770 the head's +0x0c plus its +0x04 (0 without one), and
+   0x00427bd0 / 0x00427c00 / 0x00427c30 its destination 0x00407670 /
+   0x00407680 / 0x00407690 (-1.0 when the list is empty); 0x00404580
    asks it +0x34 (0 when empty). 0x00403df0 (+0x10) and 0x00404600
    (+0x44 with three values) hand every action, in order, to `fn`. */
 /* The action unit's slots on its list (+0x184; vtable 0x00542748):

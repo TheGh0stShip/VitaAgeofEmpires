@@ -157,6 +157,21 @@ typedef struct {
     void (*open_editor_save_as)(void *context, int32_t after);
     int32_t (*scenario_tech)(void *context, int32_t slot, int32_t i);
     void (*set_scenario_tech)(void *context, int32_t slot, int32_t i, int32_t value);
+    /* Campaigns: the titles (0x0043cd70) and the chosen campaign's
+       scenario names (0x0043cdf0), each a malloc'd array of malloc'd
+       names (the caller frees both; the count returned, 0 for none) with
+       the chosen entry's index; choosing a campaign by ID (0x0043cca0)
+       and a scenario by line (0x0043ccd0); the chosen scenario's slots
+       (0x00417670(0, 1) then its 0x00476250 / 0x00476210 for slots
+       0..8; 0 when it cannot be read); a comm slot's state (0x00423d40);
+       the scenario game started (0x00502910(0), nonzero on success). */
+    int32_t (*campaign_titles)(void *context, char ***names, int32_t *chosen);
+    int32_t (*campaign_scenarios)(void *context, char ***names, int32_t *chosen);
+    void (*choose_campaign)(void *context, int32_t id);
+    void (*choose_scenario)(void *context, int32_t line);
+    int (*campaign_scenario_slots)(void *context, int32_t active[9], int32_t kind[9]);
+    void (*set_slot_state)(void *context, int32_t slot, int32_t state);
+    int (*start_scenario_game)(void *context);
 } AoeGameUiOpsRor;
 
 typedef struct {
@@ -721,5 +736,53 @@ int aoe_save_game_screen_init_ror(AoeSaveGameScreenRor *s, AoeGameUiRor *ui, Aoe
                                   const char *popup_name, int32_t popup_id);
 void aoe_save_game_screen_fill_ror(AoeSaveGameScreenRor *s);
 void aoe_save_game_screen_editor_save_ror(AoeSaveGameScreenRor *s);
+
+/* The "Campaign Selection Screen" (vtable 0x005460dc, 0x0047a7c0..
+   0x0047b140; "scr2" / 50052): the title (11213), the campaigns (11214;
+   heading 11101) and their scenarios (9726) each with a scroll bar, the
+   difficulty (11215: 11220 down to 11216 as 4..0, from the settings'
+   byte 0x993), OK, Cancel (Escape) and the hidden close button. 0x0047a7c0
+   constructor (0x0047ac20 clears the fields first); 0x0047ac90 destructor
+   (deleting 0x0047ac00); 0x0047af90 fills the campaigns (sorted; the
+   chosen one picked and its campaign chosen); 0x0047b080 fills the
+   chosen campaign's scenarios (unsorted, the chosen one picked, the list
+   scrolled). +0x4c 0x0047ad80 the idle (filled once, the campaign list
+   focused; the arrow cursor). +0xb8 0x0047ade0: OK starts (0x0047b140),
+   Cancel opens the name selection, close quits, picking a campaign
+   chooses it and refills the scenarios, double-clicking a scenario is OK.
+   0x0047b140: with a scenario picked, it is chosen; the settings for a
+   campaign game (flag 0x8fc, 0x9a0 1, 0x9a4 0, 0xa8c / 0xa90 0, the
+   difficulty in 0x993 and 0xa10, 0xae5 and 0x1190 0, 0xa84 and 0xa88 1,
+   0x985 0, 0x986 and 0x982 1, 0xad6 1, 0xad7 / 0xad8 / 0xad9 0,
+   resources, age and 0xae4 0); every active scenario slot of 0..8 in
+   order gets a player (0xaa0 = slot, 0xac4 = slot + 1, 0x994 = 1), the
+   first human one swapped to player 0; the player count (0x988); comm
+   slot 1 human (2), the others up to the count computer (4), the rest
+   closed (0); then the game. A scenario that cannot be read shows 2506,
+   a game that cannot start 2401. */
+typedef struct {
+    AoeUiEzRor ez;
+    AoeUiTextRor *title;                        /* +0x478 */
+    int32_t camp_x, camp_y, camp_w, camp_h;     /* +0x47c..+0x488 */
+    AoeUiTextRor *campaign_label;               /* +0x48c */
+    AoeUiListRor *campaigns;                    /* +0x490 */
+    AoeUiScrollbarRor *campaigns_bar;           /* +0x494 */
+    int32_t scen_x, scen_y, scen_w, scen_h;     /* +0x498..+0x4a4 */
+    AoeUiTextRor *scenario_label;               /* +0x4a8 */
+    AoeUiListRor *scenarios;                    /* +0x4ac */
+    AoeUiScrollbarRor *scenarios_bar;           /* +0x4b0 */
+    AoeUiTextRor *difficulty_label;             /* +0x4b4 */
+    AoeUiDropdownRor *difficulty;               /* +0x4b8 */
+    AoeUiButtonRor *ok, *cancel, *close;        /* +0x4bc..+0x4c4 */
+    int32_t filled;                             /* +0x4c8 */
+    AoeGameUiRor *ui;
+} AoeCampaignSelectionRor;
+
+extern const AoeUiEzVtblRor aoe_campaign_selection_vtable_ror;
+int aoe_campaign_selection_init_ror(AoeCampaignSelectionRor *c, AoeGameUiRor *ui,
+                                    AoeUiAreaRor *area);
+void aoe_campaign_selection_fill_campaigns_ror(AoeCampaignSelectionRor *c);
+void aoe_campaign_selection_fill_scenarios_ror(AoeCampaignSelectionRor *c);
+void aoe_campaign_selection_start_ror(AoeCampaignSelectionRor *c);
 
 #endif

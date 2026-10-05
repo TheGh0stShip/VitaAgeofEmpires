@@ -109,6 +109,39 @@ static int ed_save_file(void *c, const char *f) { (void)c; (void)f; ++ed_saves; 
 static char saved_file[64];
 static int save_scen(void *c, const char *f) { (void)c; ++scen_saves; snprintf(saved_file, sizeof saved_file, "%s", f); return 1; }
 static void mp_setup(void *c) { (void)c; ++mp_setups; }
+static char **names_of(const char *const *src, int32_t n) {
+    char **out = malloc((size_t)n * sizeof *out);
+    for (int32_t i = 0; i < n; ++i) {
+        out[i] = malloc(strlen(src[i]) + 1);
+        strcpy(out[i], src[i]);
+    }
+    return out;
+}
+static int32_t camp_chosen_id = -1, camp_scenario_line = -1, camp_started, camp_states[10];
+static int32_t camp_titles(void *c, char ***names, int32_t *chosen) {
+    static const char *const t[] = {"Glory of Greece", "Ascent of Egypt"};
+    (void)c;
+    *names = names_of(t, 2);
+    *chosen = 1;
+    return 2;
+}
+static int32_t camp_scenarios(void *c, char ***names, int32_t *chosen) {
+    static const char *const s[] = {"Hunting", "Foraging", "Discoveries"};
+    (void)c;
+    *names = names_of(s, 3);
+    *chosen = 2;
+    return 3;
+}
+static void camp_choose(void *c, int32_t id) { (void)c; camp_chosen_id = id; }
+static void camp_choose_scenario(void *c, int32_t line) { (void)c; camp_scenario_line = line; }
+static int camp_slots(void *c, int32_t active[9], int32_t kind[9]) {
+    (void)c;
+    active[0] = active[2] = active[3] = 1;
+    kind[2] = 1;
+    return 1;
+}
+static void camp_state(void *c, int32_t slot, int32_t state) { (void)c; camp_states[slot] = state + 1; }
+static int camp_start(void *c) { (void)c; ++camp_started; return 1; }
 static const char *idx_name(void *c, int32_t i) { (void)c; return i == 0 ? "Gaul.scn" : i == 1 ? "Egypt.scx" : NULL; }
 static int idx_info(void *c, int32_t id, const char **d, int32_t *f, int32_t *pl) {
     (void)c; *d = id == 0 ? "About Gaul" : "About Egypt"; *f = id == 0; *pl = id == 0 ? 3 : 4; return 1;
@@ -593,6 +626,35 @@ int main(void) {
         assert(mp_setups == 1 && aoe_settings_flag_8fc_ror(&settings) == 1);
         assert(!strcmp(aoe_settings_scenario_name_ror(&settings), "Gaul"));
         assert(!aoe_ui_system_find_ror(&sys, "Select Scenario Screen"));
+    }
+    /* The campaign selection screen. */
+    {
+        AoeCampaignSelectionRor *cs = calloc(1, sizeof *cs);
+        AoeUiPanelRor *cp = &cs->ez.panel;
+        ops.campaign_titles = camp_titles;
+        ops.campaign_scenarios = camp_scenarios;
+        ops.choose_campaign = camp_choose;
+        ops.choose_scenario = camp_choose_scenario;
+        ops.campaign_scenario_slots = camp_slots;
+        ops.set_slot_state = camp_state;
+        ops.start_scenario_game = camp_start;
+        aoe_settings_set_byte_993_ror(&settings, 1);
+        assert(aoe_campaign_selection_init_ror(cs, &ui, &area));
+        assert(aoe_ui_text_count_ror(&cs->campaigns->text) == 2 && cs->campaigns->text.sorted);
+        assert(aoe_ui_text_selected_id_ror(&cs->campaigns->text) == 1 && camp_chosen_id == 1);
+        assert(aoe_ui_text_count_ror(&cs->scenarios->text) == 3);
+        assert(aoe_ui_text_selection_ror(&cs->scenarios->text) == 2);
+        assert(aoe_ui_dropdown_selected_id_ror(cs->difficulty) == 1);
+        cp->vt->action(cp, &cs->scenarios->text.panel, 3, 0, 0);
+        assert(camp_scenario_line == 2 && camp_started == 1);
+        assert(aoe_settings_byte_988_ror(&settings) == 3);
+        assert(aoe_settings_int_aa0_ror(&settings, 0) == 2 && aoe_settings_byte_ac4_ror(&settings, 0) == 3);
+        assert(aoe_settings_int_aa0_ror(&settings, 1) == 0 && aoe_settings_byte_ac4_ror(&settings, 1) == 1);
+        assert(aoe_settings_int_aa0_ror(&settings, 2) == 3);
+        assert(camp_states[1] == 3 && camp_states[2] == 5 && camp_states[3] == 5 &&
+               camp_states[4] == 1 && camp_states[9] == 1);
+        assert(aoe_settings_byte_993_ror(&settings) == 1 && aoe_settings_int_a10_ror(&settings) == 1);
+        aoe_ui_system_close_ror(&sys, "Campaign Selection Screen");
     }
     /* The game settings screen (single player, random map). */
     {

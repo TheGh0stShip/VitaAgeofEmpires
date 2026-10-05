@@ -68,9 +68,10 @@ typedef struct {
     void (*text_out)(void *context, int32_t x, int32_t y, const char *text,
                      int32_t count, uint32_t color);
     void (*text_end)(void *context);
-    /* Frame 0 of a picture's shape with its hotspot at (x, y). */
+    /* Frame `frame` of a picture's shape with its hotspot at (x, y), on
+       the area's locked surface (the original's shape draw). */
     void (*draw_shape)(void *context, AoeUiAreaRor *area, void *shape,
-                       int32_t x, int32_t y);
+                       int32_t frame, int32_t x, int32_t y);
 } AoeUiPlatformRor;
 
 typedef struct AoeUiNodeRor {

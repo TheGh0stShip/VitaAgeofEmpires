@@ -75,6 +75,16 @@ struct AoeUiButtonRor {
 
 extern const AoeUiButtonVtblRor aoe_ui_button_vtable_ror;
 
+/* +0x30 0x0045f4b0: draw types 2/4/6 draw the state's picture frame
+   (centred when asked), 3/4/5 its text (the state's or the first; a
+   second line under the first when the state has one; a shadow one
+   pixel down-left; the focus colours with focus), 3..6 the bevel (two
+   rectangles when disabled, else by type, inverted when pressed); 5
+   fills with the panel colour first, the others redraw the parent
+   behind. A pressed look (pressed, or not pressed when inverted) shifts
+   the picture and text one pixel right and up. */
+void aoe_ui_button_draw_slot_ror(AoeUiPanelRor *p);
+
 /* 0x0045ebf0 constructor (one state, colours white/black and yellow/
    black, frames -1, text centred); 0x0045ed50 destructor (deleting
    0x0045ed30); 0x0045edc0 setup (area, parent, x, y, w, h, draw type,

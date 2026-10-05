@@ -1,5 +1,9 @@
 #include "ui_button.h"
 
+#include "draw_prims.h"
+#include "draw_system.h"
+#include "shape.h"
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -482,6 +486,173 @@ static void set_rect(AoeUiPanelRor *p, int32_t x, int32_t y, int32_t w, int32_t 
     aoe_ui_panel_set_rect_ror(p, x, y, w, h);
 }
 
+/* ---- drawing (0x0045f4b0) ---- */
+
+static AoeShapeSurfaceRor *lock_area(AoeUiButtonRor *b) {
+    struct AoeDrawSurfaceRor *s = b->panel.area ? b->panel.area->surface : NULL;
+    if (!s || !aoe_surface_lock_ror(s, 1)) return NULL;
+    return &s->view;
+}
+
+static void unlock_area(AoeUiButtonRor *b) {
+    struct AoeDrawSurfaceRor *s = b->panel.area ? b->panel.area->surface : NULL;
+    if (s) aoe_surface_unlock_ror(s);
+}
+
+/* The pressed look: pressed, inverted by `invert_press`. */
+static int pressed_look(const AoeUiButtonRor *b) {
+    return b->invert_press ? !b->pressed : b->pressed != 0;
+}
+
+static void draw_text(AoeUiButtonRor *b, const AoeUiPlatformRor *pf,
+                      const char *text, int32_t x, int32_t y) {
+    int16_t st = b->state;
+    int32_t n = (int16_t)strlen(text);
+    uint32_t color = b->panel.has_focus ? b->focus_color[st] : b->text_color[st];
+    uint32_t shadow = b->panel.has_focus ? b->focus_shadow[st] : b->text_shadow[st];
+    pf->text_out(pf->context, x - 1, y + 1, text, n, shadow);
+    pf->text_out(pf->context, x, y, text, n, color);
+}
+
+void aoe_ui_button_draw_slot_ror(AoeUiPanelRor *p) {
+    AoeUiButtonRor *b = B(p);
+    const AoeUiPlatformRor *pf = p->system ? p->system->platform : NULL;
+    int16_t st = b->state;
+    AoeShapeSurfaceRor *v;
+    int32_t t = b->draw_type;
+    if (!p->area || !p->visible || !p->active || t == 1) {
+        p->redraw = 0;
+        return;
+    }
+    if (t == 5) {
+        struct AoeDrawSurfaceRor *s = p->area->surface;
+        if (s) {
+            int32_t r[4] = {p->clip.left, p->clip.top, p->clip.right,
+                            p->clip.bottom};
+            aoe_surface_fill_ror(s, r, p->color);
+        }
+    } else if (p->parent) {
+        if (b->bevel_type < 2 || b->bevel_type > 4) {
+            if (!p->parent->painting) p->parent->vt->draw_rect(p->parent, &p->clip);
+        } else {
+            p->parent->vt->draw_parent_rect(p->parent, &p->clip);
+        }
+    }
+    p->vt->begin_draw(p, 0);
+    if ((t == 2 || t == 4 || t == 6) && (v = lock_area(b)) != NULL) {
+        (void)v;
+        if (b->pictures[st]) {
+            int32_t x, y;
+            if (b->center_picture) {
+                int32_t x0 = 0, y0 = 0, x1 = -1, y1 = -1;
+                aoe_shape_bounds_ror(b->pictures[st], b->frames[st], &x0, &y0,
+                                     &x1, &y1);
+                b->picture_x = (int16_t)((int16_t)(p->width / 2) -
+                                         (int16_t)((x1 - x0 + 1) / 2) -
+                                         (int16_t)x0);
+                b->picture_y = (int16_t)((int16_t)(p->height / 2) -
+                                         (int16_t)((y1 - y0 + 1) / 2) -
+                                         (int16_t)y0);
+            }
+            x = b->picture_x + p->x;
+            y = b->picture_y + p->y;
+            if (pressed_look(b)) {
+                ++x;
+                --y;
+            }
+            if (pf && pf->draw_shape)
+                pf->draw_shape(pf->context, p->area, b->pictures[st],
+                               b->frames[st], x, y);
+        }
+        unlock_area(b);
+    }
+    if ((t == 3 || t == 4 || t == 5) && pf && pf->text_begin &&
+        pf->text_begin(pf->context, p->area, &p->clip, b->font)) {
+        int32_t tx = b->text_x == -1 ? p->width / 2 : b->text_x;
+        int32_t ty = b->text_y == -1 ? p->height / 2 : b->text_y;
+        const char *s1 = b->text1[st] ? b->text1[st] : b->text1[0];
+        if (s1) {
+            const char *s2;
+            int32_t w = pf->text_width
+                            ? pf->text_width(pf->context, b->font, s1,
+                                             (int16_t)strlen(s1))
+                            : 0;
+            int32_t x = p->x - w / 2 + tx;
+            int32_t y = (b->text2[st] ? p->y - b->font_height
+                                      : p->y - b->font_height / 2) + ty;
+            if (pressed_look(b)) {
+                ++x;
+                --y;
+            }
+            draw_text(b, pf, s1, x, y);
+            s2 = b->text2[st] ? b->text2[st] : b->text2[0];
+            if (s2) {
+                w = pf->text_width ? pf->text_width(pf->context, b->font, s2,
+                                                    (int16_t)strlen(s2))
+                                   : 0;
+                x = p->x - w / 2 + tx;
+                y = p->y + ty;
+                if (pressed_look(b)) {
+                    ++x;
+                    --y;
+                }
+                draw_text(b, pf, s2, x, y);
+            }
+        }
+        pf->text_end(pf->context);
+    }
+    if ((t == 3 || t == 4 || t == 5 || t == 6) && (v = lock_area(b)) != NULL) {
+        const uint8_t *e = b->bevel;
+        int32_t l = p->x, top = p->y, r = p->width - 1 + p->x,
+                bot = p->height - 1 + p->y;
+        uint8_t c[6];
+        if (b->disabled) {
+            aoe_draw_rect_ror(v, l, top, r, bot, e[5]);
+            aoe_draw_rect_ror(v, l + 1, top + 1, r - 1, bot - 1, e[0]);
+        } else if (pressed_look(b)) {
+            switch (b->bevel_type) {
+            case 1:
+                aoe_draw_rect_ror(v, l + 1, top + 1, r - 1, bot - 1, 0xff);
+                break;
+            case 2:
+                aoe_draw_bevel1_ror(v, l, top, r, bot, e[5], e[0]);
+                break;
+            case 3:
+                c[0] = e[5], c[1] = e[4], c[2] = e[1], c[3] = e[0];
+                aoe_draw_bevel2_flat_ror(v, l, top, r, bot, c);
+                break;
+            case 4:
+                c[0] = e[5], c[1] = e[4], c[2] = e[3], c[3] = e[2],
+                c[4] = e[1], c[5] = e[0];
+                aoe_draw_bevel3_flat_ror(v, l, top, r, bot, c);
+                break;
+            }
+        } else {
+            switch (b->bevel_type) {
+            case 1:
+                aoe_draw_vline_ror(v, p->x - 1 + p->width, p->y + 1,
+                                   p->height - 1, 0);
+                aoe_draw_hline_ror(v, p->x + 1, p->y - 1 + p->height,
+                                   p->width - 1, 0);
+                aoe_draw_rect_ror(v, l, top, r - 1, bot - 1, 0xff);
+                break;
+            case 2:
+                aoe_draw_bevel1_ror(v, l, top, r, bot, e[0], e[5]);
+                break;
+            case 3:
+                c[0] = e[0], c[1] = e[1], c[2] = e[4], c[3] = e[5];
+                aoe_draw_bevel2_ror(v, l, top, r, bot, c);
+                break;
+            case 4:
+                aoe_draw_bevel3_ror(v, l, top, r, bot, e);
+                break;
+            }
+        }
+        unlock_area(b);
+    }
+    p->vt->end_draw(p);
+}
+
 const AoeUiButtonVtblRor aoe_ui_button_vtable_ror = {
     {button_destroy,
      aoe_ui_panel_setup_ror,
@@ -495,7 +666,7 @@ const AoeUiButtonVtblRor aoe_ui_button_vtable_ror = {
      aoe_ui_panel_redraw_overlaps_ror,
      aoe_ui_panel_begin_draw_ror,
      aoe_ui_panel_end_draw_ror,
-     aoe_ui_panel_draw_ror,
+     aoe_ui_button_draw_slot_ror,
      aoe_ui_panel_draw_rect_ror,
      aoe_ui_panel_draw_offset_ror,
      aoe_ui_panel_draw_parent_rect_ror,

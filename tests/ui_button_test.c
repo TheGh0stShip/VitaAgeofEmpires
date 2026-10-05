@@ -1,7 +1,9 @@
 /* Patched RoR 1.0a button panel 0x0045ebf0..0x00460700. */
 #include "ui_button.h"
+#include "draw_system.h"
 
 #include <assert.h>
+#include <stdio.h>
 #include <string.h>
 
 typedef struct {
@@ -32,6 +34,26 @@ static int shape_hit(void *c, void *pic, int32_t x, int32_t y, int16_t f) {
 static void string(void *c, int32_t id, char *out, int size) {
     (void)c;
     if (id == 9) strncpy(out, "Top\nBottom", (size_t)size);
+}
+
+static char outs[8][40];
+static int nouts;
+static int t_begin(void *c, AoeUiAreaRor *a, const AoeUiRectRor *r, uintptr_t f) {
+    (void)c; (void)a; (void)r; (void)f;
+    return 1;
+}
+static void t_out(void *c, int32_t x, int32_t y, const char *t, int32_t n,
+                  uint32_t color) {
+    (void)c;
+    if (nouts < 8)
+        snprintf(outs[nouts], sizeof outs[0], "%d,%d,%.*s,%x", (int)x, (int)y,
+                 (int)n, t, (unsigned)color);
+    ++nouts;
+}
+static void t_end(void *c) { (void)c; }
+static int32_t t_width(void *c, uintptr_t f, const char *t, int32_t n) {
+    (void)c; (void)f; (void)t;
+    return n * 6;
 }
 
 int main(void) {
@@ -123,6 +145,61 @@ int main(void) {
     assert(!c.sound && c.panel.vt->restart_sound(&c.panel) && c.sound == &env);
 
     aoe_ui_button_release_ror(&c);
+
+    /* Drawing a type-3 button: centred text with its shadow one pixel
+       down-left, then the bevel; pressed, both shift right and up and the
+       bevel inverts. */
+    {
+        static uint8_t bits[640 * 40];
+        static uint8_t *rows[40];
+        static AoeDrawSystemRor d;
+        static AoeDrawSurfaceRor surf;
+        static AoeUiButtonRor btn;
+        int i;
+        d.type = 1;
+        surf.system = &d;
+        surf.view.bits = bits;
+        surf.view.width = 640;
+        surf.view.height = 40;
+        surf.view.pitch = 640;
+        surf.view.direction = 1;
+        surf.view.clip_right = 639;
+        surf.view.clip_bottom = 39;
+        for (i = 0; i < 40; ++i) rows[i] = bits + 640 * i;
+        surf.rows = rows;
+        area.surface = &surf;
+        pf.text_begin = t_begin;
+        pf.text_out = t_out;
+        pf.text_end = t_end;
+        pf.text_width = t_width;
+        aoe_ui_button_init_ror(&btn, &sys, &ops);
+        assert(aoe_ui_button_setup_ror(&btn, &area, &root, 10, 10, 80, 20, 3,
+                                       NULL, 1, 1));
+        btn.text1[0] = "Go";
+        btn.font_height = 10;
+        btn.text_color[0] = 0x11;
+        btn.text_shadow[0] = 0x22;
+        btn.bevel_type = 2;
+        memcpy(btn.bevel, (const uint8_t[6]){1, 2, 3, 4, 5, 6}, 6);
+        btn.panel.vt->draw(&btn.panel);
+        /* x = 10 - 12/2 + 40 = 44, y = 10 - 5 + 10 = 15. */
+        assert(nouts == 2 && !strcmp(outs[0], "43,16,Go,22") &&
+               !strcmp(outs[1], "44,15,Go,11"));
+        /* Bevel type 2 unpressed: top/right in bevel[0], bottom/left in
+           bevel[5]. */
+        assert(bits[10 * 640 + 11] == 1 && bits[29 * 640 + 10] == 6);
+        nouts = 0;
+        btn.pressed = 1;
+        memset(bits, 0, sizeof bits);
+        btn.panel.vt->draw(&btn.panel);
+        assert(!strcmp(outs[1], "45,14,Go,11"));
+        assert(bits[10 * 640 + 11] == 6 && bits[29 * 640 + 10] == 1);
+        btn.pressed = 0;
+        btn.panel.parent = NULL;
+        area.surface = NULL;
+        btn.text1[0] = NULL;
+        aoe_ui_button_release_ror(&btn);
+    }
     aoe_ui_button_release_ror(&b);
     aoe_ui_button_release_ror(&a);
     aoe_ui_panel_release_ror(&root);

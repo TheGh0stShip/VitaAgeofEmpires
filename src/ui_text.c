@@ -494,7 +494,7 @@ static void draw_background(AoeUiTextRor *t) {
         for (j = 0; j < rows; ++j)
             for (i = 0; i < cols; ++i)
                 if (pf && pf->draw_shape)
-                    pf->draw_shape(pf->context, p->area, t->background,
+                    pf->draw_shape(pf->context, p->area, t->background, 0,
                                    t->background_w * i + p->x,
                                    t->background_h * j + p->y);
         unlock_area(t);

@@ -239,9 +239,9 @@ typedef struct {
        (0x00520660). */
     int (*free_tile)(void *context, int32_t id, float x, float y);
     int32_t (*world_100)(void *context);
-    /* A unit AI's path (0x00458400 cursor, 0x00458340 count): the
-       waypoint count, 0 when the cursor is -1. */
-    int (*path_count)(void *context, int32_t id, int32_t *count);
+    /* A unit AI's +0x2c (0x00458340), read next to its task (+0x30,
+       0x00458400); 0 without a unit AI. */
+    int (*unit_2c)(void *context, int32_t id, int32_t *value);
     /* The Build AI's pending costs (0x004b8960 into `costs`, at most
        `limit` items) and the Resource AI's amount `i` (0x004c8c60). */
     void (*build_costs)(void *context, AoeAiCountersRor *costs, int32_t limit);
@@ -281,11 +281,11 @@ void aoe_ai_tactical_unit_removed_ror(AoeAiTacticalRor *ai, int32_t unit,
                                       const AoeAiTacticalOpsRor *ops,
                                       const AoeAiUnitGroupOpsRor *group_ops);
 /* 0x004d8960: list 2's units that exist with a unit AI and are not on
-   +0xd58, by their path's waypoint count against `n`: `mode` below 0
-   takes those without a path or with fewer, 0 those with exactly `n`,
-   above 0 those with more. Taken units go on +0xd48 once (emptied first
+   +0xd58, by their AI's task and +0x2c against `n`: `mode` below 0 takes
+   those without a task (-1) or with +0x2c below `n`, 0 those with a task
+   and +0x2c equal to `n`, above 0 those with a task and +0x2c above. Taken units go on +0xd48 once (emptied first
    when `reset` is 1); returns how many were taken (repeats counted). */
-int32_t aoe_ai_tactical_collect_by_path_ror(AoeAiTacticalRor *ai, int32_t n,
+int32_t aoe_ai_tactical_collect_by_order_ror(AoeAiTacticalRor *ai, int32_t n,
                                             int32_t mode, int32_t reset,
                                             const AoeAiTacticalOpsRor *ops);
 /* 0x004d8be0: the same test (+0xd48 always emptied first) over list 5,
@@ -293,7 +293,7 @@ int32_t aoe_ai_tactical_collect_by_path_ror(AoeAiTacticalRor *ai, int32_t n,
 int32_t aoe_ai_tactical_collect_support_ror(AoeAiTacticalRor *ai, int32_t n,
                                             int32_t mode,
                                             const AoeAiTacticalOpsRor *ops);
-/* 0x004d90b0: an idle villager (no path and no action): first one of
+/* 0x004d90b0: an idle villager (no AI task and no action): first one of
    list 0 not on +0xd58, with a unit AI, not a gatherer (0x004e1a10) and
    not on list 1; failing that, by `mode`: 0 any, 3 not on list 1, 1 not
    a gatherer, others neither. Its ID, else -1. */

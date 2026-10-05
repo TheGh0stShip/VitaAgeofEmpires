@@ -1122,28 +1122,29 @@ void aoe_ai_tactical_unit_removed_ror(AoeAiTacticalRor *ai, int32_t unit,
 }
 
 /* One unit of the path collections: on +0xd48 (counted) when it exists
-   with a unit AI, is not on +0xd58 and its path matches. */
+   with a unit AI, is not on +0xd58 and its AI's task and +0x2c match. */
 static int32_t collect_one(AoeAiTacticalRor *ai, int32_t id, int32_t n, int32_t mode,
                            const AoeAiTacticalOpsRor *ops, int16_t *type_class) {
-    int32_t task, count;
+    int32_t task, count = 0;
     AoeAiWorldObjectRor o;
-    int has_path, take;
+    int has_task, take;
     if (!ops || !ops->world_object || !ops->world_object(ops->context, id, &o) ||
         !ops->unit_task || !ops->unit_task(ops->context, id, &task))
         return 0;
     if (aoe_ai_int_list_contains_ror(&ai->list_d58, id)) return 0;
     if (type_class && *type_class != 0 && o.type_class != 0x12 && o.type_class != 0xd)
         return 0;
-    has_path = ops->path_count && ops->path_count(ops->context, id, &count);
-    if (mode < 0) take = !has_path || count < n;
-    else if (mode < 1) take = has_path && count == n;
-    else take = has_path && n < count;
+    has_task = task != -1;
+    if (has_task && ops->unit_2c) ops->unit_2c(ops->context, id, &count);
+    if (mode < 0) take = !has_task || count < n;
+    else if (mode < 1) take = has_task && count == n;
+    else take = has_task && n < count;
     if (!take) return 0;
     aoe_ai_int_list_add_unique_ror(&ai->list_d48, id);
     return 1;
 }
 
-int32_t aoe_ai_tactical_collect_by_path_ror(AoeAiTacticalRor *ai, int32_t n,
+int32_t aoe_ai_tactical_collect_by_order_ror(AoeAiTacticalRor *ai, int32_t n,
                                             int32_t mode, int32_t reset,
                                             const AoeAiTacticalOpsRor *ops) {
     int32_t i, taken = 0, *v;
@@ -1171,10 +1172,10 @@ int32_t aoe_ai_tactical_collect_support_ror(AoeAiTacticalRor *ai, int32_t n,
     return taken;
 }
 
-/* No path and no action. */
+/* No AI task and no action. */
 static int villager_idle(const AoeAiTacticalOpsRor *ops, int32_t id) {
-    int32_t count, action;
-    if (ops->path_count && ops->path_count(ops->context, id, &count)) return 0;
+    int32_t task, action;
+    if (!ops->unit_task || !ops->unit_task(ops->context, id, &task) || task != -1) return 0;
     return ops->unit_action && ops->unit_action(ops->context, id, &action) && action == -1;
 }
 

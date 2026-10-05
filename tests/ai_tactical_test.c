@@ -424,12 +424,15 @@ static void step_and_added_tests(void) {
     orders = 0;
 }
 
-static int path_n(void *c, int32_t id, int32_t *n) {
+/* Units 40..44 and 801/802: task -1 for 40 and the villagers 900..902,
+   else 7; +0x2c id - 40. */
+static int order_task(void *c, int32_t id, int32_t *t) {
     (void)c;
-    if (id == 40 || id >= 900) return 0;
-    *n = id - 40;
+    if (id == 803) return 0;
+    *t = id == 40 || id >= 900 ? -1 : 7;
     return 1;
 }
+static int order_2c(void *c, int32_t id, int32_t *n) { (void)c; *n = id - 40; return 1; }
 
 static int idle_action(void *c, int32_t id, int32_t *a) { (void)c; (void)id; *a = -1; return 1; }
 static double id_dist(void *c, int32_t id, float x, float y, float z) {
@@ -474,8 +477,8 @@ static void removed_and_path_tests(void) {
     memset(&ops, 0, sizeof ops);
     ops.object = tobject;
     ops.world_object = tobject;
-    ops.unit_task = ttask;
-    ops.path_count = path_n;
+    ops.unit_task = order_task;
+    ops.unit_2c = order_2c;
     aoe_ai_tactical_init_ror(&ai, 1, NULL);
     aoe_ai_int_list_add_unique_ror(&ai.lists[4], 50);
     aoe_ai_int_list_add_unique_ror(&ai.lists[6], 50);
@@ -490,19 +493,19 @@ static void removed_and_path_tests(void) {
     aoe_ai_tactical_unit_removed_ror(&ai, 51, &ops, NULL);
     assert(ai.lists[9].count == 1 && ai.lists[9].data[0] == 50);
 
-    /* 0x004d8960 over list 2: 40 (no path), 41..44 (1..4 waypoints), 43 on
+    /* 0x004d8960 over list 2: 40 (no task), 41..44 (+0x2c 1..4), 43 on
        +0xd58, 803 without a unit AI. */
     for (i = 40; i <= 44; ++i) aoe_ai_int_list_add_unique_ror(&ai.lists[2], i);
     aoe_ai_int_list_add_unique_ror(&ai.lists[2], 803);
     aoe_ai_int_list_add_unique_ror(&ai.list_d58, 43);
-    assert(aoe_ai_tactical_collect_by_path_ror(&ai, 2, -1, 1, &ops) == 2);
+    assert(aoe_ai_tactical_collect_by_order_ror(&ai, 2, -1, 1, &ops) == 2);
     assert(ai.list_d48.count == 2 && ai.list_d48.data[0] == 40 && ai.list_d48.data[1] == 41);
-    assert(aoe_ai_tactical_collect_by_path_ror(&ai, 2, 0, 0, &ops) == 1 && ai.list_d48.count == 3);
-    assert(aoe_ai_tactical_collect_by_path_ror(&ai, 2, 1, 1, &ops) == 1 &&
+    assert(aoe_ai_tactical_collect_by_order_ror(&ai, 2, 0, 0, &ops) == 1 && ai.list_d48.count == 3);
+    assert(aoe_ai_tactical_collect_by_order_ror(&ai, 2, 1, 1, &ops) == 1 &&
            ai.list_d48.count == 1 && ai.list_d48.data[0] == 44);
-    assert(aoe_ai_tactical_collect_by_path_ror(&ai, 2, 1, 0, &ops) == 1 && ai.list_d48.count == 1);
+    assert(aoe_ai_tactical_collect_by_order_ror(&ai, 2, 1, 0, &ops) == 1 && ai.list_d48.count == 1);
     /* 0x004d8be0: list 5 (any class), then list 2's priests (801) and
-       siege (802) only; 801 / 802 have 761 / 762 waypoints. */
+       siege (802) only; 801 / 802 have +0x2c 761 / 762. */
     aoe_ai_int_list_add_unique_ror(&ai.lists[5], 41);
     aoe_ai_int_list_add_unique_ror(&ai.lists[2], 801);
     aoe_ai_int_list_add_unique_ror(&ai.lists[2], 802);

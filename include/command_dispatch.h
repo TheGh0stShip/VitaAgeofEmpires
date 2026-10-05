@@ -143,4 +143,26 @@ void aoe_command_bind_building_queue_ror(AoeCommandTribeDispatchRor *dispatch,
 void aoe_command_bind_player_tribute_ror(AoeCommandDispatchRor *dispatch,
                                          const AoeCommandPlayerOps *ops);
 
+/* The command processor (0x18 bytes; base vtable 0x00543498, tribe
+   0x00549904). 0x0042a0b0 constructs it (world +0x04, comm +0x14, the
+   buffer +0x08 and +0x0c cleared; the base world's +0x54 0x0051c790 and
+   the tribe constructor 0x004e8390 build one at world +0x58). 0x0042a100
+   destroys it (the buffer freed, world and comm cleared; thunk 0x004e83d0,
+   deleting 0x0042a0e0 / 0x004e83b0). 0x0042a140: with a comm object,
+   each next command (0x0041ead0) goes to +0x08 and is freed. */
+typedef struct {
+    void *world;          /* +0x04 */
+    uint8_t *buffer;      /* +0x08 */
+    int32_t field_0c;     /* +0x0c */
+    void *comm;           /* +0x14 */
+} AoeCommandProcessorRor;
+
+void aoe_command_processor_init_ror(AoeCommandProcessorRor *p, void *world, void *comm);
+void aoe_command_processor_release_ror(AoeCommandProcessorRor *p);
+/* `next` returns a heap command (freed here) or NULL; `run` is +0x08. */
+void aoe_command_processor_run_ror(AoeCommandProcessorRor *p,
+                                   uint8_t *(*next)(void *context, void *comm),
+                                   void (*run)(void *context, const uint8_t *command),
+                                   void *context);
+
 #endif

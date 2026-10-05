@@ -1,5 +1,7 @@
 #include "command_dispatch.h"
 
+#include <stdlib.h>
+
 static AoeCommandRouteRor call(const AoeCommandBindingRor *binding,
                                const uint8_t *command, size_t size) {
     if (!binding->handler) return AOE_COMMAND_ROUTE_UNBOUND;
@@ -274,4 +276,30 @@ void aoe_command_bind_place_ror(AoeCommandTribeDispatchRor *dispatch,
         .handler = place;
     dispatch->tribe[AOE_COMMAND_PLACE_ROR - AOE_COMMAND_TRIBE_FIRST_ROR]
         .context = (void *)ops;
+}
+
+void aoe_command_processor_init_ror(AoeCommandProcessorRor *p, void *world, void *comm) {
+    p->world = world;
+    p->comm = comm;
+    p->buffer = NULL;
+    p->field_0c = 0;
+}
+
+void aoe_command_processor_release_ror(AoeCommandProcessorRor *p) {
+    p->world = NULL;
+    p->comm = NULL;
+    free(p->buffer);
+    p->buffer = NULL;
+}
+
+void aoe_command_processor_run_ror(AoeCommandProcessorRor *p,
+                                   uint8_t *(*next)(void *context, void *comm),
+                                   void (*run)(void *context, const uint8_t *command),
+                                   void *context) {
+    uint8_t *command;
+    if (!p->comm || !next) return;
+    while ((command = next(context, p->comm)) != NULL) {
+        if (run) run(context, command);
+        free(command);
+    }
 }

@@ -1,6 +1,7 @@
 #include "command_dispatch.h"
 
 #include <assert.h>
+#include <stdlib.h>
 #include <string.h>
 
 static float values[0x40];
@@ -33,6 +34,17 @@ static int tribute(void *context, const uint8_t *command, size_t size) {
     ++calls;
     return 0;
 }
+
+static int proc_left = 3, proc_runs;
+static uint8_t *proc_next(void *c, void *comm) {
+    uint8_t *cmd;
+    (void)c;
+    if (!comm || !proc_left) return NULL;
+    cmd = malloc(4);
+    cmd[0] = (uint8_t)proc_left--;
+    return cmd;
+}
+static void proc_run(void *c, const uint8_t *cmd) { (void)c; proc_runs += cmd[0]; }
 
 int main(void) {
     AoeCommandDispatchRor dispatch;
@@ -129,6 +141,20 @@ int main(void) {
         tribe.rng = 0;
         assert(aoe_command_dispatch_tribe_ror(&tribe, record, 8) ==
                AOE_COMMAND_ROUTE_INVALID && calls == 2);
+    }
+    {
+        /* 0x0042a0b0 / 0x0042a140 / 0x0042a100 the processor. */
+        AoeCommandProcessorRor proc;
+        int comm = 1;
+        aoe_command_processor_init_ror(&proc, NULL, NULL);
+        aoe_command_processor_run_ror(&proc, proc_next, proc_run, NULL);
+        assert(proc_runs == 0);
+        aoe_command_processor_init_ror(&proc, &comm, &comm);
+        proc.buffer = malloc(8);
+        aoe_command_processor_run_ror(&proc, proc_next, proc_run, NULL);
+        assert(proc_runs == 6 && proc_left == 0);
+        aoe_command_processor_release_ror(&proc);
+        assert(!proc.buffer && !proc.comm && !proc.world);
     }
     return 0;
 }

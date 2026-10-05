@@ -823,17 +823,6 @@ static void list_add_cap(AoeAiIntListRor *list, int32_t value) {
     aoe_ai_int_list_add_unique_ror(list, value);
 }
 
-/* Remove the first match within the capacity, shifting the rest down;
-   the count drops (not below 0). */
-static void list_remove_cap(AoeAiIntListRor *list, int32_t value) {
-    int32_t i, n = list->capacity;
-    for (i = 0; i < n; ++i)
-        if (list->data[i] == value) break;
-    if (i >= n) return;
-    for (; i < n - 1; ++i) list->data[i] = list->data[i + 1];
-    if (--list->count < 0) list->count = 0;
-}
-
 static int sn_positive(const AoeAiInfoOpsRor *ops, int32_t index) {
     return ops->sn && ops->sn(ops->context, index) > 0;
 }
@@ -972,8 +961,8 @@ void aoe_ai_info_lose_object_ror(AoeAiInfoRor *info, int32_t id,
                                  const AoeAiInfoOpsRor *ops) {
     AoeAiObjectViewRor o;
     if (!info) return;
-    list_remove_cap(&info->list_190, id);
-    list_remove_cap(&info->list_180, id);
+    aoe_ai_int_list_remove_ror(&info->list_190, id);
+    aoe_ai_int_list_remove_ror(&info->list_180, id);
     if (get_object(ops, id, &o)) {
         AoeAiInfoObjectRor *e = aoe_ai_info_find_object_ror(info, id);
         if (e) e->owner = (uint8_t)o.owner;

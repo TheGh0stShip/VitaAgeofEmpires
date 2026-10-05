@@ -34,6 +34,10 @@ int aoe_ai_int_list_add_unique_ror(AoeAiIntListRor *list, int32_t value);
    i + 1 when it is smaller (the count is unchanged). NULL when that
    allocation fails (the original then indexes the old array). */
 int32_t *aoe_ai_int_list_at_ror(AoeAiIntListRor *list, int32_t i);
+/* 0x004e3af0: remove the first match, searching the whole capacity as the
+   original does, shifting the rest down; the count drops (not below 0).
+   1 when found. */
+int aoe_ai_int_list_remove_ror(AoeAiIntListRor *list, int32_t value);
 /* Free the storage and zero the list (the destructors' inline form). */
 void aoe_ai_int_list_release_ror(AoeAiIntListRor *list);
 

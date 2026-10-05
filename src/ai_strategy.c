@@ -55,6 +55,18 @@ int32_t *aoe_ai_int_list_at_ror(AoeAiIntListRor *list, int32_t i) {
     return &list->data[i];
 }
 
+int aoe_ai_int_list_remove_ror(AoeAiIntListRor *list, int32_t value) {
+    int32_t i, n;
+    if (!list) return 0;
+    n = list->capacity;
+    for (i = 0; i < n; ++i)
+        if (list->data[i] == value) break;
+    if (i >= n) return 0;
+    for (; i < n - 1; ++i) list->data[i] = list->data[i + 1];
+    if (--list->count < 0) list->count = 0;
+    return 1;
+}
+
 void aoe_ai_int_list_release_ror(AoeAiIntListRor *list) {
     if (!list) return;
     free(list->data);

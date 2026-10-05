@@ -52,6 +52,9 @@ static void gsetup(void *c, AoeTileMapRor *m, int32_t w, int32_t a, int32_t b) {
 static void ggen(void *c) { (void)c; ++g_gen; }
 static void gfin(void *c) { (void)c; ++g_fin; }
 
+static int32_t map_sound(void *c, int border, int i) { (void)c; return border ? -1 : 40 + i; }
+static void map_ctl(void *c, AoeOutcomeStream *s) { (void)c; aoe_stream_put_u8(s, 0xab); }
+
 int main(void) {
     AoeTileMapOpsRor ops = {NULL, t_resize, t_refresh, t_rect, t_cell, t_begin, t_end, t_border, t_used};
     AoeTileMapRor m;
@@ -144,6 +147,20 @@ int main(void) {
         g_seed = 9;
         assert(aoe_tilemap_generate_ror(&m, 0, 4, 3, 1, 2, &ops, &gen) && g_used == 9);
         assert(m.width == 4 && m.height == 3);
+    }
+    {
+        static uint8_t image[AOE_MAP_RECORD_SIZE], out[AOE_MAP_RECORD_SIZE + 8];
+        AoeOutcomeStream o = {out, sizeof out, 0, 0};
+        image[0x8c] = 1;                 /* terrain 0 enabled */
+        image[0x8c + 0x198 + 0x24] = 9;  /* terrain 1 disabled: slot kept */
+        image[0x338c + 0x5a0] = 1;       /* border 1 enabled */
+        image[0x33b0] = 5;               /* border 0 disabled: -1 */
+        image[0x8dcf] = 0x77;
+        assert(aoe_tilemap_save_data_ror(image, map_sound, map_ctl, NULL, &o));
+        assert(o.pos == AOE_MAP_RECORD_SIZE + 1 && out[AOE_MAP_RECORD_SIZE] == 0xab);
+        assert(out[0xb0] == 40 && out[0xb1] == 0 && out[0xb0 + 0x198] == 9);
+        assert(out[0x33b0] == 0xff && out[0x33b3] == 0xff && out[0x33b0 + 0x5a0] == 0xff);
+        assert(out[0x8dcf] == 0x77 && image[0xb0] == 0);
     }
     free(m.tiles);
     return 0;

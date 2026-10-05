@@ -1,6 +1,8 @@
 #include "tile_map.h"
 
 #include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 
 #include "aoe_stream.h"
 
@@ -259,4 +261,33 @@ int aoe_tilemap_generate_ror(AoeTileMapRor *m, int32_t world, int32_t w, int32_t
     gen->log(gen->context, line);
     gen->set_world_flag(gen->context, saved);
     return ok;
+}
+
+static void put32at(uint8_t *p, int32_t v) {
+    p[0] = (uint8_t)v;
+    p[1] = (uint8_t)((uint32_t)v >> 8);
+    p[2] = (uint8_t)((uint32_t)v >> 16);
+    p[3] = (uint8_t)((uint32_t)v >> 24);
+}
+
+int aoe_tilemap_save_data_ror(const uint8_t image[AOE_MAP_RECORD_SIZE],
+                              int32_t (*sound_id)(void *context, int border, int index),
+                              void (*controller_save)(void *context, AoeOutcomeStream *s),
+                              void *context, AoeOutcomeStream *s) {
+    uint8_t *copy = calloc(1, AOE_MAP_RECORD_SIZE);
+    int i;
+    if (!copy) return 0;
+    memcpy(copy, image, AOE_MAP_RECORD_SIZE);
+    for (i = 0; i < AOE_MAP_TERRAINS; ++i) {
+        size_t base = 0x8c + (size_t)i * 0x198;
+        if (image[base] != 0) put32at(copy + base + 0x24, sound_id(context, 0, i));
+    }
+    for (i = 0; i < AOE_MAP_BORDERS; ++i) {
+        size_t base = 0x338c + (size_t)i * 0x5a0;
+        put32at(copy + base + 0x24, image[base] != 0 ? sound_id(context, 1, i) : -1);
+    }
+    aoe_stream_put(s, copy, AOE_MAP_RECORD_SIZE);
+    controller_save(context, s);
+    free(copy);
+    return !s->failed;
 }

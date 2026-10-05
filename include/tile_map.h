@@ -132,4 +132,26 @@ int aoe_tilemap_generate_ror(AoeTileMapRor *m, int32_t world, int32_t w, int32_t
                              int32_t b, const AoeTileMapOpsRor *ops,
                              const AoeTileMapGenOpsRor *gen);
 
+/* 0x00446a20 (map +0x2c; the RoR map's 0x004ed850 forwards to it): the
+   data-file save. The whole 0x8dd0-byte map record is written with its
+   sound pointers replaced by sound IDs: for each of the 32 terrains
+   (0x198 bytes from +0x8c) that is enabled (its first byte), the slot at
+   record +0xb0 + i * 0x198 becomes the sound's ID or -1 when it has
+   none; for each of the 16 borders (0x5a0 bytes from +0x338c) the slot
+   at +0x33b0 + i * 0x5a0 becomes the ID, or -1 when the border is
+   disabled or has no sound. Then the random map controller's save
+   (0x0046dcc0). Here `image` is the record in its 32-bit disk layout
+   (the other pointer slots as they are, which the original also writes
+   raw), and `sound_id` gives a terrain's (border 0) or border's (1)
+   sound ID, -1 for none. */
+enum {
+    AOE_MAP_RECORD_SIZE = 0x8dd0,
+    AOE_MAP_TERRAINS = 32,
+    AOE_MAP_BORDERS = 16
+};
+int aoe_tilemap_save_data_ror(const uint8_t image[AOE_MAP_RECORD_SIZE],
+                              int32_t (*sound_id)(void *context, int border, int index),
+                              void (*controller_save)(void *context, AoeOutcomeStream *s),
+                              void *context, AoeOutcomeStream *s);
+
 #endif

@@ -78,7 +78,27 @@ typedef struct {
     int (*can_act_on)(void *context, const AoeUnitAiObjectRor *object, int32_t id);
     void (*self_stop)(void *context, int force);
     int (*rand)(void *context);                                 /* 0x0052605d */
+    /* The unit's owner index (the original's 0x0040f6a0 returns the owner
+       pointer, unit +0x0c), its group count (+0x68) and leader ID
+       (+0x78); a unit AI's vtable +0xd0 with a 6-value record (ours for
+       `id` -1, else that object's unit AI when it has one); the owner's
+       vtable +0xe8 with the values. */
+    int16_t unit_owner;
+    int32_t (*unit_group_count)(void *context);
+    int32_t (*unit_leader)(void *context);
+    void (*ai_d0)(void *context, int32_t id, const int32_t values[6]);
+    void (*owner_e8)(void *context, const int32_t values[6]);
 } AoeUnitAiOpsRor;
+
+/* 0x0040f6a0: the unit's owner (unit +0x0c). */
+int16_t aoe_unit_ai_owner_ror(const AoeUnitAiOpsRor *ops);
+/* Unit AI vtable +0x18 = 0x00410a20(six values): a unit in a group
+   (0x004abc70: +0x68 above 0) hands the record to its group: through our
+   own +0xd0 when it leads (+0x78 is its ID), else through the leader's
+   unit AI (0x00414f40) when there is one. The owner hears it (+0xe8)
+   either way; 1. +0x1c = 0x004109f0 unpacks a record into it. */
+int aoe_unit_ai_post_ror(const AoeUnitAiOpsRor *ops, const int32_t values[6]);
+int aoe_unit_ai_post_record_ror(const AoeUnitAiOpsRor *ops, const int32_t record[6]);
 
 /* Bookkeeping: 0x0040f6b0 / 0x0040f6c0 the action (+0x28; the old one to
    +0x50), 0x0040f6d0 the order (+0x30; the old one to +0x54),

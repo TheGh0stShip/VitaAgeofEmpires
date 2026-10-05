@@ -33,6 +33,16 @@ static int seq;
 static int rnd(void *c) { (void)c; return seq++; }
 static uint32_t vis(void *c, int32_t x, int32_t y) { (void)c; return (uint32_t)(x + y); }
 
+static int post_group = 1, post_d0_id = -2, post_e8;
+static int32_t post_leader = 5;
+static int32_t pg_count(void *c) { (void)c; return post_group; }
+static int32_t pg_leader(void *c) { (void)c; return post_leader; }
+static void pg_d0(void *c, int32_t id, const int32_t v[6]) { (void)c; (void)v; post_d0_id = id; }
+static void pg_e8(void *c, const int32_t v[6]) { (void)c; post_e8 = v[0]; }
+static int pg_object(void *c, int32_t id, AoeUnitAiObjectRor *o) {
+    (void)c; memset(o, 0, sizeof *o); return id == 9;
+}
+
 int main(void) {
     static AoeUnitAiRor ai;
     AoeUnitAiOpsRor ops = {0};
@@ -198,6 +208,33 @@ int main(void) {
                o.records[1][5] == 6);
         free(q.records);
         free(o.records);
+    }
+    /* 0x00410a20 / 0x004109f0: a leader posts to its own group, a member
+       through its leader (when it exists); the owner always hears. */
+    {
+        AoeUnitAiOpsRor p = {0};
+        int32_t rec[6] = {7, 1, 2, 3, 4, 5};
+        p.unit_id = 5;
+        p.unit_owner = 3;
+        p.unit_group_count = pg_count;
+        p.unit_leader = pg_leader;
+        p.ai_d0 = pg_d0;
+        p.owner_e8 = pg_e8;
+        p.object = pg_object;
+        assert(aoe_unit_ai_owner_ror(&p) == 3);
+        assert(aoe_unit_ai_post_record_ror(&p, rec) == 1 && post_d0_id == -1 && post_e8 == 7);
+        post_leader = 9;
+        post_d0_id = -2;
+        aoe_unit_ai_post_ror(&p, rec);
+        assert(post_d0_id == 9);
+        post_leader = 8; /* gone */
+        post_d0_id = -2;
+        aoe_unit_ai_post_ror(&p, rec);
+        assert(post_d0_id == -2);
+        post_group = 0;
+        post_leader = 5;
+        aoe_unit_ai_post_ror(&p, rec);
+        assert(post_d0_id == -2);
     }
     return 0;
 }

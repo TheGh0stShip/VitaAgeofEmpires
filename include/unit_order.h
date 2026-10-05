@@ -79,6 +79,11 @@ typedef struct {
                         int32_t target_class, float x, float y, float z);
 } AoeUnitOrderOps;
 
+/* 0x00406420(id): the template's task with ID `id` (0x0043e6a0; -1
+   finds none) builds an action through the list factory with no target
+   at (-1, -1, -1), which the unit adopts (+0x208). 1 when adopted. */
+int aoe_unit_start_task_ror(AoeLiveUnit *unit, int16_t id, const AoeUnitOrderOps *ops);
+
 /* Unit vtable +0x1f8 = 0x00405f20 (reached from +0x98 / +0xa0, whose last
    flag it ignores). Nothing happens when the target is the unit itself.
    1. Select a task with the unit's list. If none and the template's

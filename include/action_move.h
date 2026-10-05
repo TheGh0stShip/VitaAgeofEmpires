@@ -60,6 +60,10 @@ typedef struct {
                             float sy);
     int (*start)(void *context, AoeLiveUnit *unit);      /* 0x0044bf00 */
     int (*status)(void *context, AoeLiveUnit *unit);     /* 0x0044c2d0 */
+    /* Live vtable +0x1c0 with 0 (clear the intermediate waypoints) and
+       +0x1ec (+0x88 to 0), used by the destructor. */
+    void (*clear_waypoints)(void *context, AoeLiveUnit *unit);
+    void (*clear_88)(void *context, AoeLiveUnit *unit);
 } AoeMoveActionOps;
 
 /* 0x00407380. Returns 0 for missing dependencies. */
@@ -79,6 +83,12 @@ int aoe_move_action_init_point_ror(AoeMoveActionRor *action,
                                    AoeLiveUnit *unit, float x, float y,
                                    float z, float range, const void *graphic,
                                    const void *default_graphic);
+
+/* 0x00405390: the move action's destructor (vtable 0x005426dc): the
+   unit's waypoints are cleared and its +0x88 zeroed, then the base
+   destructor (0x00406ed0) releases the target, the second target and the
+   owned sub-action list. */
+void aoe_move_action_destroy_ror(AoeMoveActionRor *action, const AoeMoveActionOps *ops);
 
 /* +0x5c = 0x00405490: store the state; states 1/0xd/0xe show the standing
    graphic unless quiet; state 4 shows the action graphic. */

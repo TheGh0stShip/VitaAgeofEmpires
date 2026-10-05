@@ -188,3 +188,27 @@ int aoe_unit_order_ror(AoeLiveUnit *unit, AoeLiveUnit *target, float x,
     }
     return 1;
 }
+
+int aoe_unit_start_task_ror(AoeLiveUnit *unit, int16_t id, const AoeUnitOrderOps *ops) {
+    const DatUnit *t;
+    const DatUnitTask *task = NULL;
+    AoeActionRouteRor route;
+    void *action;
+    int i;
+    if (!unit || !ops || !ops->construct || !ops->adopt || !ops->tribe_template || id == -1)
+        return 0;
+    t = unit->core.unit_template;
+    if (!t) return 0;
+    for (i = 0; i < t->task_count; ++i)
+        if (t->tasks[i].id == id) {
+            task = &t->tasks[i];
+            break;
+        }
+    if (!task) return 0;
+    aoe_action_route_ror(ops->tribe_template(ops->context, t), task->action_type, 0, &route);
+    if (route.shape == AOE_ACTION_SHAPE_NONE_ROR) return 0;
+    action = ops->construct(ops->context, unit, &route, task, NULL, -1.0f, -1.0f, -1.0f);
+    if (!action) return 0;
+    ops->adopt(ops->context, unit, action);
+    return 1;
+}

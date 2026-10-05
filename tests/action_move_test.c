@@ -74,6 +74,8 @@ static void tid(void *c, AoeLiveUnit *u, int32_t id) {
 static void tsize(void *c, AoeLiveUnit *u, float a, float b) { (void)c; (void)u; (void)a; (void)b; }
 static int start(void *c, AoeLiveUnit *u) { (void)c; (void)u; mark("go "); return start_result; }
 static int status(void *c, AoeLiveUnit *u) { (void)c; (void)u; return status_now; }
+static void clear_wp(void *c, AoeLiveUnit *u) { (void)c; (void)u; mark("wp "); }
+static void clear88(void *c, AoeLiveUnit *u) { (void)c; (void)u; mark("88 "); }
 
 int main(void) {
     AoeMoveActionOps ops = {0, resolve, released, attached, clear2, notice,
@@ -156,5 +158,17 @@ int main(void) {
     deer_alive = 0;
     assert(aoe_move_action_update_ror(&a, &ops, &r) && r == 5);
     expect("");
+    /* 0x00405390: the destructor clears the waypoints and +0x88, then
+       releases the target. */
+    ops.clear_waypoints = clear_wp;
+    ops.clear_88 = clear88;
+    deer_alive = 1;
+    a.target = &deer;
+    a.target_id = 7;
+    a.secondary_id = -1;
+    a.sub_list = NULL; /* the constructors leave it to the allocator */
+    aoe_move_action_destroy_ror(&a, &ops);
+    expect("wp 88 rel ");
+    assert(a.target == NULL && a.secondary_id == -1);
     return 0;
 }

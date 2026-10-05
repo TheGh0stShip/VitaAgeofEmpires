@@ -379,3 +379,27 @@ int aoe_unit_ai_send_ror(AoeUnitAiOutRor *q, const int32_t values[6]) {
     q->count++;
     return 1;
 }
+
+int16_t aoe_unit_ai_owner_ror(const AoeUnitAiOpsRor *ops) {
+    return ops ? ops->unit_owner : -1;
+}
+
+int aoe_unit_ai_post_ror(const AoeUnitAiOpsRor *ops, const int32_t values[6]) {
+    if (!ops || !values) return 0;
+    if (ops->unit_group_count && ops->unit_group_count(ops->context) > 0 && ops->ai_d0) {
+        int32_t leader = ops->unit_leader ? ops->unit_leader(ops->context) : -1;
+        if (ops->unit_id == leader) {
+            ops->ai_d0(ops->context, -1, values);
+        } else {
+            AoeUnitAiObjectRor o;
+            if (ops->object && ops->object(ops->context, leader, &o))
+                ops->ai_d0(ops->context, leader, values);
+        }
+    }
+    if (ops->owner_e8) ops->owner_e8(ops->context, values);
+    return 1;
+}
+
+int aoe_unit_ai_post_record_ror(const AoeUnitAiOpsRor *ops, const int32_t record[6]) {
+    return aoe_unit_ai_post_ror(ops, record);
+}

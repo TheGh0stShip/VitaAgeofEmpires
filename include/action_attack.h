@@ -144,6 +144,11 @@ int aoe_attack_action_update_ror(AoeAttackActionRor *action,
                                  const AoeAttackActionOps *ops,
                                  uint8_t *result);
 
+/* 0x00401fa0: fire: at the target (unit vtable +0x228) or, without one,
+   at the stored point (+0x224); firing (+0x58) ends. */
+void aoe_attack_action_fire_ror(AoeAttackActionRor *action,
+                                const AoeAttackActionOps *ops);
+
 /* +0x44 = 0x00401fe0: after a template or task change, swap graphics that
    still match the old task (+0x34 move, +0x38/+0x3c attack and idle) or
    the old template (+0xbc, +0xfc, +0x18) for the new ones. */

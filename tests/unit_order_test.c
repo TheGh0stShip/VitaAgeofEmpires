@@ -190,6 +190,18 @@ int main(void) {
     assert(aoe_unit_order_ror(&unit, &unit, 5, 6, 0, &ops, &code) &&
            code == -1);
     expect("");
+    /* 0x00406420: the builder's task ID 4 builds a point action, adopted;
+       an unknown ID and -1 do nothing. */
+    builder_tasks[0].id = 4;
+    construct_ok = 1;
+    unit.core.unit_template = &builder;
+    trace[0] = 0;
+    assert(aoe_unit_start_task_ror(&unit, 4, &ops) == 1);
+    assert(strstr(trace, "adopt ") != NULL);
+    trace[0] = 0;
+    assert(aoe_unit_start_task_ror(&unit, 5, &ops) == 0 &&
+           aoe_unit_start_task_ror(&unit, -1, &ops) == 0);
+    expect("");
     aoe_action_list_clear(&list);
     return 0;
 }

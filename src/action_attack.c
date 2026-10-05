@@ -315,15 +315,20 @@ static int update_firing(AoeAttackActionRor *a,
         int32_t frame = a->fire_frame;
         if (!frame)
             frame = aoe_ftol32((double)ops->sprite_frames(c, u) * 0.5);
-        if (ops->sprite_reached(c, u, frame)) {
-            if (a->base.target)
-                ops->fire_target(c, u, a->base.target);
-            else
-                ops->fire_point(c, u, a->base.x, a->base.y, a->base.z);
-            a->firing = 0;
-        }
+        if (ops->sprite_reached(c, u, frame)) aoe_attack_action_fire_ror(a, ops);
     }
     return 1;
+}
+
+void aoe_attack_action_fire_ror(AoeAttackActionRor *a, const AoeAttackActionOps *ops) {
+    void *c;
+    if (!a || !ops_ok(ops) || !a->base.unit) return;
+    c = ops->move.context;
+    if (a->base.target)
+        ops->fire_target(c, a->base.unit, a->base.target);
+    else
+        ops->fire_point(c, a->base.unit, a->base.x, a->base.y, a->base.z);
+    a->firing = 0;
 }
 
 int aoe_attack_action_update_ror(AoeAttackActionRor *a,

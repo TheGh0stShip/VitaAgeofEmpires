@@ -3,6 +3,7 @@
 #include <math.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "aoe_ftol.h"
 
@@ -281,4 +282,21 @@ uint32_t aoe_action_base_done_ror(AoeMoveActionRor *action,
         ops->sub_done)
         return ops->sub_done(ops->context, action);
     return action->state == 1;
+}
+
+void aoe_move_action_destroy_ror(AoeMoveActionRor *a, const AoeMoveActionOps *ops) {
+    if (!a || !ops) return;
+    if (a->unit && ops->clear_waypoints) ops->clear_waypoints(ops->context, a->unit);
+    if (a->unit && ops->clear_88) ops->clear_88(ops->context, a->unit);
+    (void)aoe_action_set_target_ror(a, NULL, ops);
+    if (a->secondary_id != -1 && ops->resolve && ops->target_released) {
+        AoeLiveUnit *x = ops->resolve(ops->context, a->secondary_id);
+        if (x) ops->target_released(ops->context, x, a->unit);
+    }
+    a->secondary_id = -1;
+    if (a->sub_list) {
+        (void)aoe_action_list_clear(a->sub_list);
+        free(a->sub_list);
+        a->sub_list = NULL;
+    }
 }

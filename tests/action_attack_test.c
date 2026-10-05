@@ -293,5 +293,14 @@ int main(void) {
                a.idle_graphic == T1);
         (void)W2;
     }
+    /* 0x00401fa0: a point attack fires at the point and stops firing. */
+    {
+        int before = env.fires_point;
+        a.base.unit = &attacker;
+        a.base.target = NULL;
+        a.firing = 1;
+        aoe_attack_action_fire_ror(&a, &ops);
+        assert(env.fires_point == before + 1 && a.firing == 0);
+    }
     return 0;
 }

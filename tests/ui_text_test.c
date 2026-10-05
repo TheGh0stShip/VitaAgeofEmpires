@@ -203,6 +203,14 @@ int main(void) {
         changed = 0;
         aoe_ui_text_move_up_ror(&b, reveal_fn, NULL, &changed);
         assert(!changed);
+        aoe_ui_text_move_down_ror(&b, reveal_fn, NULL, &changed);
+        assert(changed && !strcmp(aoe_ui_text_line_ror(&b, 0), "two"));
+        assert(!strcmp(aoe_ui_text_line_ror(&b, 1), "three") && aoe_ui_text_selection_ror(&b) == 1);
+        changed = 0;
+        aoe_ui_text_move_down_ror(&b, reveal_fn, NULL, &changed);
+        assert(!changed && aoe_ui_text_count_ror(&b) == 2);
+        aoe_ui_text_move_up_ror(&b, reveal_fn, NULL, &changed);
+        changed = 0;
         aoe_ui_text_append_ror(&a, "three", 0);
         aoe_ui_text_append_ror(&a, "four", 0);
         aoe_ui_text_append_ror(&b, "five", 0);

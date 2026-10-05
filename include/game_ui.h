@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "game_base.h"
+#include "campaign_progress.h"
 #include "game_settings.h"
 #include "ui_dialog.h"
 #include "ui_ez.h"
@@ -172,6 +173,13 @@ typedef struct {
     int (*campaign_scenario_slots)(void *context, int32_t active[9], int32_t kind[9]);
     void (*set_slot_state)(void *context, int32_t slot, int32_t state);
     int (*start_scenario_game)(void *context);
+    /* The campaign files (campaign and scenario directories, listing,
+       reading and writing); the game's campaign index reloaded
+       (0x0041b9f0); whether a file can be opened for writing (the
+       original's open(0x8301) probe). */
+    const AoeCampaignOpsRor *(*campaign_file_ops)(void *context);
+    void (*refresh_campaigns)(void *context);
+    int (*file_writable)(void *context, const char *path);
 } AoeGameUiOpsRor;
 
 typedef struct {
@@ -784,5 +792,55 @@ int aoe_campaign_selection_init_ror(AoeCampaignSelectionRor *c, AoeGameUiRor *ui
 void aoe_campaign_selection_fill_campaigns_ror(AoeCampaignSelectionRor *c);
 void aoe_campaign_selection_fill_scenarios_ror(AoeCampaignSelectionRor *c);
 void aoe_campaign_selection_start_ror(AoeCampaignSelectionRor *c);
+
+/* The "Campaign Editor Screen" (vtable 0x00545fb0, 0x00479360..
+   0x0047a3c0; "scr4" / 50054): the title (11201, 640 x 50), "campaign
+   file" (11202) over the campaign names (an editable drop-down; its edit
+   starts with 11210, at most 100 characters), Save (11204), the available
+   scenarios (11207) and the campaign's (11208), each with a scroll bar,
+   Add (11205), Remove (11206), Up (11221), Down (11222), Done (4001) and
+   Cancel (4002, Escape). 0x00479360 constructor; 0x004797d0 destructor
+   (deleting 0x004797b0; the "Cancel Dialog" and "Load Dialog" closed
+   first). 0x00479950 the campaign names ("*.cpn" then "*.cpx" in the
+   campaign directory, sorted, extensions cut); 0x00479ab0 the available
+   scenarios ("*.scn" then "*.scx" in the scenario directory, sorted);
+   0x00479c10 the open campaign's scenario names; 0x00479d10 open the
+   edit's campaign (".cpn", else ".cpx"): the available scenarios refilled
+   and, when all of the campaign's are among them, taken out of that list
+   and shown as the campaign's (else that list emptied); 0x00479ea0 save
+   (a name that is empty or starts with a space: 11212; no scenarios:
+   11211; an existing "<name>.cpn" must be writable and is removed; the
+   campaign written as "<name>.cpx" with the title <name> and each
+   scenario's file "<line>.scn" when that exists, else ".scx"; then the
+   names refilled and the game's campaigns reloaded). Every change marks
+   the screen changed (+0x478); open and save clear it. +0xb8 0x0047a3c0:
+   picking a name in the drop-down opens it, asking first ("Load Dialog",
+   11209 with the edit's text) when there are unsaved changes; Done asks
+   the same ("Cancel Dialog") before the editor menu; Save saves; Cancel
+   goes to the editor menu; Add / Remove / double-clicks move a scenario;
+   Up / Down reorder. A dialog's yes saves first, no goes on, cancel
+   stays. */
+typedef struct {
+    AoeUiEzRor ez;
+    uint8_t changed;                            /* +0x478 */
+    AoeUiTextRor *title, *file_label;           /* +0x47c, +0x480 */
+    AoeUiTextRor *available_label, *chosen_label; /* +0x484, +0x488 */
+    AoeUiListRor *available, *chosen;           /* +0x48c, +0x490 */
+    AoeUiScrollbarRor *available_bar, *chosen_bar; /* +0x494, +0x498 */
+    AoeUiEditRor *name;                         /* +0x49c */
+    AoeUiButtonRor *done, *cancel, *save;       /* +0x4a0, +0x4a4, +0x4a8 */
+    AoeUiButtonRor *add, *remove;               /* +0x4ac, +0x4b0 */
+    AoeUiButtonRor *up, *down;                  /* +0x4b4, +0x4b8 */
+    AoeUiDropdownRor *files;                    /* +0x4bc */
+    AoeCampaignRor *campaign;                   /* +0x4c0 */
+    AoeGameUiRor *ui;
+} AoeCampaignEditorRor;
+
+extern const AoeUiEzVtblRor aoe_campaign_editor_vtable_ror;
+int aoe_campaign_editor_init_ror(AoeCampaignEditorRor *c, AoeGameUiRor *ui, AoeUiAreaRor *area);
+void aoe_campaign_editor_fill_names_ror(AoeCampaignEditorRor *c);
+void aoe_campaign_editor_fill_available_ror(AoeCampaignEditorRor *c);
+void aoe_campaign_editor_open_ror(AoeCampaignEditorRor *c);
+void aoe_campaign_editor_save_ror(AoeCampaignEditorRor *c);
 
 #endif

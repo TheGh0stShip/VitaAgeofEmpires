@@ -109,6 +109,60 @@ static int ed_save_file(void *c, const char *f) { (void)c; (void)f; ++ed_saves; 
 static char saved_file[64];
 static int save_scen(void *c, const char *f) { (void)c; ++scen_saves; snprintf(saved_file, sizeof saved_file, "%s", f); return 1; }
 static void mp_setup(void *c) { (void)c; ++mp_setups; }
+typedef struct { char path[64]; uint8_t data[4096]; uint32_t size; int used; } FakeFile;
+static FakeFile fake_files[8];
+static int camp_refreshes;
+static FakeFile *fake_find(const char *path) {
+    for (int i = 0; i < 8; ++i)
+        if (fake_files[i].used && !strcmp(fake_files[i].path, path)) return &fake_files[i];
+    return NULL;
+}
+static void fake_put(const char *path, const uint8_t *data, uint32_t size) {
+    FakeFile *f = fake_find(path);
+    for (int i = 0; !f && i < 8; ++i)
+        if (!fake_files[i].used) f = &fake_files[i];
+    if (!f) return;
+    snprintf(f->path, sizeof f->path, "%s", path);
+    memcpy(f->data, data, size);
+    f->size = size;
+    f->used = 1;
+}
+static uint8_t *fake_read(void *c, const char *path, uint32_t *size) {
+    FakeFile *f = fake_find(path);
+    uint8_t *out;
+    (void)c;
+    if (!f) return NULL;
+    out = malloc(f->size ? f->size : 1);
+    memcpy(out, f->data, f->size);
+    *size = f->size;
+    return out;
+}
+static int fake_write(void *c, const char *path, const uint8_t *data, uint32_t size) {
+    (void)c;
+    if (size > 4096) return 0;
+    fake_put(path, data, size);
+    return 1;
+}
+static void fake_list(void *c, const char *pattern, void (*each)(void *, const char *), void *user) {
+    const char *star = strchr(pattern, '*');
+    size_t dir = (size_t)(star - pattern);
+    (void)c;
+    for (int i = 0; i < 8; ++i) {
+        const char *n = fake_files[i].path;
+        if (!fake_files[i].used || strncmp(n, pattern, dir)) continue;
+        if (strlen(n) > 4 && !strcmp(n + strlen(n) - 4, star + 1)) each(user, n + dir);
+    }
+}
+static int fake_exists(void *c, const char *path) { (void)c; return fake_find(path) != NULL; }
+static void fake_delete(void *c, const char *path) {
+    FakeFile *f = fake_find(path);
+    (void)c;
+    if (f) f->used = 0;
+}
+static AoeCampaignOpsRor camp_file_ops = {NULL, "camp/", "scen/", fake_read, fake_write, NULL, fake_list,
+                                          NULL, NULL, NULL};
+static const AoeCampaignOpsRor *camp_files(void *c) { (void)c; return &camp_file_ops; }
+static void camp_refresh(void *c) { (void)c; ++camp_refreshes; }
 static char **names_of(const char *const *src, int32_t n) {
     char **out = malloc((size_t)n * sizeof *out);
     for (int32_t i = 0; i < n; ++i) {
@@ -655,6 +709,65 @@ int main(void) {
                camp_states[4] == 1 && camp_states[9] == 1);
         assert(aoe_settings_byte_993_ror(&settings) == 1 && aoe_settings_int_a10_ror(&settings) == 1);
         aoe_ui_system_close_ror(&sys, "Campaign Selection Screen");
+    }
+    /* The campaign editor screen. */
+    {
+        AoeCampaignEditorRor *ce = calloc(1, sizeof *ce);
+        AoeUiPanelRor *ep = &ce->ez.panel;
+        int (*old_exists)(void *, const char *) = ops.file_exists;
+        void (*old_delete)(void *, const char *) = ops.delete_file;
+        fake_put("scen/Alpha.scn", (const uint8_t *)"AAAA", 4);
+        fake_put("scen/Beta.scn", (const uint8_t *)"BB", 2);
+        fake_put("scen/Gamma.scx", (const uint8_t *)"G", 1);
+        ops.campaign_file_ops = camp_files;
+        ops.refresh_campaigns = camp_refresh;
+        ops.file_exists = fake_exists;
+        ops.delete_file = fake_delete;
+        assert(aoe_campaign_editor_init_ror(ce, &ui, &area));
+        assert(aoe_ui_text_count_ror(&ce->available->text) == 3);
+        assert(aoe_ui_text_count_ror(&ce->chosen->text) == 0 && !ce->changed);
+        aoe_ui_text_select_ror(&ce->available->text,
+                               (int16_t)aoe_ui_text_index_of_ror(&ce->available->text, "Gamma"));
+        ep->vt->action(ep, &ce->add->panel, 1, 0, 0);
+        aoe_ui_text_select_ror(&ce->available->text,
+                               (int16_t)aoe_ui_text_index_of_ror(&ce->available->text, "Alpha"));
+        ep->vt->action(ep, &ce->available->text.panel, 3, 0, 0);
+        assert(aoe_ui_text_count_ror(&ce->chosen->text) == 2 && ce->changed);
+        assert(!strcmp(aoe_ui_text_line_ror(&ce->chosen->text, 0), "Gamma"));
+        ep->vt->action(ep, &ce->down->panel, 1, 0, 0);
+        assert(!strcmp(aoe_ui_text_line_ror(&ce->chosen->text, 1), "Alpha"));
+        aoe_ui_text_select_ror(&ce->chosen->text, 0);
+        ep->vt->action(ep, &ce->down->panel, 1, 0, 0);
+        assert(!strcmp(aoe_ui_text_line_ror(&ce->chosen->text, 1), "Gamma"));
+        /* An empty name is refused. */
+        aoe_ui_edit_set_text_ror(ce->name, "");
+        ep->vt->action(ep, &ce->save->panel, 1, 0, 0);
+        assert(aoe_ui_system_find_ror(&sys, "OKDialog") && !fake_exists(NULL, "camp/Mine.cpx"));
+        aoe_ui_system_close_ror(&sys, "OKDialog");
+        aoe_ui_edit_set_text_ror(ce->name, "Mine");
+        ep->vt->action(ep, &ce->save->panel, 1, 0, 0);
+        assert(fake_exists(NULL, "camp/Mine.cpx") && camp_refreshes == 1 && !ce->changed);
+        assert(aoe_ui_dropdown_index_of_ror(ce->files, "Mine") == 0);
+        {
+            uint32_t n = 0;
+            uint8_t *d = fake_read(NULL, "camp/Mine.cpx", &n);
+            assert(n == 0x108 + 2 * 0x208 + 5 && !memcmp(d + n - 5, "AAAAG", 5));
+            free(d);
+        }
+        /* Reopening it takes its scenarios out of the available list. */
+        aoe_ui_text_clear_ror(&ce->chosen->text);
+        aoe_ui_dropdown_select_ror(ce->files, 0);
+        ep->vt->action(ep, &ce->files->panel, 0, 0, 0);
+        assert(aoe_ui_text_count_ror(&ce->chosen->text) == 2);
+        assert(aoe_ui_text_count_ror(&ce->available->text) == 1);
+        /* Unsaved changes ask before leaving. */
+        ep->vt->action(ep, &ce->remove->panel, 1, 0, 0);
+        ep->vt->action(ep, &ce->done->panel, 1, 0, 0);
+        assert(aoe_ui_system_find_ror(&sys, "Cancel Dialog"));
+        aoe_ui_system_close_ror(&sys, "Cancel Dialog");
+        aoe_ui_system_close_ror(&sys, "Campaign Editor Screen");
+        ops.file_exists = old_exists;
+        ops.delete_file = old_delete;
     }
     /* The game settings screen (single player, random map). */
     {

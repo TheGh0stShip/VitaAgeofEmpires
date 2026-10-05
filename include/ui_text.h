@@ -233,7 +233,8 @@ int aoe_ui_text_char_kind_ror(const uint8_t *text,
    0x0047a170 / 0x0047a1f0 move the selected line from one list to the
    other (appended there and selected, removed here, then the target
    scrolls to it through 0x004650c0(1, selection, 1)); 0x0047a270 moves
-   the selected line of +0x490 up one place. Each marks the screen
+   the selected line of +0x490 up one place and 0x0047a310 down one
+   place (below the last line nothing happens). Each marks the screen
    changed (+0x478), the move up only when something was selected past
    the first line. */
 /* 0x00479c90: when every line of +0x490 is also in +0x48c, those lines
@@ -244,5 +245,7 @@ void aoe_ui_text_move_selected_ror(AoeUiTextRor *from, AoeUiTextRor *to, AoeUiTe
                                    void *context, uint8_t *changed);
 void aoe_ui_text_move_up_ror(AoeUiTextRor *t, AoeUiTextRevealFn reveal, void *context,
                              uint8_t *changed);
+void aoe_ui_text_move_down_ror(AoeUiTextRor *t, AoeUiTextRevealFn reveal, void *context,
+                               uint8_t *changed);
 
 #endif

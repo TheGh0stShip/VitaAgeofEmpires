@@ -935,6 +935,20 @@ void aoe_ui_text_move_up_ror(AoeUiTextRor *t, AoeUiTextRevealFn reveal, void *co
     *changed = 1;
 }
 
+void aoe_ui_text_move_down_ror(AoeUiTextRor *t, AoeUiTextRevealFn reveal, void *context,
+                               uint8_t *changed) {
+    const char *text;
+    if (aoe_ui_text_selection_ror(t) >= aoe_ui_text_count_ror(t) - 1) return;
+    text = aoe_ui_text_selected_text_ror(t);
+    if (text && *text) {
+        aoe_ui_text_insert_ror(t, aoe_ui_text_selection_ror(t) + 2, text, NULL, 0);
+        aoe_ui_text_remove_ror(t, aoe_ui_text_selection_ror(t));
+        aoe_ui_text_select_ror(t, (int16_t)(aoe_ui_text_selection_ror(t) + 1));
+        reveal(context, t, aoe_ui_text_selection_ror(t));
+    }
+    *changed = 1;
+}
+
 int aoe_ui_text_take_chosen_ror(AoeUiTextRor *available, const AoeUiTextRor *chosen) {
     int16_t n = aoe_ui_text_count_ror(chosen), i;
     for (i = 0; i < n; ++i)

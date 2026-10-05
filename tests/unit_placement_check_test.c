@@ -44,6 +44,13 @@ int main(void) {
     assert(aoe_unit_placement_check_ror(
                &candidate, &context, 1.5f, 1.5f, &blocker,
                0, 2, 0, 0, 1, 0) == AOE_PLACEMENT_SHAPE);
+    /* Mode 1 accepts shape 8 and refuses 11 (0x004429d0). */
+    shapes[4] = 8;
+    assert(aoe_unit_placement_check_ror(&candidate, &context, 1.5f, 1.5f, &blocker, 0, 1, 0, 0, 1, 0) ==
+           AOE_PLACEMENT_OK);
+    shapes[4] = 11;
+    assert(aoe_unit_placement_check_ror(&candidate, &context, 1.5f, 1.5f, &blocker, 0, 1, 0, 0, 1, 0) ==
+           AOE_PLACEMENT_SHAPE);
     shapes[4] = 0;
     restriction[0] = 0;
     assert(aoe_unit_placement_check_ror(
@@ -65,5 +72,16 @@ int main(void) {
     assert(aoe_unit_placement_check_ror(
                &candidate, &context, 1.5f, 1.5f, &blocker,
                0, 0, 0, 0, 1, 1) == AOE_PLACEMENT_OK);
+    /* A neighbour whose centre lies in another tile still blocks: the scan
+       reaches 3 tiles around the point (0x004429d0). */
+    existing_template.placement_overlap_mode = 0;
+    existing_template.size[0] = 1.0f;
+    existing.position.x38 = 2.5f;
+    objects[4].head = NULL;
+    objects[5].head = &node;
+    blocker = -1;
+    assert(aoe_unit_placement_check_ror(
+               &candidate, &context, 1.5f, 1.5f, &blocker,
+               0, 0, 0, 0, 1, 1) == AOE_PLACEMENT_OCCUPIED && blocker == 77);
     return 0;
 }

@@ -183,6 +183,17 @@ static int valid_watch(const AoeVisibilityWatch *watch) {
     return 1;
 }
 
+int aoe_visibility_watch_init(AoeVisibilityWatch *watch, size_t capacity) {
+    if (!watch) return 0;
+    memset(watch, 0, sizeof(*watch));
+    if (!capacity) return 1;
+    if (capacity > SIZE_MAX / sizeof(*watch->entries)) return 0;
+    watch->entries = calloc(capacity, sizeof(*watch->entries));
+    if (!watch->entries) return 0;
+    watch->capacity = capacity;
+    return 1;
+}
+
 int aoe_visibility_watch_add(AoeVisibilityWatch *watch,
                              int16_t watch_owner_index,
                              int16_t unit_owner_index,

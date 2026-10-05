@@ -270,7 +270,15 @@ static void test_world_id_allocator(void) {
     aoe_owned_visibility_registry_destroy(&owned);
 }
 
+static void init_test(void) {
+    AoeVisibilityWatch w;
+    assert(aoe_visibility_watch_init(&w, 100) && w.capacity == 100 && w.count == 0 && w.entries);
+    aoe_visibility_watch_destroy(&w);
+    assert(w.entries == NULL && w.capacity == 0);
+}
+
 int main(void) {
+    init_test();
     test_invalid_removal(AOE_VISIBILITY_BASE);
     test_invalid_removal(AOE_VISIBILITY_RISE_OF_ROME);
     test_bit_recipients(AOE_VISIBILITY_BASE);

@@ -31,9 +31,16 @@ typedef struct {
     size_t capacity;
 } AoeVisibilityWatch;
 
-/* RoR 0x00436dd0 / base 0x004f9470: grow in 32-entry increments, reject a
-   different owner or duplicate unit, and snapshot the pointed live flags.
-   The live_flags storage must outlive the watch entry. */
+/* The player's +0x40 object. Patched RoR 1.0a 0x00436850 constructs it
+   with room for `capacity` (100) entries in each of its four arrays and
+   0x004368a0 frees them (aoe_visibility_watch_destroy). */
+int aoe_visibility_watch_init(AoeVisibilityWatch *watch, size_t capacity);
+
+/* Patched RoR 1.0a 0x004368f0 (noted earlier as RoR 0x00436dd0) / base
+   0x004f9470: grow in 32-entry increments (0x00436b30 with 0x20; the
+   original grows a full list before the owner test), reject a different
+   owner or duplicate unit, and snapshot the pointed live flags. The
+   live_flags storage must outlive the watch entry. */
 int aoe_visibility_watch_add(AoeVisibilityWatch *watch,
                              int16_t watch_owner_index,
                              int16_t unit_owner_index,
@@ -123,12 +130,14 @@ int aoe_owned_visibility_registry_insert(AoeOwnedVisibilityRegistry *registry,
 int aoe_owned_visibility_registry_clear(AoeOwnedVisibilityRegistry *registry,
                                          int32_t unit_id);
 
-/* RoR 0x00436e60 / base 0x004f9520: swap-last removal by unit pointer. */
+/* Patched RoR 1.0a 0x00436980 (noted earlier as 0x00436e60) / base
+   0x004f9520: swap-last removal by unit pointer. */
 int aoe_visibility_watch_remove(AoeVisibilityWatch *watch,
                                 const AoeVisibilityUnitRef *unit);
 void aoe_visibility_watch_destroy(AoeVisibilityWatch *watch);
 
-/* RoR 0x00436f20 / base 0x004f95d0. Both notify recipients 1..15 for
+/* Patched RoR 1.0a 0x00436a20 (noted earlier as 0x00436f20) / base
+   0x004f95d0. Both notify recipients 1..15 for
    newly cleared bits 1..15, skipping the owner. RoR removes each invalid
    entry immediately and rechecks a swapped-in slot; base removes only the
    last non-null invalid entry after the scan. Returns zero on invalid

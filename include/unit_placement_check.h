@@ -30,7 +30,8 @@ typedef struct {
     uint32_t owner_visible_mask, owner_explored_mask;
 } AoeUnitPlacementCheckContext;
 
-/* Common unit-template vtable +0x20, release RoR 0x00443700. The boolean
+/* Common unit-template vtable +0x20: patched RoR 1.0a 0x004429d0 (every
+   template class; noted earlier as release RoR 0x00443700). The boolean
    arguments retain the original call surface used by training and scenario
    editor placement. Return values are the executable's 0..7 reason codes;
    `blocking_unit_id` receives the first overlapping live unit's ID for code

@@ -293,6 +293,9 @@ typedef struct {
                            int32_t unique_id);
     /* The information AI's zone test on an object (0x004bc690). */
     int (*info_zone_open)(void *context, int32_t id);
+    /* The information AI's live remembered objects of `owner` (0x004bcc10
+       with any seen owner). */
+    int32_t (*info_count_owned)(void *context, int32_t owner);
     /* The tactical AI's gathering order (0x004d99f0), run by
        0x004e1a80. */
     void (*rebalance)(void *context);
@@ -501,6 +504,21 @@ void aoe_ai_tactical_send_scout_ror(AoeAiTacticalRor *ai, int32_t unit, float x,
                                     float y, const AoeAiTacticalOpsRor *ops,
                                     AoeAiInfoRor *info,
                                     const AoeAiInfoOpsRor *info_ops);
+/* 0x004d2d30: villagers into explorers (list 1's +0x10c) and gatherers
+   (+0x9d0), then the gatherer plan (0x004d9be0). With fewer than three
+   villagers: one gives 1 explorer and no gatherer; otherwise 1 gatherer
+   (number 5 when that is set and below 1) and the rest explore, at most
+   number 3 (when set). From three: when the information AI's zone test
+   passes for list 0's first villager, ceil(number 0 x villagers x 0.01)
+   explore, capped so that with the task-0x66 group members it stays
+   within number 18, and at number 3 (when set); else none. When the
+   explored percentage (truncated) reaches number 32 and the remembered
+   live objects of +0xd28's first player exceed number 145, number 35
+   caps them; failing that, from number 179 percent they halve (not
+   below 0). +0xfa4 at 1 sends none. Gatherers are the rest, at most
+   number 5 (when set). */
+void aoe_ai_tactical_plan_villagers_ror(AoeAiTacticalRor *ai,
+                                        const AoeAiTacticalOpsRor *ops);
 /* 0x004dc650: ftol(number 34 / f), at most 99. */
 int32_t aoe_ai_tactical_effort_ror(const AoeAiTacticalRor *ai, float f);
 /* 0x004e2f90: +0xd68[i] (0..3, else -1). 0x004e2f30 / 0x004e2f60 /

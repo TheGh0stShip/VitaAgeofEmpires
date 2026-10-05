@@ -682,6 +682,36 @@ static void soldier_group_tests(void) {
     tnow = 300000;
 }
 
+static double half_ratio(void *c) { (void)c; return 0.5; }
+static int32_t seen_n(void *c, int32_t o) { (void)c; (void)o; return 3; }
+
+static void villager_plan_tests(void) {
+    static AoeAiTacticalRor ai;
+    AoeAiTacticalOpsRor ops;
+    int32_t i;
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    memset(&ops, 0, sizeof ops);
+    ops.explored_ratio = half_ratio;
+    ops.info_count_owned = seen_n;
+    ops.info_zone_open = zone_ok;
+    ops.resource = tresource;
+    aoe_ai_int_list_add_unique_ror(&ai.lists[0], 10);
+    aoe_ai_tactical_plan_villagers_ror(&ai, &ops);
+    assert(ai.lists[1].field_8 == 1 && ai.field_9d0 == 0);
+    for (i = 11; i < 20; ++i) aoe_ai_int_list_add_unique_ror(&ai.lists[0], i);
+    /* Ten villagers, number 0 at 25%: ceil(2.5) = 3 explorers; 50% is
+       below number 32 (60) but reaches number 179 (40): halved to 1. */
+    ai.sn[0] = 25; ai.sn[18] = 9; ai.sn[3] = -1; ai.sn[5] = -1;
+    ai.sn[32] = 60; ai.sn[145] = 0; ai.sn[35] = 0; ai.sn[179] = 40;
+    aoe_ai_tactical_plan_villagers_ror(&ai, &ops);
+    assert(ai.lists[1].field_8 == 1 && ai.field_9d0 == 9);
+    /* 50% reaches number 32 (50) with 3 seen > 0: capped at number 35. */
+    ai.sn[32] = 50; ai.sn[35] = 2;
+    aoe_ai_tactical_plan_villagers_ror(&ai, &ops);
+    assert(ai.lists[1].field_8 == 2 && ai.field_9d0 == 8);
+    aoe_ai_tactical_release_ror(&ai);
+}
+
 static void scout_tests(void) {
     static AoeAiTacticalRor ai;
     AoeAiTacticalOpsRor ops;
@@ -944,6 +974,7 @@ int main(void) {
     point_attack_train_tests();
     soldier_group_tests();
     scout_tests();
+    villager_plan_tests();
 
     aoe_ai_tactical_init_ror(&ai, 3, NULL);
     assert(ai.module.id == 0x3f1 && !strcmp(ai.module.name, "TacAI"));

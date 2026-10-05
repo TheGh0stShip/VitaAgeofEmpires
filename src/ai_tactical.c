@@ -1849,3 +1849,46 @@ void aoe_ai_tactical_send_scout_ror(AoeAiTacticalRor *ai, int32_t unit, float x,
         }
     aoe_ai_tactical_order_explore_ror(ai, unit, x, y, 0, ops);
 }
+
+void aoe_ai_tactical_plan_villagers_ror(AoeAiTacticalRor *ai,
+                                        const AoeAiTacticalOpsRor *ops) {
+    int32_t explored, seen, v, *first, *x = NULL;
+    if (!ai || !ops) return;
+    x = &ai->lists[1].field_8;
+    explored = aoe_ftol32((ops->explored_ratio ? ops->explored_ratio(ops->context) : 0.0) *
+                          (double)100.0f);
+    first = aoe_ai_int_list_at_ror(&ai->list_d28, 0);
+    seen = ops->info_count_owned ? ops->info_count_owned(ops->context, first ? *first : 0) : 0;
+    v = ai->lists[0].count;
+    if (v < 3) {
+        if (v == 1) {
+            ai->field_9d0 = 0;
+            *x = 1;
+        } else {
+            ai->field_9d0 = 1;
+            if (ai->sn[5] != -1 && ai->sn[5] < 1) ai->field_9d0 = ai->sn[5];
+            *x = v - ai->field_9d0;
+            if (ai->sn[3] != -1 && *x > ai->sn[3]) *x = ai->sn[3];
+        }
+    } else {
+        first = aoe_ai_int_list_at_ror(&ai->lists[0], 0);
+        if (ops->info_zone_open && ops->info_zone_open(ops->context, first ? *first : 0) == 1) {
+            int32_t g;
+            *x = aoe_ftol32(ceil((double)ai->sn[0] * (double)v * (double)0.01f));
+            g = aoe_ai_tactical_grouped_units_ror(ai, 0x66);
+            if (*x + g > ai->sn[18]) *x = ai->sn[18] - g;
+            if (ai->sn[3] != -1 && *x > ai->sn[3]) *x = ai->sn[3];
+        } else {
+            *x = 0;
+        }
+        if (explored >= ai->sn[32] && seen > ai->sn[145]) {
+            if (*x > ai->sn[35]) *x = ai->sn[35];
+        } else if (explored >= ai->sn[179]) {
+            *x = *x / 2 > 0 ? *x / 2 : 0;
+        }
+        if (ai->field_fa4 == 1) *x = 0;
+        ai->field_9d0 = v - *x;
+        if (ai->sn[5] != -1 && ai->field_9d0 > ai->sn[5]) ai->field_9d0 = ai->sn[5];
+    }
+    aoe_ai_tactical_plan_gatherers_ror(ai, ops);
+}

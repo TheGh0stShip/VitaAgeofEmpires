@@ -68,6 +68,54 @@ typedef struct {
                    int32_t *task, int32_t *action);
     /* The tactical AI's strategic number (0x004d77d0). */
     int32_t (*sn)(void *context, int32_t index);
+    /* Hooks of the group update (0x004cd2d0). The object's position
+       (+0x38..+0x40); its type's float at +0x28 (0 when there is no
+       object). */
+    int (*position)(void *context, int32_t id, float out[3]);
+    float (*type_28)(void *context, int32_t id);
+    /* The unit AI's +0x38 (read when its task is 600). */
+    int32_t (*unit_ai_38)(void *context, int32_t id);
+    /* The object's cached map zone byte (+0x7c, filled on first use), and
+       the zone byte at a tile as seen by that object (0x004ab9e0). */
+    int32_t (*zone)(void *context, int32_t id);
+    int32_t (*zone_at)(void *context, int32_t id, int32_t x, int32_t y);
+    /* The tactical AI's orders: 0x004da160 move, 0x004db9f0 action 0x2bd
+       on a target, 0x004da1b0 action 0x2d4, 0x004dc650 effort. */
+    void (*order_move)(void *context, int32_t id, float x, float y,
+                       int32_t value);
+    void (*order_2bd)(void *context, int32_t id, int32_t target, float d,
+                      int32_t value);
+    void (*order_2d4)(void *context, int32_t id, int32_t target, float x,
+                      float y, float z, float d, int32_t value);
+    int32_t (*effort)(void *context, float f);
+    /* Not yet translated tactical orders: attack a target at (x, y) with
+       the target owner, the group's waypoint block and count, the
+       commander and a round-up flag; the "play" attack of every member;
+       a unit order taking 0 (task 8, commanders of task 7); commander
+       orders of tasks 10 (target, x, y) and 0xb (target). */
+    void (*order_attack)(void *context, int32_t id, float x, float y,
+                         int32_t target, int32_t owner,
+                         const uint8_t *waypoints, uint8_t count,
+                         int32_t commander, int32_t roundup);
+    void (*order_play)(void *context, int32_t commander, const int32_t *ids,
+                       int32_t count, int32_t target, int32_t play,
+                       const uint8_t *waypoints, uint8_t count_wp);
+    void (*order_zero)(void *context, int32_t id, int32_t zero);
+    void (*order_10)(void *context, int32_t id, int32_t target, float x,
+                     float y);
+    void (*order_11)(void *context, int32_t id, int32_t target);
+    int32_t (*rand)(void *context); /* 0x0052605d */
+    /* 0x004e15b0 on the commander. */
+    int (*priest_or_siege)(void *context, int32_t id);
+    /* 0x004c2d60 on the information AI (+0xcec), 0x004c3660 recording
+       (x0, y0, x1, y1) for our player byte and the target owner's byte at
+       time `t`, then 0x004e0c00. */
+    void (*clamp_tile)(void *context, int32_t tile[2]);
+    void (*record_area)(void *context, int32_t x0, int32_t y0, int32_t x1,
+                        int32_t y1, int32_t owner, int32_t t);
+    void (*roll_d24)(void *context);
+    /* The object's owner (its player's +0x4a, a short). */
+    int32_t (*owner)(void *context, int32_t id);
 } AoeAiUnitGroupOpsRor;
 
 /* 0x004cc630 constructor (0x004cc780 / 0x004cc760 destructors). */
@@ -154,5 +202,23 @@ int aoe_ai_unit_group_save_ror(const AoeAiUnitGroupRor *g,
                                AoeOutcomeStream *out);
 int aoe_ai_unit_group_load_ror(AoeAiUnitGroupRor *g, float version,
                                AoeOutcomeStream *in);
+
+/* 0x004cd2d0: carry out group task `task` for every member (40 slots).
+   Returns 0 at once without a commander. Every task but 9 and 0xe resets
+   +0x2c8. A member is "gone" when its object or unit AI is missing; it is
+   then dropped by slot (0x004ccd90). Live members store their truncated
+   hit points as values; "busy" (only checked when `force` is 0) means a
+   unit AI task other than -1. With `record` 1 the tasks that set the type
+   copy the summed values and the count to +0x168 / +0x16c.
+   0, 1: stop every member (100); type 0. 2, 0x15: attack (see the
+   source); 3: retreat members farther than a third of their type's +0x28
+   to +0x1ac; 4: defend; 5, 6, 0xc, 0x13: only values, type 1, returns 0;
+   7, 10, 0xb: the commander is ordered, the others follow it; 8: the
+   zero order; 9, 0xe: gather at +0x19c; 0x14: attack round-up at most
+   every 10 seconds. Unknown tasks return 0. */
+int aoe_ai_unit_group_update_ror(AoeAiUnitGroupRor *g,
+                                 const AoeAiUnitGroupOpsRor *ops,
+                                 int32_t task, int32_t record,
+                                 int32_t force);
 
 #endif

@@ -235,6 +235,10 @@ typedef struct {
     /* Our object's own zone (0x0040bab0, then its zone getter); 0 without
        one. */
     int (*object_zone)(void *context, int32_t id, uint8_t *zone);
+    /* Unit vtable +0x114 (it could stand at (x, y)) and the world's +0x100
+       (0x00520660). */
+    int (*free_tile)(void *context, int32_t id, float x, float y);
+    int32_t (*world_100)(void *context);
 } AoeAiTacticalOpsRor;
 
 /* 0x004e0630: in list order, the group with task `task` and +0x180
@@ -247,6 +251,21 @@ typedef struct {
 AoeAiUnitGroupRor *aoe_ai_tactical_nearest_group_ror(
     const AoeAiTacticalRor *ai, int32_t task, int32_t field_180, int32_t max,
     const int32_t pt[2], int32_t zone, const AoeAiTacticalOpsRor *ops);
+/* 0x004d2560: an idle unit (task -1, 0x004d99a0) steps around the box
+   (x0, y0)..(x1, y1): of the eight points 2 outside its corners and edge
+   middles (clockwise from the top left), the nearest it could stand at
+   (distance from its height) gets a move order (0x004da160, 100). 1 when
+   ordered. */
+int aoe_ai_tactical_step_around_ror(const AoeAiTacticalOpsRor *ops, int32_t unit,
+                                    float x0, float y0, float x1, float y1);
+/* 0x004d2710: a new unit of ours goes on its list (each value once):
+   class 4 list 0; classes 0, 0x18, 6, 0x19, 0x1a, 0xc, 0x23, 0x17, 0x24,
+   0x1c, 0x12, 0xd, 0x27 list 2; boats (2, 0x14, 0x16, 0x15) list 4 and
+   also class 2 list 7, 0x14 list 8, 0x16 list 5, 0x15 list 6; type 0x9f
+   list 9 while the world's +0x100 is below 4. */
+void aoe_ai_tactical_unit_added_ror(AoeAiTacticalRor *ai,
+                                    const AoeAiWorldObjectRor *unit,
+                                    const AoeAiTacticalOpsRor *ops);
 /* 0x004dc650: ftol(number 34 / f), at most 99. */
 int32_t aoe_ai_tactical_effort_ror(const AoeAiTacticalRor *ai, float f);
 /* 0x004e2f90: +0xd68[i] (0..3, else -1). 0x004e2f30 / 0x004e2f60 /

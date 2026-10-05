@@ -373,6 +373,57 @@ static int ng_zone(void *c, int32_t id, uint8_t *z) {
     return 1;
 }
 
+static int idle_task(void *c, int32_t id, int32_t *t) { (void)c; *t = id == 5 ? -1 : 3; return 1; }
+static int step_free(void *c, int32_t id, float x, float y) { (void)c; (void)id; (void)y; return x > 5.0f; }
+static double step_dist(void *c, int32_t id, float x, float y, float z) {
+    (void)c; (void)id; (void)z; return fabs((double)x - 20.0) + fabs((double)y - 20.0);
+}
+static int32_t world100(void *c) { (void)c; return 3; }
+
+static void step_and_added_tests(void) {
+    static AoeAiTacticalRor ai;
+    AoeAiTacticalOpsRor ops;
+    AoeAiWorldObjectRor u;
+    memset(&ops, 0, sizeof ops);
+    ops.object = tobject;
+    ops.world_object = tobject;
+    ops.unit_task = idle_task;
+    ops.free_tile = step_free;
+    ops.distance = step_dist;
+    ops.order = order;
+    /* Box (4, 4)..(10, 10): standable from x 5 on; nearest to (20, 20) is
+       the bottom-right point (12, 12). */
+    orders = 0;
+    assert(aoe_ai_tactical_step_around_ror(&ops, 5, 4.0f, 4.0f, 10.0f, 10.0f) == 1);
+    assert(orders == 1 && last_order.action == 0x2c6 && last_order.a == 12.0f &&
+           last_order.b == 12.0f);
+    assert(!aoe_ai_tactical_step_around_ror(&ops, 6, 4.0f, 4.0f, 10.0f, 10.0f));
+    assert(!aoe_ai_tactical_step_around_ror(&ops, 5, -9.0f, 4.0f, 0.0f, 10.0f) && orders == 1);
+
+    /* 0x004d2710 */
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    ops.world_100 = world100;
+    memset(&u, 0, sizeof u);
+    u.id = 30; u.type_class = 4;
+    aoe_ai_tactical_unit_added_ror(&ai, &u, &ops);
+    aoe_ai_tactical_unit_added_ror(&ai, &u, &ops);
+    u.id = 31; u.type_class = 0x12;
+    aoe_ai_tactical_unit_added_ror(&ai, &u, &ops);
+    u.id = 32; u.type_class = 0x14;
+    aoe_ai_tactical_unit_added_ror(&ai, &u, &ops);
+    u.id = 33; u.type_class = 2;
+    aoe_ai_tactical_unit_added_ror(&ai, &u, &ops);
+    u.id = 34; u.type_class = 0x1e; u.type_id = 0x9f;
+    aoe_ai_tactical_unit_added_ror(&ai, &u, &ops);
+    u.id = 35; u.type_id = 0x10;
+    aoe_ai_tactical_unit_added_ror(&ai, &u, &ops);
+    assert(ai.lists[0].count == 1 && ai.lists[2].count == 1 && ai.lists[4].count == 2 &&
+           ai.lists[8].count == 1 && ai.lists[8].data[0] == 32 && ai.lists[7].data[0] == 33 &&
+           ai.lists[9].count == 1 && ai.lists[9].data[0] == 34 && ai.lists[5].count == 0);
+    aoe_ai_tactical_release_ror(&ai);
+    orders = 0;
+}
+
 static void nearest_group_tests(void) {
     static AoeAiTacticalRor ai;
     AoeAiTacticalOpsRor ops;
@@ -417,6 +468,7 @@ int main(void) {
     size_t full;
 
     nearest_group_tests();
+    step_and_added_tests();
 
     aoe_ai_tactical_init_ror(&ai, 3, NULL);
     assert(ai.module.id == 0x3f1 && !strcmp(ai.module.name, "TacAI"));

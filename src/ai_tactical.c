@@ -1037,3 +1037,63 @@ AoeAiUnitGroupRor *aoe_ai_tactical_nearest_group_ror(
     }
     return best;
 }
+
+int aoe_ai_tactical_step_around_ror(const AoeAiTacticalOpsRor *ops, int32_t unit,
+                                    float x0, float y0, float x1, float y1) {
+    AoeAiWorldObjectRor u;
+    float x = -1.0f, y = -1.0f, best = -1.0f, bx = -1.0f, by = -1.0f;
+    int i;
+    if (!ops || !aoe_ai_tactical_unit_has_task_ror(ops, unit, -1) || !ops->object ||
+        !ops->object(ops->context, unit, &u))
+        return 0;
+    for (i = 0; i < 8; ++i) {
+        switch (i) {
+        case 0: x = x0 - 2.0f; y = y0 - 2.0f; break;
+        case 1: case 5: x = (x0 + x1) * 0.5f; break;
+        case 2: x = x1 + 2.0f; break;
+        case 3: case 7: y = (y0 + y1) * 0.5f; break;
+        case 4: y = y1 + 2.0f; break;
+        default: x = x0 - 2.0f; break;
+        }
+        if (ops->free_tile && ops->free_tile(ops->context, unit, x, y)) {
+            double d = ops->distance ? ops->distance(ops->context, unit, x, y, u.z) : 0.0;
+            if (best == -1.0f || d < (double)best) {
+                best = (float)d;
+                bx = x;
+                by = y;
+            }
+        }
+    }
+    if (best == -1.0f) return 0;
+    aoe_ai_tactical_order_move_ror(ops, unit, bx, by, 100);
+    return 1;
+}
+
+void aoe_ai_tactical_unit_added_ror(AoeAiTacticalRor *ai,
+                                    const AoeAiWorldObjectRor *unit,
+                                    const AoeAiTacticalOpsRor *ops) {
+    int16_t c;
+    if (!ai || !unit) return;
+    c = unit->type_class;
+    switch (c) {
+    case 4:
+        aoe_ai_int_list_add_unique_ror(&ai->lists[0], unit->id);
+        return;
+    case 0: case 0x18: case 6: case 0x19: case 0x1a: case 0xc: case 0x23:
+    case 0x17: case 0x24: case 0x1c: case 0x12: case 0xd: case 0x27:
+        aoe_ai_int_list_add_unique_ror(&ai->lists[2], unit->id);
+        return;
+    case 2: case 0x14: case 0x16: case 0x15:
+        aoe_ai_int_list_add_unique_ror(&ai->lists[4], unit->id);
+        if (c == 2) aoe_ai_int_list_add_unique_ror(&ai->lists[7], unit->id);
+        if (c == 0x14) aoe_ai_int_list_add_unique_ror(&ai->lists[8], unit->id);
+        if (c == 0x16) aoe_ai_int_list_add_unique_ror(&ai->lists[5], unit->id);
+        if (c == 0x15) aoe_ai_int_list_add_unique_ror(&ai->lists[6], unit->id);
+        return;
+    default:
+        if (unit->type_id == 0x9f && ops && ops->world_100 &&
+            ops->world_100(ops->context) < 4)
+            aoe_ai_int_list_add_unique_ror(&ai->lists[9], unit->id);
+        return;
+    }
+}

@@ -291,6 +291,8 @@ typedef struct {
        order). */
     void (*research_order)(void *context, int32_t type, int32_t producer,
                            int32_t unique_id);
+    /* The information AI's zone test on an object (0x004bc690). */
+    int (*info_zone_open)(void *context, int32_t id);
 } AoeAiTacticalOpsRor;
 
 /* 0x004e0630: in list order, the group with task `task` and +0x180
@@ -453,6 +455,31 @@ int aoe_ai_tactical_research_ror(AoeAiTacticalRor *ai, AoeAiBuildItemRor *item,
    priority from its distance there at height 1.0. 1 when ordered. */
 int aoe_ai_tactical_order_2ca_ror(AoeAiTacticalRor *ai, int32_t unit, float x, float y,
                                   const AoeAiTacticalOpsRor *ops);
+/* 0x004dc670 ("Setup SolGroups"):
+   - Groups without members are deleted; after 600 s since both +0xd0c and
+     +0xd10 (which then takes the time) so are all task-100 groups.
+   - When the information AI's zone test fails for list 2's first entry
+     (list 2 grown to hold one), task-0x66 groups go and number 42 is 0.
+   - Ungrouped list-9 units (0x004de120) each get a new numbered group
+     (task 0x6d, +0x160 1, the unit as member and commander, the location
+     and +0x19c at it, +0x1ac at our first town centre) while a town
+     centre exists; units gone, or without a centre, just leave +0xd48.
+     The original works on +0xd48 at the index left by the deletions
+     above (0 unless groups were deleted) and loops forever when that
+     entry is not on the list; the port stops there.
+   - Wanted counts from the military (list 2) count m: with number 40 at
+     0, task 100 = min(ceil(m / number 16), number 36), task 0x65 =
+     min(ceil(rest / number 25), number 38), task 0x66 = min(ceil(rest /
+     number 43), number 42); otherwise min(m, number 36), min(rest, 38),
+     min(rest, 42). Number 162 at 1 wants no task-100 groups.
+   - Task-100 groups are added by retasking 0x65 then 0x66 groups (while
+     counted) or making new ones: +0x184 / +0x188 -1, +0x180 1, type 0,
+     +0x160 min(rand() % (number 98 + 1) + number 16, number 26); surplus
+     ones with +0x180 0 or 1 are deleted. Task 0x65 likewise from 0x66 or
+     new (+0x160 number 25); task 0x66 only new (+0x160 number 43). */
+void aoe_ai_tactical_setup_soldier_groups_ror(AoeAiTacticalRor *ai,
+                                              const AoeAiTacticalOpsRor *ops,
+                                              const AoeAiUnitGroupOpsRor *group_ops);
 /* 0x004dc650: ftol(number 34 / f), at most 99. */
 int32_t aoe_ai_tactical_effort_ror(const AoeAiTacticalRor *ai, float f);
 /* 0x004e2f90: +0xd68[i] (0..3, else -1). 0x004e2f30 / 0x004e2f60 /

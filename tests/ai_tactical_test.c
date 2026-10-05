@@ -606,6 +606,54 @@ static void point_attack_train_tests(void) {
     aoe_ai_tactical_release_ror(&ai);
 }
 
+static int zone_ok(void *c, int32_t id) { (void)c; (void)id; return 1; }
+static int32_t centre_id(void *c) { (void)c; return 50; }
+
+static void soldier_group_tests(void) {
+    static AoeAiTacticalRor ai;
+    AoeAiTacticalOpsRor ops;
+    AoeAiUnitGroupRor *empty, *fish;
+    int32_t i;
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    memset(&ops, 0, sizeof ops);
+    ops.object = tobject;
+    ops.info_zone_open = zone_ok;
+    ops.first_center = centre_id;
+    ops.rand = roll;
+    ops.game_time = ttime;
+    tnow = 1000;
+    /* Seven soldiers, 3 per task-100 group (at most 2), 2 per 0x65 group,
+       then 0x66; a list-9 boat (60) gets its own 0x6d group. */
+    for (i = 0; i < 7; ++i) aoe_ai_int_list_add_unique_ror(&ai.lists[2], 70 + i);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[9], 60);
+    ai.sn[40] = 0;
+    ai.sn[16] = 3; ai.sn[36] = 2;
+    ai.sn[25] = 2; ai.sn[38] = 5;
+    ai.sn[43] = 4; ai.sn[42] = 1;
+    ai.sn[98] = 1; ai.sn[26] = 3;
+    ai.sn[162] = 0;
+    aoe_ai_tactical_setup_soldier_groups_ror(&ai, &ops, NULL);
+    assert(aoe_ai_tactical_count_groups_ror(&ai, 100, -1) == 2);
+    assert(aoe_ai_tactical_count_groups_ror(&ai, 0x65, -1) == 1);
+    assert(aoe_ai_tactical_count_groups_ror(&ai, 0x66, -1) == 0);
+    fish = aoe_ai_tactical_find_group_ror(&ai, -1, 0x6d, -1, -1);
+    assert(fish && aoe_ai_unit_group_contains_ror(fish, 60) && fish->commander == 60 &&
+           ai.list_d48.count == 0);
+    /* 17 % 2 + 3 = 4, capped at 3. */
+    assert(aoe_ai_tactical_find_group_ror(&ai, -1, 100, 1, -1)->field_160 == 3);
+    /* Number 162: the task-100 groups (empty, so deleted first anyway) go,
+       and so does the empty 0x67 group. */
+    ai.sn[162] = 1;
+    empty = aoe_ai_tactical_new_group_ror(&ai, 1);
+    empty->task = 0x67;
+    aoe_ai_int_list_add_unique_ror(&ai.lists[9], 61);
+    aoe_ai_tactical_setup_soldier_groups_ror(&ai, &ops, NULL);
+    assert(aoe_ai_tactical_count_groups_ror(&ai, 100, -1) == 0 &&
+           aoe_ai_tactical_count_groups_ror(&ai, 0x67, -1) == 0);
+    aoe_ai_tactical_release_ror(&ai);
+    tnow = 300000;
+}
+
 static void to_object_tests(void) {
     static AoeAiTacticalRor ai;
     AoeAiTacticalOpsRor ops;
@@ -843,6 +891,7 @@ int main(void) {
     build_start_tests();
     to_object_tests();
     point_attack_train_tests();
+    soldier_group_tests();
 
     aoe_ai_tactical_init_ror(&ai, 3, NULL);
     assert(ai.module.id == 0x3f1 && !strcmp(ai.module.name, "TacAI"));

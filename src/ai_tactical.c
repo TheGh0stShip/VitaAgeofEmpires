@@ -1656,3 +1656,137 @@ int aoe_ai_tactical_order_2ca_ror(AoeAiTacticalRor *ai, int32_t unit, float x, f
     if (ops->order) ops->order(ops->context, &o);
     return 1;
 }
+
+/* Retask (or make) a soldier group. */
+static void soldier_group(AoeAiUnitGroupRor *g, int32_t task, int32_t size, int full) {
+    g->task = task;
+    if (full) {
+        g->field_184 = -1;
+        g->field_188 = -1;
+        g->field_180 = 1;
+        g->type = 0;
+    }
+    g->field_160 = size;
+}
+
+static int32_t ceil_div(int32_t a, int32_t b) {
+    return aoe_ftol32(ceil((double)a / (double)b));
+}
+
+void aoe_ai_tactical_setup_soldier_groups_ror(AoeAiTacticalRor *ai,
+                                              const AoeAiTacticalOpsRor *ops,
+                                              const AoeAiUnitGroupOpsRor *group_ops) {
+    AoeAiIntListRor doomed;
+    int32_t i, k, now, n100, n65, n66, w100 = 0, w65 = 0, w66 = 0, m, rest, *first;
+    if (!ai || !ops) return;
+    memset(&doomed, 0, sizeof doomed);
+    for (i = 0; i < ai->groups_len; ++i)
+        if (aoe_ai_unit_group_count_ror(ai->groups[i]) == 0)
+            aoe_ai_int_list_add_unique_ror(&doomed, ai->groups[i]->id);
+    now = ops->game_time ? (int32_t)ops->game_time(ops->context) : 0;
+    if ((uint32_t)(now - ai->field_d0c) / 1000 > 600 &&
+        (uint32_t)(now - ai->field_d10) / 1000 > 600) {
+        ai->field_d10 = now;
+        for (i = 0; i < ai->groups_len; ++i)
+            if (ai->groups[i]->task == 100)
+                aoe_ai_int_list_add_unique_ror(&doomed, ai->groups[i]->id);
+    }
+    for (k = 0; k < doomed.count; ++k) aoe_ai_tactical_delete_group_ror(ai, doomed.data[k]);
+    first = aoe_ai_int_list_at_ror(&ai->lists[2], 0);
+    if (ops->info_zone_open && !ops->info_zone_open(ops->context, first ? *first : 0)) {
+        aoe_ai_tactical_delete_groups_ror(ai, 0x66);
+        aoe_ai_tactical_set_sn_ror(ai, 0x2a, 0, NULL, NULL);
+    }
+    n100 = aoe_ai_tactical_count_groups_ror(ai, 100, -1);
+    n65 = aoe_ai_tactical_count_groups_ror(ai, 0x65, -1);
+    n66 = aoe_ai_tactical_count_groups_ror(ai, 0x66, -1);
+    aoe_ai_tactical_collect_ungrouped_ror(ai, 9);
+    while (ai->list_d48.count > 0) {
+        int32_t *v = aoe_ai_int_list_at_ror(&ai->list_d48, k), id, before, centre;
+        AoeAiWorldObjectRor u, c;
+        if (!v) break;
+        id = *v;
+        before = ai->list_d48.count;
+        centre = ops->first_center ? ops->first_center(ops->context) : -1;
+        if (ops->object && ops->object(ops->context, id, &u) && centre != -1 &&
+            ops->object(ops->context, centre, &c)) {
+            AoeAiUnitGroupRor *g = aoe_ai_tactical_new_group_ror(ai, 1);
+            if (!g) break;
+            g->task = 0x6d;
+            g->field_160 = 1;
+            aoe_ai_unit_group_add_ror(g, id, group_ops);
+            aoe_ai_unit_group_set_commander_ror(g, id, group_ops);
+            aoe_ai_unit_group_set_location_ror(g->location, u.x, u.y, u.z);
+            aoe_ai_unit_group_set_location_ror(g->loc_19c, u.x, u.y, u.z);
+            aoe_ai_unit_group_set_location_ror(g->loc_1ac, c.x, c.y, c.z);
+        }
+        aoe_ai_int_list_remove_ror(&ai->list_d48, id);
+        if (ai->list_d48.count == before) break;
+    }
+    m = ai->lists[2].count;
+    if (ai->sn[40] == 0) {
+        w100 = ceil_div(m, ai->sn[16]);
+        if (w100 > ai->sn[36]) w100 = ai->sn[36];
+        rest = m - ai->sn[16] * w100;
+        if (rest > 0) {
+            w65 = ceil_div(rest, ai->sn[25]);
+            if (w65 > ai->sn[38]) w65 = ai->sn[38];
+            rest = m - ai->sn[25] * w65 - ai->sn[16] * w100;
+            if (rest > 0) {
+                w66 = ceil_div(rest, ai->sn[43]);
+                if (w66 > ai->sn[42]) w66 = ai->sn[42];
+            }
+        }
+    } else {
+        w100 = m < ai->sn[36] ? m : ai->sn[36];
+        if (m - w100 > 0) {
+            w65 = m - w100 < ai->sn[38] ? m - w100 : ai->sn[38];
+            if (m - w65 - w100 > 0)
+                w66 = m - w65 - w100 < ai->sn[42] ? m - w65 - w100 : ai->sn[42];
+        }
+    }
+    if (ai->sn[162] == 1) w100 = 0;
+    for (; n100 < w100; ++n100) {
+        AoeAiUnitGroupRor *g = NULL;
+        int32_t size;
+        if (n65 > 0) {
+            if ((g = aoe_ai_tactical_find_group_ror(ai, -1, 0x65, -1, -1))) --n65;
+            else if ((g = aoe_ai_tactical_find_group_ror(ai, -1, 0x66, -1, -1))) --n66;
+        }
+        if (!g && !(g = aoe_ai_tactical_new_group_ror(ai, 1))) break;
+        size = (ops->rand ? ops->rand(ops->context) : 0) % (ai->sn[98] + 1) + ai->sn[16];
+        if (size > ai->sn[26]) size = ai->sn[26];
+        soldier_group(g, 100, size, 1);
+    }
+    while (n100 > w100) {
+        AoeAiUnitGroupRor *g = aoe_ai_tactical_find_group_ror(ai, -1, 100, 0, -1);
+        if (!g) g = aoe_ai_tactical_find_group_ror(ai, -1, 100, 1, -1);
+        if (!g) break;
+        aoe_ai_tactical_delete_group_ror(ai, g->id);
+        --n100;
+    }
+    for (; n65 < w65; ++n65) {
+        AoeAiUnitGroupRor *g = NULL;
+        if (n66 > 0 && (g = aoe_ai_tactical_find_group_ror(ai, -1, 0x66, -1, -1))) --n66;
+        if (!g && !(g = aoe_ai_tactical_new_group_ror(ai, 1))) break;
+        soldier_group(g, 0x65, ai->sn[25], 1);
+    }
+    while (n65 > w65) {
+        AoeAiUnitGroupRor *g = aoe_ai_tactical_find_group_ror(ai, -1, 0x65, -1, -1);
+        if (!g) break;
+        aoe_ai_tactical_delete_group_ror(ai, g->id);
+        --n65;
+    }
+    for (; n66 < w66; ++n66) {
+        AoeAiUnitGroupRor *g = aoe_ai_tactical_new_group_ror(ai, 1);
+        if (!g) break;
+        soldier_group(g, 0x66, ai->sn[43], 0);
+    }
+    while (n66 > w66) {
+        AoeAiUnitGroupRor *g = aoe_ai_tactical_find_group_ror(ai, -1, 0x66, -1, -1);
+        if (!g) break;
+        aoe_ai_tactical_delete_group_ror(ai, g->id);
+        --n66;
+    }
+    free(doomed.data);
+}

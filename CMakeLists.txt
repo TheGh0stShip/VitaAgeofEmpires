@@ -630,7 +630,7 @@ add_library(aoe_unit_class STATIC src/unit_class.c)
 target_include_directories(aoe_unit_class PUBLIC include)
 target_compile_options(aoe_unit_class PRIVATE -Wall -Wextra)
 
-add_library(aoe_ui_panel STATIC src/ui_panel.c src/ui_button.c src/command_button.c src/resource_panel.c src/info_panel.c src/population_panel.c src/timer_panel.c src/edit_toolbar.c src/diamond_map.c
+add_library(aoe_ui_panel STATIC src/ui_panel.c src/ui_button.c src/command_button.c src/resource_panel.c src/info_panel.c src/population_panel.c src/timer_panel.c src/edit_toolbar.c src/diamond_map.c src/game_minimap.c
             src/ui_text.c
             src/ui_scrollbar.c
             src/ui_list.c
@@ -1505,6 +1505,10 @@ else()
   target_link_libraries(diamond_map_test PRIVATE aoe_ui_panel aoe_draw_system)
   target_compile_options(diamond_map_test PRIVATE -UNDEBUG)
   add_test(NAME original_ror_diamond_map COMMAND diamond_map_test)
+  add_executable(game_minimap_test tests/game_minimap_test.c)
+  target_link_libraries(game_minimap_test PRIVATE aoe_ui_panel aoe_draw_system)
+  target_compile_options(game_minimap_test PRIVATE -UNDEBUG)
+  add_test(NAME original_ror_game_minimap COMMAND game_minimap_test)
   add_executable(ui_list_test tests/ui_list_test.c)
   target_link_libraries(ui_list_test PRIVATE aoe_ui_panel)
   target_compile_options(ui_list_test PRIVATE -UNDEBUG)

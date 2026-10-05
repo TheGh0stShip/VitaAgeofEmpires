@@ -221,7 +221,7 @@ static void inf_add(void *c, int m, int32_t x0, int32_t y0, int32_t x1, int32_t 
     int32_t *l = influence_log[influence_n++];
     (void)c; l[0] = 300 + m; l[1] = x0; l[2] = y0; l[3] = x1; l[4] = y1; l[5] = v;
 }
-static void inf_finish(void *c, int m) { (void)c; influence_log[influence_n][0] = 400 + m; ++influence_n; }
+static int32_t inf_finish(void *c, int m) { (void)c; influence_log[influence_n][0] = 400 + m; ++influence_n; return 0; }
 static double v108_3(void *c, int32_t id) { (void)c; return id == 501 ? 2.0 : 0.0; }
 static double range3(void *c, int32_t id) { (void)c; return id == 501 ? 2.5 : 0.5; }
 
@@ -826,6 +826,17 @@ static int write_file(void *c, const char *path, const void *data, int size) {
 }
 
 static const char *player_name(void *c) { (void)c; return "Bob"; }
+static const char *player_name_n(void *c, int32_t p) { (void)c; return p == 2 ? "Ann" : "?"; }
+static char read_all_path[64];
+static int read_all(void *c, const char *path, uint8_t **data, size_t *size) {
+    (void)c;
+    snprintf(read_all_path, sizeof read_all_path, "%s", path);
+    if (strcmp(path, "learn\\camp1Ann.2") != 0) return 0;
+    *data = (uint8_t *)malloc((size_t)written_size[0]);
+    memcpy(*data, written[0], (size_t)written_size[0]);
+    *size = (size_t)written_size[0];
+    return 1;
+}
 
 static int step_reach;
 static int step_unit(void *c, int32_t id, AoeAiWorldObjectRor *o) {
@@ -1161,6 +1172,64 @@ static void force_and_wonder_tests(void) {
     assert(aoe_ai_info_wonder_ror(&info, 5, &ops) == NULL);
 }
 
+static int ap_object(void *c, int32_t id, AoeAiWorldObjectRor *o) {
+    (void)c;
+    memset(o, 0, sizeof *o);
+    o->id = id;
+    return id == 7;
+}
+static int ap_shore;
+static uint8_t ap_tile(void *c, int32_t x, int32_t y) {
+    (void)c;
+    if (ap_shore) return (uint8_t)(x == 11 && y == 11 ? 2 : 0);
+    return (uint8_t)(x < 9 ? 1 : 0);
+}
+static uint8_t ap_zone(void *c, int32_t id, int32_t x, int32_t y) { (void)c; (void)id; (void)x; (void)y; return 1; }
+static int ap_reach(void *c, int32_t id, const int32_t from[2], const int32_t to[2], float r) {
+    (void)c; (void)id;
+    assert(to[0] == 10 && to[1] == 10 && r == 1.0f);
+    return from[1] == 12;
+}
+static int ap_block;
+static int ap_free(void *c, int32_t id, float x, float y) {
+    (void)c; (void)id;
+    return !(ap_block && x == 12.0f && y == 12.0f);
+}
+static int ap_rand(void *c) { (void)c; return 0; }
+
+static void approach_tests(void) {
+    static AoeAiInfoRor info;
+    static AoeAiInfoObjectRor objs[1];
+    AoeAiInfoOpsRor ops;
+    int32_t out[2] = {-1, -1};
+    memset(&ops, 0, sizeof ops);
+    ops.object = ap_object;
+    ops.tile_byte5 = ap_tile;
+    ops.tile_zone = ap_zone;
+    ops.reach_test = ap_reach;
+    ops.free_tile = ap_free;
+    ops.rand = ap_rand;
+    objs[0].id = 50; objs[0].owner = 2; objs[0].x = 10; objs[0].y = 10;
+    info.objects = objs;
+    info.object_count = 1;
+    info.map_width = info.map_height = 20;
+    /* Land tiles from x 9: (13, 12) scores 3 + 3. */
+    assert(aoe_ai_info_approach_tile_ror(&info, 0, 0, out, 0, 1, 50, 3, 7, &ops) == 1);
+    assert(out[0] == 13 && out[1] == 12);
+    /* Water only (land 0): x 7..8; (7, 12) scores 3 + 3. */
+    assert(aoe_ai_info_approach_tile_ror(&info, 0, 0, out, 0, 0, 50, 3, 7, &ops) == 1);
+    assert(out[0] == 7 && out[1] == 12);
+    /* Landing: only the shore tile (11, 11), whose surroundings must be
+       standable. */
+    ap_shore = 1;
+    assert(aoe_ai_info_approach_tile_ror(&info, 0, 0, out, 1, 0, 50, 3, 7, &ops) == 1);
+    assert(out[0] == 11 && out[1] == 11);
+    ap_block = 1;
+    assert(!aoe_ai_info_approach_tile_ror(&info, 0, 0, out, 1, 0, 50, 3, 7, &ops));
+    assert(!aoe_ai_info_approach_tile_ror(&info, 0, 0, out, 0, 1, 51, 3, 7, &ops));
+    assert(!aoe_ai_info_approach_tile_ror(&info, 0, 0, out, 0, 1, 50, 3, 8, &ops));
+}
+
 static void lifecycle_tests(void) {
     static AoeAiInfoRor a, b;
     static uint8_t buf[200000];
@@ -1272,6 +1341,25 @@ static void lifecycle_tests(void) {
     assert(strcmp(written_path[1], "learn\\Bob.uh") == 0 &&
            written_size[1] == 44 && written[1][16] == 14);
     assert(a.objects == NULL);
+
+    /* 0x004c3820 reads that area file back. */
+    assert(aoe_ai_info_init_ror(&b));
+    ops.player_name = player_name_n;
+    ops.read_all = read_all;
+    assert(aoe_ai_info_load_area_file_ror(&b, NULL, &ops) == 1 &&
+           strcmp(b.area_path, "learn\\default.2") == 0 && b.map_width == -1);
+    assert(aoe_ai_info_load_area_file_ror(&b, "camp1", &ops) == 1);
+    assert(strcmp(read_all_path, "learn\\camp1Ann.2") == 0);
+    assert(b.map_width == 8 && b.map_height == 6);
+    assert(b.areas[0].id != -1 && b.areas[0].age == 2 && b.areas[1].id == -1);
+    assert(aoe_ai_info_find_object_ror(&b, 9) != NULL && b.list_128.count == 1 &&
+           b.list_128.data[0] == 9);
+    assert(b.target_capacity[1] == 2 && b.target_count[1] == 1 &&
+           b.targets[1][1].id == 11 && b.targets[0] == NULL);
+    assert(b.list_148.count == 1 && b.list_148.data[0] == 42);
+    written_size[0] = 20;
+    assert(aoe_ai_info_load_area_file_ror(&b, "camp1", &ops) == 0);
+    aoe_ai_info_release_ror(&b, NULL);
 }
 
 int main(void) {
@@ -1288,6 +1376,7 @@ int main(void) {
     resource_tests();
     dock_and_ring_tests();
     force_and_wonder_tests();
+    approach_tests();
     memset(&ops, 0, sizeof ops);
     ops.self = 1;
     ops.object = object;

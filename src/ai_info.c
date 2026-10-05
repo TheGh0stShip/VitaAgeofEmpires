@@ -1081,13 +1081,13 @@ void aoe_ai_info_penalize_areas_ror(const AoeAiInfoRor *info,
     }
 }
 
-void aoe_ai_info_unit_influence_ror(const AoeAiInfoRor *info, uint32_t owner,
+int32_t aoe_ai_info_unit_influence_ror(const AoeAiInfoRor *info, uint32_t owner,
                                     int32_t x, int32_t y,
                                     const AoeAiInfoOpsRor *ops) {
     int32_t i;
     if (!info || !ops || !ops->influence_clear || !ops->influence_origin ||
         !ops->influence_add || !ops->influence_finish)
-        return;
+        return 0;
     ops->influence_clear(ops->context, 0);
     ops->influence_origin(ops->context, 0, x, y);
     for (i = 0; i < info->object_count; ++i) {
@@ -1103,16 +1103,16 @@ void aoe_ai_info_unit_influence_ror(const AoeAiInfoRor *info, uint32_t owner,
         ops->influence_add(ops->context, 0, ox - r, oy - r, ox + r, r + oy,
                            v > 0.0 ? 5 : 1);
     }
-    ops->influence_finish(ops->context, 0);
+    return ops->influence_finish(ops->context, 0);
 }
 
-void aoe_ai_info_area_influence_ror(const AoeAiInfoRor *info,
+int32_t aoe_ai_info_area_influence_ror(const AoeAiInfoRor *info,
                                     uint32_t player_a, int32_t x, int32_t y,
                                     const AoeAiInfoOpsRor *ops) {
     int32_t i;
     if (!info || !ops || !ops->influence_clear || !ops->influence_origin ||
         !ops->influence_add || !ops->influence_finish)
-        return;
+        return 0;
     ops->influence_clear(ops->context, 1);
     ops->influence_origin(ops->context, 1, x, y);
     for (i = 0; i < info->area_count; ++i) {
@@ -1122,7 +1122,7 @@ void aoe_ai_info_area_influence_ror(const AoeAiInfoRor *info,
             continue;
         ops->influence_add(ops->context, 1, r->x0, r->y0, r->x1, r->y1, 1);
     }
-    ops->influence_finish(ops->context, 1);
+    return ops->influence_finish(ops->context, 1);
 }
 
 /* ---- Choosing targets ---- */
@@ -2911,4 +2911,147 @@ AoeAiInfoObjectRor *aoe_ai_info_wonder_ror(const AoeAiInfoRor *info,
         }
     }
     return best;
+}
+
+int aoe_ai_info_load_area_file_ror(AoeAiInfoRor *info, const char *name,
+                                   const AoeAiInfoOpsRor *ops) {
+    AoeOutcomeStream s;
+    uint8_t *data = NULL;
+    size_t size = 0;
+    int32_t n, i, k;
+    if (!info || !ops) return 0;
+    if (!name) {
+        snprintf(info->area_path, sizeof info->area_path, "learn\\default.%d",
+                 (int)ops->self);
+    } else {
+        const char *player = ops->player_name ? ops->player_name(ops->context, ops->self)
+                                              : NULL;
+        snprintf(info->area_path, sizeof info->area_path, "learn\\%s%s.%d", name,
+                 player ? player : "", (int)ops->self);
+    }
+    if (!ops->read_all || !ops->read_all(ops->context, info->area_path, &data, &size))
+        return 1;
+    memset(&s, 0, sizeof s);
+    s.data = data;
+    s.size = size;
+    info->map_width = aoe_stream_i32(&s);
+    info->map_height = aoe_stream_i32(&s);
+    n = aoe_stream_i32(&s);
+    for (i = 0; i < n && !s.failed; ++i) {
+        AoeAiInfoAreaRor a;
+        take_area(&s, &a);
+        if (s.failed) break;
+        aoe_ai_info_add_area_ror(info, a.field_4, a.x0, a.y0, a.x1, a.y1, a.player_9,
+                                 a.player_a, a.field_c, a.field_e, a.age, a.field_14,
+                                 ops);
+    }
+    n = aoe_stream_i32(&s);
+    for (i = 0; i < n && !s.failed; ++i) {
+        AoeAiInfoObjectRor e;
+        take_object(&s, &e);
+        if (s.failed) break;
+        aoe_ai_info_store_object_ror(info, &e, NULL, ops);
+        aoe_ai_int_list_add_unique_ror(&info->list_128, e.id);
+    }
+    for (k = 0; k < 4 && !s.failed; ++k) {
+        int32_t cap = aoe_stream_i32(&s);
+        info->target_capacity[k] = cap;
+        info->target_count[k] = aoe_stream_i32(&s);
+        free(info->targets[k]);
+        info->targets[k] = NULL;
+        if (s.failed || cap <= 0) continue;
+        info->targets[k] = (AoeAiInfoTargetRor *)calloc((size_t)cap, sizeof **info->targets);
+        if (!info->targets[k]) {
+            s.failed = 1;
+            break;
+        }
+        for (i = 0; i < cap; ++i) take_target(&s, &info->targets[k][i]);
+    }
+    if (!s.failed) take_list(&s, &info->list_138);
+    if (!s.failed) take_list(&s, &info->list_148);
+    free(data);
+    return !s.failed;
+}
+
+static int is_water(uint8_t t) { return t == 1 || t == 0x16; }
+
+int aoe_ai_info_approach_tile_ror(AoeAiInfoRor *info, int32_t x, int32_t y,
+                                  int32_t out[2], int32_t landing,
+                                  int32_t land, int32_t target,
+                                  int32_t radius, int32_t unit,
+                                  const AoeAiInfoOpsRor *ops) {
+    AoeAiInfoObjectRor *e;
+    AoeAiWorldObjectRor u;
+    int32_t from[2], lo[2], hi[2], mid[2], m0, m1, tx, ty, best = -1;
+    uint8_t zone;
+    if (!info || !ops || !ops->object || !ops->tile_byte5) return 0;
+    e = aoe_ai_info_find_object_ror(info, target);
+    if (!e || !ops->object(ops->context, unit, &u)) return 0;
+    from[0] = x;
+    from[1] = y;
+    if (ops->near_tile) {
+        if (aoe_class_is_boat_ror(u.type_class) == 1 && landing == 0)
+            ops->near_tile(ops->context, unit, x, y, from, 1, 0x16);
+        else
+            ops->near_tile(ops->context, unit, x, y, from, 2, 0);
+    }
+    zone = ops->tile_zone ? ops->tile_zone(ops->context, unit, from[0], from[1]) : 0;
+    m0 = aoe_ai_info_unit_influence_ror(info, e->owner, e->x, e->y, ops);
+    m1 = aoe_ai_info_area_influence_ror(info, e->owner, e->x, e->y, ops);
+    lo[0] = e->x - radius;
+    lo[1] = e->y - radius;
+    aoe_ai_info_clamp_ror(info, lo);
+    hi[0] = e->x + radius;
+    hi[1] = e->y + radius;
+    aoe_ai_info_clamp_ror(info, hi);
+    mid[0] = e->x;
+    mid[1] = e->y;
+    aoe_ai_info_clamp_ror(info, mid);
+    for (tx = lo[0]; tx <= hi[0]; ++tx) {
+        for (ty = lo[1]; ty <= hi[1]; ++ty) {
+            uint8_t t = ops->tile_byte5(ops->context, tx, ty) & 0x1f;
+            int32_t dx, dy, score, at[2];
+            int ok;
+            if (landing == 1) ok = t == 2;
+            else if (land == 1) ok = !is_water(t);
+            else ok = land != 0 || is_water(t);
+            if (!ok) continue;
+            if (!ops->tile_zone || ops->tile_zone(ops->context, unit, tx, ty) != zone)
+                continue;
+            if (landing == 1) {
+                int32_t a[2], b[2], i, j, open = 1;
+                a[0] = tx - 2;
+                a[1] = ty - 2;
+                aoe_ai_info_clamp_ror(info, a);
+                b[0] = tx + 2;
+                b[1] = ty + 2;
+                aoe_ai_info_clamp_ror(info, b);
+                for (i = a[0]; i <= b[0] && open; ++i)
+                    for (j = a[1]; j <= b[1] && open; ++j)
+                        if (!is_water(ops->tile_byte5(ops->context, i, j) & 0x1f) &&
+                            (!ops->free_tile ||
+                             !ops->free_tile(ops->context, unit, (float)i, (float)j)))
+                            open = 0;
+                if (!open) continue;
+            }
+            dx = e->x - tx;
+            dy = e->y - ty;
+            score = aoe_ftol32(sqrt((double)(dx * dx + dy * dy)));
+            score += (ops->rand ? ops->rand(ops->context) : 0) % (radius * 3);
+            at[0] = tx;
+            at[1] = ty;
+            if (ops->reach_test && ops->reach_test(ops->context, unit, at, mid, 1.0f) == 1)
+                score += radius;
+            if (m0 > 0 && ops->influence_get)
+                score += -(ops->influence_get(ops->context, 0, tx, ty) * radius / m0);
+            if (m1 > 0 && ops->influence_get)
+                score += -(ops->influence_get(ops->context, 1, tx, ty) * radius / m1);
+            if (best == -1 || best < score) {
+                out[0] = tx;
+                out[1] = ty;
+                best = score;
+            }
+        }
+    }
+    return best != -1;
 }

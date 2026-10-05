@@ -169,12 +169,14 @@ typedef struct {
     /* The two influence maps (map 0 the global at 0x007c0478 for units,
        map 1 at 0x007c04c8 for areas): clear to 0, set the origin
        (0x00415ac0), add a value over a rectangle (capped below the map's
-       limit) and finish (the maximum scan). */
+       limit), finish (the maximum scan, 0x0043dfe0: the largest cell)
+       and read a cell (0x0043d6a0). */
     void (*influence_clear)(void *context, int map);
     void (*influence_origin)(void *context, int map, int32_t x, int32_t y);
     void (*influence_add)(void *context, int map, int32_t x0, int32_t y0,
                           int32_t x1, int32_t y1, int32_t value);
-    void (*influence_finish)(void *context, int map);
+    int32_t (*influence_finish)(void *context, int map);
+    uint8_t (*influence_get)(void *context, int map, int32_t x, int32_t y);
     /* World players (+0x3c +0x3c), a player's +4 (0x00454150), whether
        that player names us an ally (its vtable +0x1c with our index),
        and passing a sighting to that player's information AI (its
@@ -260,6 +262,15 @@ typedef struct {
        +0x18), state byte (+0xc) and +0x2c; 0 for an empty list. */
     int (*head_action)(void *context, int32_t id, int16_t *type,
                        uint8_t *state, float *field_2c);
+    /* A player's name in the settings (0x0043ce80) and a whole binary
+       file read into a malloc'd buffer (0 when it cannot open). */
+    const char *(*player_name)(void *context, int32_t player);
+    int (*read_all)(void *context, const char *path, uint8_t **data,
+                    size_t *size);
+    /* Unit `id`'s nearby-tile search from (x, y) with a mode, a terrain
+       and 4 (its own map search): the tile goes to `out`. */
+    void (*near_tile)(void *context, int32_t id, int32_t x, int32_t y,
+                      int32_t out[2], int32_t mode, int32_t terrain);
 } AoeAiInfoOpsRor;
 
 /* The 36-byte summary 0x004c2de0 fills: the farthest distance, two words
@@ -564,6 +575,35 @@ void aoe_ai_info_force_ror(const AoeAiInfoRor *info, AoeAiInfoForceRor *out,
 AoeAiInfoObjectRor *aoe_ai_info_wonder_ror(const AoeAiInfoRor *info,
                                            int32_t player,
                                            const AoeAiInfoOpsRor *ops);
+/* 0x004c3820: the area file (+0x208) "learn\\default.<our index>"
+   without `name`, else "learn\\<name><our player name>.<our index>",
+   read as the destructor writes it: the map size, each area recorded
+   (0x004c3660, its ID not used), each object stored (0x004bd7e0) and its
+   ID added once to +0x128, the four target lists (capacity, count,
+   entries; the old arrays are dropped) and the +0x138 and +0x148 lists
+   (values added once). A missing file changes only the path. 0 when the
+   file is short. */
+int aoe_ai_info_load_area_file_ror(AoeAiInfoRor *info, const char *name,
+                                   const AoeAiInfoOpsRor *ops);
+/* 0x004c42a0: a tile near remembered object `target` for unit `unit` to
+   attack from or land at. The unit's nearby-tile search from (x, y)
+   (mode 1 and terrain 0x16 for a boat when `landing` is 0, else mode 2,
+   terrain 0) gives the zone to keep. The two influence maps are built
+   for the target's owner around its tile; over its tile +- `radius`
+   (clamped) a tile qualifies by terrain (tile byte 5 & 0x1f): with
+   `landing` 1, terrain 2 and every non-water (1, 0x16) tile within 2 of
+   it standable for the unit; else with `land` 1 any non-water tile; with
+   `land` 0 water only; any other `land` every tile. In the unit's zone it
+   scores ftol(its distance to the target's tile) + rand() % (3 x radius)
+   + radius when the unit's reach test toward the target's clamped tile
+   within 1.0 passes - map 0's cell x radius / map 0's maximum - map 1's
+   cell x radius / map 1's maximum (each only for a positive maximum);
+   the first best goes to `out`. 1 with a tile. */
+int aoe_ai_info_approach_tile_ror(AoeAiInfoRor *info, int32_t x, int32_t y,
+                                  int32_t out[2], int32_t landing,
+                                  int32_t land, int32_t target,
+                                  int32_t radius, int32_t unit,
+                                  const AoeAiInfoOpsRor *ops);
 int32_t aoe_ai_info_pick_target_ror(AoeAiInfoRor *info, int32_t k,
                                     int32_t id, float pos[2], int32_t *drop,
                                     const int32_t *exclude,
@@ -661,11 +701,12 @@ void aoe_ai_info_penalize_areas_ror(const AoeAiInfoRor *info,
    object seen as `owner` adds 5 (1 when its vtable +0x108 value is not
    above 0) over the square of its truncated type +0x28 around its
    truncated tile. 0x004c4880: map 1 gains 1 over each of our areas of
-   kind `player_a`. */
-void aoe_ai_info_unit_influence_ror(const AoeAiInfoRor *info, uint32_t owner,
+   kind `player_a`. Both return the map's largest cell (the original
+   passes on the scan's result); 0 without the map ops. */
+int32_t aoe_ai_info_unit_influence_ror(const AoeAiInfoRor *info, uint32_t owner,
                                     int32_t x, int32_t y,
                                     const AoeAiInfoOpsRor *ops);
-void aoe_ai_info_area_influence_ror(const AoeAiInfoRor *info,
+int32_t aoe_ai_info_area_influence_ror(const AoeAiInfoRor *info,
                                     uint32_t player_a, int32_t x, int32_t y,
                                     const AoeAiInfoOpsRor *ops);
 /* 0x004c5b80: among live remembered objects of type 0x9e or 0xa3 seen

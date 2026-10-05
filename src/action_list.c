@@ -80,3 +80,17 @@ void aoe_action_list_each_ror(const AoeActionList *list, void (*fn)(void *contex
     const AoeActionNode *n;
     for (n = list->head; n; n = n->next) fn(context, n->action);
 }
+
+int aoe_unit_push_action_ror(AoeActionList *list, void *action) {
+    return action ? aoe_action_list_push(list, action) : 1;
+}
+
+int aoe_unit_append_action_ror(AoeActionList *list, void *action) {
+    return action ? aoe_action_list_append(list, action) : 1;
+}
+
+void aoe_unit_cleanup_actions_ror(AoeActionList *list, void (*cleanup)(void *context),
+                                  void *context) {
+    if (list) aoe_action_list_clear(list);
+    cleanup(context);
+}

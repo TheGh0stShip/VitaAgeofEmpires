@@ -52,6 +52,14 @@ int aoe_action_list_update_ror(AoeActionList *list, const AoeActionTickOps *ops,
    update_head. 0x004045b0: the head action (NULL when empty); 0x00404580
    asks it +0x34 (0 when empty). 0x00403df0 (+0x10) and 0x00404600
    (+0x44 with three values) hand every action, in order, to `fn`. */
+/* The action unit's slots on its list (+0x184; vtable 0x00542748):
+   +0x204 0x00406470 pushes and +0x20c 0x004064c0 appends an action,
+   ignoring NULL (1); +0x08 0x00405b40 clears the list (when it has one)
+   before the common cleanup 0x004a6920 (`cleanup`). */
+int aoe_unit_push_action_ror(AoeActionList *list, void *action);
+int aoe_unit_append_action_ror(AoeActionList *list, void *action);
+void aoe_unit_cleanup_actions_ror(AoeActionList *list, void (*cleanup)(void *context),
+                                  void *context);
 void *aoe_action_list_head_ror(const AoeActionList *list);
 void aoe_action_list_each_ror(const AoeActionList *list, void (*fn)(void *context, void *action),
                               void *context);

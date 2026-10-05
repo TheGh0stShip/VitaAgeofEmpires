@@ -52,6 +52,8 @@ static void tick_waiting(void *context,void *action) {
 }
 static void add_id(void *c, void *a) { *(int *)c = *(int *)c * 10 + *(int *)a; }
 
+static void count_clean(void *c) { ++*(int *)c; }
+
 int main(void) {
     uint8_t state=2;
     int a=1,b=2,c=3;
@@ -149,5 +151,21 @@ int main(void) {
     list.ops.destroy=NULL;
     assert(!aoe_action_list_clear(&list));
     assert(!aoe_building_terminal_cleanup_ror(&building,&count));
+    {
+        int x=7, y=8, cleaned=0;
+        t.used=0;
+        t.building=NULL;
+        state=2;
+        list.owner_state=&state;
+        list.ops.destroy=destroy;
+        assert(aoe_unit_push_action_ror(&list,NULL) && !list.head);
+        assert(aoe_unit_append_action_ror(&list,&x) && aoe_unit_push_action_ror(&list,&y));
+        assert(list.head->action==&y && list.head->next->action==&x);
+        assert(aoe_unit_append_action_ror(&list,NULL));
+        aoe_unit_cleanup_actions_ror(&list,count_clean,&cleaned);
+        assert(!list.head && cleaned==1);
+        aoe_unit_cleanup_actions_ror(NULL,count_clean,&cleaned);
+        assert(cleaned==2);
+    }
     return 0;
 }

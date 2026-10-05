@@ -124,6 +124,25 @@ typedef struct {
     void (*base_414eb0)(void *context, int32_t arg);
     void (*call_a4)(void *context, int32_t value);
     int32_t (*call_3c)(void *context, int32_t value);
+    /* The base class's own +0xd4 (with 1), the nearby count of band 3,
+       vtable +0xe0 / +0xe4 (searches with an out distance), +0x70 / +0x6c
+       (id, value) with their results, +0x40 with (-1, 2, -1, -1, 0), the
+       owner's view of a tile (0x00412fd0), the owner's vtable +0xe8
+       (self, self, kind, sender, 0, 0), the +0x60 list (count, has) and
+       the base's warning of nearby units about an attacker. */
+    int32_t (*base_d4)(void *context, int32_t first);
+    int32_t (*call_e0)(void *context, int32_t a, int32_t b);
+    int32_t (*call_e4)(void *context, int32_t a);
+    int32_t (*call_70)(void *context, int32_t id, int32_t value);
+    int32_t (*call_40_2)(void *context);
+    uint8_t (*owner_view)(void *context, int32_t x, int32_t y);
+    void (*owner_e8)(void *context, int32_t kind, int32_t sender);
+    int32_t (*group_count)(void *context);
+    int (*group_has)(void *context, int32_t id);
+    void (*alert_allies)(void *context, int32_t attacker);
+    /* rand() and the unit's vtable +0x10c (its range). */
+    int32_t (*rand)(void *context);
+    double (*range_10c)(void *context);
 } AoeAiUnitAiOpsRor;
 
 /* The unit AI's own order fields the overrides read: action (+0x28),
@@ -272,5 +291,29 @@ int32_t aoe_ai_unit_ai_type30_cc_ror(const AoeAiUnitAiMessageRor *msg, int32_t a
 int32_t aoe_ai_unit_ai_7e_cc_ror(AoeAiUnitAiRor *ai, const AoeAiUnitAiOrderRor *order,
                                  const AoeAiUnitAiMessageRor *msg, int32_t arg,
                                  const AoeAiUnitAiOpsRor *ops);
+/* 0x004e54e0 (priest, +0xd4): for a computer-or-human owner with +4 set:
+   the base's +0xd4(1) at 6 gives 6; with band 3 holding n > 0 objects
+   and n below rand() % (n + 2), a heal target (+0xe0(1, ...)) gets
+   +0x70(t, 0) and 6; else, with a target (+0x40(-1, 2, ...)) closer than
+   the unit's range, the unit steps away by the difference and 6. Else 5. */
+int32_t aoe_ai_unit_ai_priest_d4_ror(const AoeAiUnitAiOpsRor *ops);
+/* 0x004e5370 (priest, +0xcc): 0x1fc is ignored while the target is on a
+   tile the owner sees, else clear, stop, pass on and the base. 0x1f9,
+   0x1fb, 0x202: a gaia priest converting (task 0x25c) just stops; else a
+   new conversion (+0xe4(0) then +0x6c(t, 1)) or heal (+0xe0(0, 0) then
+   +0x70(t, 1)) at 1 gives 3, otherwise clear, +0x58(0), pass on and 2.
+   Others go to the base. */
+int32_t aoe_ai_unit_ai_priest_cc_ror(const AoeAiUnitAiOrderRor *order,
+                                     const AoeAiUnitAiMessageRor *msg, int32_t arg,
+                                     const AoeAiUnitAiOpsRor *ops);
+/* 0x004e5c00 (class 0x14, +0xcc): 500 and 0x20f: with +0x10 below 1 the
+   owner hears 0x209 about the sender, then the base's 0x00414eb0(0), 4;
+   else the owner hears 0x201 (first sender or computer owner), a new
+   sender is warned about (gaia owner, not the target) and listed, the
+   unit's +0xec(1) runs; with an action 2; with a head action not in
+   state 2, 3; else +0xa4(1), 3. Others go to the base. */
+int32_t aoe_ai_unit_ai_class14_cc_ror(const AoeAiUnitAiOrderRor *order,
+                                      const AoeAiUnitAiMessageRor *msg, int32_t arg,
+                                      const AoeAiUnitAiOpsRor *ops);
 
 #endif

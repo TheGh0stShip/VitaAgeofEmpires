@@ -483,3 +483,106 @@ int32_t aoe_ai_unit_ai_7e_cc_ror(AoeAiUnitAiRor *ai, const AoeAiUnitAiOrderRor *
     }
     return base_cc(msg, arg, ops);
 }
+
+int32_t aoe_ai_unit_ai_priest_d4_ror(const AoeAiUnitAiOpsRor *ops) {
+    const uint8_t *e;
+    int32_t n, r, t;
+    if (!ops || !ops->owner_field_4 || !ops->owner_field_4(ops->context)) return 5;
+    if (ops->base_d4 && ops->base_d4(ops->context, 1) == 6) return 6;
+    n = ops->nearby ? ops->nearby(ops->context, 3, &e) : 0;
+    r = ops->rand ? ops->rand(ops->context) : 0;
+    if (n > 0 && n < r % (n + 2) && ops->call_e0 &&
+        (t = ops->call_e0(ops->context, 1, 0)) != -1) {
+        if (ops->call_70) ops->call_70(ops->context, t, 0);
+        return 6;
+    }
+    t = ops->call_40_2 ? ops->call_40_2(ops->context) : -1;
+    if (t != -1 && ops->object && ops->self) {
+        AoeAiUnitViewRor o, me;
+        if (ops->object(ops->context, t, &o)) {
+            float dx, dy, d;
+            double extra;
+            ops->self(ops->context, &me);
+            dx = o.x - me.x;
+            dy = o.y - me.y;
+            d = sqrtf(dx * dx + dy * dy);
+            extra = (ops->range_10c ? ops->range_10c(ops->context) : 0.0) - (double)d;
+            if (0.0 < extra) {
+                if (ops->move)
+                    ops->move(ops->context, (float)(-((double)dx / (double)d * extra) + (double)me.x),
+                              (float)(-((double)dy / (double)d * extra) + (double)me.y), me.z);
+                return 6;
+            }
+        }
+    }
+    return 5;
+}
+
+int32_t aoe_ai_unit_ai_priest_cc_ror(const AoeAiUnitAiOrderRor *order,
+                                     const AoeAiUnitAiMessageRor *msg, int32_t arg,
+                                     const AoeAiUnitAiOpsRor *ops) {
+    int32_t t;
+    if (!order || !msg || !ops) return 0;
+    switch (msg->type) {
+    case 0x1fc: {
+        AoeAiUnitViewRor o;
+        if (ops->object && ops->object(ops->context, order->target, &o) && ops->owner_view &&
+            ops->owner_view(ops->context, aoe_ftol32(o.x), aoe_ftol32(o.y)) == 0xf)
+            return 2;
+        if (ops->clear_target) ops->clear_target(ops->context);
+        if (ops->call_58) ops->call_58(ops->context, 1);
+        if (ops->call_1c) ops->call_1c(ops->context, (void *)msg);
+        return base_cc(msg, arg, ops);
+    }
+    case 0x1f9: case 0x1fb: case 0x202:
+        break;
+    default:
+        return base_cc(msg, arg, ops);
+    }
+    if (!(ops->owner_field_4 && ops->owner_field_4(ops->context)) && order->task == 0x25c) {
+        if (ops->clear_target) ops->clear_target(ops->context);
+        if (ops->call_58) ops->call_58(ops->context, 1);
+    } else {
+        if (order->task == 0x25c) {
+            if (ops->call_e4 && (t = ops->call_e4(ops->context, 0)) != -1 && ops->call_6c &&
+                ops->call_6c(ops->context, t, 1) == 1)
+                return 3;
+        } else if (order->task == 0x25b && ops->call_e0 &&
+                   (t = ops->call_e0(ops->context, 0, 0)) != -1 && ops->call_70 &&
+                   ops->call_70(ops->context, t, 1) == 1) {
+            return 3;
+        }
+        if (ops->clear_target) ops->clear_target(ops->context);
+        if (ops->call_58) ops->call_58(ops->context, 0);
+    }
+    if (ops->call_1c) ops->call_1c(ops->context, (void *)msg);
+    return 2;
+}
+
+int32_t aoe_ai_unit_ai_class14_cc_ror(const AoeAiUnitAiOrderRor *order,
+                                      const AoeAiUnitAiMessageRor *msg, int32_t arg,
+                                      const AoeAiUnitAiOpsRor *ops) {
+    int32_t owner4;
+    if (!order || !msg || !ops) return 0;
+    if (msg->type != 500 && msg->type != 0x20f) return base_cc(msg, arg, ops);
+    if (msg->field_10 < 1) {
+        if (ops->owner_e8) ops->owner_e8(ops->context, 0x209, msg->sender);
+        if (ops->base_414eb0) ops->base_414eb0(ops->context, 0);
+        return 4;
+    }
+    owner4 = ops->owner_field_4 ? ops->owner_field_4(ops->context) : 0;
+    if ((ops->group_count ? ops->group_count(ops->context) : 0) == 0 || owner4 == 1)
+        if (ops->owner_e8) ops->owner_e8(ops->context, 0x201, msg->sender);
+    if (!(ops->group_has && ops->group_has(ops->context, msg->sender)) && owner4 == 0 &&
+        order->target != msg->sender && ops->alert_allies)
+        ops->alert_allies(ops->context, msg->sender);
+    if (ops->group_add) ops->group_add(ops->context, msg->sender);
+    if (ops->unit_ec) ops->unit_ec(ops->context, 1);
+    if (order->action != -1) return 2;
+    if (ops->head_state) {
+        int st = ops->head_state(ops->context);
+        if (st != -1 && st != 2) return 3;
+    }
+    if (ops->call_a4) ops->call_a4(ops->context, 1);
+    return 3;
+}

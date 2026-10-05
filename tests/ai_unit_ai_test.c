@@ -180,6 +180,59 @@ static void cc_more_tests(void) {
     assert(ai.timer == 25000 && t_restart == 25000);
 }
 
+static int32_t bd4 = 5;
+static int32_t t_bd4(void *c, int32_t f) { (void)c; (void)f; return bd4; }
+static int32_t t_rand7(void *c) { (void)c; return 7; }
+static int32_t t_e0(void *c, int32_t a, int32_t b) { (void)c; (void)a; (void)b; return 77; }
+static int32_t c70_id = -1;
+static int32_t t_70(void *c, int32_t id, int32_t v) { (void)c; (void)v; c70_id = id; return 1; }
+static int32_t t_40_2(void *c) { (void)c; return 9; }
+static double t_rng(void *c) { (void)c; return 5.0; }
+static int e8_kind = -1;
+static void t_e8(void *c, int32_t k, int32_t s) { (void)c; (void)s; e8_kind = k; }
+static int alerted = -1;
+static void t_alert(void *c, int32_t a) { (void)c; alerted = a; }
+
+static void priest_more_tests(void) {
+    AoeAiUnitAiOpsRor o;
+    AoeAiUnitAiOrderRor ord = {-1, 9, 0x25b};
+    AoeAiUnitAiMessageRor m = {44, 0x1f9, 0, 1};
+    memset(&o, 0, sizeof o);
+    o.owner_field_4 = pd_owner4;
+    o.base_d4 = t_bd4;
+    o.nearby = p_nearby;
+    o.rand = t_rand7;
+    o.call_e0 = t_e0;
+    o.call_70 = t_70;
+    o.call_40_2 = t_40_2;
+    o.object = obj_any;
+    o.self = me0;
+    o.range_10c = t_rng;
+    o.move = mv;
+    /* Band 3 holds 2; 7 % 4 = 3 > 2: heal 77. */
+    assert(aoe_ai_unit_ai_priest_d4_ror(&o) == 6 && c70_id == 77);
+    bd4 = 6;
+    assert(aoe_ai_unit_ai_priest_d4_ror(&o) == 6);
+    bd4 = 5;
+    o.call_e0 = NULL;
+    mx = 0.0f;
+    /* Target at x 3 within range 5: step back 2. */
+    assert(aoe_ai_unit_ai_priest_d4_ror(&o) == 6 && mx == -2.0f);
+    /* 0x004e5370: a healing priest re-heals. */
+    o.call_e0 = t_e0;
+    c70_id = -1;
+    assert(aoe_ai_unit_ai_priest_cc_ror(&ord, &m, 1, &o) == 3 && c70_id == 77);
+    /* 0x004e5c00 */
+    o.owner_e8 = t_e8;
+    o.alert_allies = t_alert;
+    o.group_add = cc_add;
+    m.type = 500;
+    assert(aoe_ai_unit_ai_class14_cc_ror(&ord, &m, 1, &o) == 3 && e8_kind == 0x201 &&
+           alerted == -1 && cc_added == 44);
+    m.field_10 = 0;
+    assert(aoe_ai_unit_ai_class14_cc_ror(&ord, &m, 1, &o) == 4 && e8_kind == 0x209);
+}
+
 static void d4_5564_tests(void) {
     AoeAiUnitAiOpsRor o;
     AoeAiUnitAiOrderRor ord = {-1, -1};
@@ -245,6 +298,7 @@ int main(void) {
     d4_5564_tests();
     cc_5644_tests();
     cc_more_tests();
+    priest_more_tests();
     AoeAiUnitAiRor ai;
     AoeAiUnitAiOpsRor ops;
     memset(&ops, 0, sizeof ops);

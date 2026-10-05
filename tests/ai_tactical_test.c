@@ -589,6 +589,18 @@ static void point_attack_train_tests(void) {
            tr_prod == 33 && tr_uid == 12 && item.in_progress == 1);
     item.build_from = 0x6e;
     assert(aoe_ai_tactical_train_ror(&ai, &item, &ops) == 0);
+    /* 0x004dc1a0 */
+    ops.research_order = t_train;
+    tr_type = -1;
+    item.build_from = 0x6d;
+    item.plan.type = 0x70;
+    assert(aoe_ai_tactical_research_ror(&ai, &item, &ops) == 1 && tr_type == 0x70);
+    /* 0x004dc420 */
+    orders = 0;
+    assert(aoe_ai_tactical_order_2ca_ror(&ai, 12, 5.0f, 6.0f, &ops) == 1 && orders == 1 &&
+           last_order.action == 0x2ca && last_order.target == -1 &&
+           last_order.target2 == 2 && last_order.d == 1.0f);
+    assert(aoe_ai_tactical_order_2ca_ror(&ai, -1, 5.0f, 6.0f, &ops) == 0);
     aoe_ai_build_item_release_ror(&item);
     orders = 0;
     aoe_ai_tactical_release_ror(&ai);

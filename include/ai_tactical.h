@@ -287,6 +287,10 @@ typedef struct {
        unique ID: a train order). */
     int32_t (*find_producer)(void *context, int32_t type);
     void (*train_order)(void *context, int32_t type, int32_t producer, int32_t unique_id);
+    /* The tribe player's vtable +0x114 with the same arguments (a research
+       order). */
+    void (*research_order)(void *context, int32_t type, int32_t producer,
+                           int32_t unique_id);
 } AoeAiTacticalOpsRor;
 
 /* 0x004e0630: in list order, the group with task `task` and +0x180
@@ -441,6 +445,14 @@ int aoe_ai_tactical_order_attack_ror(AoeAiTacticalRor *ai, int32_t unit, float x
    tasked and the train order goes out. 1 when ordered. */
 int aoe_ai_tactical_train_ror(AoeAiTacticalRor *ai, AoeAiBuildItemRor *item,
                               const AoeAiTacticalOpsRor *ops);
+/* 0x004dc1a0: as 0x004dc030, but the research order (+0x114). */
+int aoe_ai_tactical_research_ror(AoeAiTacticalRor *ai, AoeAiBuildItemRor *item,
+                                 const AoeAiTacticalOpsRor *ops);
+/* 0x004dc420: our `unit` (not -1) is marked tasked and ordered 0x2ca to
+   (x, y): no target, target2 our index, (x, y, 1.0, 1.0), 1, 0, the
+   priority from its distance there at height 1.0. 1 when ordered. */
+int aoe_ai_tactical_order_2ca_ror(AoeAiTacticalRor *ai, int32_t unit, float x, float y,
+                                  const AoeAiTacticalOpsRor *ops);
 /* 0x004dc650: ftol(number 34 / f), at most 99. */
 int32_t aoe_ai_tactical_effort_ror(const AoeAiTacticalRor *ai, float f);
 /* 0x004e2f90: +0xd68[i] (0..3, else -1). 0x004e2f30 / 0x004e2f60 /

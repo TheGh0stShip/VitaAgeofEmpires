@@ -1605,8 +1605,9 @@ int aoe_ai_tactical_order_attack_ror(AoeAiTacticalRor *ai, int32_t unit, float x
     return 1;
 }
 
-int aoe_ai_tactical_train_ror(AoeAiTacticalRor *ai, AoeAiBuildItemRor *item,
-                              const AoeAiTacticalOpsRor *ops) {
+static int produce(AoeAiTacticalRor *ai, AoeAiBuildItemRor *item,
+                   const AoeAiTacticalOpsRor *ops,
+                   void (*send)(void *, int32_t, int32_t, int32_t)) {
     int32_t producer, task;
     if (!ai || !item || !ops || !ops->find_producer) return 0;
     producer = ops->find_producer(ops->context,
@@ -1616,8 +1617,42 @@ int aoe_ai_tactical_train_ror(AoeAiTacticalRor *ai, AoeAiBuildItemRor *item,
     aoe_ai_build_item_put_ror(item, AOE_AI_BUILD_IN_PROGRESS, 1);
     aoe_ai_build_item_put_ror(item, AOE_AI_BUILD_BUILT, 0);
     aoe_ai_int_list_add_unique_ror(&ai->list_d58, producer);
-    if (ops->train_order)
-        ops->train_order(ops->context, aoe_ai_plan_item_type_ror(&item->plan), producer,
-                         aoe_ai_plan_item_unique_id_ror(&item->plan));
+    if (send)
+        send(ops->context, aoe_ai_plan_item_type_ror(&item->plan), producer,
+             aoe_ai_plan_item_unique_id_ror(&item->plan));
+    return 1;
+}
+
+int aoe_ai_tactical_train_ror(AoeAiTacticalRor *ai, AoeAiBuildItemRor *item,
+                              const AoeAiTacticalOpsRor *ops) {
+    return produce(ai, item, ops, ops ? ops->train_order : NULL);
+}
+
+int aoe_ai_tactical_research_ror(AoeAiTacticalRor *ai, AoeAiBuildItemRor *item,
+                                 const AoeAiTacticalOpsRor *ops) {
+    return produce(ai, item, ops, ops ? ops->research_order : NULL);
+}
+
+int aoe_ai_tactical_order_2ca_ror(AoeAiTacticalRor *ai, int32_t unit, float x, float y,
+                                  const AoeAiTacticalOpsRor *ops) {
+    AoeAiWorldObjectRor u;
+    AoeAiTaskOrderRor o;
+    double d;
+    if (!ai || !ops || !ops->object || !ops->object(ops->context, unit, &u) || unit == -1)
+        return 0;
+    d = ops->distance ? ops->distance(ops->context, unit, x, y, 1.0f) : 0.0;
+    o.value = aoe_ai_tactical_effort_ror(ai, (float)d);
+    aoe_ai_int_list_add_unique_ror(&ai->list_d58, unit);
+    o.player = ops->self;
+    o.unit = unit;
+    o.action = 0x2ca;
+    o.target = -1;
+    o.target2 = ops->self;
+    o.a = x;
+    o.b = y;
+    o.c = o.d = 1.0f;
+    o.flag = 1;
+    o.zero = 0;
+    if (ops->order) ops->order(ops->context, &o);
     return 1;
 }

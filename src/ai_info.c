@@ -3202,3 +3202,114 @@ AoeAiInfoObjectRor *aoe_ai_info_choose_play_ror(
     ++info->history[*play];
     return target;
 }
+
+static int is_naval(int16_t type_id, int16_t cls) {
+    return type_id == 0x2d || cls == 2 || cls == 0x15 || cls == 0x16 || cls == 0x14;
+}
+
+AoeAiInfoObjectRor *aoe_ai_info_engage_target_ror(
+    AoeAiInfoRor *info, uint32_t player, int32_t skip_buildings,
+    int32_t skip_naval, int32_t unit, int32_t *found,
+    const AoeAiInfoOpsRor *ops) {
+    AoeAiInfoObjectRor *best = NULL, *wonder;
+    AoeAiWorldObjectRor u, obj;
+    AoeAiInfoForceRor force;
+    int32_t mobile, land, best_score = -1, i, dummy;
+    int siege, boat, priest;
+    uint8_t zone;
+    if (!info || !ops) return NULL;
+    wonder = aoe_ai_info_wonder_ror(info, -1, ops);
+    if (wonder) {
+        *found = 1;
+        return wonder;
+    }
+    if (!ops->object || !ops->object(ops->context, unit, &u) || !ops->unit_ai_target ||
+        !ops->unit_ai_target(ops->context, unit, &dummy))
+        return NULL;
+    zone = ops->zone ? ops->zone(ops->context, unit) : 0;
+    siege = u.type_id == 0x23 || u.type_id == 0x24 || u.type_id == 0x118 || u.type_id == 0xb;
+    boat = aoe_class_is_boat_ror(u.type_class);
+    priest = u.type_class == 0x12;
+    aoe_ai_info_force_ror(info, &force, player, unit, &mobile, &land, ops);
+    for (i = 0; i < info->object_count; ++i) {
+        AoeAiInfoObjectRor *e = &info->objects[i];
+        float threat, v104, ttd, ttk;
+        double v;
+        int32_t ox, oy, dx, dy, dist_t, hp_t, f14_t, f18_t, range_t = 0, f1c_t = 0, rnd;
+        int32_t wall, naval, near_zone, is6a, is6b, is6c, score;
+        if (e->owner != player || !ops->object(ops->context, e->id, &obj) || obj.state > 2)
+            continue;
+        ox = aoe_ftol32(obj.x);
+        oy = aoe_ftol32(obj.y);
+        threat = aoe_ai_info_threat_ror(info, unit, ox, oy, ops);
+        /* +0x104 is stored as a float; the quotient stays on the FPU. */
+        v104 = (float)(ops->value_104 ? ops->value_104(ops->context, e->id, unit) : 0.0);
+        v = (double)v104 / (ops->value_100 ? ops->value_100(ops->context, unit) : 1.0);
+        ttd = threat > 0.0f ? u.hp / threat : -1.0f;
+        ttk = v > 0.0 ? (float)((double)(int16_t)e->hp / v) : -1.0f;
+        if (!siege && skip_buildings && (obj.type_class == 3 || obj.type_class == 0x1b) &&
+            mobile > 0)
+            continue;
+        if (boat == 0 && skip_naval && is_naval(obj.type_id, obj.type_class) && land > 0)
+            continue;
+        if (priest && (!ops->unit_ai_c4 || !ops->unit_ai_c4(ops->context, unit, e->id)))
+            continue;
+        dx = e->x - ox;
+        if (dx < 0) dx = -dx;
+        dy = e->y - oy;
+        if (dy < 0) dy = -dy;
+        if ((dx > 5 || dy > 5) &&
+            !(ops->vision && ops->vision(ops->context, ox, oy) == 0xf))
+            continue;
+        dx = e->x - aoe_ftol32(u.x);
+        dy = e->y - aoe_ftol32(u.y);
+        dist_t = force.max_distance != 0
+                     ? 100 - aoe_ftol32(sqrt((double)(dy * dy + dx * dx))) * 100 /
+                                 force.max_distance
+                     : 100;
+        hp_t = force.hp != 0 ? (int16_t)e->hp * 100 / force.hp : 100;
+        f14_t = force.field_14 != 0 ? e->field_14 * 100 / force.field_14 : 100;
+        f18_t = force.field_18 != 0.0f
+                    ? aoe_ftol32((double)e->field_18 * 100.0 / (double)force.field_18)
+                    : 100;
+        if (e->field_18 > 0.0f) {
+            range_t = force.range != 0.0f
+                          ? aoe_ftol32((double)e->range * 100.0 / (double)force.range)
+                          : 100;
+            f1c_t = force.field_1c != 0.0f
+                        ? 100 - aoe_ftol32((double)e->field_1c * 100.0 /
+                                           (double)force.field_1c)
+                        : 100;
+        }
+        rnd = (ops->rand ? ops->rand(ops->context) : 0) % 100;
+        is6a = e->type_id == info_sn(ops, 0x6a);
+        is6b = e->type_id == info_sn(ops, 0x6b);
+        is6c = e->type_id == info_sn(ops, 0x6c);
+        near_zone = ops->tile_zone && ops->tile_zone(ops->context, unit, ox, oy) == zone;
+        if (obj.type_class == 3 || obj.type_class == 0x1b) wall = siege ? 1 : -1;
+        else wall = siege ? -1 : 1;
+        if (is_naval(obj.type_id, obj.type_class)) naval = boat ? 1 : -1;
+        else naval = boat ? -1 : 1;
+        score = (int32_t)((uint32_t)info_sn(ops, 0x59) * (uint32_t)e->field_10 +
+                          (uint32_t)info_sn(ops, 0x90) * (uint32_t)naval +
+                          (uint32_t)info_sn(ops, 0x7b) * (uint32_t)wall +
+                          (uint32_t)info_sn(ops, 0x7a) * (uint32_t)near_zone +
+                          (uint32_t)info_sn(ops, 0x6f) * (uint32_t)is6c +
+                          (uint32_t)info_sn(ops, 0x6e) * (uint32_t)is6b +
+                          (uint32_t)info_sn(ops, 0x6d) * (uint32_t)is6a +
+                          (uint32_t)info_sn(ops, 0x53) * (uint32_t)rnd +
+                          (uint32_t)info_sn(ops, 0x52) * (uint32_t)f1c_t +
+                          (uint32_t)info_sn(ops, 0x5a) * (uint32_t)range_t +
+                          (uint32_t)info_sn(ops, 0x4f) * (uint32_t)f18_t +
+                          (uint32_t)info_sn(ops, 0x50) * (uint32_t)f14_t +
+                          (uint32_t)info_sn(ops, 0x4e) * (uint32_t)hp_t +
+                          (uint32_t)info_sn(ops, 0x4d) * (uint32_t)dist_t);
+        if ((ttk > ttd && ttd != -1.0f) || ttk == -1.0f) score = 1;
+        if (!best || score > best_score) {
+            best = e;
+            best_score = score;
+            *found = 1;
+        }
+    }
+    return best;
+}

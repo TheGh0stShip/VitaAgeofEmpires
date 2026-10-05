@@ -644,6 +644,35 @@ AoeAiInfoObjectRor *aoe_ai_info_choose_play_ror(
     AoeAiInfoRor *info, uint32_t player, const int32_t *ids, int32_t count,
     int32_t *play, int32_t *cast, int32_t *cast_count, int32_t *leader,
     const AoeAiInfoOpsRor *ops);
+/* 0x004bf7d0: the target for our unit `unit` (it needs a unit AI) among
+   `player`'s remembered objects; `found` is set to 1 for any. An enemy
+   wonder (0x004c5980 with -1) wins outright. Otherwise, with the force
+   summary of `player` (0x004c2de0), each object that exists below state
+   3 is skipped when it is a building or wall (class 3, 0x1b) while
+   `skip_buildings`, the unit is not siege (type 0x23, 0x24, 0x118, 0xb)
+   and the summary counted mobile objects; or naval (type 0x2d, class 2,
+   0x15, 0x16, 0x14) while `skip_naval`, the unit is not a boat and land
+   objects were counted; a priest (class 0x12) needs its AI's vtable
+   +0xc4 test; and the object must be within 5 tiles of where it was seen
+   or on a visible tile. Its integer score is number 89 x +0x10 + number
+   144 x (1 if naval matches the unit being a boat, else -1) + number 123
+   x (1 if a building matches the unit being siege, else -1) + number 122
+   x (in the unit's zone) + numbers 111 / 110 / 109 x (its type is number
+   108 / 107 / 106) + number 83 x rand() % 100 + number 82 x (100 -
+   +0x1c x 100 / summary +0x1c, 100 when that is 0) + number 90 x (+0x20
+   x 100 / summary range, 100 when 0) (both 0 unless +0x18 is positive) +
+   number 79 x (+0x18 x 100 / summary +0x18, 100 when 0) + number 80 x
+   (+0x14 x 100 / summary +0x14, 100 when 0) + number 78 x (hit points x
+   100 / summary hit points, 100 when 0) + number 77 x (100 - tile
+   distance x 100 / summary distance, 100 when 0); it is 1 instead when
+   the time to kill it (hit points / (its value_104 against the unit /
+   the unit's value_100), -1 when not positive) exceeds the time for the
+   threat there to kill the unit (-1 when no threat) that is not -1, or is
+   -1 itself. The first best wins; NULL for none. */
+AoeAiInfoObjectRor *aoe_ai_info_engage_target_ror(
+    AoeAiInfoRor *info, uint32_t player, int32_t skip_buildings,
+    int32_t skip_naval, int32_t unit, int32_t *found,
+    const AoeAiInfoOpsRor *ops);
 int32_t aoe_ai_info_pick_target_ror(AoeAiInfoRor *info, int32_t k,
                                     int32_t id, float pos[2], int32_t *drop,
                                     const int32_t *exclude,

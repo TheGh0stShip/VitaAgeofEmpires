@@ -1330,6 +1330,50 @@ static void attack_target_tests(void) {
     assert(aoe_ai_info_attack_target_ror(&info, 2, lone, 1, &ops) == &objs[3]);
 }
 
+static double eng_dist(void *c, int32_t id, float x, float y, float z) {
+    (void)c; (void)id; (void)y; (void)z; return x;
+}
+static int32_t eng_sn(void *c, int32_t i) { (void)c; return i == 0x4d ? 100 : 0; }
+
+static void engage_tests(void) {
+    static AoeAiInfoRor info;
+    static AoeAiInfoObjectRor objs[3];
+    AoeAiInfoOpsRor ops;
+    int32_t found = 0;
+    memset(&ops, 0, sizeof ops);
+    ops.object = at_object;
+    ops.unit_ai_target = at_ai;
+    ops.zone = at_zone;
+    ops.tile_zone = at_tile_zone;
+    ops.sn = eng_sn;
+    ops.distance = eng_dist;
+    ops.value_104 = at_v104;
+    ops.value_100 = at_v100;
+    ops.head_action = at_head;
+    objs[0].id = 60; objs[0].owner = 2; objs[0].x = 7; objs[0].y = 5;
+    objs[1].id = 62; objs[1].owner = 2; objs[1].x = 15; objs[1].y = 5;
+    objs[2].id = 63; objs[2].owner = 2; objs[2].x = 6; objs[2].y = 5; objs[2].type_id = 0x114;
+    info.objects = objs;
+    info.object_count = 2;
+    /* Summary distance 15: 60 scores 100 x (100 - 2 x 100 / 15) = 8700,
+       62 100 x 34. */
+    assert(aoe_ai_info_engage_target_ror(&info, 2, 0, 0, 7, &found, &ops) == &objs[0] &&
+           found == 1);
+    found = 0;
+    assert(aoe_ai_info_engage_target_ror(&info, 3, 0, 0, 7, &found, &ops) == NULL && found == 0);
+    assert(aoe_ai_info_engage_target_ror(&info, 2, 0, 0, 9, &found, &ops) == NULL);
+    /* Without a value_104 the time to kill is -1: every score is 1 and
+       the first wins. */
+    ops.value_104 = NULL;
+    ops.sn = NULL;
+    assert(aoe_ai_info_engage_target_ror(&info, 2, 0, 0, 7, &found, &ops) == &objs[0]);
+    info.object_count = 3;
+    ops.is_enemy = at_enemy;
+    found = 0;
+    assert(aoe_ai_info_engage_target_ror(&info, 2, 0, 0, 9, &found, &ops) == &objs[2] &&
+           found == 1);
+}
+
 static void lifecycle_tests(void) {
     static AoeAiInfoRor a, b;
     static uint8_t buf[200000];
@@ -1478,6 +1522,7 @@ int main(void) {
     force_and_wonder_tests();
     approach_tests();
     attack_target_tests();
+    engage_tests();
     memset(&ops, 0, sizeof ops);
     ops.self = 1;
     ops.object = object;

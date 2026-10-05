@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "progress_percent": "15",
-  "progress_assessment": "Approximate full-port estimate, up from 10%: the RoR 1.0a command layer, order-to-action routing, A* pathfinding, unit movement, the attack action, combat damage, projectiles and blasts are now translated, and units walk and fight on a real campaign map through that code. Still unfinished: unit death and most action classes (gather, build, trade, convert), the player/economy update loop, research effects, computer AI, UI/input and menus, audio playback, saves/multiplayer, and Vita integration and packaging. Not validated against original-game traces or on Vita hardware.",
+  "progress_percent": "20",
+  "progress_assessment": "Approximate full-port estimate, up from 15%, within an assessed 18-25% range. Translation: 2307/4510 game functions (51.2%) and 37.7% of game-code bytes are translated, now including the computer-player AI, research and effects, the player class, the UI panel and dialog framework, the draw system and surfaces, the sound and wave system, campaigns and the player information file. Still unfinished: the remaining 62% of code bytes (the in-game and menu screens, multiplayer/DirectPlay, the rest of the unit and world logic, the hand-written assembly sprite renderer); wiring the translated modules into one game loop (most are tested in isolation behind callback interfaces); Vita graphics, audio, input, file and network backends beyond the demo shell; and validation against original-game behaviour and on Vita hardware.",
   "effort": "high",
   "workers": null,
   "effort_assessment": "Eight builders represent the high effort setting for this reporting period (sustained simulation translation work), not eight people or a measured number of work hours.",

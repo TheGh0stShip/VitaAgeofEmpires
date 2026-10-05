@@ -232,7 +232,8 @@ typedef struct {
     double (*distance)(void *context, int32_t id, float x, float y, float z);
     /* Our first town centre (0x0040bad0 with type 0x6d), -1 for none. */
     int32_t (*first_center)(void *context);
-    /* Our object's own zone (0x0040bab0, 0x004aba60); 0 without one. */
+    /* Our object's own zone (0x0040bab0, then its zone getter); 0 without
+       one. */
     int (*object_zone)(void *context, int32_t id, uint8_t *zone);
 } AoeAiTacticalOpsRor;
 

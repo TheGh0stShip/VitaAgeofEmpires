@@ -538,6 +538,62 @@ static void t_p124(void *c, int32_t u, int32_t t, int32_t o, float x, float y) {
     (void)c; (void)o; (void)x; (void)y; p124_unit = u; p124_target = t;
 }
 
+static int pt_reach(void *c, int32_t id, int32_t x, int32_t y, int32_t z, float r, int32_t t) {
+    (void)c; (void)id; (void)y;
+    assert(z == 1 && r == 1.0f && t == -1);
+    return x < 50;
+}
+static int32_t t_producer(void *c, int32_t type) { (void)c; return type == 0x6d ? 33 : -1; }
+static int32_t tr_type = -1, tr_prod, tr_uid;
+static void t_train(void *c, int32_t type, int32_t p, int32_t uid) { (void)c; tr_type = type; tr_prod = p; tr_uid = uid; }
+
+static void point_attack_train_tests(void) {
+    static AoeAiTacticalRor ai;
+    static AoeAiBuildItemRor item;
+    AoeAiTacticalOpsRor ops;
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    memset(&ops, 0, sizeof ops);
+    ops.object = tobject;
+    ops.world_object = tobject;
+    ops.unit_task = ttask;
+    ops.can_reach = pt_reach;
+    ops.player_124 = t_p124;
+    ops.order = order;
+    ops.object_distance = t_odist;
+    ops.range = trange;
+    ops.self = 2;
+    ai.sn[34] = 200;
+    /* 0x004dbca0 */
+    assert(aoe_ai_tactical_order_point_ror(&ai, 5, 88, 10.0f, 11.0f, &ops) == 1 &&
+           p124_unit == 5 && p124_target == 88);
+    assert(aoe_ai_tactical_order_point_ror(&ai, 6, 88, 60.0f, 11.0f, &ops) == 0);
+    /* 0x004dbe10: a target, kind 1: order 0x2d9 with the range. */
+    orders = 0;
+    assert(aoe_ai_tactical_order_attack_ror(&ai, 9, 3.0f, 4.0f, 70, 71, NULL, 0, 1, &ops) == 1);
+    assert(orders == 1 && last_order.action == 0x2d9 && last_order.target2 == 71 &&
+           last_order.d == 2.0f && last_order.value == 50 &&
+           aoe_ai_int_list_contains_ror(&ai.list_d58, 9));
+    assert(aoe_ai_tactical_order_attack_ror(&ai, 9, 3.0f, 4.0f, 70, 71, NULL, 0, 0, &ops) == 1 &&
+           last_order.action == 0x2bc);
+    assert(aoe_ai_tactical_order_attack_ror(&ai, 9, 3.0f, 4.0f, 899, 71, NULL, 0, 0, &ops) == 0);
+    assert(aoe_ai_tactical_order_attack_ror(&ai, 9, 3.0f, 4.0f, -1, 71, NULL, 0, 0, &ops) == 1 &&
+           last_order.action == 0x2c6 && last_order.a == 3.0f);
+    /* 0x004dc030 */
+    ops.find_producer = t_producer;
+    ops.train_order = t_train;
+    aoe_ai_build_item_init_ror(&item);
+    item.plan.type = 0x53;
+    aoe_ai_plan_item_set_unique_id_ror(&item.plan, 12);
+    item.build_from = 0x6d;
+    assert(aoe_ai_tactical_train_ror(&ai, &item, &ops) == 1 && tr_type == 0x53 &&
+           tr_prod == 33 && tr_uid == 12 && item.in_progress == 1);
+    item.build_from = 0x6e;
+    assert(aoe_ai_tactical_train_ror(&ai, &item, &ops) == 0);
+    aoe_ai_build_item_release_ror(&item);
+    orders = 0;
+    aoe_ai_tactical_release_ror(&ai);
+}
+
 static void to_object_tests(void) {
     static AoeAiTacticalRor ai;
     AoeAiTacticalOpsRor ops;
@@ -774,6 +830,7 @@ int main(void) {
     plan_tests();
     build_start_tests();
     to_object_tests();
+    point_attack_train_tests();
 
     aoe_ai_tactical_init_ror(&ai, 3, NULL);
     assert(ai.module.id == 0x3f1 && !strcmp(ai.module.name, "TacAI"));

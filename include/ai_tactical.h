@@ -281,6 +281,12 @@ typedef struct {
        index, its x and y). */
     void (*player_124)(void *context, int32_t unit, int32_t target, int32_t owner,
                        float x, float y);
+    /* Our first object of `type` whose order is neither 0x26b nor 0x26c,
+       in state 2 (0x0040bd10 with -1, type, -1, 0x26b, 0x26c, 2): its ID,
+       -1 for none; the tribe player's vtable +0x108 (type, producer,
+       unique ID: a train order). */
+    int32_t (*find_producer)(void *context, int32_t type);
+    void (*train_order)(void *context, int32_t type, int32_t producer, int32_t unique_id);
 } AoeAiTacticalOpsRor;
 
 /* 0x004e0630: in list order, the group with task `task` and +0x180
@@ -414,6 +420,27 @@ int aoe_ai_tactical_order_explore_ror(AoeAiTacticalRor *ai, int32_t unit, float 
 int aoe_ai_tactical_order_to_object_ror(AoeAiTacticalRor *ai, int32_t unit,
                                         int32_t target,
                                         const AoeAiTacticalOpsRor *ops);
+/* 0x004dbca0: our `unit` (not -1) is sent to (x, y) with `target` when its
+   path test there (height 1, radius 1.0) passes: marked tasked, then the
+   tribe player's vtable +0x124 (unit, target, 0, x, y). 1 when sent. */
+int aoe_ai_tactical_order_point_ror(AoeAiTacticalRor *ai, int32_t unit, int32_t target,
+                                    float x, float y, const AoeAiTacticalOpsRor *ops);
+/* 0x004dbe10: a unit (not -1, with a unit AI) gets `count` waypoints
+   (0x004e1570) when given, then without `target` a move to (x, y) (its
+   priority from the distance at height 1.0), else, when the target
+   exists, order 0x2d9 (`kind` 1) or 0x2bc on it with `target2`, (x, y,
+   1.0, the unit's range), 1, 0 and the priority from their distance;
+   it is marked tasked. 1 when ordered. */
+int aoe_ai_tactical_order_attack_ror(AoeAiTacticalRor *ai, int32_t unit, float x, float y,
+                                     int32_t target, int32_t target2,
+                                     const float *waypoints, int32_t count,
+                                     int32_t kind, const AoeAiTacticalOpsRor *ops);
+/* 0x004dc030: train `item` at its producer (our first object of its
+   build-from type not ordered 0x26b / 0x26c, in state 2, with a unit AI):
+   the item becomes in progress and not built, the producer is marked
+   tasked and the train order goes out. 1 when ordered. */
+int aoe_ai_tactical_train_ror(AoeAiTacticalRor *ai, AoeAiBuildItemRor *item,
+                              const AoeAiTacticalOpsRor *ops);
 /* 0x004dc650: ftol(number 34 / f), at most 99. */
 int32_t aoe_ai_tactical_effort_ror(const AoeAiTacticalRor *ai, float f);
 /* 0x004e2f90: +0xd68[i] (0..3, else -1). 0x004e2f30 / 0x004e2f60 /

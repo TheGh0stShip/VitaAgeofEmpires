@@ -455,9 +455,8 @@ int aoe_ai_con_plan_fits_ror(const AoeAiConPlanRor *plan, const AoeAiPlanItemRor
    not in progress, not gather settings; with no cap or at most `cap`
    built) summed into `costs` (all eight first 0, 0x0040ec60), up to
    `limit` items: research and category 4 through the tech's costs
-   (0x004f2040 / 0x004eabc1), the rest through the object's (0x004f1f70 /
-   0x004f0830); each cost is three (resource, amount) pairs added with
-   0x0040ec40. The count summed. */
+   (0x004eabc1), the rest through the object's; each cost is three
+   (resource, amount) pairs added with 0x0040ec40. The count summed. */
 typedef void (*AoeAiCostFn)(void *context, int32_t type, int16_t pairs[6]);
 int32_t aoe_ai_ror_build_costs_ror(const AoeAiRorBuildListRor *list, AoeAiCountersRor *costs,
                                    int32_t limit, AoeAiCostFn research_cost,

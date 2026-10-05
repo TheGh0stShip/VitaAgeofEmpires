@@ -2,6 +2,7 @@
 #include "scenario_object.h"
 
 #include <assert.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -13,6 +14,27 @@ static int temp_ok = 1, writes, write_ok = 1;
 static char written[256];
 static int temp(void *c, char *out, int n) { (void)c; if (!temp_ok) return 0; snprintf(out, (size_t)n, "T/"); return 1; }
 static int wf(void *c, const char *p, const void *d, int32_t sz) { (void)c; (void)d; (void)sz; ++writes; snprintf(written, sizeof written, "%s", p); return write_ok; }
+
+static void names(void *c, int32_t id, char *out, int n) {
+    (void)c;
+    snprintf(out, (size_t)n, "%s", id == 0x2775 ? " <None> " : "Random");
+}
+static uint8_t idx_buf[2048];
+static AoeOutcomeStream idx_stream;
+static size_t idx_size;
+static AoeOutcomeStream *idx_open_read(void *c, const char *p) {
+    (void)c;
+    if (strcmp(p, "list.dat") != 0) return NULL;
+    idx_stream.data = idx_buf; idx_stream.size = idx_size; idx_stream.pos = 0; idx_stream.failed = 0;
+    return &idx_stream;
+}
+static AoeOutcomeStream *idx_open_write(void *c, const char *p) {
+    (void)c;
+    if (strcmp(p, "list.dat") != 0) return NULL;
+    idx_stream.data = idx_buf; idx_stream.size = sizeof idx_buf; idx_stream.pos = 0; idx_stream.failed = 0;
+    return &idx_stream;
+}
+static void idx_close(void *c, AoeOutcomeStream *s) { (void)c; if (s->size == sizeof idx_buf) idx_size = s->pos; }
 
 int main(void) {
     static AoeScenarioObjectRor s;
@@ -83,5 +105,51 @@ int main(void) {
         assert(aoe_scenario_record_size_ror(&r) == 12 && !r.text);
     }
     puts("scenario object ok");
+    {
+        /* Defaults, messages and counts (0x004755b0, 0x00476b40, ...). */
+        static AoeScenarioObjectRor d;
+        memset(&d, 0, sizeof d);
+        assert(aoe_scenario_reset_ror(&d, names, NULL));
+        assert(strcmp(d.text_17a8, " <None> ") == 0 && strcmp(d.ai_name[15], "Random") == 0);
+        assert(strcmp(d.city_name[0], " <None> ") == 0 && strcmp(d.per_name[3], "Random") == 0);
+        assert(d.description && d.description[0] == 0 && d.message[2] == NULL);
+        aoe_scenario_set_message_ror(&d, "win", 2);
+        aoe_scenario_set_message_ror(&d, "lose", 2);
+        aoe_scenario_set_message_ror(&d, "x", 7);
+        assert(strcmp(aoe_scenario_message_ror(&d, 2), "lose") == 0 && aoe_scenario_message_ror(&d, 5) == NULL);
+        aoe_scenario_append_message_ror(&d, "ab");
+        aoe_scenario_append_message_ror(&d, "cd");
+        assert(strcmp(aoe_scenario_message_ror(&d, 0), "abcd") == 0);
+        d.value_194c[1] = 1; d.value_194c[4] = 1; d.value_18cc[4] = 1; d.value_18cc[2] = 1;
+        assert(aoe_scenario_active_players_ror(&d) == 2 && aoe_scenario_human_players_ror(&d) == 1);
+        aoe_scenario_release_ror(&d);
+        assert(d.ai_name[0] == NULL && d.message[0] == NULL);
+    }
+    {
+        /* The scenario index file. */
+        AoeScenarioIndexRor x, y;
+        AoeScenarioIndexOpsRor iops = {NULL, idx_open_read, idx_close, idx_open_write, idx_close, NULL};
+        memset(&x, 0, sizeof x);
+        snprintf(x.path, sizeof x.path, "list.dat");
+        x.count = 2;
+        x.entries = calloc(2, sizeof *x.entries);
+        x.entries[0].id = 7;
+        snprintf(x.entries[0].name, sizeof x.entries[0].name, "one.scn");
+        x.entries[0].record = calloc(1, sizeof *x.entries[0].record);
+        aoe_scenario_record_init_ror(x.entries[0].record, "desc", 99);
+        x.entries[1].id = 8;
+        snprintf(x.entries[1].name, sizeof x.entries[1].name, "two.scn");
+        x.entries[1].record = calloc(1, sizeof *x.entries[1].record);
+        aoe_scenario_record_init_ror(x.entries[1].record, "", 5);
+        aoe_scenario_index_close_ror(&x, &iops); /* saves, then frees */
+        assert(x.count == 0 && x.entries == NULL);
+        assert(aoe_scenario_index_load_ror(&y, "list.dat", &iops) && y.count == 2);
+        assert(strcmp(aoe_scenario_index_name_ror(&y, 1), "two.scn") == 0 && y.entries[0].id == 7);
+        assert(strcmp(aoe_scenario_index_record_ror(&y, 0)->text, "desc") == 0);
+        assert(aoe_scenario_index_name_ror(&y, 2) == NULL && aoe_scenario_index_record_ror(&y, -1) == NULL);
+        snprintf(y.path, sizeof y.path, "other.dat");
+        aoe_scenario_index_close_ror(&y, &iops);
+        assert(!aoe_scenario_index_load_ror(&y, "missing", &iops) && y.count == 0);
+    }
     return 0;
 }

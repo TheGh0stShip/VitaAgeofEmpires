@@ -11,9 +11,10 @@
 #define AOE_SCENARIO_PLAYERS_ROR 16
 
 typedef struct {
+    uint8_t field_c;                                   /* +0x0c */
     char player_name[AOE_SCENARIO_PLAYERS_ROR][256];   /* +0x0d */
     char *description;                                 /* +0x1010 */
-    char *field_1014;                                  /* +0x1014 */
+    char *message[5];                                  /* +0x1014..+0x1024 */
     char ai_path[0xe0], city_path[0xe0], per_path[0xe0]; /* +0x1028, +0x1108, +0x11e8 */
     char *ai_name[AOE_SCENARIO_PLAYERS_ROR];           /* +0x12c8 */
     char *city_name[AOE_SCENARIO_PLAYERS_ROR];         /* +0x1308 */
@@ -26,7 +27,7 @@ typedef struct {
     int32_t city_size[AOE_SCENARIO_PLAYERS_ROR];       /* +0x1488 */
     int32_t per_size[AOE_SCENARIO_PLAYERS_ROR];        /* +0x14c8 */
     char text_1508[0xe0], text_15e8[0xe0], text_16c8[0xe0], text_17a8[0xe0];
-    int32_t player_kind[9];                            /* +0x188c */
+    int32_t player_kind[AOE_SCENARIO_PLAYERS_ROR];     /* +0x188c */
     int32_t value_18cc[AOE_SCENARIO_PLAYERS_ROR];      /* +0x18cc */
     int32_t value_190c[AOE_SCENARIO_PLAYERS_ROR];      /* +0x190c */
     int32_t value_194c[AOE_SCENARIO_PLAYERS_ROR];      /* +0x194c */
@@ -57,6 +58,29 @@ const char *aoe_scenario_text_ror(const AoeScenarioObjectRor *s, int which);
 const char *aoe_scenario_player_name_ror(const AoeScenarioObjectRor *s, int32_t player);
 /* 0x00476190: player i's kind 1..5 (others and out of 0..8: 0). */
 int32_t aoe_scenario_player_kind_ror(const AoeScenarioObjectRor *s, int32_t player);
+/* 0x004755b0: the defaults: the five messages none, a fresh 0xe0-byte
+   description, the four texts " <None> " (string 10101), per player the
+   kind and three values 0, an empty name, fresh AI / city-plan /
+   personality names "Random" (10107) / " <None> " / "Random", no
+   embedded files. 0x00475490 frees everything (0x00474d20 deleting);
+   +0x04 (an owned object) is released through `release`. */
+int aoe_scenario_reset_ror(AoeScenarioObjectRor *s,
+                           void (*string)(void *context, int32_t id, char *out, int size),
+                           void *context);
+void aoe_scenario_release_ror(AoeScenarioObjectRor *s);
+/* 0x00476b40: message i (0..4) replaced by a copy (NULL empties; for 2
+   the old text is kept allocated, as in the original; others drop the
+   copy); 0x00476c70 message i (NULL beyond); 0x00476b00 text appended
+   to message 0 (0x00450ea0 / 0x00450e20). 0x00476af0: +0x0c. */
+void aoe_scenario_set_message_ror(AoeScenarioObjectRor *s, const char *text, int32_t which);
+const char *aoe_scenario_message_ror(const AoeScenarioObjectRor *s, int32_t which);
+void aoe_scenario_append_message_ror(AoeScenarioObjectRor *s, const char *text);
+uint8_t aoe_scenario_field_c_ror(const AoeScenarioObjectRor *s);
+/* 0x00476a90: players with value_194c set (0x00476250); 0x00476ac0:
+   those with value_18cc 1 as well (0x00476210). */
+int32_t aoe_scenario_active_players_ror(const AoeScenarioObjectRor *s);
+int32_t aoe_scenario_human_players_ror(const AoeScenarioObjectRor *s);
+
 /* 0x00475f80: the scenario version written, 1.15. */
 float aoe_scenario_version_ror(void);
 
@@ -100,5 +124,35 @@ void aoe_scenario_record_read_ror(AoeScenarioRecordRor *r, AoeOutcomeStream *in)
 void aoe_scenario_record_free_ror(AoeScenarioRecordRor *r);
 int32_t aoe_scenario_record_size_ror(const AoeScenarioRecordRor *r);
 void aoe_scenario_record_write_ror(const AoeScenarioRecordRor *r, AoeOutcomeStream *out);
+
+/* A scenario index file (0x00476cd0..0x00477310): a count, then per
+   entry an ID, a scenario info record (0x00474ae0) and a 0x104-byte
+   name. 0x00476cd0 loads "<path>" (none: empty), then 0x00476f10;
+   0x00476e70 saves it; 0x00476e00 saves then frees; 0x004772e0 /
+   0x00477310 entry i's name / record. */
+typedef struct {
+    int32_t id;
+    AoeScenarioRecordRor *record;
+    char name[0x104];
+} AoeScenarioIndexEntryRor;
+typedef struct {
+    char path[0x104];
+    int32_t count;                    /* +0x104 */
+    AoeScenarioIndexEntryRor *entries;/* +0x108 */
+} AoeScenarioIndexRor;
+typedef struct {
+    void *context;
+    AoeOutcomeStream *(*open_read)(void *context, const char *path);
+    void (*close_read)(void *context, AoeOutcomeStream *s);
+    AoeOutcomeStream *(*open_write)(void *context, const char *path);
+    void (*close_write)(void *context, AoeOutcomeStream *s);
+    void (*refresh)(void *context, AoeScenarioIndexRor *index); /* 0x00476f10 */
+} AoeScenarioIndexOpsRor;
+int aoe_scenario_index_load_ror(AoeScenarioIndexRor *x, const char *path,
+                                const AoeScenarioIndexOpsRor *ops);
+void aoe_scenario_index_save_ror(const AoeScenarioIndexRor *x, const AoeScenarioIndexOpsRor *ops);
+void aoe_scenario_index_close_ror(AoeScenarioIndexRor *x, const AoeScenarioIndexOpsRor *ops);
+const char *aoe_scenario_index_name_ror(const AoeScenarioIndexRor *x, int32_t i);
+AoeScenarioRecordRor *aoe_scenario_index_record_ror(const AoeScenarioIndexRor *x, int32_t i);
 
 #endif

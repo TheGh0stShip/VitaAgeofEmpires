@@ -46,7 +46,7 @@ target_include_directories(aoe_action_io PUBLIC include)
 add_library(aoe_world_base STATIC src/world_base.c src/world_game.c src/world_ror.c)
 target_include_directories(aoe_world_base PUBLIC include)
 target_include_directories(aoe_scn PUBLIC include)
-target_link_libraries(aoe_scn PUBLIC ZLIB::ZLIB)
+target_link_libraries(aoe_scn PUBLIC ZLIB::ZLIB aoe_effects_io)
 target_compile_options(aoe_scn PRIVATE -Wall -Wextra)
 
 add_library(aoe_scenario_spawn STATIC src/scenario_spawn.c)

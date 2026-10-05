@@ -1245,37 +1245,53 @@ int aoe_ai_info_food_far_ror(const AoeAiInfoRor *info,
     return (ops->sn ? ops->sn(ops->context, 0xa3) : -1) < info->best_distance[0];
 }
 
+/* One tile of a scan; `fog` skips objects on an explored-but-unseen tile
+   whose type is not shown in fog. */
+static void scan_tile(AoeAiInfoRor *info, int32_t x, int32_t y, int fog,
+                      const AoeAiInfoOpsRor *ops) {
+    int32_t ids[256], n, i, trees = 0;
+    uint8_t terrain = ops->tile_byte5(ops->context, x, y) & 0x1f;
+    uint8_t seen = fog && ops->vision ? ops->vision(ops->context, x, y) : 0;
+    if (info->map_width != -1) {
+        int32_t col = x * 4 / info->map_width;
+        int32_t row = y * 4 / info->map_height;
+        if (col >= 0 && col < 4 && row >= 0 && row < 4)
+            ++info->cells[col][row][0];
+    }
+    if (ops->grid_set) ops->grid_set(ops->context, x, y, 0);
+    n = ops->tile_objects ? ops->tile_objects(ops->context, x, y, ids, 256) : 0;
+    for (i = 0; i < n; ++i) {
+        AoeAiWorldObjectRor o;
+        if (!ops->world_object || !ops->world_object(ops->context, ids[i], &o))
+            continue;
+        if (seen == 0x80 && !o.fog_visible) continue;
+        if (aoe_ai_info_known_class_ror(o.type_class) == 1)
+            aoe_ai_info_notice_ror(info, &o, 0, ops);
+        if (o.type_class == 0xf) ++trees;
+    }
+    if (n > 0 && trees > 0 &&
+        (terrain == 10 || terrain == 0x13 || terrain == 0xd || terrain == 0x14))
+        ++info->field_560;
+}
+
 void aoe_ai_info_scan_map_ror(AoeAiInfoRor *info,
                               const AoeAiInfoOpsRor *ops) {
-    int32_t x, y, ids[256];
+    int32_t x, y;
     if (!info || !ops || !ops->tile_byte5) return;
-    for (x = 0; x < info->map_width; ++x) {
-        for (y = 0; y < info->map_height; ++y) {
-            uint8_t terrain = ops->tile_byte5(ops->context, x, y) & 0x1f;
-            int32_t n, i, trees = 0;
-            if (info->map_width != -1) {
-                int32_t col = x * 4 / info->map_width;
-                int32_t row = y * 4 / info->map_height;
-                if (col >= 0 && col < 4 && row >= 0 && row < 4)
-                    ++info->cells[col][row][0];
-            }
-            if (ops->grid_set) ops->grid_set(ops->context, x, y, 0);
-            n = ops->tile_objects ? ops->tile_objects(ops->context, x, y, ids, 256)
-                                  : 0;
-            for (i = 0; i < n; ++i) {
-                AoeAiWorldObjectRor o;
-                if (!ops->world_object || !ops->world_object(ops->context, ids[i], &o))
-                    continue;
-                if (aoe_ai_info_known_class_ror(o.type_class) == 1)
-                    aoe_ai_info_notice_ror(info, &o, 0, ops);
-                if (o.type_class == 0xf) ++trees;
-            }
-            if (n > 0 && trees > 0 &&
-                (terrain == 10 || terrain == 0x13 || terrain == 0xd ||
-                 terrain == 0x14))
-                ++info->field_560;
-        }
-    }
+    for (x = 0; x < info->map_width; ++x)
+        for (y = 0; y < info->map_height; ++y) scan_tile(info, x, y, 0, ops);
+}
+
+int aoe_ai_info_scan_new_tiles_ror(AoeAiInfoRor *info,
+                                   const AoeAiInfoOpsRor *ops) {
+    const int32_t *xy;
+    int32_t total, fresh, i;
+    if (!info || !ops || !ops->tile_byte5 || !ops->new_tiles) return 1;
+    fresh = ops->new_tiles(ops->context, &xy, &total);
+    if (fresh <= 0) return 1;
+    for (i = total - fresh; i < total; ++i)
+        scan_tile(info, xy[2 * i], xy[2 * i + 1], 1, ops);
+    return 1;
 }
 
 /* ---- Marks, kinds and learning ---- */
@@ -2432,4 +2448,98 @@ int aoe_ai_info_load_ror(AoeAiInfoRor *info, AoeOutcomeStream *in,
         for (i = 0; i < AOE_AI_INFO_HISTORY; ++i)
             info->history[i] = aoe_stream_i32(in);
     return !in->failed;
+}
+
+static int32_t step_rand(const AoeAiInfoOpsRor *ops) {
+    return ops->rand ? ops->rand(ops->context) : 0;
+}
+
+/* rand() % 4 with the sign of the dividend, as the original's masking. */
+static int32_t rand4(const AoeAiInfoOpsRor *ops) {
+    return step_rand(ops) % 4;
+}
+
+static int explore_candidate(const AoeAiInfoRor *info, int32_t id,
+                             const AoeAiWorldObjectRor *unit, int32_t x,
+                             int32_t y, uint8_t own_zone,
+                             const AoeAiInfoOpsRor *ops) {
+    int g = ops->grid_get ? ops->grid_get(ops->context, x, y) : 0xff;
+    uint8_t seen = ops->vision ? ops->vision(ops->context, x, y) : 0;
+    (void)info;
+    if (seen == 0xf) return 0;
+    if (unit->type_class == 4 ? g != 0xff : g != 0xff && g != 2) return 0;
+    if (!ops->free_tile || !ops->free_tile(ops->context, id, (float)x, (float)y))
+        return 0;
+    return ops->tile_zone && ops->tile_zone(ops->context, id, x, y) == own_zone;
+}
+
+int aoe_ai_info_explore_step_ror(AoeAiInfoRor *info, int32_t id, float x,
+                                 float y, float out[2],
+                                 const AoeAiInfoOpsRor *ops) {
+    AoeAiWorldObjectRor unit;
+    int32_t dir, step = 0, leg, i, tx, ty;
+    int off_lo_x = 0, off_hi_x = 0, off_lo_y = 0, off_hi_y = 0;
+    uint8_t own_zone;
+    if (!info || !ops || !ops->world_object ||
+        !ops->world_object(ops->context, id, &unit))
+        return 0;
+    own_zone = ops->zone ? ops->zone(ops->context, id) : 0;
+    dir = rand4(ops);
+    tx = aoe_ftol32(x);
+    ty = aoe_ftol32(y);
+    for (;;) {
+        if (off_lo_x && off_hi_x && off_lo_y && off_hi_y) {
+            aoe_ai_info_set_zone_flag_ror(info, id, 1, ops);
+            return 0;
+        }
+        ++step;
+        for (leg = 0; leg < 2; ++leg) {
+            dir = (dir + 1) % 4;
+            if (dir < 0) dir += 4;
+            for (i = 0; i < step; ++i) {
+                switch (dir) {
+                case 0: ++ty; break;
+                case 1: ++tx; break;
+                case 2: --ty; break;
+                default: --tx; break;
+                }
+                if (tx < 0) off_lo_x = 1;
+                else if (tx >= info->map_width) off_hi_x = 1;
+                else if (ty < 0) off_lo_y = 1;
+                else if (ty >= info->map_height) off_hi_y = 1;
+                else if (explore_candidate(info, id, &unit, tx, ty, own_zone, ops))
+                    goto found;
+            }
+        }
+    }
+found:
+    if (ops->can_reach &&
+        ops->can_reach(ops->context, id, tx, ty, aoe_ftol32(unit.z),
+                       unit.type_28 - 1.0f)) {
+        if (ops->grid_set) ops->grid_set(ops->context, tx, ty, 0);
+    } else {
+        int32_t best = -1, lx = 0, ly = 0, hx, hy, c, r, v;
+        if (ops->grid_set) ops->grid_set(ops->context, tx, ty, 1);
+        for (c = 0; c < 4; ++c)
+            for (r = 0; r < 4; ++r) {
+                v = info->cells[c][r][0] + step_rand(ops) % 100 +
+                    info->cells[c][r][1] * 25;
+                if (best == -1 || v < best) {
+                    best = v;
+                    lx = info->map_width * c / 4;
+                    ly = info->map_height * r / 4;
+                }
+            }
+        hx = info->map_width / 4 + lx - 1;
+        hy = info->map_height / 4 + ly - 1;
+        switch (rand4(ops)) {
+        case 0: tx = lx; ty = ly; break;
+        case 1: tx = lx; ty = hy; break;
+        case 2: tx = hx; ty = hy; break;
+        default: tx = hx; ty = ly; break;
+        }
+    }
+    out[0] = (float)tx;
+    out[1] = (float)ty;
+    return 1;
 }

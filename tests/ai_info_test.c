@@ -385,6 +385,16 @@ static double odist4(void *c, int32_t a, int32_t b) {
     AoeAiWorldObjectRor o;
     (void)a; object4(c, b, &o); return sqrt((double)o.x * o.x + (double)o.y * o.y);
 }
+static int new_tiles_taken;
+static int32_t new_tiles(void *c, const int32_t **xy, int32_t *count) {
+    static const int32_t tiles[] = {0, 0, 1, 2, 3, 3};
+    (void)c;
+    *xy = tiles;
+    *count = 3;
+    if (new_tiles_taken) return 0;
+    new_tiles_taken = 1;
+    return 2;
+}
 static float age4 = 2.9f;
 static float res4(void *c, int32_t i) { (void)c; return i == 6 ? age4 : 0.0f; }
 static int granary4 = 1;
@@ -486,6 +496,20 @@ static void choice_tests(void) {
     assert(info.cells[0][0][0] == 1 && info.cells[3][3][0] == 1 && grid[3][3] == 0 &&
            info.field_560 == 1 && info.list_118.count == 3 && info.list_128.count == 1);
     aoe_ai_int_list_release_ror(&info.list_128);
+
+    /* 0x004bb8d0: only the two newest of three explored tiles; every tile
+       here is fogged (0x80), so no object counts. */
+    memset(info.cells, 0, sizeof info.cells);
+    memset(grid, 0xff, sizeof grid);
+    info.field_560 = 0;
+    ops.new_tiles = new_tiles;
+    assert(aoe_ai_info_scan_new_tiles_ror(&info, &ops) == 1);
+    assert(grid[0][0] == 0xff && grid[3][3] == 0 && grid[1][2] == 0 &&
+           info.cells[0][1][0] == 0 && info.cells[3][3][0] == 1 &&
+           info.cells[0][0][0] == 0 && info.field_560 == 0 &&
+           info.list_118.count == 3 && info.list_128.count == 0);
+    assert(aoe_ai_info_scan_new_tiles_ror(&info, &ops) == 1 &&
+           info.cells[3][3][0] == 1);
 
     free(info.objects);
     for (k = 0; k < 4; ++k) free(info.targets[k]);
@@ -803,6 +827,65 @@ static int write_file(void *c, const char *path, const void *data, int size) {
 
 static const char *player_name(void *c) { (void)c; return "Bob"; }
 
+static int step_reach;
+static int step_unit(void *c, int32_t id, AoeAiWorldObjectRor *o) {
+    (void)c;
+    if (id != 7) return 0;
+    memset(o, 0, sizeof *o);
+    o->id = 7;
+    o->type_28 = 1.5f;
+    return 1;
+}
+static uint8_t step_zone(void *c, int32_t id) { (void)c; (void)id; return 2; }
+static uint8_t step_tile_zone(void *c, int32_t id, int32_t x, int32_t y) {
+    (void)c; (void)id; (void)y; return (uint8_t)(x == 1 ? 9 : 2);
+}
+static uint8_t step_vision(void *c, int32_t x, int32_t y) { (void)c; (void)x; (void)y; return 0; }
+static int step_free(void *c, int32_t id, float x, float y) { (void)c; (void)id; (void)x; (void)y; return 1; }
+static int step_can_reach(void *c, int32_t id, int32_t x, int32_t y, int32_t z, float r) {
+    (void)c; (void)id; (void)x; (void)y; (void)z;
+    assert(r == 0.5f);
+    return step_reach;
+}
+static int step_rand(void *c) { (void)c; return 0; }
+
+static void explore_step_tests(void) {
+    static AoeAiInfoRor info;
+    AoeAiInfoOpsRor ops;
+    float out[2];
+    memset(&ops, 0, sizeof ops);
+    ops.world_object = step_unit;
+    ops.object = step_unit;
+    ops.zone = step_zone;
+    ops.tile_zone = step_tile_zone;
+    ops.grid_get = grid_get;
+    ops.grid_set = grid_set;
+    ops.vision = step_vision;
+    ops.free_tile = step_free;
+    ops.can_reach = step_can_reach;
+    ops.rand = step_rand;
+    info.map_width = 8;
+    info.map_height = 6;
+    /* rand 0: the first leg runs x + 1 to (3, 2) (explored), the second
+       y - 1 to (3, 1), grid 2, taken by a unit not of class 4. */
+    memset(grid, 0, sizeof grid);
+    grid[3][1] = 2;
+    step_reach = 1;
+    assert(aoe_ai_info_explore_step_ror(&info, 7, 2.9f, 2.0f, out, &ops) == 1);
+    assert(out[0] == 3.0f && out[1] == 1.0f && grid[3][1] == 0);
+    /* A failed path test: the cell becomes 1 and the target is the low
+       corner of the first smallest map cell, (0, 1) for cell (0, 1). */
+    grid[3][1] = 0xff;
+    info.cells[0][0][0] = 5;
+    step_reach = 0;
+    assert(aoe_ai_info_explore_step_ror(&info, 7, 2.0f, 2.0f, out, &ops) == 1);
+    assert(out[0] == 0.0f && out[1] == 1.0f && grid[3][1] == 1);
+    /* Nothing left: the zone is flagged. */
+    assert(aoe_ai_info_explore_step_ror(&info, 7, 2.0f, 2.0f, out, &ops) == 0);
+    assert(info.zone_flags[2] == 1);
+    assert(aoe_ai_info_explore_step_ror(&info, 8, 2.0f, 2.0f, out, &ops) == 0);
+}
+
 static void lifecycle_tests(void) {
     static AoeAiInfoRor a, b;
     static uint8_t buf[200000];
@@ -925,6 +1008,7 @@ int main(void) {
 
     site_tests();
     lifecycle_tests();
+    explore_step_tests();
     memset(&ops, 0, sizeof ops);
     ops.self = 1;
     ops.object = object;

@@ -33,6 +33,7 @@ typedef struct {
     float type_28;
     int16_t field_4c;
     float size_x, size_y;  /* the type's +0x30 / +0x34 (half sizes) */
+    uint8_t fog_visible;   /* the type's +0x65: shown on fogged tiles */
 } AoeAiWorldObjectRor;
 
 /* One remembered object (0x24 bytes at +0x114): the ID (-1 free), type
@@ -233,6 +234,10 @@ typedef struct {
        cannot open. */
     int (*write_file)(void *context, const char *path, const void *data,
                       int size);
+    /* The player's explored-tile list (player +0x58, 0x0045ebc0 /
+       0x0045ebe0): the (x, y) pairs and their count, and the number added
+       since the last call (which is then reset). */
+    int32_t (*new_tiles)(void *context, const int32_t **xy, int32_t *count);
 } AoeAiInfoOpsRor;
 
 /* 0x004ba1c0: the constructor's state (the base part, 0x0040b470, is the
@@ -583,6 +588,12 @@ int aoe_ai_info_food_far_ror(const AoeAiInfoRor *info,
    0x14 holding a class-0xf object raises +0x560. */
 void aoe_ai_info_scan_map_ror(AoeAiInfoRor *info,
                               const AoeAiInfoOpsRor *ops);
+/* 0x004bb8d0: the same for the tiles explored since the last call (the
+   tail of the explored-tile list), except that on a tile the vision map
+   holds as explored but unseen (0x80) only objects whose type is shown
+   in fog (+0x65) count. Always 1. */
+int aoe_ai_info_scan_new_tiles_ror(AoeAiInfoRor *info,
+                                   const AoeAiInfoOpsRor *ops);
 /* 0x004c4930: append a value to the kind's array (a new array one longer
    each time). */
 void aoe_ai_info_kind_append_ror(AoeAiInfoRor *info, int32_t kind,
@@ -605,6 +616,23 @@ void aoe_ai_info_put_mark_ror(AoeAiInfoRor *info, int32_t id, uint8_t x,
 int aoe_ai_info_explore_toward_ror(AoeAiInfoRor *info, int32_t id,
                                    int32_t out[2],
                                    const AoeAiInfoOpsRor *ops);
+/* 0x004bc2d0: for unit `id` at (x, y) (truncated), a square spiral that
+   starts in direction rand() % 4 (0 y+1, 1 x+1, 2 y-1, 3 x-1; legs of 1,
+   1, 2, 2, 3, 3, ... tiles, each leg turning to the next direction)
+   looks for a tile not visible now (vision not 0xf) whose explored-grid
+   value is 0xff (also 2 unless the unit is of class 4) where the unit
+   could stand (its vtable +0x114, the last argument 1) in its own zone.
+   Its path test there (as above) then marks the cell 0 and gives that
+   tile; when it fails the cell becomes 1 and the target is a random
+   corner (rand() % 4: 0 low x/low y, 1 low x/high y, 2 high/high, 3 high
+   x/low y; high = low + size / 4 - 1) of the 4x4 map cell with the
+   smallest cell count + 25 x its second word + rand() % 100 (first
+   smallest wins), its low corner size x index / 4. 1 then, with `out`
+   set. Once the spiral has run off all four map edges the unit's zone
+   is flagged (0x004bc6e0) and 0 returned, as for a missing unit. */
+int aoe_ai_info_explore_step_ror(AoeAiInfoRor *info, int32_t id, float x,
+                                 float y, float out[2],
+                                 const AoeAiInfoOpsRor *ops);
 /* 0x004c6780: no remembered enemy town centre, granary, storage pit or
    type 0x4f, 199 or 0x45 lies within number 202 tiles of (x, y). */
 int aoe_ai_info_clear_of_enemy_ror(const AoeAiInfoRor *info, int32_t x,

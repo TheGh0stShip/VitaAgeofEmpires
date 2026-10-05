@@ -8,6 +8,7 @@
 #include "ui_dialog.h"
 #include "ui_ez.h"
 #include "ui_picture.h"
+#include "palette_fade.h"
 
 /* The game-side context shared by the Patched Rise of Rome 1.0a screens
    and in-game dialogs: the panel system (0x005830e8), the game object
@@ -62,6 +63,11 @@ typedef struct {
     void (*open_single_player_menu)(void *context);
     void (*open_mp_startup)(void *context);
     void (*open_editor_menu)(void *context);
+    /* A whole file (heap, free()) or NULL; the CD music: the current
+       track (0 when not playing) and playing tracks from..to. */
+    uint8_t *(*read_file)(void *context, const char *path, uint32_t *size);
+    int32_t (*music_track)(void *context);
+    void (*play_music)(void *context, int32_t from, int32_t to);
 } AoeGameUiOpsRor;
 
 typedef struct {
@@ -233,5 +239,65 @@ extern const AoeUiEzVtblRor aoe_error_screen_vtable_ror;
 int aoe_error_screen_init_ror(AoeErrorScreenRor *e, AoeGameUiRor *ui,
                               AoeUiAreaRor *area);
 void aoe_error_screen_set_message_ror(AoeErrorScreenRor *e, int32_t string_id);
+
+/* The credits' scrolling text (vtable 0x00546594, 0x0047cc40..0x0047cf00):
+   a text panel whose lines rise `speed` pixels a second from its bottom.
+   0x0047cc40 constructor and setup (centred, wrapped, the text);
+   0x0047cd40 destructor (deleting 0x0047cd20); 0x0047cd50 the text (the
+   scroll restarts). +0x4c 0x0047cd80: scroll by elapsed time; once the
+   last line has risen above the top the parent hears action 1. +0x30
+   0x0047ce20 draws every line (0x0047cf00) at its scrolled height. */
+typedef struct {
+    AoeUiTextRor text;
+    int32_t offset;            /* +0x188 */
+    uint32_t last_ms;          /* +0x18c */
+    int32_t speed;             /* +0x190: pixels a second */
+    int32_t done;              /* +0x194 */
+} AoeCreditsTextRor;
+
+extern const AoeUiTextVtblRor aoe_credits_text_vtable_ror;
+
+int aoe_credits_text_init_ror(AoeCreditsTextRor *c, AoeUiSystemRor *system,
+                              AoeUiAreaRor *area, AoeUiPanelRor *parent,
+                              int32_t x, int32_t y, int32_t w, int32_t h,
+                              int32_t speed, uintptr_t font, int32_t font_w,
+                              int32_t font_h, const char *text);
+void aoe_credits_text_set_ror(AoeCreditsTextRor *c, const char *text);
+
+/* The credits "Credits Screen" (vtable 0x00546468, 0x0047c510..
+   0x0047cb80): a screen ("scr_cred", 50059) with the scrolling credits
+   (font 4, speed 30, 500 x 300 in the middle) of "data2\list.cr" and,
+   behind it, the background and six pictures ("credit2".."credit7",
+   50155..50160) taking turns every ten seconds, faded out and in over
+   half a second on a full-screen or memory display. While the music plays
+   track 15 it is played on entry and 5..14 again on leaving.
+   0x0047c510 constructor; 0x0047c790 destructor (deleting 0x0047c770);
+   +0x4c 0x0047c870 the picture turns; +0x30 0x0047caa0 draw (the screen
+   black while switching; the first time each picture is drawn once);
+   +0xac 0x0047cb20 Enter or Escape, +0x70 0x0047c860 a press, and the
+   text's end (+0xb8 0x0047cb40) all leave: 0x0047cb80 back to the game
+   screen (resuming a single-player game) or a new main menu. */
+typedef struct {
+    AoeUiEzRor ez;
+    AoeCreditsTextRor *text;   /* +0x478 */
+    int32_t field_47c;         /* +0x47c, 1 */
+    int32_t picture;           /* +0x480, 1..7 */
+    uint32_t shown_ms;         /* +0x484 */
+    uint32_t switch_ms;        /* +0x488 */
+    int32_t state;             /* +0x48c: 1 showing, 2 out, 4 switching, 5 in */
+    uint8_t palette[1024];     /* +0x490 */
+    uint32_t fade_color;       /* +0x890 */
+    void *pictures[7];         /* +0x894 */
+    int32_t preload;           /* +0x8b0 */
+    int32_t leave;             /* +0x8b4 */
+    AoePaletteFadeRor fade;    /* the fade's globals 0x007bfafc.. */
+    AoeGameUiRor *ui;
+} AoeCreditsScreenRor;
+
+extern const AoeUiEzVtblRor aoe_credits_screen_vtable_ror;
+
+int aoe_credits_screen_init_ror(AoeCreditsScreenRor *c, AoeGameUiRor *ui,
+                                AoeUiAreaRor *area);
+void aoe_credits_screen_leave_ror(AoeCreditsScreenRor *c);
 
 #endif

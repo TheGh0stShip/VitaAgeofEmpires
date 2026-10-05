@@ -21,7 +21,10 @@ int32_t aoe_ui_ez_no_key_action_ror(AoeUiPanelRor *p, int32_t a, int32_t b,
 void aoe_ui_ez_draw_background_slot_ror(AoeUiEzRor *ez, int32_t parent_rect);
 void aoe_ui_ez_set_reference_slot_ror(AoeUiEzRor *ez, int32_t w, int32_t h);
 
-#define AOE_UI_EZ_SLOTS_M(destroy_fn, idle_fn, paint_fn, key_fn, help_fn, action_fn, focus_fn, mouse_fn)                         \
+#define AOE_UI_EZ_SLOTS_M(destroy_fn, idle_fn, paint_fn, key_fn, help_fn, action_fn, focus_fn, mouse_fn) \
+    AOE_UI_EZ_SLOTS_MD(destroy_fn, aoe_ui_ez_draw_slot_ror, idle_fn, paint_fn, key_fn, help_fn, action_fn, focus_fn, mouse_fn)
+
+#define AOE_UI_EZ_SLOTS_MD(destroy_fn, draw_fn, idle_fn, paint_fn, key_fn, help_fn, action_fn, focus_fn, mouse_fn)                         \
     {destroy_fn,                                                              \
      aoe_ui_panel_setup_ror,                                                  \
      aoe_ui_panel_set_rect_ltrb_ror,                                          \
@@ -34,7 +37,7 @@ void aoe_ui_ez_set_reference_slot_ror(AoeUiEzRor *ez, int32_t w, int32_t h);
      aoe_ui_panel_redraw_overlaps_ror,                                        \
      aoe_ui_ez_begin_draw_slot_ror,                                                           \
      aoe_ui_panel_end_draw_ror,                                               \
-     aoe_ui_ez_draw_slot_ror,                                                                 \
+     draw_fn,                                                                 \
      aoe_ui_panel_draw_rect_ror,                                              \
      aoe_ui_panel_draw_offset_ror,                                            \
      aoe_ui_panel_draw_parent_rect_ror,                                       \

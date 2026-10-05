@@ -62,6 +62,28 @@ static char *load_info(void *c, const char *f, int32_t id) {
     strcpy(s, "x");
     return s;
 }
+static uint32_t now;
+static uint32_t clock_now(void *c) { (void)c; return now; }
+static int music_from = -1, music_to = -1;
+static int32_t track(void *c) { (void)c; return 0xf; }
+static void play_music(void *c, int32_t a, int32_t b) { (void)c; music_from = a; music_to = b; }
+static uint8_t *read_file(void *c, const char *path, uint32_t *size) {
+    uint8_t *b;
+    (void)c;
+    if (strcmp(path, "data2\\list.cr") != 0) return NULL;
+    b = malloc(5);
+    memcpy(b, "A\nB\nC", 5);
+    *size = 5;
+    return b;
+}
+static char shapes[8];
+static void *load_shape(void *c, const char *f, int32_t id) {
+    (void)c;
+    if (f && strncmp(f, "credit", 6) == 0 && id == 0xc3e9 + (f[6] - '0'))
+        return &shapes[f[6] - '0'];
+    return NULL;
+}
+static void free_shape(void *c, void *s) { (void)c; (void)s; }
 static uint8_t state;
 static uint8_t player_state(void *c, void *p) { (void)c; (void)p; return state; }
 
@@ -351,6 +373,57 @@ int main(void) {
         ep->vt->action(ep, &es->close->panel, 1, 0, 0);
         assert(programs_closed == 3);
         aoe_ui_system_close_ror(&sys, "Main Error Screen");
+    }
+    /* Credits: the text rises 30 px a second; pictures turn every ten
+       seconds (no fade without a full-screen display); Enter, or the
+       text's end, goes back to the game screen. */
+    {
+        AoeCreditsScreenRor *cr = calloc(1, sizeof *cr);
+        AoeUiPanelRor *cp = &cr->ez.panel;
+        pf.now_ms = clock_now;
+        ops.read_file = read_file;
+        ops.music_track = track;
+        ops.play_music = play_music;
+        ez_ops.load_shape = load_shape;
+        ez_ops.free_shape = free_shape;
+        assert(aoe_credits_screen_init_ror(cr, &ui, &area));
+        aoe_ui_system_show_ror(&sys, cp, 0);
+        assert(music_from == 15 && music_to == 15);
+        assert(cr->text && cr->text->text.count == 3 && cr->text->speed == 30);
+        assert(cr->text->text.panel.x == 400 - 250 &&
+               cr->text->text.panel.y == 300 - 150 &&
+               cr->text->text.panel.width == 500);
+        assert(cr->pictures[1] == &shapes[2] && cr->pictures[6] == &shapes[7]);
+        now = 1000;
+        cr->text->text.panel.vt->handle_idle(&cr->text->text.panel);
+        cp->vt->handle_idle(cp);
+        assert(cr->state == 1 && cr->shown_ms == 1000);
+        now = 2000;
+        cr->text->text.panel.vt->handle_idle(&cr->text->text.panel);
+        assert(cr->text->offset == 30);
+        now = 11000;
+        cp->vt->handle_idle(cp);
+        assert(cr->state == 4);
+        cp->vt->handle_idle(cp);
+        assert(cr->switch_ms == 11000 && cr->state == 4);
+        cp->vt->handle_idle(cp);
+        assert(cr->state == 1 && cr->picture == 2 &&
+               cr->ez.background == &shapes[2] && cr->shown_ms == 11000);
+        /* The end of the text leaves on the next idle. */
+        cr->text->done = 1;
+        cr->text->text.panel.vt->handle_idle(&cr->text->text.panel);
+        assert(cr->leave == 1);
+        cp->vt->handle_idle(cp);
+        assert(!aoe_ui_system_find_ror(&sys, "Credits Screen") &&
+               sys.screen == &screen->panel);
+        assert(music_from == 5 && music_to == 14);
+        /* Enter leaves too. */
+        cr = calloc(1, sizeof *cr);
+        cp = &cr->ez.panel;
+        assert(aoe_credits_screen_init_ror(cr, &ui, &area));
+        aoe_ui_system_show_ror(&sys, cp, 0);
+        assert(cp->vt->key_action(cp, 0xd, 0, 0, 1, 0) == 1);
+        assert(!aoe_ui_system_find_ror(&sys, "Credits Screen"));
     }
     aoe_ui_system_close_ror(&sys, "Game Screen");
     free(sys.panels);

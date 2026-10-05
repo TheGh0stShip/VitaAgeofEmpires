@@ -2939,6 +2939,7 @@ int aoe_ai_info_load_area_file_ror(AoeAiInfoRor *info, const char *name,
     n = aoe_stream_i32(&s);
     for (i = 0; i < n && !s.failed; ++i) {
         AoeAiInfoAreaRor a;
+        memset(&a, 0, sizeof a);
         take_area(&s, &a);
         if (s.failed) break;
         aoe_ai_info_add_area_ror(info, a.field_4, a.x0, a.y0, a.x1, a.y1, a.player_9,
@@ -2948,6 +2949,7 @@ int aoe_ai_info_load_area_file_ror(AoeAiInfoRor *info, const char *name,
     n = aoe_stream_i32(&s);
     for (i = 0; i < n && !s.failed; ++i) {
         AoeAiInfoObjectRor e;
+        memset(&e, 0, sizeof e);
         take_object(&s, &e);
         if (s.failed) break;
         aoe_ai_info_store_object_ror(info, &e, NULL, ops);

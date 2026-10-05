@@ -1604,3 +1604,274 @@ void aoe_ai_info_prepare_sites_ror(AoeAiInfoRor *info, AoeValueGridRor *g, int32
             if (m->id == type && m->state == 2) aoe_value_grid_set_ror(g, m->x, m->y, 0xff);
         }
 }
+
+static void save_search(AoeAiSiteSearchRor *s, int32_t type, float size, const char *name,
+                        int32_t builder, int32_t min, int32_t max, int32_t bx, int32_t by,
+                        int32_t best, int32_t cx, int32_t jitter, int has_item) {
+    s->type = type;
+    s->size = size;
+    snprintf(s->name, sizeof s->name, "%s", name ? name : "");
+    s->builder = builder;
+    s->min = min;
+    s->max = max;
+    s->best_x = bx;
+    s->best_y = by;
+    s->state = 1;
+    s->best = best;
+    s->cursor_x = cx;
+    s->jitter = jitter;
+    s->has_item = has_item;
+}
+
+static AoeAiConItemRor *new_site_item(float x, float y, float size, int32_t type, const char *name) {
+    AoeAiConItemRor *it = malloc(sizeof *it);
+    if (!it) return NULL;
+    aoe_ai_con_item_init_ror(it);
+    aoe_ai_con_item_set_ror(it, x, y, 1.0f, size, size, 1.0f, type, name);
+    return it;
+}
+
+static int32_t iabs32(int32_t v) { return v < 0 ? -v : v; }
+
+AoeAiConItemRor *aoe_ai_info_find_site_ror(AoeAiInfoRor *info, AoeValueGridRor *g,
+                                           const AoeAiPlanItemRor *item, int32_t builder,
+                                           int32_t type, float size, const char *name_in,
+                                           int32_t min, int32_t max, int32_t px, int32_t py,
+                                           AoeAiSiteSearchRor *s, uint32_t start, int *found,
+                                           const AoeAiInfoOpsRor *ops) {
+    char name[256];
+    int32_t size_i, floor_score, prio, cx, cy, outer_lo[2], outer_hi[2], inner_lo[2], inner_hi[2];
+    int32_t best, bx, by, x, jitter, has_item, resuming = s->state == 1;
+    AoeAiWorldObjectRor tc, b;
+    int have_tc, have_b, first = 1, in_box_rule;
+    int32_t class4 = ops->first_of_class ? ops->first_of_class(ops->context, 4) : 0;
+    if (found) *found = 0;
+    if (!class4) {
+        s->state = 0;
+        return NULL;
+    }
+    if (resuming) {
+        type = s->type;
+        size = s->size;
+        snprintf(name, sizeof name, "%s", s->name);
+    } else if (item) {
+        type = item->type;
+        size = item->size_x;
+        snprintf(name, sizeof name, "%s", item->name);
+    } else {
+        snprintf(name, sizeof name, "%s", name_in ? name_in : "");
+    }
+    size_i = aoe_ftol32(size);
+    floor_score = size_i * size_i * 20;
+    if (!ops->has_template || !ops->has_template(ops->context, type)) {
+        s->state = 0;
+        return NULL;
+    }
+    memset(&tc, 0, sizeof tc);
+    memset(&b, 0, sizeof b);
+    {
+        int32_t tc_id = ops->first_of_type ? ops->first_of_type(ops->context, 0x6d) : -1;
+        have_tc = tc_id != -1 && ops->object && ops->object(ops->context, tc_id, &tc);
+        have_b = ops->object && ops->object(ops->context, resuming ? s->builder : builder, &b);
+    }
+    has_item = resuming ? s->has_item : item != NULL;
+    if (!has_item && !resuming) {
+        cx = px;
+        cy = py;
+    } else if (have_tc) {
+        cx = aoe_ftol32(tc.x);
+        cy = aoe_ftol32(tc.y);
+    } else {
+        if (!have_b) ops->object(ops->context, class4, &b);
+        cx = aoe_ftol32(b.x);
+        cy = aoe_ftol32(b.y);
+    }
+    prio = aoe_ai_info_site_priority_ror(type);
+    if (prio == -1) { /* "Invalid influence placement type" */
+        s->state = 0;
+        return NULL;
+    }
+    if (has_item || resuming) {
+        int32_t (*sn)(void *, int32_t) = ops->sn;
+        if (prio == 1) {
+            int32_t age = 1;
+            if (ops->age_reached && ops->age_reached(ops->context, 2)) age = 2;
+            else if (ops->age_reached && ops->age_reached(ops->context, 3)) age = 3;
+            else if (ops->age_reached && ops->age_reached(ops->context, 4)) age = 4;
+            min = 7;
+            max = (sn ? sn(ops->context, 0x56) : 0) * age;
+        } else if (prio == 2) {
+            min = 4;
+            max = sn ? sn(ops->context, 0x57) : 0;
+        } else {
+            min = (prio == 3 || prio == 4) ? (sn ? sn(ops->context, 0x49) : 0) : 4;
+            max = sn ? sn(ops->context, 0x4a) : 0;
+        }
+    }
+    if (max <= min) {
+        s->state = 0;
+        return NULL;
+    }
+    outer_lo[0] = cx - max, outer_lo[1] = cy - max;
+    aoe_ai_info_clamp_ror(info, outer_lo);
+    outer_hi[0] = max + cx, outer_hi[1] = max + cy;
+    aoe_ai_info_clamp_ror(info, outer_hi);
+    inner_lo[0] = cx - min, inner_lo[1] = cy - min;
+    aoe_ai_info_clamp_ror(info, inner_lo);
+    inner_hi[0] = min + cx, inner_hi[1] = min + cy;
+    aoe_ai_info_clamp_ror(info, inner_hi);
+    if (item && !resuming) {
+        AoeAiInfoMarkRor *m = aoe_ai_info_open_mark_ror(info, type);
+        if (m) {
+            AoeAiConItemRor *made;
+            if (prio == 4) {
+                info->prev_site[0] = info->last_site[0], info->prev_site[1] = info->last_site[1];
+                info->last_site[0] = m->x, info->last_site[1] = m->y;
+            }
+            made = size == 2.0f ? new_site_item((float)m->x, (float)m->y, size, type, name)
+                                : new_site_item((float)m->x + 0.5f, (float)m->y + 0.5f, size, type,
+                                                name);
+            m->state = 1;
+            s->state = 0;
+            return made;
+        }
+    }
+    if (!resuming) aoe_ai_info_prepare_sites_ror(info, g, prio, type, outer_lo, outer_hi, ops);
+    if (!resuming) {
+        int32_t n = ops->sn ? ops->sn(ops->context, 0xa8) : 0;
+        jitter = n >= 1 && ops->rand ? ops->rand(ops->context) % n : 0;
+        bx = by = -1;
+        best = -1;
+        x = outer_lo[0];
+    } else {
+        jitter = s->jitter;
+        bx = s->best_x;
+        by = s->best_y;
+        best = s->best;
+        x = s->cursor_x;
+    }
+    if (!resuming && ops->now_ms && ops->time_slice <= ops->now_ms(ops->context) - start) {
+        save_search(s, type, size, name, builder, min, max, bx, by, best, x, jitter, has_item);
+        return NULL;
+    }
+    in_box_rule = prio == 4 || prio == 3;
+    for (; x <= outer_hi[0]; ++x) {
+        int32_t y;
+        if (!first) {
+            if (ops->now_ms && ops->time_slice <= ops->now_ms(ops->context) - start) {
+                save_search(s, type, size, name, builder, min, max, bx, by, best, x, jitter,
+                            has_item);
+                return NULL;
+            }
+        } else {
+            first = 0;
+        }
+        for (y = outer_lo[1]; y <= outer_hi[1]; ++y) {
+            int32_t lo[2], hi[2], score = 0, cell;
+            int blocked = 0;
+            if (in_box_rule && x >= inner_lo[0] && x <= inner_hi[0] && y >= inner_lo[1] &&
+                y <= inner_hi[1])
+                continue;
+            if (size == 5.0f || (size == 3.0f && prio != 6 && prio != 3 && prio != 4 &&
+                                 prio != 1 && prio != 2 && prio != 8)) {
+                lo[0] = x - 2, lo[1] = y - 2, hi[0] = x + 2, hi[1] = y + 2;
+            } else if (size == 3.0f) {
+                lo[0] = x - 1, lo[1] = y - 1, hi[0] = x + 1, hi[1] = y + 1;
+            } else if (size == 2.0f) {
+                if (prio == 6 || prio == 3 || prio == 4)
+                    lo[0] = x - 1, lo[1] = y - 1, hi[0] = x, hi[1] = y;
+                else
+                    lo[0] = x - 2, lo[1] = y - 2, hi[0] = x + 1, hi[1] = y + 1;
+            } else if (size == 1.0f) {
+                if (prio == 6 || prio == 3 || prio == 4)
+                    lo[0] = x, lo[1] = y, hi[0] = x, hi[1] = y;
+                else
+                    lo[0] = x - 1, lo[1] = y - 1, hi[0] = x + 1, hi[1] = y + 1;
+            } else { /* "Unsupported building size" */
+                s->state = 0;
+                return NULL;
+            }
+            if (aoe_ai_info_clamp_ror(info, lo) == 1 || aoe_ai_info_clamp_ror(info, hi) == 1)
+                continue;
+            if (ops->placement_refused &&
+                ops->placement_refused(ops->context, type, (float)x + 0.5f, (float)y + 0.5f))
+                continue;
+            for (int32_t a = lo[0]; a <= hi[0] && !blocked; ++a)
+                for (int32_t c = lo[1]; c <= hi[1] && !blocked; ++c) {
+                    cell = aoe_value_grid_get_ror(g, a, c);
+                    if (cell == 0xff) blocked = 1;
+                    else score += cell;
+                }
+            if (blocked) continue;
+            if (prio == 4 || prio == 6) {
+                int32_t before = g->count;
+                int32_t open = aoe_value_grid_score_ror(g, lo, hi, 0xff, 0xff, 1, 0, 1) - before;
+                if (prio == 4 && open > 6) continue;
+                score *= open;
+            }
+            if (prio == 4) {
+                int32_t cand[2] = {x, y}, dir;
+                if (info->last_site[0] != -1 && !aoe_ai_info_tiles_near_ror(info->last_site, cand, 0))
+                    score /= 2;
+                dir = aoe_ai_info_direction_ror(info->last_site, cand);
+                if (dir % 2 == 1) score *= 3;
+                if (aoe_ai_info_direction_ror(info->prev_site, info->last_site) == dir) score *= 3;
+                {
+                    int32_t dy = iabs32(info->last_site[1] - cy), dx = iabs32(info->last_site[0] - cx);
+                    if (dy < dx) {
+                        if (dir == 1 || dir == 5) score *= 3;
+                    } else if (dx < dy && (dir == 3 || dir == 7)) {
+                        score *= 3;
+                    }
+                }
+            } else {
+                if (prio == 1 || prio == 2) {
+                    if (aoe_ai_info_mark_near_ror(info, type, (uint8_t)x, (uint8_t)y, 10) == 1)
+                        score /= 10;
+                } else if (prio != 6 &&
+                           aoe_ai_info_mark_near_ror(info, type, (uint8_t)x, (uint8_t)y, size_i) == 1) {
+                    score /= 10;
+                }
+                if (prio == 1 || prio == 2) {
+                    int32_t d2 = (y - cy) * (y - cy) + (x - cx) * (x - cx);
+                    int32_t d = aoe_ftol32(sqrt((double)d2)) - 10;
+                    if (d > 0 && score - d / 5 > floor_score) score -= d / 5;
+                }
+            }
+            if (best == -1 || best < score + jitter) {
+                if (score <= best) jitter /= 2;
+                bx = x;
+                by = y;
+                best = score;
+            }
+        }
+    }
+    if (best == -1 || (best <= floor_score && (prio == 2 || prio == 1))) {
+        if (prio == 4) {
+            info->prev_site[0] = info->last_site[0], info->prev_site[1] = info->last_site[1];
+            info->last_site[0] = info->last_site[1] = -1;
+        }
+        s->state = 0;
+        return NULL;
+    }
+    if (prio == 4) {
+        info->prev_site[0] = info->last_site[0], info->prev_site[1] = info->last_site[1];
+        info->last_site[0] = bx, info->last_site[1] = by;
+    }
+    if (!has_item && !resuming) {
+        aoe_ai_info_put_mark_ror(info, type, (uint8_t)bx, (uint8_t)by, 0);
+        s->state = 0;
+        if (found) *found = 1;
+        return NULL;
+    }
+    {
+        AoeAiConItemRor *made = size == 2.0f
+                                    ? new_site_item((float)bx, (float)by, size, type, name)
+                                    : new_site_item((float)bx + 0.5f, (float)by + 0.5f, size, type,
+                                                    name);
+        aoe_ai_info_put_mark_ror(info, type, (uint8_t)bx, (uint8_t)by, 1);
+        s->state = 0;
+        if (found) *found = made != NULL;
+        return made;
+    }
+}

@@ -5,6 +5,7 @@
 
 #include "ai_strategy.h" /* AoeAiIntListRor */
 #include "ai_unit_group.h"
+#include "ai_build.h" /* AoeAiConItemRor */
 
 struct AoeValueGridRor;
 
@@ -90,6 +91,8 @@ typedef struct {
     AoeAiIntListRor list_148;         /* +0x148 (count +0x14c) */
     AoeAiIntListRor list_180;         /* +0x180 */
     AoeAiIntListRor list_190;         /* +0x190 */
+    int32_t last_site[2];             /* +0x1a0, +0x1a4 (-1 none) */
+    int32_t prev_site[2];             /* +0x1a8, +0x1ac */
     AoeAiInfoMarkRor *marks;          /* +0x1f8 */
     int32_t mark_count;               /* +0x1f4 */
     AoeAiInfoAreaRor *areas;          /* +0x200 */
@@ -200,6 +203,18 @@ typedef struct {
        tactical AI's pass over the site grid (+0x1146c, 0x004e0d80). */
     uint8_t (*terrain)(void *context, int32_t x, int32_t y);
     void (*tactical_sites)(void *context, struct AoeValueGridRor *grid);
+    /* For the site finder: our first object of a class (0x0040bad0 with
+       the class), whether we have a template of a type (player +0x24),
+       its placement check at a point (template vtable +0x20: nonzero when
+       refused), the tactical AI's age test (0x004e2190), rand(), the time
+       and the world's time slice (+0xf8). */
+    int32_t (*first_of_class)(void *context, int32_t type_class);
+    int (*has_template)(void *context, int32_t type_id);
+    int (*placement_refused)(void *context, int32_t type_id, float x, float y);
+    int (*age_reached)(void *context, int32_t age);
+    int (*rand)(void *context);
+    uint32_t (*now_ms)(void *context);
+    uint32_t time_slice;
 } AoeAiInfoOpsRor;
 
 /* 0x004bc690: 1 when the object exists and its zone has no flag;
@@ -580,5 +595,57 @@ void aoe_ai_info_top_stats_ror(const AoeAiInfoRor *info, int32_t *first,
 void aoe_ai_info_prepare_sites_ror(AoeAiInfoRor *info, struct AoeValueGridRor *grid,
                                    int32_t mode, int32_t type, const int32_t lo[2],
                                    const int32_t hi[2], const AoeAiInfoOpsRor *ops);
+
+/* The site finder's saved progress (0x4c dwords; +0x114 the state). */
+typedef struct {
+    int32_t type;                 /* [0] */
+    float size;                   /* [1] */
+    char name[256];               /* [2] */
+    int32_t builder;              /* [0x42] */
+    int32_t min, max;             /* [0x43], [0x44] (saved, not reused) */
+    int32_t state;                /* [0x45]: 1 resuming */
+    int32_t best_x, best_y;       /* [0x46], [0x47] */
+    int32_t best;                 /* [0x48] */
+    int32_t cursor_x;             /* [0x49] */
+    int32_t jitter;               /* [0x4a] */
+    int has_item;                 /* [0x4b] */
+} AoeAiSiteSearchRor;
+
+/* 0x004be2e0(item, builder, type, size, name, min, max, x, y, search,
+   start): a site for a building, searched over the site grid in time
+   slices. Without an object of class 4 or a template of the type it
+   fails (state 0, NULL); so does a type without a site priority. The
+   centre: our town centre (type 0x6d), else the builder, else that
+   class-4 object; a request without an item uses the given point and
+   distances. Otherwise by site priority: 1 (houses) 7 to number 0x56 x
+   the age (1, or 2..4 by the tactical AI's age test); 2 4 to number
+   0x57; 3 and 4 number 0x49 to 0x4a; others 4 to 0x4a (a maximum not
+   above the minimum fails). An item request first takes an open mark
+   of its type (made state 1; priority 4 also moves the last-site pair
+   +0x1a0 / +0x1a8). Then the grid is prepared (0x004c1ef0) and every
+   tile of the outer box (priorities 3 and 4 skip the inner box) is
+   scored: its footprint (by size 5, 3, 2 or 1 and priority; another
+   size fails) must lie inside the map and pass the placement check;
+   the score is the grid's sum over the footprint (a 255 cell rules the
+   tile out); priorities 4 and 6 multiply it by the open-neighbour score
+   less the grid's last count (priority 4 drops tiles above 6), priority
+   4 halves it away from the last site and triples it along the last
+   direction (and its repeat, and along the axis the last site leans
+   to), priorities 1 and 2 divide it by 10 near a placed mark of the
+   type (others except 6 within the size) and take one per five tiles
+   past ten from the centre while above 20 x size x size. The best tile
+   wins (a random jitter of number 0xa8 favours later ties, halved each
+   time a tile loses). Whenever the time slice is used up the search is
+   saved and returns NULL (state 1). Failure for no tile, or for
+   priorities 1 and 2 at most 20 x size x size. Priority 4 records the
+   site. A plain request marks the tile (state 0) and returns 1 through
+   `found`; an item request marks it (state 1) and returns a new item at
+   the tile (+0.5 unless the size is 2). */
+AoeAiConItemRor *aoe_ai_info_find_site_ror(AoeAiInfoRor *info, struct AoeValueGridRor *grid,
+                                           const AoeAiPlanItemRor *item, int32_t builder,
+                                           int32_t type, float size, const char *name,
+                                           int32_t min, int32_t max, int32_t x, int32_t y,
+                                           AoeAiSiteSearchRor *search, uint32_t start,
+                                           int *found, const AoeAiInfoOpsRor *ops);
 
 #endif

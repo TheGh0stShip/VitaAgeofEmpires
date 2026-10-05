@@ -611,6 +611,19 @@ static int site_object(void *c, int32_t id, AoeAiWorldObjectRor *o) {
 static uint8_t site_terrain(void *c, int32_t x, int32_t y) { (void)c; return x == 15 && y == 15; }
 static uint8_t site_tile5(void *c, int32_t x, int32_t y) { (void)c; (void)y; return x == 12 ? 0x40 : 0; }
 
+static int32_t finder_first_class(void *c, int32_t cls) { (void)c; return cls == 4 ? 901 : 0; }
+static int32_t finder_first_type(void *c, int32_t t) { (void)c; (void)t; return -1; }
+static int finder_object(void *c, int32_t id, AoeAiWorldObjectRor *o) {
+    (void)c;
+    memset(o, 0, sizeof *o);
+    if (id != 901) return 0;
+    o->id = id; o->x = 10.0f; o->y = 10.0f;
+    return 1;
+}
+static int finder_template(void *c, int32_t t) { (void)c; return t == 1; }
+static uint32_t finder_clock;
+static uint32_t finder_now(void *c) { (void)c; return finder_clock; }
+static int32_t finder_sn(void *c, int32_t i) { (void)c; return i == 0x49 ? 2 : i == 0x4a ? 5 : 0; }
 static void site_tests(void) {
     /* 0x004c1ef0 the site grid for mode 3 (a 20 x 20 map). */
     static AoeAiInfoRor info;
@@ -660,6 +673,45 @@ static void site_tests(void) {
         assert(aoe_value_grid_get_ror(&g, 9, 4) == 20);
         assert(aoe_value_grid_get_ror(&g, 10, 10) == 255 && aoe_value_grid_get_ror(&g, 12, 12) == 10);
         assert(aoe_value_grid_get_ror(&g, 13, 13) == 20);
+    }
+    {
+        /* 0x004be2e0: the best open tile; then a sliced search. */
+        static AoeAiInfoRor fi;
+        AoeAiInfoOpsRor fo;
+        AoeAiSiteSearchRor search;
+        AoeAiConItemRor *made;
+        int found = 0;
+        memset(&fo, 0, sizeof fo);
+        memset(&search, 0, sizeof search);
+        fo.self = 1;
+        fo.object = finder_object;
+        fo.first_of_class = finder_first_class;
+        fo.first_of_type = finder_first_type;
+        fo.has_template = finder_template;
+        fo.now_ms = finder_now;
+        fo.sn = finder_sn;
+        fo.time_slice = 1000;
+        fi.map_width = fi.map_height = 20;
+        fi.last_site[0] = fi.last_site[1] = -1;
+        assert(!aoe_ai_info_find_site_ror(&fi, &g, NULL, 0, 1, 1.0f, "Bldg", 2, 5, 10, 10, &search,
+                                          0, &found, &fo));
+        assert(found == 1 && search.state == 0);
+        /* No template: refused. */
+        assert(!aoe_ai_info_find_site_ror(&fi, &g, NULL, 0, 2, 1.0f, "X", 2, 5, 10, 10, &search, 0,
+                                          &found, &fo) && !found);
+        /* A sliced search: saved at once, then resumed into an item. */
+        fo.time_slice = 0;
+        assert(!aoe_ai_info_find_site_ror(&fi, &g, NULL, 0, 1, 1.0f, "Bldg", 2, 5, 10, 10, &search,
+                                          0, &found, &fo));
+        assert(search.state == 1 && search.cursor_x == 5 && !strcmp(search.name, "Bldg"));
+        fo.time_slice = 100000;
+        made = aoe_ai_info_find_site_ror(&fi, &g, NULL, 0, 0, 0.0f, NULL, 0, 0, 0, 0, &search, 0,
+                                         &found, &fo);
+        assert(made && search.state == 0 && made->plan.type == 1);
+        /* Mode 5 has no edge band: the first tile of the box wins ties. */
+        assert(made->plan.x == 5.5f && made->plan.y == 5.5f);
+        aoe_ai_con_item_release_ror(made);
+        free(made);
     }
     aoe_value_grid_free_ror(&g);
 }

@@ -99,7 +99,13 @@ static void press(AoeMenuDialogRor *m, int i) {
 }
 
 static char loaded[64], deleted[64];
-static int mp_setups, scen_saves;
+static int mp_setups, scen_saves, humans, ed_saves;
+static char scen_name[64];
+static void scen_players(void *c, int32_t *a, int32_t *h) { (void)c; *a = 2; *h = humans; }
+static const char *scen_file(void *c) { (void)c; return scen_name; }
+static void set_scen_file(void *c, const char *f) { (void)c; snprintf(scen_name, sizeof scen_name, "%s", f); }
+static int32_t file_number(void *c) { (void)c; return 7; }
+static int ed_save_file(void *c, const char *f) { (void)c; (void)f; ++ed_saves; return 1; }
 static char saved_file[64];
 static int save_scen(void *c, const char *f) { (void)c; ++scen_saves; snprintf(saved_file, sizeof saved_file, "%s", f); return 1; }
 static void mp_setup(void *c) { (void)c; ++mp_setups; }
@@ -637,6 +643,24 @@ int main(void) {
         assert(aoe_ui_system_find_ror(&sys, "Scenario Menu Dialog"));
         aoe_ui_system_close_ror(&sys, "Scenario Menu Dialog");
         aoe_scenario_editor_idle_ror(&ed);
+        /* File operations. */
+        ops.scenario_players = scen_players;
+        ops.scenario_file = scen_file;
+        ops.set_scenario_file = set_scen_file;
+        ops.game_file_number = file_number;
+        ops.editor_save_file = ed_save_file;
+        aoe_scenario_editor_save_ror(&ed, 0, 0);
+        assert(aoe_ui_system_find_ror(&sys, "OKDialog") && ed_saves == 0); /* no human player */
+        aoe_ui_system_close_ror(&sys, "OKDialog");
+        humans = 1;
+        assert(!strcmp(aoe_scenario_editor_file_ror(&ed), "default7.scx"));
+        aoe_scenario_editor_save_ror(&ed, 0, 0);
+        assert(ed_saves == 1 && ed.modified == 0);
+        ed.modified = 1;
+        assert(!strcmp(aoe_scenario_editor_test_save_ror(&ed), "default7") && ed_saves == 2);
+        aoe_scenario_editor_open_ror(&ed);
+        assert(aoe_ui_system_find_ror(&sys, "OpenSaveDialog"));
+        aoe_ui_system_close_ror(&sys, "OpenSaveDialog");
         aoe_ui_system_close_ror(&sys, "Scenario Editor Screen");
 #undef ed
     }

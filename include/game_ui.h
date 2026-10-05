@@ -141,6 +141,22 @@ typedef struct {
     int (*editor_save_file)(void *context, const char *file);
     void (*editor_saved)(void *context);
     int (*to_main_menu)(void *context);
+    /* The editor: its pages stored into the scenario (0x00491650(11)
+       then 0x00507800(1)); the scenario's active and human player counts
+       (0x00476a90 / 0x00476ac0); its file name (0x00475b30 / 0x00475800);
+       the registry's "Game File Number" (0x0046af50); the status screen
+       closed (0x005003e0); the save screen opened for a save as (mode 2,
+       an empty name, `after`); a player's tech toggle i (0x00507680 /
+       0x00507380). */
+    void (*editor_commit)(void *context);
+    void (*scenario_players)(void *context, int32_t *active, int32_t *human);
+    const char *(*scenario_file)(void *context);
+    void (*set_scenario_file)(void *context, const char *file);
+    int32_t (*game_file_number)(void *context);
+    void (*close_status)(void *context);
+    void (*open_editor_save_as)(void *context, int32_t after);
+    int32_t (*scenario_tech)(void *context, int32_t slot, int32_t i);
+    void (*set_scenario_tech)(void *context, int32_t slot, int32_t i, int32_t value);
 } AoeGameUiOpsRor;
 
 typedef struct {
@@ -620,6 +636,10 @@ typedef struct {
     AoeUiPanelRor *panel_774;         /* +0x774 */
     uint32_t view_interval, view_time;/* +0x92c, +0x930 */
     uint32_t map_interval, map_time;  /* +0x934, +0x938 */
+    int16_t current_player;           /* +0x4b8, 1-based */
+    AoeUiDropdownRor *players;        /* +0x73c */
+    AoeUiButtonRor *techs[16];        /* +0x7d4 */
+    char test_file[0x104];            /* global 0x007c0340 */
     AoeGameUiRor *ui;
 } AoeScenarioEditorRor;
 
@@ -637,6 +657,26 @@ void aoe_scenario_editor_clear_selection_ror(AoeScenarioEditorRor *e);
 void aoe_scenario_editor_set_player_ror(AoeScenarioEditorRor *e, int16_t player, int32_t on);
 void aoe_scenario_editor_show_774_ror(AoeScenarioEditorRor *e, int32_t on);
 int32_t aoe_scenario_editor_idle_ror(AoeScenarioEditorRor *e);
+/* File operations. 0x00494db0 open and 0x00494e50 quit (a modified
+   scenario asks first: "OpenSaveDialog" / "QuitSaveDialog", 9287);
+   0x00494eb0 save (needs an active and a human player, 10050 / 10051;
+   with no file name the save as 0x00495110; the status, the save or
+   2403; a name other than "default<n>" clears the modified flag; then
+   by `after` as the save screen); 0x00495220 the file name, made
+   "default<n>.scx" when there is none; 0x004952a0 that, then a save;
+   0x004952c0 the scenario saved as "default<n>.scx" for a test, its name
+   without the extension (NULL on failure). 0x004953f0 / 0x00495470: the
+   current player's sixteen tech toggles stored / shown (a pressed
+   button means off). */
+void aoe_scenario_editor_open_ror(AoeScenarioEditorRor *e);
+void aoe_scenario_editor_quit_ror(AoeScenarioEditorRor *e);
+void aoe_scenario_editor_save_ror(AoeScenarioEditorRor *e, int close_menu, int32_t after);
+void aoe_scenario_editor_save_as_ror(AoeScenarioEditorRor *e, int32_t after);
+const char *aoe_scenario_editor_file_ror(AoeScenarioEditorRor *e);
+void aoe_scenario_editor_save_default_ror(AoeScenarioEditorRor *e);
+const char *aoe_scenario_editor_test_save_ror(AoeScenarioEditorRor *e);
+void aoe_scenario_editor_store_techs_ror(AoeScenarioEditorRor *e);
+void aoe_scenario_editor_show_techs_ror(AoeScenarioEditorRor *e);
 
 /* The "Save Game Screen" (vtable 0x00547234, 0x0048eca0..0x0048fac0):
    a name field over the existing saved games (.gam / .gmx in the game

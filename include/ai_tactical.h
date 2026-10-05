@@ -233,6 +233,9 @@ typedef struct {
     double (*distance)(void *context, int32_t id, float x, float y, float z);
     /* Our first town centre (0x0040bad0 with type 0x6d), -1 for none. */
     int32_t (*first_center)(void *context);
+    /* Our first object of `type` (0x0040bad0 with only the type set), -1
+       for none. */
+    int32_t (*first_of_type)(void *context, int32_t type);
     /* Our object's own zone (0x0040bab0, then its zone getter); 0 without
        one. */
     int (*object_zone)(void *context, int32_t id, uint8_t *zone);
@@ -890,6 +893,24 @@ int aoe_ai_tactical_defend_object_ror(AoeAiTacticalRor *ai, int32_t enemy, int32
    without a pending 0x65 item skips the age-2 test. */
 void aoe_ai_tactical_research_ages_ror(AoeAiTacticalRor *ai,
                                        const AoeAiTacticalOpsRor *ops);
+/* 0x004e22b0: military upgrades, at most every 180 seconds of game time
+   (+0xf94 holds the last run). With a town centre (type 0x6d), the
+   remembered objects of `owner` within 20 tiles of it (0x004c3ef0) less
+   our soldiers (+0x118, list 2) give a budget, at most 5. The steps then
+   run while budget remains:
+   - 0: with 150 stone (0x004c8c60 resource 2) and more than two list-0
+     units, a 0x4f item (cap 1, budget less 2);
+   - 1 to 11: items 0x25 (producer 0x65), 0x4b (0xc), 0x5d (type 0, so
+     no producer matches), 0x27 (0x57), 0x49 (0xc), 5 (0x57), 0x12b
+     (0x65), 4 (0x57), 0x7d (0x68), 0x29 (0x57) and 0x28 (0x65): when the
+     template is usable (0x004f20c0), the producer present and the costs
+     (0x004f1f70) affordable (0x004c8c90), the item is added (cap 1,
+     budget less 1);
+   - past 11: when step 1 to 11 added something, they run again from 1,
+     else the routine ends. */
+void aoe_ai_tactical_upgrades_ror(AoeAiTacticalRor *ai, int32_t owner,
+                                  const AoeAiTacticalOpsRor *ops, const AoeAiInfoRor *info,
+                                  const AoeAiInfoOpsRor *info_ops);
 
 /* 0x004e1d00(type, cap, position): plans a building.
    - 0x32 with number 206 at 1 in age 4, and 0x4f with number 207 at 1:

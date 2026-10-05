@@ -1010,6 +1010,59 @@ static int def_reach(void *c, int32_t id, int32_t x, int32_t y, int32_t z, float
 static double def_dist(void *c, int32_t a, int32_t b) { (void)c; (void)b; return a == 71 ? 30.0 : 5.0; }
 static int def_task(void *c, int32_t id, int32_t *t) { (void)c; (void)id; *t = 3; return 1; }
 
+static int32_t up_added[16], up_n;
+static void up_add(void *c, int32_t t, int32_t cap, int32_t pos) {
+    (void)c; (void)cap; (void)pos; if (up_n < 16) up_added[up_n++] = t;
+}
+static int32_t up_stone = 200;
+static int32_t up_amount(void *c, int32_t i) { (void)c; return i == 2 ? up_stone : 0; }
+static int32_t up_first(void *c, int32_t t) { (void)c; return t == 0x6d ? 50 : t == 0xc ? 60 : -1; }
+static int up_usable(void *c, int32_t t) { (void)c; return t != 0x49; }
+static int up_afford(void *c, const AoeAiCountersRor *k) { (void)c; (void)k; return 1; }
+
+static void upgrades_tests(void) {
+    static AoeAiTacticalRor ai;
+    static AoeAiInfoRor info;
+    AoeAiInfoObjectRor seen[4];
+    AoeAiTacticalOpsRor ops;
+    int32_t i;
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    memset(&ops, 0, sizeof ops);
+    memset(seen, 0, sizeof seen);
+    ops.game_time = ttime;
+    ops.object = tobject;
+    ops.first_of_type = up_first;
+    ops.resource_amount = up_amount;
+    ops.template_usable = up_usable;
+    ops.can_afford = up_afford;
+    ops.build_add = up_add;
+    /* Four objects of owner 3 at the centre (tobject: 0, 0), one far. */
+    for (i = 0; i < 4; ++i) seen[i].owner = 3;
+    seen[3].x = 30;
+    info.objects = seen;
+    info.object_count = 4;
+    for (i = 0; i < 3; ++i) aoe_ai_int_list_add_unique_ror(&ai.lists[0], 10 + i);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[2], 20);
+    tnow = 200000;
+    up_n = 0;
+    /* Budget 3 - 1 = 2: the 0x4f item takes both. */
+    aoe_ai_tactical_upgrades_ror(&ai, 3, &ops, &info, NULL);
+    assert(up_n == 1 && up_added[0] == 0x4f && ai.field_f94 == 200000);
+    /* Within 180 seconds nothing runs. */
+    tnow = 379999;
+    aoe_ai_tactical_upgrades_ror(&ai, 3, &ops, &info, NULL);
+    assert(up_n == 1);
+    /* Without stone, barracks item 0x4b is added (0x49 is unusable) and the
+       steps repeat, adding it again. */
+    up_stone = 0;
+    tnow = 380000;
+    up_n = 0;
+    aoe_ai_tactical_upgrades_ror(&ai, 3, &ops, &info, NULL);
+    assert(up_n == 2 && up_added[0] == 0x4b && up_added[1] == 0x4b);
+    tnow = 300000;
+    aoe_ai_tactical_release_ror(&ai);
+}
+
 static void defend_tests(void) {
     static AoeAiTacticalRor ai;
     AoeAiTacticalOpsRor ops;
@@ -1487,6 +1540,7 @@ int main(void) {
     surplus_tests();
     ask_and_play_tests();
     defend_tests();
+    upgrades_tests();
 
     aoe_ai_tactical_init_ror(&ai, 3, NULL);
     assert(ai.module.id == 0x3f1 && !strcmp(ai.module.name, "TacAI"));

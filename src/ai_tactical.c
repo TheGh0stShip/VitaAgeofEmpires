@@ -2559,3 +2559,53 @@ void aoe_ai_tactical_defend_ror(AoeAiTacticalRor *ai, int32_t enemy,
         v = aoe_ai_tactical_pick_unit_ror(ai, pt, 1, 700, 0x2c9, 0x2c9, 1, ops);
     }
 }
+
+/* 0x004e22b0: see the header. */
+void aoe_ai_tactical_upgrades_ror(AoeAiTacticalRor *ai, int32_t owner,
+                                  const AoeAiTacticalOpsRor *ops, const AoeAiInfoRor *info,
+                                  const AoeAiInfoOpsRor *info_ops) {
+    static const int32_t items[11][2] = {
+        {0x25, 0x65}, {0x4b, 0xc}, {0x5d, 0}, {0x27, 0x57}, {0x49, 0xc}, {5, 0x57},
+        {0x12b, 0x65}, {4, 0x57}, {0x7d, 0x68}, {0x29, 0x57}, {0x28, 0x65}};
+    AoeAiWorldObjectRor c;
+    int32_t now, centre, budget, step = 0, added = 0;
+    if (!ai || !ops || !ops->game_time) return;
+    now = (int32_t)ops->game_time(ops->context);
+    if ((now - ai->field_f94) / 1000 < 180) return;
+    ai->field_f94 = now;
+    centre = ops->first_of_type ? ops->first_of_type(ops->context, 0x6d) : -1;
+    if (centre == -1 || !ops->object || !ops->object(ops->context, centre, &c)) return;
+    budget = aoe_ai_info_count_near_ror(info, owner, aoe_ftol32(c.x), aoe_ftol32(c.y), 20,
+                                        info_ops) -
+             ai->lists[2].count;
+    if (budget > 5) budget = 5;
+    while (budget > 0) {
+        if (step == 0) {
+            if (ops->resource_amount && ops->resource_amount(ops->context, 2) >= 150 &&
+                ai->lists[0].count > 2) {
+                if (ops->build_add) ops->build_add(ops->context, 0x4f, 1, 0);
+                budget -= 2;
+            }
+            step = 1;
+        } else if (step <= 11) {
+            const int32_t *it = items[step - 1];
+            ++step;
+            if (ops->template_usable && ops->template_usable(ops->context, it[0]) &&
+                ops->first_of_type && ops->first_of_type(ops->context, it[1]) != -1) {
+                AoeAiCountersRor costs;
+                aoe_ai_counters_init_ror(&costs, 4);
+                if (ops->type_costs) ops->type_costs(ops->context, it[0], &costs);
+                if (ops->can_afford && ops->can_afford(ops->context, &costs) == 1) {
+                    if (ops->build_add) ops->build_add(ops->context, it[0], 1, 0);
+                    --budget;
+                    added = 1;
+                }
+                aoe_ai_counters_release_ror(&costs);
+            }
+        } else {
+            if (!added) return;
+            step = 1;
+            added = 0;
+        }
+    }
+}

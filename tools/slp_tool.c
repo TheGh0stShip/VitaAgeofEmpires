@@ -8,7 +8,7 @@
 
 static int render(const char *archive_path, uint32_t id,
                   const char *palette_path, const char *output_path,
-                  uint32_t frame_index) {
+                  uint32_t frame_index, uint32_t player_base) {
     DrsArchive archive = {0}, palettes = {0};
     const DrsEntry *sprite, *palette_entry;
     uint8_t *sprite_data = NULL, *palette_data = NULL;
@@ -33,7 +33,7 @@ static int render(const char *archive_path, uint32_t id,
     for (size_t i = 0; i < (size_t)frame.width * frame.height; ++i) {
         SlpPixel pixel = frame.pixels[i];
         uint32_t index = pixel.kind == SLP_PLAYER ?
-            (16u + pixel.index) & 255u : pixel.index;
+            (player_base + pixel.index) & 255u : pixel.index;
         PaletteColor color = palette.colors[index];
         uint8_t rgba[4] = {color.r, color.g, color.b, 255};
         if (pixel.kind == SLP_TRANSPARENT) rgba[3] = 0;
@@ -58,16 +58,19 @@ int main(int argc, char **argv) {
     DrsArchive archive;
     size_t sprites = 0, frames = 0, failures = 0;
     int scan;
-    if ((argc == 6 || argc == 7) && !strcmp(argv[1], "render")) {
+    if (argc >= 6 && argc <= 8 && !strcmp(argv[1], "render")) {
+        /* Optional player colour: the palette index of its first shade
+           (16, the blue player, by default). */
         if (render(argv[2], (uint32_t)strtoul(argv[3], NULL, 0), argv[4], argv[5],
-                   argc == 7 ? (uint32_t)strtoul(argv[6], NULL, 0) : 0))
+                   argc >= 7 ? (uint32_t)strtoul(argv[6], NULL, 0) : 0,
+                   argc == 8 ? (uint32_t)strtoul(argv[7], NULL, 0) : 16u))
             return 0;
         fprintf(stderr, "render failed\n");
         return 1;
     }
     if (argc < 3 || argc > 4 ||
         (strcmp(argv[1], "scan") && strcmp(argv[1], "info"))) {
-        fprintf(stderr, "usage: slp_tool scan ARCHIVE | info ARCHIVE ID | render ARCHIVE ID PALETTE_ARCHIVE OUTPUT.pam [FRAME]\n");
+        fprintf(stderr, "usage: slp_tool scan ARCHIVE | info ARCHIVE ID | render ARCHIVE ID PALETTE_ARCHIVE OUTPUT.pam [FRAME [PLAYER_BASE]]\n");
         return 2;
     }
     scan = strcmp(argv[1], "scan") == 0;

@@ -26,37 +26,34 @@ mapping, `tools/revision_match.py`.
   estimate, not proof of translation. Original-behaviour claims still need
   evidence and tests.
 
-## Snapshot (2026-10-04, after the mapped-citation fix)
+## Snapshot (2026-10-04 evening: computer-player AI merged)
 
-Until this date every cited RoR address was also looked up as a base-game
-address, so a RoR address that happened to start a base function counted
-that function's RoR match as well. About 190 functions were counted only
-that way; earlier snapshots (41.6% on 2026-10-04 and before) overstate
-coverage. Comments that only named an untranslated callee were also
-removed on this date.
+Counted with the mapped-citation fix described below; earlier snapshots
+(41.6% and before) overstate coverage because every RoR address was also
+looked up as a base-game address.
 
-Patched RoR 1.0a game code: 1978/4510 functions cited (43.9%), 365289/1195664 bytes (30.6%)
+Patched RoR 1.0a game code: 2307/4510 functions cited (51.2%), 450812/1195664 bytes (37.7%)
 Excluded: assembly module 32 functions, C runtime 1308 functions
-Ready now (all callees cited): 1132
+Ready now (all callees cited): 1025
 
 | Region | Functions | Cited | Bytes | Cited bytes |
 | --- | ---: | ---: | ---: | ---: |
 | 0x00400000 | 405 | 318 (79%) | 62192 | 46480 (75%) |
 | 0x00410000 | 392 | 160 (41%) | 64992 | 10544 (16%) |
 | 0x00420000 | 330 | 117 (35%) | 65520 | 19856 (30%) |
-| 0x00430000 | 258 | 117 (45%) | 65392 | 23408 (36%) |
+| 0x00430000 | 258 | 166 (64%) | 65392 | 36560 (56%) |
 | 0x00440000 | 219 | 56 (26%) | 65568 | 21680 (33%) |
-| 0x00450000 | 388 | 334 (86%) | 65525 | 55397 (85%) |
+| 0x00450000 | 388 | 335 (86%) | 65525 | 55429 (85%) |
 | 0x00460000 | 322 | 270 (84%) | 66699 | 56624 (85%) |
 | 0x00470000 | 163 | 34 (21%) | 65392 | 14496 (22%) |
 | 0x00480000 | 137 | 2 (1%) | 64848 | 256 (0%) |
 | 0x00490000 | 117 | 10 (9%) | 65536 | 3840 (6%) |
 | 0x004a0000 | 269 | 155 (58%) | 65152 | 35344 (54%) |
-| 0x004b0000 | 205 | 73 (36%) | 69200 | 22224 (32%) |
-| 0x004c0000 | 178 | 45 (25%) | 63280 | 3264 (5%) |
-| 0x004d0000 | 71 | 0 (0%) | 64112 | 0 (0%) |
-| 0x004e0000 | 300 | 89 (30%) | 65584 | 19460 (30%) |
-| 0x004f0000 | 174 | 15 (9%) | 65744 | 3408 (5%) |
+| 0x004b0000 | 205 | 97 (47%) | 69200 | 28208 (41%) |
+| 0x004c0000 | 178 | 161 (90%) | 63280 | 41872 (66%) |
+| 0x004d0000 | 71 | 31 (44%) | 64112 | 9392 (15%) |
+| 0x004e0000 | 300 | 181 (60%) | 65584 | 32887 (50%) |
+| 0x004f0000 | 174 | 31 (18%) | 65744 | 8336 (13%) |
 | 0x00500000 | 302 | 150 (50%) | 65392 | 18528 (28%) |
 | 0x00510000 | 191 | 17 (9%) | 65792 | 7104 (11%) |
 | 0x00520000 | 89 | 16 (18%) | 19744 | 3376 (17%) |

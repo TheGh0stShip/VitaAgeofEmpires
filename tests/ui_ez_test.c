@@ -206,6 +206,15 @@ static const char *INFO =
     "text 255 0 0   shadow 0 1 2   focus 0 255 0   fshadow 3 4 5 "
     "hot 0 0 255   hshadow 6 7 8";
 
+static int last_list, last_radio, shows, hides, redraws_ed, last_action, last_arg;
+static void t_list(void *c, int l, int32_t i) { (void)c; last_list = l * 100 + i; }
+static void t_radio(void *c, int g, int32_t i) { (void)c; last_radio = g * 100 + i; }
+static void t_show(void *c, int p, int32_t t, int32_t s) { (void)c; (void)p; (void)t; if (s) ++shows; else ++hides; }
+static void t_redraw(void *c) { (void)c; ++redraws_ed; }
+static void t_action(void *c, int32_t a, int32_t b) { (void)c; last_action = a; last_arg = b; }
+static int16_t t_entry(void *c, int32_t i) { (void)c; return (int16_t)(50 + i); }
+static int t_building(void *c, int16_t id) { (void)c; return id == 52; }
+
 int main(void) {
     AoeUiPlatformRor pf = {0};
     static AoeUiSystemRor sys;
@@ -690,6 +699,40 @@ int main(void) {
         if (aoe_scenario_editor_edit_ror(&ed, &ez.panel, &e, "x", 10, 0, 0, 0))
             assert(!e->panel.active);
         (void)aoe_scenario_editor_string_ror(&ed, buf, 7, sizeof buf);
+    }
+    {
+        AoeScenarioEditorToolOpsRor to = {NULL, t_list, t_radio, t_show, t_redraw, t_action,
+                                          t_entry, t_building, 77};
+        AoeScenarioEditorToolsRor tl;
+        memset(&tl, 0, sizeof tl);
+        aoe_scenario_editor_brush_ror(&tl, 3, &to);
+        assert(tl.brush == 5 && tl.brush_size == 3 && last_radio == 103);
+        aoe_scenario_editor_brush_ror(&tl, 0, &to);
+        assert(tl.brush_size == 3);
+        aoe_scenario_editor_brush_ror(&tl, 9, &to);
+        assert(tl.brush == 2);
+        aoe_scenario_editor_terrain_ror(&tl, 5, &to);
+        assert(tl.terrain == 20 && last_list == 5);
+        aoe_scenario_editor_terrain_ror(&tl, 0, &to);
+        assert(tl.terrain == 0);
+        aoe_scenario_editor_elevation_ror(&tl, 3, &to);
+        assert(tl.elevation == 3 && last_list == 103);
+        aoe_scenario_editor_unit_ror(&tl, 2, &to);
+        assert(tl.place_unit == 52 && last_list == 202);
+        aoe_scenario_editor_cancel_ror(&tl, &to);
+        assert(last_action == 0x15);
+        aoe_scenario_editor_unit_ror(&tl, -1, &to);
+        assert(tl.place_unit == -1);
+        aoe_scenario_editor_cancel_ror(&tl, &to);
+        assert(last_action == 8 && last_arg == 77);
+        aoe_scenario_editor_map_tool_ror(&tl, 2, 1, &to);
+        assert(tl.map_tool == 2 && shows == 1 && hides == 0 && redraws_ed == 1 && last_radio == 2);
+        aoe_scenario_editor_map_tool_ror(&tl, 3, 0, &to);
+        assert(tl.map_tool == 3 && shows == 1 && hides == 1);
+        aoe_scenario_editor_map_tool_ror(&tl, 0, 1, &to);
+        assert(tl.map_tool == 3 && hides == 2 && redraws_ed == 2);
+        aoe_scenario_editor_unit_tool_ror(&tl, 4, 1, &to);
+        assert(tl.unit_tool == 4 && last_radio == 204);
     }
     aoe_ui_ez_release_ror(&ez);
     return 0;

@@ -893,6 +893,34 @@ int aoe_ai_tactical_defend_object_ror(AoeAiTacticalRor *ai, int32_t enemy, int32
    without a pending 0x65 item skips the age-2 test. */
 void aoe_ai_tactical_research_ages_ror(AoeAiTacticalRor *ai,
                                        const AoeAiTacticalOpsRor *ops);
+/* 0x004d3700: runs the groups' tasks, resuming after the group whose ID
+   is +0xf80 (from the first when none matches). Groups of task 0x6a,
+   0x6b and 0x6c, and those with +0x180 other than 0 or 1, are passed
+   over. A group is ready when its +0x2c8 byte is above 10 or its members
+   are in range (0x004ce950).
+   - More wanted (+0x160) than it holds: with a live commander and town
+     centre (type 0x6d) in different zones (the commander's own zone, and
+     the zone of the centre's truncated tile as the commander moves) the
+     want drops to the count and the group is dispatched.
+   - Otherwise, when ready and settled (0x004cea40 with 600 allowed):
+     tasks 0x66 / 0x69 need the commander in the information AI's open
+     zone (0x004bc690); tasks 100 / 0x67 take +0x18 = 0 for victory kind
+     0 and +0x18 = 4 for kind 4, but a task-100 group with no free target
+     (0x004e0b00 / 0x004e0b50 give -1) is not dispatched; tasks 0x65 /
+     0x68 need entries in the information AI's +0x148 list (0x004e0ba0);
+     others pass. Passing dispatches the group.
+   - A group not ready is updated with task 9 (0x004cd2d0, recording).
+   Dispatch sets +0x180: 8 for 0x66 / 0x69; for 100 / 0x67, 2, but a
+   task-0x67 group with no enemy seen (0x004e0a70) becomes task 0x69 with
+   8; 4 for 0x65 / 0x68; 0x13 for 0x6d. Each group handled stores the
+   next one's ID in +0xf80 and ends the call once `budget` ms have passed
+   since `start` (timeGetTime); finishing the list sets -1. Port note: at
+   the list's end the original reads its sentinel's ID; -1 stands for it. */
+void aoe_ai_tactical_run_groups_ror(AoeAiTacticalRor *ai, uint32_t start, uint32_t budget,
+                                    const AoeAiTacticalOpsRor *ops,
+                                    const AoeAiUnitGroupOpsRor *group_ops,
+                                    const AoeAiStrategyRor *strategy,
+                                    const AoeAiInfoRor *info, const AoeAiInfoOpsRor *info_ops);
 /* 0x004e22b0: military upgrades, at most every 180 seconds of game time
    (+0xf94 holds the last run). With a town centre (type 0x6d), the
    remembered objects of `owner` within 20 tiles of it (0x004c3ef0) less

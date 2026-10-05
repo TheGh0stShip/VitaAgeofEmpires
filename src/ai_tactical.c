@@ -2609,3 +2609,86 @@ void aoe_ai_tactical_upgrades_ror(AoeAiTacticalRor *ai, int32_t owner,
         }
     }
 }
+
+/* 0x004d3700: the dispatch at its 0x4d3883 label. */
+static void run_group_dispatch(AoeAiTacticalRor *ai, AoeAiUnitGroupRor *g,
+                               const AoeAiTacticalOpsRor *ops) {
+    if (g->task == 0x66 || g->task == 0x69) {
+        g->field_180 = 8;
+    } else if (g->task == 100 || g->task == 0x67) {
+        if (aoe_ai_tactical_enemy_seen_ror(ai, ops) == 0 && g->task == 0x67) {
+            g->task = 0x69;
+            g->field_180 = 8;
+        } else {
+            g->field_180 = 2;
+        }
+    } else if (g->task == 0x65 || g->task == 0x68) {
+        g->field_180 = 4;
+    } else if (g->task == 0x6d) {
+        g->field_180 = 0x13;
+    }
+}
+
+/* 0x004d3700: see the header. */
+void aoe_ai_tactical_run_groups_ror(AoeAiTacticalRor *ai, uint32_t start, uint32_t budget,
+                                    const AoeAiTacticalOpsRor *ops,
+                                    const AoeAiUnitGroupOpsRor *group_ops,
+                                    const AoeAiStrategyRor *strategy,
+                                    const AoeAiInfoRor *info, const AoeAiInfoOpsRor *info_ops) {
+    int32_t i = 0;
+    if (!ai || !ops) return;
+    if (ai->field_f80 != -1) {
+        while (i < ai->groups_len && ai->groups[i]->id != ai->field_f80) ++i;
+        if (i == ai->groups_len) i = 0;
+    }
+    for (; i < ai->groups_len; ++i) {
+        AoeAiUnitGroupRor *g = ai->groups[i];
+        int ready, dispatch = 0;
+        if (g->task == 0x6b || g->task == 0x6c || g->task == 0x6a ||
+            (g->field_180 != 0 && g->field_180 != 1))
+            continue;
+        ready = g->flag_2c8 > 10 ? 1 : aoe_ai_unit_group_in_range_ror(g, group_ops);
+        if (g->field_160 > aoe_ai_unit_group_count_ror(g)) {
+            AoeAiWorldObjectRor commander, centre;
+            int32_t centre_id = ops->first_center ? ops->first_center(ops->context) : -1;
+            if (ops->object && ops->object(ops->context, g->commander, &commander) &&
+                centre_id != -1 && ops->object(ops->context, centre_id, &centre) &&
+                info_ops && info_ops->zone && info_ops->tile_zone &&
+                info_ops->zone(info_ops->context, g->commander) !=
+                    info_ops->tile_zone(info_ops->context, g->commander,
+                                        aoe_ftol32(centre.x), aoe_ftol32(centre.y))) {
+                g->field_160 = aoe_ai_unit_group_count_ror(g);
+                dispatch = 1;
+            }
+        } else if (ready && aoe_ai_unit_group_settled_ror(g, group_ops, 1)) {
+            dispatch = 1;
+            if ((g->task == 0x66 || g->task == 0x69) &&
+                !(ops->info_zone_open && ops->info_zone_open(ops->context, g->commander)))
+                dispatch = 0;
+            else if (g->task == 100 || g->task == 0x67) {
+                int32_t kind = strategy ? aoe_ai_strategy_ai_victory_kind_ror(strategy) : -1;
+                if (kind == 0) {
+                    if (aoe_ai_tactical_free_target_ror(ai, strategy) == -1 && g->task == 100)
+                        dispatch = 0;
+                    else
+                        g->field_18 = 0;
+                }
+                if (kind == 4) {
+                    if (aoe_ai_tactical_free_second_ror(ai, strategy) == -1 && g->task == 100)
+                        dispatch = 0;
+                    else
+                        g->field_18 = 4;
+                }
+            } else if (g->task == 0x65 || g->task == 0x68) {
+                dispatch = info && aoe_ai_info_list_148_count_ror(info) != 0;
+            }
+        }
+        if (dispatch)
+            run_group_dispatch(ai, g, ops);
+        else if (!ready)
+            aoe_ai_unit_group_update_ror(g, group_ops, 9, 1, 0);
+        ai->field_f80 = i + 1 < ai->groups_len ? ai->groups[i + 1]->id : -1;
+        if (ops->real_ms && ops->real_ms(ops->context) - start >= budget) return;
+    }
+    ai->field_f80 = -1;
+}

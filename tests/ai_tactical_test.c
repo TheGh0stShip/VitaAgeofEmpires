@@ -1063,6 +1063,50 @@ static void upgrades_tests(void) {
     aoe_ai_tactical_release_ror(&ai);
 }
 
+static uint32_t rg_ms;
+static uint32_t rg_real(void *c) { (void)c; return rg_ms += 4; }
+static int32_t rg_centre(void *c) { (void)c; return 60; }
+static uint8_t rg_zone(void *c, int32_t id) { (void)c; (void)id; return 1; }
+static uint8_t rg_tile_zone(void *c, int32_t id, int32_t x, int32_t y) {
+    (void)c; (void)id; (void)x; (void)y; return 2;
+}
+
+static void run_groups_tests(void) {
+    static AoeAiTacticalRor ai;
+    AoeAiTacticalOpsRor ops;
+    AoeAiInfoOpsRor iops;
+    AoeAiUnitGroupRor *g[5];
+    static const int32_t tasks[5] = {0x6b, 0x6d, 0x65, 0x67, 0x66};
+    int32_t i;
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    memset(&ops, 0, sizeof ops);
+    memset(&iops, 0, sizeof iops);
+    ops.object = tobject;
+    ops.first_center = rg_centre;
+    ops.real_ms = rg_real;
+    iops.zone = rg_zone;
+    iops.tile_zone = rg_tile_zone;
+    for (i = 0; i < 5; ++i) {
+        g[i] = aoe_ai_tactical_new_group_ror(&ai, 1);
+        g[i]->task = tasks[i];
+    }
+    /* The last wants five members it lacks, its commander out of the
+       centre's zone. */
+    g[4]->field_160 = 5;
+    g[4]->commander = 70;
+    /* A budget of 6 ms ends the call after the second group handled. */
+    rg_ms = 0;
+    aoe_ai_tactical_run_groups_ror(&ai, 0, 6, &ops, NULL, NULL, NULL, &iops);
+    assert(g[0]->field_180 == 0 && g[1]->field_180 == 0x13 && g[2]->field_180 == 0);
+    assert(ai.field_f80 == g[3]->id && g[3]->field_180 == 0);
+    /* Resumed at the fourth: no enemy seen turns task 0x67 into 0x69. */
+    rg_ms = 0;
+    aoe_ai_tactical_run_groups_ror(&ai, 0, 100, &ops, NULL, NULL, NULL, &iops);
+    assert(g[3]->task == 0x69 && g[3]->field_180 == 8);
+    assert(g[4]->field_160 == 0 && g[4]->field_180 == 8 && ai.field_f80 == -1);
+    aoe_ai_tactical_release_ror(&ai);
+}
+
 static void defend_tests(void) {
     static AoeAiTacticalRor ai;
     AoeAiTacticalOpsRor ops;
@@ -1541,6 +1585,7 @@ int main(void) {
     ask_and_play_tests();
     defend_tests();
     upgrades_tests();
+    run_groups_tests();
 
     aoe_ai_tactical_init_ror(&ai, 3, NULL);
     assert(ai.module.id == 0x3f1 && !strcmp(ai.module.name, "TacAI"));

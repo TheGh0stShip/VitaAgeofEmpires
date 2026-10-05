@@ -2816,3 +2816,70 @@ int aoe_ai_tactical_gather_ror(AoeAiTacticalRor *ai, int32_t unit, int32_t kind,
     if (t.type_id == 0x32 && ops->player_ddc_add) ops->player_ddc_add(ops->context, t.id);
     return 1;
 }
+
+/* 0x004da330: see the header. */
+int aoe_ai_tactical_regather_ror(AoeAiTacticalRor *ai, int32_t unit,
+                                 const AoeAiTacticalOpsRor *ops, AoeAiInfoRor *info,
+                                 const AoeAiInfoOpsRor *info_ops) {
+    AoeAiWorldObjectRor o;
+    int32_t tried[4] = {0, 0, 0, 0}, *e, i, k, task, v;
+    uint32_t now;
+    int r = 0;
+    if (!ai || !ops) return 0;
+    for (i = 0; i < ai->field_9cc && i < AOE_AI_TAC_GATHERERS; ++i)
+        if (ai->gatherers[i][0] == unit) break;
+    if (i >= ai->field_9cc || i >= AOE_AI_TAC_GATHERERS) return 0;
+    e = ai->gatherers[i];
+    now = ops->real_ms ? ops->real_ms(ops->context) : 0;
+    if (now - (uint32_t)e[5] < 5000) return 1;
+    e[5] = (int32_t)now;
+    if (!ops->world_object || !ops->world_object(ops->context, unit, &o) || !ops->unit_task ||
+        !ops->unit_task(ops->context, unit, &task))
+        return 0;
+    if (task == 600 || task == 0x25a || task == 0x26a) return 1;
+    if (o.field_44 > 0.0f) return 1;
+    if (aoe_ai_tactical_busy_103_ror(ops, unit, 0) == 1 &&
+        (ops->resource_amount ? ops->resource_amount(ops->context, 0) : 0) < 1000 &&
+        ai->lists[0].count - aoe_ai_tactical_count_busy_103_ror(ai, ops) > 3)
+        return 1;
+    v = -1;
+    if (ops->unit_action) ops->unit_action(ops->context, unit, &v);
+    if (v == 0x2c6) {
+        int32_t w = -1;
+        if (ops->unit_2c && ops->unit_2c(ops->context, unit, &w) && w == 100) return 1;
+    }
+    if (v == 0x2be) return 1;
+    if (e[2] > e[3]) {
+        if (task != -1) return 1;
+        if (e[1] >= 0 && e[1] < 4) tried[e[1]] = 1;
+        if (aoe_ai_tactical_gather_ror(ai, e[0], e[1], 0, NULL, ops, info, info_ops) == 1)
+            return 1;
+        e[1] = e[2] = e[3] = -1;
+    }
+    for (k = 0; k < 4; ++k) {
+        if (tried[k] == 1 || ai->field_d68[k] >= ai->field_d78[k]) continue;
+        if (e[1] == k && ops->unit_task(ops->context, unit, &task) &&
+            (task == 0x265 || task == 0x261))
+            return 1;
+        tried[k] = 1;
+        if (aoe_ai_tactical_gather_ror(ai, e[0], k, 0, NULL, ops, info, info_ops) == 1)
+            return 1;
+    }
+    if ((aoe_ai_tactical_age_is_ror(ops, 1) && ai->sn[181] == 1) ||
+        (aoe_ai_tactical_age_is_ror(ops, 2) && ai->sn[182] == 1 && tried[0] == 0)) {
+        tried[0] = 1;
+        r = aoe_ai_tactical_gather_ror(ai, e[0], 0, 1, NULL, ops, info, info_ops);
+    } else if (aoe_ai_tactical_age_is_ror(ops, 3) && ai->sn[183] == 1) {
+        if (tried[0] == 0) {
+            r = aoe_ai_tactical_gather_ror(ai, e[0], 0, 1, NULL, ops, info, info_ops);
+            tried[0] = 1;
+        }
+        if (tried[3] == 0) {
+            if (r) return 1;
+            tried[3] = 1;
+            r = aoe_ai_tactical_gather_ror(ai, e[0], 3, 1, NULL, ops, info, info_ops);
+        }
+    }
+    if (!r) aoe_ai_tactical_gather_ror(ai, e[0], -1, 1, tried, ops, info, info_ops);
+    return 1;
+}

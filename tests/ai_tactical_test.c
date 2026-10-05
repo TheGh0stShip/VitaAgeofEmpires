@@ -1073,6 +1073,11 @@ static void ga_124(void *c, int32_t u, int32_t t, int32_t o, float x, float y) {
     (void)c; (void)o; (void)x; (void)y; ga_unit = u; ga_target = t; ++ga_sent;
 }
 
+static uint32_t ga_now;
+static int32_t ga_task_v;
+static uint32_t ga_ms(void *c) { (void)c; return ga_now; }
+static int ga_task(void *c, int32_t id, int32_t *t) { (void)c; (void)id; *t = ga_task_v; return 1; }
+
 static void gather_tests(void) {
     static AoeAiTacticalRor ai;
     static AoeAiInfoRor info;
@@ -1118,6 +1123,29 @@ static void gather_tests(void) {
     /* Without the exclusion 601 is taken (the test result unused). */
     assert(aoe_ai_tactical_gather_ror(&ai, 41, -1, 0, NULL, &ops, &info, &iops) == 1);
     assert(ga_unit == 41 && ga_target == 601);
+    /* Regathering (0x004da330): unit 40's entry is short and its task is
+       -1, so kind 1 is retried. */
+    ops.world_object = tobject;
+    ops.unit_task = ga_task;
+    ops.real_ms = ga_ms;
+    ga_now = 10000;
+    ga_task_v = -1;
+    ga_sent = 0;
+    assert(aoe_ai_tactical_regather_ror(&ai, 40, &ops, &info, &iops) == 1);
+    assert(ga_sent == 1 && ga_unit == 40 && e[5] == 10000);
+    /* Within 5000 ms nothing happens; nor for a busy short entry. */
+    ga_now = 14999;
+    assert(aoe_ai_tactical_regather_ror(&ai, 40, &ops, &info, &iops) == 1 && ga_sent == 1);
+    ga_now = 15000;
+    ga_task_v = 7;
+    assert(aoe_ai_tactical_regather_ror(&ai, 40, &ops, &info, &iops) == 1 && ga_sent == 1);
+    /* A full entry: the first kind below its +0xd78 share (kind 1) is
+       tried. */
+    e[2] = e[3] = 0;
+    ai.field_d78[1] = 9;
+    ga_now = 20000;
+    assert(aoe_ai_tactical_regather_ror(&ai, 40, &ops, &info, &iops) == 1 && ga_sent == 2);
+    assert(aoe_ai_tactical_regather_ror(&ai, 99, &ops, &info, &iops) == 0);
     aoe_ai_tactical_release_ror(&ai);
 }
 

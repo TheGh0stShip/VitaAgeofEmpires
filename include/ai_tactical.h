@@ -897,6 +897,29 @@ int aoe_ai_tactical_defend_object_ror(AoeAiTacticalRor *ai, int32_t enemy, int32
    without a pending 0x65 item skips the age-2 test. */
 void aoe_ai_tactical_research_ages_ror(AoeAiTacticalRor *ai,
                                        const AoeAiTacticalOpsRor *ops);
+/* 0x004da330: re-tasks gatherer `unit`. 0 when it has no entry among the
+   first +0x9cc, its world object or unit AI is gone. 1 (nothing done)
+   within 5000 ms (timeGetTime) of the entry's last check (+0x14, then
+   restamped), for unit AI tasks 600, 0x25a and 0x26a, with +0x44 above
+   0, for a busy type 0x103 (0x004e2030) while food is below 1000 and
+   list 0 exceeds such units (0x004e2090) by more than 3, and for action
+   0x2c6 with +0x2c 100 or action 0x2be. Then (0x004daec0 calls, `fixed`
+   0, stop at the first success with 1):
+   - An entry short of its amount (+8 above +0xc) keeps gathering when
+     its task is not -1, else its kind is retried (and marked tried);
+     failing, its kind, amount and tally become -1.
+   - Each untried kind 0..3 with +0xd68 below +0xd78 is tried, except
+     that a unit of that kind with task 0x265 or 0x261 is left alone.
+   - In age 1 with number 181 at 1, or age 2 with number 182 at 1 and
+     food untried, food is tried with `fixed` 1; else in age 3 with
+     number 183 at 1, food (when untried) and then gold (when untried and
+     food failed) are, with `fixed` 1.
+   - Failing all, kind -1 (with `fixed` 1 and the tried kinds excluded).
+   1. The original marks index -1 of its tried kinds (a stack slot) for
+   an entry of kind -1; the port skips it. */
+int aoe_ai_tactical_regather_ror(AoeAiTacticalRor *ai, int32_t unit,
+                                 const AoeAiTacticalOpsRor *ops, AoeAiInfoRor *info,
+                                 const AoeAiInfoOpsRor *info_ops);
 /* 0x004daec0: sends `unit` (our listed object) to gather. An entry still
    short of its amount (+8 above +0xc) keeps its own kind. Kind -1 tries
    +0xd88's four kinds in order (those `exclude` marks 1 skipped): the

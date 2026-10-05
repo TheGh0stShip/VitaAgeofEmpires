@@ -229,3 +229,22 @@ int32_t aoe_ai_unit_ai_priest_5c_ror(int32_t field_28, int32_t id,
     }
     return 0;
 }
+
+AoeAiUnitAiRor *aoe_ai_unit_ai_delete_ror(AoeAiUnitAiRor *ai, uint8_t flags,
+                                          const AoeAiUnitAiOpsRor *ops) {
+    if (!ai) return ai;
+    if (ops && ops->base_destroy) ops->base_destroy(ops->context);
+    ai->class_count = 0;
+    if ((flags & 1) && ops && ops->free_self) ops->free_self(ops->context);
+    return ai;
+}
+
+int32_t aoe_ai_unit_ai_5644_d8_ror(AoeAiUnitAiRor *ai,
+                                   const AoeAiUnitAiOpsRor *ops) {
+    if (!ai || !ops || !ops->call_d4 || ops->call_d4(ops->context, 1) != 6)
+        return 9;
+    if (ops->clear_target) ops->clear_target(ops->context);
+    if (ops->call_58) ops->call_58(ops->context, 1);
+    ai->field_f8 = 0;
+    return 10;
+}

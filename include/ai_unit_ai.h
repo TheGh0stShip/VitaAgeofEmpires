@@ -31,6 +31,7 @@ typedef struct {
     int32_t timer;            /* +0x100 */
     int32_t classes[24];      /* +0x124 (allocated), the target classes */
     int32_t class_count;      /* +0x128 */
+    int32_t field_f8;         /* +0xf8, cleared by 0x004e6d20 */
 } AoeAiUnitAiRor;
 
 /* What the overrides read about a unit or target. */
@@ -80,6 +81,12 @@ typedef struct {
     int32_t (*call_6c)(void *context, int32_t id, int32_t value);
     int32_t (*call_94)(void *context, int32_t id, float f);
     double (*unit_10c)(void *context, int32_t value);
+    /* The base destructor 0x0040ef80 (through its thunk 0x004e5bf0) and
+       the allocator's free (0x00525fc2) of the object itself. */
+    void (*base_destroy)(void *context);
+    void (*free_self)(void *context);
+    /* Virtual +0xd4 (with 1); clear_target and call_58 above serve too. */
+    int32_t (*call_d4)(void *context, int32_t arg);
 } AoeAiUnitAiOpsRor;
 
 /* The constructors: the base, then the target-class table (and, for
@@ -140,5 +147,18 @@ int32_t aoe_ai_unit_ai_class10_cc_ror(int32_t target, int32_t message_type,
 int32_t aoe_ai_unit_ai_priest_5c_ror(int32_t field_28, int32_t id,
                                      int32_t value,
                                      const AoeAiUnitAiOpsRor *ops);
+/* 0x004e5e90, vtable +0x00 of all four 0x00549564 / 0x00549644 /
+   0x00549724 / 0x00549804 classes: the scalar deleting destructor. Runs
+   the base destructor (here also emptying the class list), then frees
+   the object only when bit 0 of `flags` is set; other bits are ignored.
+   Returns the object, as the original returns `this`. */
+AoeAiUnitAiRor *aoe_ai_unit_ai_delete_ror(AoeAiUnitAiRor *ai, uint8_t flags,
+                                          const AoeAiUnitAiOpsRor *ops);
+/* 0x004e6d20 (0x00549644 only, vtable +0xd8): virtual +0xd4(1); on 6
+   clear the target, call +0x58(1), zero +0xf8 and return 10; any other
+   result returns 9 with nothing changed. The +0xd4 slot is called with
+   an argument here, whatever override the vtable holds. */
+int32_t aoe_ai_unit_ai_5644_d8_ror(AoeAiUnitAiRor *ai,
+                                   const AoeAiUnitAiOpsRor *ops);
 
 #endif

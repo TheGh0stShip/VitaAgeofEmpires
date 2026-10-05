@@ -38,12 +38,17 @@ static float owner_res(void *c, int32_t i) { (void)c; return i == 27 ? res27 : i
 static int32_t level = 2;
 static int32_t difficulty(void *c) { (void)c; return level; }
 static double dist = 3.0;
+static int destroyed, freed, cleared, c58 = -1, d4_arg = -1;
+static int32_t d4_result;
+static void base_destroy(void *c) { (void)c; ++destroyed; }
+static void free_self(void *c) { (void)c; ++freed; }
+static int32_t call_d4(void *c, int32_t a) { (void)c; d4_arg = a; return d4_result; }
+static void clear_target(void *c) { (void)c; ++cleared; }
+static void call_58(void *c, int32_t a) { (void)c; c58 = a; }
 static double distance_to(void *c, int32_t id) { (void)c; (void)id; return dist; }
 
 static int cleared, c58, c1c, bcc, c6c = -1, c94 = -1;
 static float f94;
-static void clear_target(void *c) { (void)c; ++cleared; }
-static void call_58(void *c, int32_t v) { (void)c; c58 = v; }
 static void call_1c(void *c, void *m) { (void)c; (void)m; ++c1c; }
 static int32_t base_cc(void *c, void *m, int32_t a) { (void)c; (void)m; ++bcc; return a; }
 static int32_t call_6c(void *c, int32_t id, int32_t v) { (void)c; c6c = id; return v; }
@@ -170,6 +175,30 @@ int main(void) {
     owner4 = 1;
     assert(aoe_ai_unit_ai_priest_5c_ror(3, 8, 6, &ops) == 0 && c94 == -1);
     assert(aoe_ai_unit_ai_priest_5c_ror(-1, 8, 6, &ops) == 2 && c94 == 8 && f94 == 3.0f);
+    {
+        AoeAiUnitAiOpsRor o2;
+        memset(&o2, 0, sizeof o2);
+        o2.base_destroy = base_destroy;
+        o2.free_self = free_self;
+        o2.call_d4 = call_d4;
+        o2.clear_target = clear_target;
+        o2.call_58 = call_58;
+        aoe_ai_unit_ai_init_ror(&ai, AOE_AI_UNIT_AI_KIND_5644, &o2);
+        cleared = 0;
+        c58 = -1;
+        /* 0x004e5e90: only bit 0 frees. */
+        assert(aoe_ai_unit_ai_delete_ror(&ai, 2, &o2) == &ai && destroyed == 1 && freed == 0 &&
+               ai.class_count == 0);
+        assert(aoe_ai_unit_ai_delete_ror(&ai, 3, &o2) == &ai && destroyed == 2 && freed == 1);
+        /* 0x004e6d20. */
+        ai.field_f8 = 7;
+        d4_result = 5;
+        assert(aoe_ai_unit_ai_5644_d8_ror(&ai, &o2) == 9 && d4_arg == 1 && cleared == 0 &&
+               c58 == -1 && ai.field_f8 == 7);
+        d4_result = 6;
+        assert(aoe_ai_unit_ai_5644_d8_ror(&ai, &o2) == 10 && cleared == 1 && c58 == 1 &&
+               ai.field_f8 == 0);
+    }
     puts("ai unit ai ok");
     return 0;
 }

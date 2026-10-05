@@ -91,6 +91,8 @@ int aoe_ui_dialog_setup_color_ror(AoeUiDialogRor *d, AoeUiAreaRor *area,
     return 1;
 }
 
+static void free_child(void *child);
+
 const AoeUiEzVtblRor aoe_ui_dialog_vtable_ror = {
     AOE_UI_EZ_DEFAULT_SLOTS(aoe_ui_dialog_destroy_slot_ror,
                             aoe_ui_panel_handle_paint_ror,
@@ -253,6 +255,122 @@ const AoeUiEzVtblRor aoe_ui_message_dialog_vtable_ror = {
                     aoe_ui_panel_handle_paint_ror,
                     aoe_ui_ez_no_key_action_ror, aoe_ui_panel_zero_ror,
                     message_action, aoe_ui_ez_set_focus_slot_ror),
+    aoe_ui_ez_draw_background_slot_ror,
+    aoe_ui_ez_set_reference_slot_ror,
+};
+
+/* ---- the list dialog ---- */
+
+#define LST(p) ((AoeUiListDialogRor *)(p))
+
+int aoe_ui_list_dialog_init_ror(AoeUiListDialogRor *d, AoeUiSystemRor *system,
+                                const AoeUiEzOpsRor *ops, const char *name) {
+    int ok;
+    if (!d) return 0;
+    ok = aoe_ui_dialog_init_ror(&d->dialog, system, ops, name);
+    d->selected = -1;
+    d->title = NULL;
+    d->list = NULL;
+    d->scrollbar = NULL;
+    d->ok = d->cancel = NULL;
+    d->selected_text = NULL;
+    d->dialog.ez.panel.vt = &aoe_ui_list_dialog_vtable_ror.base;
+    return ok;
+}
+
+static void list_destroy(AoeUiPanelRor *p) {
+    AoeUiListDialogRor *d = LST(p);
+    free_child(d->title);
+    free_child(d->list);
+    free_child(d->scrollbar);
+    free_child(d->ok);
+    free_child(d->cancel);
+    d->title = NULL;
+    d->list = NULL;
+    d->scrollbar = NULL;
+    d->ok = d->cancel = NULL;
+    aoe_ui_dialog_release_ror(&d->dialog);
+}
+
+int aoe_ui_list_dialog_setup_ror(
+    AoeUiListDialogRor *d, AoeUiPanelRor *parent, const char *info_name,
+    int32_t info_id, int32_t w, int32_t h, int32_t title_x, int32_t title_y,
+    int32_t title_w, int32_t title_h, const char *title, int32_t list_x,
+    int32_t list_y, int32_t list_w, int32_t list_h, const char *const *lines,
+    int16_t count, int16_t selected, int32_t ok_x, int32_t cancel_x,
+    int32_t button_y, int32_t button_w, int32_t button_h) {
+    AoeUiEzRor *ez;
+    if (!d) return 0;
+    ez = &d->dialog.ez;
+    if (!aoe_ui_dialog_setup_ror(&d->dialog, parent ? parent->area : NULL,
+                                 parent, w, h, info_name, info_id, 1))
+        return 0;
+    if (title && *title &&
+        !aoe_ui_ez_create_text_ror(ez, &ez->panel, &d->title, title, title_x,
+                                   title_y, title_w, title_h, 4, 1, 1, 1))
+        return 0;
+    if (!aoe_ui_ez_create_list_ror(ez, &ez->panel, &d->list, list_x, list_y,
+                                   list_w, list_h, 0xb))
+        return 0;
+    if (!aoe_ui_ez_create_text_scrollbar_ror(ez, &d->scrollbar, &d->list->text,
+                                             0x14))
+        return 0;
+    if (lines)
+        ((const AoeUiTextVtblRor *)d->list->text.panel.vt)
+            ->set_lines(&d->list->text, lines, count);
+    d->selected = selected;
+    aoe_ui_list_move_ror(d->list, 1, selected, 1);
+    if (!aoe_ui_ez_create_button_id_ror(ez, &ez->panel, &d->ok, 0xfa1, 0, ok_x,
+                                        button_y, button_w, button_h, 0, 0, 0))
+        return 0;
+    if (!aoe_ui_ez_create_button_id_ror(ez, &ez->panel, &d->cancel, 0xfa2, 0,
+                                        cancel_x, button_y, button_w, button_h,
+                                        0, 0, 0))
+        return 0;
+    d->cancel->hotkey = 0x1b;
+    d->cancel->hotkey_shift = 0;
+    aoe_ui_panel_set_current_ror(&ez->panel, &d->list->text.panel);
+    return 1;
+}
+
+static int32_t list_action(AoeUiPanelRor *p, AoeUiPanelRor *from,
+                           int32_t code, int32_t value, int32_t extra) {
+    AoeUiListDialogRor *d = LST(p);
+    if (from) {
+        int chosen = 0;
+        if (d->ok && from == &d->ok->panel) {
+            if (code == 1) chosen = 1;
+        } else if (d->cancel && from == &d->cancel->panel) {
+            if (code == 1) {
+                if (p->parent) p->parent->vt->action(p->parent, p, 2, 0, 0);
+                return 1;
+            }
+        } else if (d->list && from == &d->list->text.panel && code == 3) {
+            chosen = 1;
+        }
+        if (chosen) {
+            d->selected = aoe_ui_text_selected_ror(&d->list->text);
+            d->selected_text = aoe_ui_text_selected_text_ror(&d->list->text);
+            if (p->parent) p->parent->vt->action(p->parent, p, 1, 0, 0);
+            return 1;
+        }
+    }
+    return aoe_ui_ez_action_slot_ror(p, from, code, value, extra);
+}
+
+int16_t aoe_ui_list_dialog_selected_ror(const AoeUiListDialogRor *d) {
+    return d ? d->selected : -1;
+}
+
+const char *aoe_ui_list_dialog_text_ror(const AoeUiListDialogRor *d) {
+    return d ? d->selected_text : NULL;
+}
+
+const AoeUiEzVtblRor aoe_ui_list_dialog_vtable_ror = {
+    AOE_UI_EZ_SLOTS(list_destroy, aoe_ui_panel_handle_idle_ror,
+                    aoe_ui_panel_handle_paint_ror, aoe_ui_ez_no_key_action_ror,
+                    aoe_ui_panel_zero_ror, list_action,
+                    aoe_ui_ez_set_focus_slot_ror),
     aoe_ui_ez_draw_background_slot_ror,
     aoe_ui_ez_set_reference_slot_ror,
 };

@@ -76,4 +76,38 @@ int aoe_ui_message_dialog_setup_ror(AoeUiMessageDialogRor *m,
    base idle), +0xac 0x00434990 (no key action), +0xb8 0x004348d0 (a
    button's click answers the parent). */
 
+/* The list dialog (vtable 0x00543a7c, 0x00433890..0x00433c20): an
+   optional title, a list with its scrollbar and OK / Cancel (Escape).
+   OK or a double-click (action 3) on the list keeps the selection and
+   its text and answers the parent 1; Cancel answers 2. */
+typedef struct {
+    AoeUiDialogRor dialog;
+    AoeUiTextRor *title;            /* +0x490 */
+    AoeUiListRor *list;             /* +0x494 */
+    AoeUiScrollbarRor *scrollbar;   /* +0x498 */
+    AoeUiButtonRor *ok, *cancel;    /* +0x49c, +0x4a0 */
+    int16_t selected;               /* +0x4a4, -1 */
+    const char *selected_text;      /* +0x4a8 */
+} AoeUiListDialogRor;
+
+extern const AoeUiEzVtblRor aoe_ui_list_dialog_vtable_ror;
+
+/* 0x00433890 constructor; 0x00433900 destructor (deleting 0x004338e0).
+   0x004339a0 setup: the dialog, the title (font 4, centred, wrapped) when
+   given, the list (font 11) and its 20-wide scrollbar, the lines, the
+   first selection, OK (string 4001) and Cancel (4002) of the same size on
+   one row; the list has the focus. 0x00433c10 / 0x00433c20 the chosen
+   line and text. */
+int aoe_ui_list_dialog_init_ror(AoeUiListDialogRor *d, AoeUiSystemRor *system,
+                                const AoeUiEzOpsRor *ops, const char *name);
+int aoe_ui_list_dialog_setup_ror(
+    AoeUiListDialogRor *d, AoeUiPanelRor *parent, const char *info_name,
+    int32_t info_id, int32_t w, int32_t h, int32_t title_x, int32_t title_y,
+    int32_t title_w, int32_t title_h, const char *title, int32_t list_x,
+    int32_t list_y, int32_t list_w, int32_t list_h, const char *const *lines,
+    int16_t count, int16_t selected, int32_t ok_x, int32_t cancel_x,
+    int32_t button_y, int32_t button_w, int32_t button_h);
+int16_t aoe_ui_list_dialog_selected_ror(const AoeUiListDialogRor *d);
+const char *aoe_ui_list_dialog_text_ror(const AoeUiListDialogRor *d);
+
 #endif

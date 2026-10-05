@@ -137,6 +137,26 @@ int main(void) {
     surf.direction = -1;
     assert(aoe_shape_blit_ror(&s, &surf, 0, 1));
     assert(px[8] == 0xa1 && px[4] == 0xc3);
+    /* Drawing: hotspot (1, 1) puts the frame's top-left at (0, 0);
+       clipping to column 0..0 and row 1 leaves only the fill's first
+       pixel. */
+    surf.direction = 1;
+    memset(px, 0x11, sizeof(px));
+    assert(aoe_shape_draw_ror(&s, &surf, 1, 1, 0, 0, NULL, NULL));
+    assert(px[0] == 0xa1 && px[1] == 0xb2 && px[4] == 0xc3 && px[6] == 0xc3);
+    memset(px, 0x11, sizeof(px));
+    surf.clip_right = 0;
+    surf.clip_top = 1;
+    assert(aoe_shape_draw_ror(&s, &surf, 1, 1, 0, 1, table, NULL));
+    assert(px[0] == 0x11 && px[4] == 3 && px[5] == 0x11);
+    /* Clipped literal runs start mid-run. */
+    memset(px, 0x11, sizeof(px));
+    surf.clip_left = 1; surf.clip_right = 3; surf.clip_top = 0;
+    assert(aoe_shape_draw_ror(&s, &surf, 1, 1, 0, 0, NULL, NULL));
+    assert(px[0] == 0x11 && px[1] == 0xb2 && px[4] == 0x11 && px[5] == 0xc3);
+    /* Mode 3 draws nothing; a box wholly outside draws nothing. */
+    assert(!aoe_shape_draw_ror(&s, &surf, 1, 1, 0, 3, table, NULL));
+    assert(!aoe_shape_draw_ror(&s, &surf, 40, 40, 0, 0, NULL, NULL));
     aoe_shape_free_ror(&s, &ops);
 
     /* An SHP resource (mapped, released on free). */

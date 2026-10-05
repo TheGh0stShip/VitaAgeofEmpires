@@ -86,4 +86,41 @@ int aoe_shape_blit_shadow_ror(const AoeShapeRor *s, AoeShapeSurfaceRor *dst,
                               int32_t x, int32_t y,
                               const uint8_t table[256]);
 
+/* The clipped SHP blitters, writing only columns cl..cr of rows ct..cb
+   for a frame placed with its top-left at (x, y): 0x004a0480 copy,
+   0x004a0790 through a colour table, 0x004a0b20 shadow remap. */
+int aoe_shape_blit_clipped_ror(const AoeShapeRor *s, AoeShapeSurfaceRor *dst,
+                               int32_t x, int32_t y, int32_t cl, int32_t ct,
+                               int32_t cr, int32_t cb);
+int aoe_shape_blit_clipped_xlat_ror(const AoeShapeRor *s,
+                                    AoeShapeSurfaceRor *dst, int32_t x,
+                                    int32_t y, int32_t cl, int32_t ct,
+                                    int32_t cr, int32_t cb,
+                                    const uint8_t table[256]);
+int aoe_shape_blit_clipped_shadow_ror(const AoeShapeRor *s,
+                                      AoeShapeSurfaceRor *dst, int32_t x,
+                                      int32_t y, int32_t cl, int32_t ct,
+                                      int32_t cr, int32_t cb,
+                                      const uint8_t table[256]);
+
+typedef struct {
+    void *context;
+    /* SLP frames go to the sprite rasterizer: batched (0x007c045c set)
+       or drawn into the surface at the hotspot-adjusted point with the
+       colour table (the drawn count 0x007c044c rises). */
+    int32_t *batching;
+    int32_t *drawn;
+    void (*draw_slp)(void *context, AoeShapeSurfaceRor *dst,
+                     const AoeShapeRor *s, int32_t frame, int32_t x,
+                     int32_t y, const uint8_t *table, int batched);
+} AoeShapeDrawOpsRor;
+
+/* 0x0049fe00: draw frame `frame` with its hotspot at (x, y). Modes: 0
+   copy, 1 through `table`, 2 shadow through `table` (no table: copy);
+   others draw nothing. SHP frames are clipped to the surface's clip and
+   size, using the unclipped blitter when nothing is cut. */
+int aoe_shape_draw_ror(AoeShapeRor *s, AoeShapeSurfaceRor *dst, int32_t x,
+                       int32_t y, int32_t frame, uint8_t mode,
+                       const uint8_t *table, const AoeShapeDrawOpsRor *ops);
+
 #endif

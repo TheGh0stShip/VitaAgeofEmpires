@@ -392,3 +392,126 @@ int aoe_shape_blit_shadow_ror(const AoeShapeRor *s, AoeShapeSurfaceRor *dst,
                               const uint8_t table[256]) {
     return table ? blit(s, dst, x, y, table, 2) : 0;
 }
+
+/* ---- clipped SHP blitters ---- */
+
+static void put(uint8_t *o, int mode, const uint8_t *table, uint8_t value) {
+    if (mode == 2) *o = table[*o];
+    else if (mode == 1) *o = table[value];
+    else *o = value;
+}
+
+static int blit_clipped(const AoeShapeRor *s, AoeShapeSurfaceRor *d,
+                        int32_t x, int32_t y, int32_t cl, int32_t ct,
+                        int32_t cr, int32_t cb, const uint8_t *table,
+                        int mode) {
+    const uint8_t *f = s ? s->frame : NULL, *p;
+    int32_t row;
+    uint8_t *line;
+    if (!f || !d || !d->bits) return 0;
+    p = f + 0x18;
+    for (row = y; row < ct; ++row)
+        if (!(p = shp_skip_row(s, p))) return 1;
+    if (cb < ct) return 1;
+    line = row_at(d, 0, ct);
+    for (row = ct; row <= cb; ++row, line += step(d)) {
+        int32_t col = x;
+        for (;;) {
+            uint8_t b, n;
+            int32_t i;
+            if (!inside(s, p, 1)) return 1;
+            b = *p;
+            n = b >> 1;
+            if (b & 1) {
+                if (!n) {
+                    if (!inside(s, p, 2)) return 1;
+                    col += p[1];
+                    p += 2;
+                    continue;
+                }
+                if (!inside(s, p, 1 + (size_t)n)) return 1;
+                for (i = 0; i < n; ++i, ++col)
+                    if (col >= cl && col <= cr) put(line + col, mode, table, p[1 + i]);
+                p += 1 + n;
+            } else {
+                if (!n) {
+                    p += 1;
+                    break;
+                }
+                if (!inside(s, p, 2)) return 1;
+                for (i = 0; i < n; ++i, ++col)
+                    if (col >= cl && col <= cr) put(line + col, mode, table, p[1]);
+                p += 2;
+            }
+        }
+    }
+    return 1;
+}
+
+int aoe_shape_blit_clipped_ror(const AoeShapeRor *s, AoeShapeSurfaceRor *dst,
+                               int32_t x, int32_t y, int32_t cl, int32_t ct,
+                               int32_t cr, int32_t cb) {
+    return blit_clipped(s, dst, x, y, cl, ct, cr, cb, NULL, 0);
+}
+
+int aoe_shape_blit_clipped_xlat_ror(const AoeShapeRor *s,
+                                    AoeShapeSurfaceRor *dst, int32_t x,
+                                    int32_t y, int32_t cl, int32_t ct,
+                                    int32_t cr, int32_t cb,
+                                    const uint8_t table[256]) {
+    return table ? blit_clipped(s, dst, x, y, cl, ct, cr, cb, table, 1) : 0;
+}
+
+int aoe_shape_blit_clipped_shadow_ror(const AoeShapeRor *s,
+                                      AoeShapeSurfaceRor *dst, int32_t x,
+                                      int32_t y, int32_t cl, int32_t ct,
+                                      int32_t cr, int32_t cb,
+                                      const uint8_t table[256]) {
+    return table ? blit_clipped(s, dst, x, y, cl, ct, cr, cb, table, 2) : 0;
+}
+
+/* ---- drawing ---- */
+
+int aoe_shape_draw_ror(AoeShapeRor *s, AoeShapeSurfaceRor *dst, int32_t x,
+                       int32_t y, int32_t frame, uint8_t mode,
+                       const uint8_t *table, const AoeShapeDrawOpsRor *ops) {
+    const uint8_t *f;
+    int32_t x0, y0, x1, y1, l, t, r, b;
+    if (!s || !dst || frame < 0 || aoe_shape_bad_ror(s, frame)) return 0;
+    if (s->slp) {
+        int batched = ops && ops->batching && *ops->batching;
+        f = slp_frame(s, frame);
+        if (!f) return 0;
+        if (ops && ops->draw_slp)
+            ops->draw_slp(ops->context, dst, s, frame, x - aoe_le_i32(f + 0x18),
+                          y - aoe_le_i32(f + 0x1c), table, batched);
+        if (!batched && ops && ops->drawn) ++*ops->drawn;
+        return 1;
+    }
+    if (!s->shp || !(f = shp_frame(s, frame))) return 0;
+    x0 = aoe_le_i32(f + 8) + x;
+    y0 = aoe_le_i32(f + 0xc) + y;
+    x1 = aoe_le_i32(f + 0x10) + x;
+    y1 = aoe_le_i32(f + 0x14) + y;
+    l = x0 < dst->clip_left ? dst->clip_left : x0;
+    t = y0 < dst->clip_top ? dst->clip_top : y0;
+    r = dst->clip_right < x1 ? dst->clip_right : x1;
+    b = dst->clip_bottom < y1 ? dst->clip_bottom : y1;
+    if (l < 0) l = 0;
+    if (t < 0) t = 0;
+    if (dst->width <= r) r = dst->width - 1;
+    if (dst->height <= b) b = dst->height - 1;
+    if (l > r || t > b) return 0;
+    if (l == x0 && t == y0 && r == x1 && b == y1) {
+        if (mode == 1 && table) return aoe_shape_blit_xlat_ror(s, dst, x0, y0, table);
+        if (mode == 2 && table) return aoe_shape_blit_shadow_ror(s, dst, x0, y0, table);
+        if (mode > 2) return 0;
+        return aoe_shape_blit_ror(s, dst, x0, y0);
+    }
+    if (mode == 1 && table)
+        return aoe_shape_blit_clipped_xlat_ror(s, dst, x0, y0, l, t, r, b, table);
+    if (mode == 2 && table)
+        return aoe_shape_blit_clipped_shadow_ror(s, dst, x0, y0, l, t, r, b, table);
+    if (mode > 2) return 0;
+    return aoe_shape_blit_clipped_ror(s, dst, x0, y0, l, t, r, b);
+}

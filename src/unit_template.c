@@ -51,6 +51,20 @@ static void type50_derive(AoeTemplateRor *t) {
     t->field_144 = t->field_120;
 }
 
+/* Type 70 without a saved +0x160: the largest attack of kind 3, and
+   +0x13c the largest other attack (or +0x100). */
+static void type70_derive(AoeTemplateRor *t) {
+    int16_t i;
+    t->pierce_armor = 0;
+    for (i = 0; i < t->attack_count; ++i)
+        if (t->attacks[i].kind == 3 && t->pierce_armor < t->attacks[i].amount)
+            t->pierce_armor = t->attacks[i].amount;
+    t->max_attack = (int16_t)t->field_100;
+    for (i = 0; i < t->attack_count; ++i)
+        if (t->attacks[i].kind != 3 && t->max_attack < t->attacks[i].amount)
+            t->max_attack = t->attacks[i].amount;
+}
+
 static AoeTemplatePairRor *copy_pairs(const AoeTemplatePairRor *src, int16_t n) {
     AoeTemplatePairRor *p;
     if (n < 1 || !src) return NULL;
@@ -76,7 +90,7 @@ int aoe_template_copy_ror(AoeTemplateRor *t, const AoeTemplateRor *src,
                           const AoeTemplateOpsRor *ops) {
     uint8_t type = src->type;
     int i;
-    /* 10 */
+    /* 10 (and 90) */
     *t = *src;
     t->name = dup_name(src->name);
     t->field_12 = src->field_10;
@@ -90,6 +104,10 @@ int aoe_template_copy_ror(AoeTemplateRor *t, const AoeTemplateRor *src,
     }
     t->type = 10;
     if (type == 10) return 1;
+    if (type == 0x5a) {
+        t->type = 0x5a;
+        return 1;
+    }
     t->type = 20; /* speed */
     if (type == 20) return 1;
     if (type == 25) {
@@ -106,8 +124,14 @@ int aoe_template_copy_ror(AoeTemplateRor *t, const AoeTemplateRor *src,
     t->armors = copy_pairs(src->armors, src->armor_count);
     t->attacks = copy_pairs(src->attacks, src->attack_count);
     if (type == 0x32) return 1;
-    t->type = 0x3c;
-    return type == 0x3c;
+    if (type == 0x3c) {
+        t->type = 0x3c;
+        return 1;
+    }
+    t->type = 0x46;
+    if (type == 0x46) return 1;
+    t->type = 0x50;
+    return type == 0x50;
 }
 
 /* ---- binary ---- */
@@ -217,6 +241,10 @@ int aoe_template_load_ror(AoeTemplateRor *t, uint8_t type, AoeOutcomeStream *s, 
     memset(t, 0, sizeof *t);
     if (!load10(t, s, sprites, sounds, version)) return 0;
     if (type == 10) return 1;
+    if (type == 0x5a) {
+        t->type = 0x5a;
+        return !s->failed;
+    }
     t->type = 0x14;
     t->speed = gf(s);
     if (type == 0x14) return !s->failed;
@@ -301,13 +329,47 @@ int aoe_template_load_ror(AoeTemplateRor *t, uint8_t type, AoeOutcomeStream *s, 
         }
     }
     if (type == 0x32) return !s->failed;
-    {
+    if (type == 0x3c) {
         int i;
         t->type = 0x3c;
         for (i = 0; i < 5; ++i) t->field_148[i] = g8(s);
         t->field_150 = gf(s);
+        return !s->failed;
     }
-    return type == 0x3c && !s->failed;
+    {
+        int i;
+        t->type = 0x46;
+        for (i = 0; i < 3; ++i) {
+            t->costs[i].type = g16(s);
+            t->costs[i].amount = g16(s);
+            t->costs[i].flag = g8(s);
+            t->costs[i].pad = g8(s);
+        }
+        t->train_time = g16(s);
+        t->train_location = g16(s);
+        t->button = g8(s);
+        if (version >= 7.01f)
+            t->pierce_armor = g16(s);
+        else
+            type70_derive(t);
+    }
+    if (type == 0x46) return !s->failed;
+    {
+        int16_t sprite, sound;
+        t->type = 0x50;
+        sprite = g16(s);
+        t->field_16c = g8(s);
+        t->field_16e = g16(s);
+        t->field_170 = g8(s);
+        t->field_172 = g16(s);
+        t->field_174 = g16(s);
+        t->field_176 = g16(s);
+        t->field_178 = g16(s);
+        sound = g16(s);
+        t->sprite_168 = pick(sprites, sprite);
+        t->sound_164 = pick(sounds, sound);
+    }
+    return type == 0x50 && !s->failed;
 }
 
 /* ---- text ---- */
@@ -400,6 +462,10 @@ int aoe_template_text_ror(AoeTemplateRor *t, uint8_t type, FILE *f, void **sprit
     memset(t, 0, sizeof *t);
     if (!text10(t, f, sprites, sounds, index)) return 0;
     if (type == 10) return 1;
+    if (type == 0x5a) {
+        t->type = 0x5a;
+        return 1;
+    }
     t->type = 0x14;
     if (fscanf(f, "%f", &t->speed) != 1) t->speed = 0.0f;
     if (type == 0x14) return 1;
@@ -464,7 +530,7 @@ int aoe_template_text_ror(AoeTemplateRor *t, uint8_t type, FILE *f, void **sprit
         type50_derive(t);
     }
     if (type == 0x32) return 1;
-    {
+    if (type == 0x3c) {
         int16_t v[5] = {0, 0, 0, 0, 0};
         int i;
         t->type = 0x3c;
@@ -473,8 +539,36 @@ int aoe_template_text_ror(AoeTemplateRor *t, uint8_t type, FILE *f, void **sprit
                    &t->field_150) == EOF) {
         }
         for (i = 0; i < 5; ++i) t->field_148[i] = (uint8_t)v[i];
+        return 1;
     }
-    return type == 0x3c;
+    {
+        int i;
+        int16_t button = 0;
+        t->type = 0x46;
+        for (i = 0; i < 3; ++i) {
+            int16_t flag = 0;
+            if (fscanf(f, "%hd %hd %hd", &t->costs[i].type, &t->costs[i].amount, &flag) == EOF)
+                flag = 0;
+            t->costs[i].flag = (uint8_t)flag;
+        }
+        if (fscanf(f, "%hd %hd %hd", &t->train_time, &t->train_location, &button) == EOF)
+            button = 0;
+        t->button = (uint8_t)button;
+        type70_derive(t);
+    }
+    if (type == 0x46) return 1;
+    {
+        int16_t sprite = -1, b16c = 0, b170 = 0, sound = -1;
+        t->type = 0x50;
+        if (fscanf(f, "%hd %hd %hd %hd %hd %hd %hd %hd %hd", &sprite, &b16c, &t->field_16e, &b170,
+                   &t->field_172, &t->field_174, &t->field_176, &t->field_178, &sound) == EOF)
+            sprite = sound = -1;
+        t->field_16c = (uint8_t)b16c;
+        t->field_170 = (uint8_t)b170;
+        t->sprite_168 = pick(sprites, sprite);
+        t->sound_164 = pick(sounds, sound);
+    }
+    return type == 0x50;
 }
 
 /* ---- save ---- */
@@ -552,7 +646,7 @@ void aoe_template_save_ror(const AoeTemplateRor *t, AoeOutcomeStream *s,
     aoe_stream_put_u8(s, t->field_92);
     if (name_len) aoe_stream_put(s, t->name, (size_t)name_len);
     p16(s, t->field_12);
-    if (t->type == 10) return;
+    if (t->type == 10 || t->type == 0x5a) return;
     /* 20 (and 25) */
     aoe_stream_put_f32(s, t->speed);
     if (t->type == 0x14 || t->type == 0x19) return;
@@ -607,9 +701,34 @@ void aoe_template_save_ror(const AoeTemplateRor *t, AoeOutcomeStream *s,
     aoe_stream_put_f32(s, t->field_140);
     aoe_stream_put_f32(s, t->field_144);
     if (t->type == 0x32) return;
-    /* 60 */
-    for (i = 0; i < 5; ++i) aoe_stream_put_u8(s, t->field_148[i]);
-    aoe_stream_put_f32(s, t->field_150);
+    if (t->type == 0x3c) {
+        /* 60 */
+        for (i = 0; i < 5; ++i) aoe_stream_put_u8(s, t->field_148[i]);
+        aoe_stream_put_f32(s, t->field_150);
+        return;
+    }
+    /* 70 */
+    for (i = 0; i < 3; ++i) {
+        p16(s, t->costs[i].type);
+        p16(s, t->costs[i].amount);
+        aoe_stream_put_u8(s, t->costs[i].flag);
+        aoe_stream_put_u8(s, t->costs[i].pad);
+    }
+    p16(s, t->train_time);
+    p16(s, t->train_location);
+    aoe_stream_put_u8(s, t->button);
+    p16(s, t->pierce_armor);
+    if (t->type == 0x46) return;
+    /* 80 */
+    p16(s, sprite_id(ops, t->sprite_168));
+    aoe_stream_put_u8(s, t->field_16c);
+    p16(s, t->field_16e);
+    aoe_stream_put_u8(s, t->field_170);
+    p16(s, t->field_172);
+    p16(s, t->field_174);
+    p16(s, t->field_176);
+    p16(s, t->field_178);
+    p16(s, sound_id(ops, t->sound_164));
 }
 
 void aoe_template_release_ror(AoeTemplateRor *t, const AoeTemplateOpsRor *ops) {
@@ -652,6 +771,8 @@ int aoe_template_set_attribute_ror(AoeTemplateRor *t, uint8_t attribute, float v
         t->field_148[1] = (uint8_t)(int32_t)v;
         return 0;
     }
+    /* Type 90 is a type 10. */
+    if (t->type == 0x5a) return 0;
     if (op != 0 && attribute == 0xd && t->type >= 0x28)
         field = &t->work_rate;
     else if (op != 0 && attribute == 6 && t->type >= 0x1e)

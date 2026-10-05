@@ -8,7 +8,9 @@
 
 /* Patched Rise of Rome 1.0a unit templates (the master objects), types
    10 (vtable 0x00544534), 20 (0x0054440c), 25 (0x00544484), 30
-   (0x005444fc), 40 (0x005443cc), 50 (0x00544444) and 60 (0x005444c0):
+   (0x005444fc), 40 (0x005443cc), 50 (0x00544444), 60 (0x005444c0), and
+   the RoR 70 (0x00549970), 80 (0x00549930) and 90 (0x005499bc, a type
+   10 with its own instances):
    each type's copy, binary load, text load and save of its own fields
    after its parent's, the attribute overrides, the clone and the
    instance factory. Sprites and sounds are the world's tables
@@ -102,6 +104,22 @@ typedef struct AoeTemplateRor {
     /* 60 */
     uint8_t field_148[5];
     float field_150;
+    /* 70 (shares +0x148 with 60 in the original; kept apart here) */
+    struct {
+        int16_t type, amount;
+        uint8_t flag, pad;
+    } costs[3];                         /* +0x148, 6 bytes each */
+    int16_t train_time;                 /* +0x15a */
+    int16_t train_location;             /* +0x15c */
+    uint8_t button;                     /* +0x15e */
+    int16_t pierce_armor;               /* +0x160 */
+    /* 80 */
+    void *sound_164;                    /* +0x164 */
+    void *sprite_168;                   /* +0x168 */
+    uint8_t field_16c;
+    int16_t field_16e;
+    uint8_t field_170;
+    int16_t field_172, field_174, field_176, field_178;
 } AoeTemplateRor;
 
 typedef struct {
@@ -147,7 +165,15 @@ typedef struct {
    free  10 0x00441dd0 (deleting 0x00441020), 20 0x0043eb60 (0x0043e990),
          25 0x004401d0 (0x00440030), 30 0x00440cc0 (0x00440970), 40
          0x0043e460 (0x0043e070), 50 0x0043f5a0 (0x0043edf0), 60
-         0x00440660 (0x004403b0).
+         0x00440660 (0x004403b0);
+   and for RoR: 70 copy 0x004ecb80 (ctor 0x004eca10), load 0x004ecc10
+   (0x004eca90), text 0x004ecd30 (0x004ecb00), save 0x004ed0b0, free
+   0x004ece40 (0x004eca70); 80 copy 0x004ec270 (0x004ec100), load
+   0x004ec310 (0x004ec180), text 0x004ec410 (0x004ec1f0), save
+   0x004ec600, free 0x004ec4e0 (0x004ec160); 90 copy 0x004ed220, load
+   0x004ed2c0, text 0x004ed340 (the type 10 fields as type 0x5a), free
+   0x004ed290. 70 from 7.01 reads +0x160; before, +0x160 is the largest
+   attack of kind 3 and +0x13c the largest other (or +0x100).
    Version gates on load: 10 +0xa8..+0xb4 from 7.04 (else the size) and
    +0x12 from 7.12; 40 the second sound from 7.04 (else the first); 50
    +0x13c..+0x144 from 7.04 (else the largest attack / armor amounts,
@@ -161,10 +187,13 @@ void aoe_template_save_ror(const AoeTemplateRor *t, AoeOutcomeStream *s, const A
 void aoe_template_release_ror(AoeTemplateRor *t, const AoeTemplateOpsRor *ops);
 
 /* Clones (+0x1c): 10 0x00441ee0, 20 0x0043ec40, 25 0x004402c0, 30
-   0x00440da0, 40 0x0043e600, 50 0x0043f6c0, 60 0x00440740. */
+   0x00440da0, 40 0x0043e600, 50 0x0043f6c0, 60 0x00440740, 70 0x004ed1b0,
+   80 0x004ec7d0, 90 0x004ed440. */
 AoeTemplateRor *aoe_template_clone_ror(const AoeTemplateRor *t, const AoeTemplateOpsRor *ops);
 /* Instances (+0x18): 10 0x00441e10, 20 0x0043eb70, 25 0x004401e0, 30
-   0x00440cd0, 40 0x0043e530, 50 0x0043f5f0, 60 0x00440670. */
+   0x00440cd0, 40 0x0043e530, 50 0x0043f5f0, 60 0x00440670, 70 0x004ed130,
+   80 0x004ec750 (and +0x3c 0x004ec6d0 with one more argument), 90
+   0x004ed3c0. */
 void *aoe_template_create_ror(AoeTemplateRor *t, void *player, float x, float y, float z,
                               const AoeTemplateOpsRor *ops);
 

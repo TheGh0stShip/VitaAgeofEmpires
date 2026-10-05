@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 /* Patched Rise of Rome 1.0a per-class unit AIs (0x004e3b50..0x004e5dc0):
-   the classes the unit factory (0x004afbe0) gives units of a class, built
+   the classes the unit factory gives units of a class, built
    over the shared unit AI base. This file keeps what the derived classes
    add: their target-class tables, timers and small overrides. The base
    itself is reached through the ops below. Semantic storage. */
@@ -40,7 +40,7 @@ typedef struct {
 
 typedef struct {
     void *context;
-    /* The base constructor (0x0040edf0 with the unit and 10) and the
+    /* The base constructor (with the unit and 10) and the
        timer restart the derived constructors call. */
     void (*base_init)(void *context);
     void (*restart_timer)(void *context, int32_t timer);
@@ -55,10 +55,10 @@ typedef struct {
     void (*call_5c)(void *context, int32_t id, int32_t value);
     void (*call_64)(void *context, int32_t id, int32_t value);
     int (*call_c4)(void *context, int32_t id);
-    /* The base's own +0x5c (0x00411d50). */
+    /* The base class's own +0x5c. */
     void (*base_5c)(void *context, int32_t id, int32_t value);
     /* The unit's vtable +0xfc (speed); the owner's +4 (0x00454150); the
-       owner's resource `i` (+0x50); the game difficulty (0x00520660); the
+       owner's resource `i` (+0x50); the game difficulty (cached); the
        settings 0x0041b700 / 0x0041b750; object distance (0x004aaeb0). */
     double (*speed)(void *context);
     int32_t (*owner_field_4)(void *context);

@@ -40,8 +40,8 @@ typedef struct {
 typedef struct {
     void *context;
     /* A module's constructor (the new form, or the load form reading
-       `in`), its owner hookup (the Build AI 0x004b76e0, ConAI 0x004b96f0,
-       information AI 0x004bbaa0, the others +0xf0), its player name
+       `in`), its owner hookup (the Build AI, ConAI and information AI
+       have their own setters, the others set +0xf0), its player name
        (0x0040c150), vtable +8 with a value, its save (vtable +0x3c; the
        information AI's own save) and its destructor. */
     void (*module_init)(void *context, int module, AoeOutcomeStream *in);
@@ -68,8 +68,8 @@ typedef struct {
     void (*detask)(void *context, int32_t id);
     /* The listed world object's class (type +0x14); 0 for none. */
     int (*object_class)(void *context, int32_t id, int16_t *type_class);
-    /* Kick actions: 1 runs the Build AI's 0x004b8030, 2 inserts build
-       item 0x53 (0x004b9050 with 1, -1), 3 prints the build list (Build
+    /* Kick actions: 1 runs a Build AI action, 2 inserts build item 0x53
+       (with 1, -1), 3 prints the build list (Build
        AI vtable +0x40). */
     void (*kick)(void *context, int32_t kind);
     int32_t (*sn)(void *context, int32_t index);

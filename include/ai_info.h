@@ -115,9 +115,9 @@ typedef struct {
     int (*object)(void *context, int32_t id, AoeAiWorldObjectRor *out);
     /* 0x005206d0: any world object by ID, or 0. */
     int (*world_object)(void *context, int32_t id, AoeAiWorldObjectRor *out);
-    /* 0x004aba60: the object's terrain zone. */
+    /* The object's terrain zone (its own zone getter). */
     uint8_t (*zone)(void *context, int32_t id);
-    /* The explored grid at +0x158 (0x0043d6a0 / 0x0043d6d0). */
+    /* The explored byte grid at +0x158 (get, and a bounded set). */
     int (*grid_get)(void *context, int32_t x, int32_t y);
     void (*grid_set)(void *context, int32_t x, int32_t y, int32_t value);
     /* The world map (player +0x3c, +0x28): width (+8), height (+0xc) and
@@ -152,9 +152,9 @@ typedef struct {
     uint8_t (*penalty_get)(void *context, int32_t x, int32_t y);
     void (*penalty_set)(void *context, int32_t x, int32_t y, uint8_t value);
     /* The two influence maps (map 0 the global at 0x007c0478 for units,
-       map 1 at 0x007c04c8 for areas): clear to 0 (0x0043d510), set the
-       origin (0x00415ac0), add a value over a rectangle (0x0043d830) and
-       finish (0x0043dfe0). */
+       map 1 at 0x007c04c8 for areas): clear to 0, set the origin
+       (0x00415ac0), add a value over a rectangle (capped below the map's
+       limit) and finish (the maximum scan). */
     void (*influence_clear)(void *context, int map);
     void (*influence_origin)(void *context, int map, int32_t x, int32_t y);
     void (*influence_add)(void *context, int map, int32_t x0, int32_t y0,
@@ -184,9 +184,9 @@ typedef struct {
        within `radius` (the other arguments are fixed: -1, 1, -1, -1). */
     int (*can_reach)(void *context, int32_t id, int32_t x, int32_t y,
                      int32_t z, float radius);
-    /* The game settings' +4 player name object (0x0043ce80), or NULL when
-       there is none, and reading the start of a binary file (0x0046b5b0
-       mode 0x8000, 0x0046b800, 0x0046b6b0): 0 when it cannot open. */
+    /* The game settings' +4 player name, or NULL when there is none, and
+       reading the start of a binary file (opened in binary mode, read
+       with 0x0046b800, closed): 0 when it cannot open. */
     const char *(*learn_name)(void *context);
     int (*read_file)(void *context, const char *path, void *out, int size);
     /* The objects standing on a tile (tile +0x10 list), at most `max`;

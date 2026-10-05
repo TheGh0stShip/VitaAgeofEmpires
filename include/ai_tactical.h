@@ -196,7 +196,7 @@ typedef struct {
     void (*order)(void *context, const AoeAiTaskOrderRor *order);
     void (*player_44)(void *context, int32_t id, const uint8_t bytes[3]);
     /* Player +0x50 resource `i`; the explored share (player +0x38 map,
-       +0x1c / +0x20, 0x00517810). */
+       +0x1c / +0x20). */
     float (*resource)(void *context, int32_t i);
     double (*explored_ratio)(void *context);
     /* Build AI list counts (0x00408ff0 all, 0x004090a0 not built) for a

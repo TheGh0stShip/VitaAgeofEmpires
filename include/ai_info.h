@@ -275,6 +275,9 @@ typedef struct {
        vtable +0xc4 test on a target; 0 without an AI. */
     int (*unit_ai_target)(void *context, int32_t id, int32_t *target);
     int (*unit_ai_c4)(void *context, int32_t id, int32_t target);
+    /* The world's play list (+0xa0) and a unit's play category there. */
+    AoeAiPlayListRor *(*plays)(void *context);
+    AoeAiCategoryFn play_category;
 } AoeAiInfoOpsRor;
 
 /* The 36-byte summary 0x004c2de0 fills: the farthest distance, two words
@@ -625,6 +628,22 @@ AoeAiInfoObjectRor *aoe_ai_info_attack_target_ror(AoeAiInfoRor *info,
                                                   const int32_t *ids,
                                                   int32_t count,
                                                   const AoeAiInfoOpsRor *ops);
+/* 0x004bf530: a play for units `ids` against `player`: with units and an
+   attack target (0x004c0e60), each play of the world's list that is not
+   an "HP" play casts the units (0x0040ccd0 with its own fill mode) and,
+   when no minimum is left unmet, checks each Move action of its ten
+   rules: the target's tile moved by the action's +4 / +8 must lie on the
+   map and out of reach of an enemy there (0x004c5880 without the range
+   test). A passing play is taken when it is the first, or when number
+   189, 198 or 199 (by its +0x43: 1, 2, 3; else 0) + 2 x ((100 - its
+   +0x51) + the statistics share) + rand() % 50 is positive; its cast
+   IDs go to `cast` (count `cast_count`) and one of them, rand() % count,
+   to `leader`. The taken play's history count rises and the target is
+   returned (`play` holds its index, -1 for none); NULL otherwise. */
+AoeAiInfoObjectRor *aoe_ai_info_choose_play_ror(
+    AoeAiInfoRor *info, uint32_t player, const int32_t *ids, int32_t count,
+    int32_t *play, int32_t *cast, int32_t *cast_count, int32_t *leader,
+    const AoeAiInfoOpsRor *ops);
 int32_t aoe_ai_info_pick_target_ror(AoeAiInfoRor *info, int32_t k,
                                     int32_t id, float pos[2], int32_t *drop,
                                     const int32_t *exclude,

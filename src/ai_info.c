@@ -3142,3 +3142,63 @@ AoeAiInfoObjectRor *aoe_ai_info_attack_target_ror(AoeAiInfoRor *info,
     }
     return best;
 }
+
+AoeAiInfoObjectRor *aoe_ai_info_choose_play_ror(
+    AoeAiInfoRor *info, uint32_t player, const int32_t *ids, int32_t count,
+    int32_t *play, int32_t *cast, int32_t *cast_count, int32_t *leader,
+    const AoeAiInfoOpsRor *ops) {
+    AoeAiInfoObjectRor *target;
+    AoeAiPlayListRor *plays;
+    int32_t i;
+    if (!info || !ops || count == 0) return NULL;
+    target = aoe_ai_info_attack_target_ror(info, player, ids, count, ops);
+    if (!target) return NULL;
+    plays = ops->plays ? ops->plays(ops->context) : NULL;
+    *play = -1;
+    for (i = 0; plays && i < plays->count; ++i) {
+        AoeAiGroupRor *p = (AoeAiGroupRor *)aoe_ai_play_list_get_ror(plays, i);
+        AoeAiMembersRor m;
+        int32_t r, a, share, rnd, bonus = 0;
+        int bad = 0;
+        if (!p || aoe_ai_group_is_hp_ror(p) == 1) continue;
+        aoe_ai_members_init_ror(&m);
+        m.field_190 = i;
+        aoe_ai_members_fill_ror(&m, p->mode,
+                                (AoeAiGroupRor *)aoe_ai_play_list_get_ror(plays, i), ids,
+                                count, ops->play_category, ops->context);
+        if (m.shortfall != 0) continue;
+        for (r = 0; r < 10 && !bad; ++r) {
+            AoeAiRuleRor *rule = aoe_ai_group_rule_ror(p, r);
+            for (a = 0; a < 5 && !bad; ++a) {
+                AoeAiActionRor *act = aoe_ai_rule_action_ror(rule, a);
+                int32_t tx, ty;
+                if (!act || act->code != 1) continue;
+                tx = target->x + act->a;
+                ty = target->y + act->b;
+                if (tx < 0 || ty < 0 || tx >= info->map_width || ty >= info->map_height)
+                    bad = 1;
+                if (aoe_ai_info_in_reach_ror(info, (int32_t)player, tx, ty, 0, ops) == 1)
+                    bad = 1;
+            }
+        }
+        if (bad) continue;
+        share = aoe_ai_info_stat_share_ror(info);
+        rnd = ops->rand ? ops->rand(ops->context) : 0;
+        switch (p->field_43) {
+        case 1: bonus = info_sn(ops, 0xbd); break;
+        case 2: bonus = info_sn(ops, 0xc6); break;
+        case 3: bonus = info_sn(ops, 199); break;
+        default: break;
+        }
+        if (*play == -1 || bonus + ((100 - p->field_51) + share) * 2 + rnd % 0x32 > 0) {
+            *play = i;
+            *cast_count = aoe_ai_members_ids_ror(&m, cast);
+            *leader = *cast_count > 0
+                          ? cast[(ops->rand ? ops->rand(ops->context) : 0) % *cast_count]
+                          : -1;
+        }
+    }
+    if (*play == -1) return NULL;
+    ++info->history[*play];
+    return target;
+}

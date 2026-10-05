@@ -1256,6 +1256,13 @@ static int at_head(void *c, int32_t id, int16_t *t, uint8_t *st, float *tm) {
     (void)c; (void)id; *t = 0x78; *st = 2; *tm = 0.0f; return 1;
 }
 
+static AoeAiPlayListRor *play_list_value;
+static AoeAiPlayListRor *play_list(void *c) { (void)c; return play_list_value; }
+static int32_t play_cat(void *c, int32_t id) { (void)c; (void)id; return 0; }
+static double play_far(void *c, int32_t id, float x, float y, float z) {
+    (void)c; (void)id; (void)x; (void)y; (void)z; return 100.0;
+}
+
 static void attack_target_tests(void) {
     static AoeAiInfoRor info;
     static AoeAiInfoObjectRor objs[4];
@@ -1284,6 +1291,39 @@ static void attack_target_tests(void) {
     /* 60 moved out of sight: only 62 remains. */
     objs[0].x = 0;
     assert(aoe_ai_info_attack_target_ror(&info, 2, ids, 2, &ops) == &objs[2]);
+    /* 0x004bf530: play 0 is an "HP" play; play 1 casts both units and
+       its Move (+1, 0) from 62's tile stays on the map. */
+    {
+        static AoeAiPlayRor play_store[2];
+        AoeAiPlayListRor list;
+        AoeAiGroupRor *p0 = (AoeAiGroupRor *)&play_store[0];
+        AoeAiGroupRor *p1 = (AoeAiGroupRor *)&play_store[1];
+        int32_t play = 5, cast[50], cast_n = 0, leader = 0;
+        aoe_ai_group_init_ror(p0);
+        aoe_ai_group_init_ror(p1);
+        aoe_ai_group_set_name_ror(p0, "HPRush");
+        aoe_ai_group_set_name_ror(p1, "Flank");
+        p1->range_count = 1;
+        p1->mode = 2;
+        aoe_ai_range_set_min_ror(&p1->ranges[0], 0, 1);
+        aoe_ai_action_set_ror(&p1->rules[0].actions[0], 0, 1, 1, 0, 0);
+        list.count = 2;
+        list.plays = play_store;
+        ops.plays = play_list;
+        play_list_value = &list;
+        ops.play_category = play_cat;
+        ops.distance = play_far;
+        info.map_width = info.map_height = 20;
+        assert(aoe_ai_info_choose_play_ror(&info, 2, ids, 2, &play, cast, &cast_n,
+                                           &leader, &ops) == &objs[2]);
+        assert(play == 1 && cast_n == 2 && leader == 7 && info.history[1] == 1);
+        /* Off the map: no play. */
+        aoe_ai_action_set_ror(&p1->rules[0].actions[0], 0, 1, 9, 0, 0);
+        assert(aoe_ai_info_choose_play_ror(&info, 2, ids, 2, &play, cast, &cast_n,
+                                           &leader, &ops) == NULL && play == -1);
+        assert(aoe_ai_info_choose_play_ror(&info, 2, ids, 0, &play, cast, &cast_n,
+                                           &leader, &ops) == NULL);
+    }
     /* A wonder of an enemy comes first. */
     info.object_count = 4;
     ops.is_enemy = at_enemy;

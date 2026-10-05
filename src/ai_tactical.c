@@ -2883,3 +2883,94 @@ int aoe_ai_tactical_regather_ror(AoeAiTacticalRor *ai, int32_t unit,
     if (!r) aoe_ai_tactical_gather_ror(ai, e[0], -1, 1, tried, ops, info, info_ops);
     return 1;
 }
+
+/* 0x004d2f40: an idle villager, the farthest from our town centre. */
+static int32_t round_villager(AoeAiTacticalRor *ai, const AoeAiTacticalOpsRor *ops) {
+    AoeAiWorldObjectRor c;
+    int32_t centre = ops->first_center ? ops->first_center(ops->context) : -1;
+    if (centre != -1 && ops->object && ops->object(ops->context, centre, &c)) {
+        int32_t pt[2] = {aoe_ftol32(c.x), aoe_ftol32(c.y)};
+        return aoe_ai_tactical_villager_near_ror(ai, -1, pt, 0, ops);
+    }
+    return aoe_ai_tactical_idle_villager_ror(ai, -1, ops);
+}
+
+static int round_spent(const AoeAiTacticalOpsRor *ops, uint32_t start, uint32_t budget) {
+    return ops->real_ms && ops->real_ms(ops->context) - start >= budget;
+}
+
+/* 0x004d2f40: see the header. */
+int32_t aoe_ai_tactical_villager_round_ror(AoeAiTacticalRor *ai, uint32_t start, uint32_t budget,
+                                           const AoeAiTacticalOpsRor *ops, AoeAiInfoRor *info,
+                                           const AoeAiInfoOpsRor *info_ops) {
+    AoeAiIntListRor *idle;
+    int32_t done = 0, i, *slot;
+    if (!ai || !ops) return 0;
+    idle = &ai->lists[1];
+    if (ai->lists[0].count < 1) {
+        ai->field_f7c = -1;
+        return 0;
+    }
+    if (ai->field_f7c == -1) {
+        while (idle->count < idle->field_8) {
+            int32_t unit = round_villager(ai, ops);
+            if (unit == -1) {
+                int32_t k;
+                if (ai->field_9d0 >= ai->field_9cc) break;
+                for (k = 3; k >= 0 && unit == -1; --k) {
+                    AoeAiWorldObjectRor o;
+                    int32_t id = ops->first_tasked ? ops->first_tasked(ops->context, 0x261, 0x25d) : -1;
+                    if (id == -1 && ops->first_tasked)
+                        id = ops->first_tasked(ops->context, 0x265, 0x25d);
+                    if (id == -1 || !ops->object || !ops->object(ops->context, id, &o) ||
+                        o.field_44 != 0.0f)
+                        continue;
+                    if (aoe_ai_int_list_contains_ror(idle, id)) continue;
+                    aoe_ai_tactical_remove_gatherer_ror(ai, id);
+                    unit = id;
+                }
+                if (unit == -1) break;
+            }
+            if (!aoe_ai_int_list_add_unique_ror(idle, unit)) break;
+        }
+        while (idle->count > idle->field_8 && idle->count > 0) {
+            int32_t unit;
+            slot = aoe_ai_int_list_at_ror(idle, 0);
+            if (!slot) break;
+            unit = *slot;
+            aoe_ai_int_list_remove_ror(idle, unit);
+            aoe_ai_tactical_order_stop_ror(ops, unit, 100);
+        }
+        while (ai->field_9cc < ai->field_9d0) {
+            int32_t unit = round_villager(ai, ops);
+            if (unit == -1 || !aoe_ai_tactical_add_gatherer_ror(ai, unit)) break;
+        }
+        slot = aoe_ai_int_list_at_ror(&ai->lists[0], 0);
+        ai->field_f7c = slot ? *slot : -1;
+        if (round_spent(ops, start, budget)) return 0;
+    }
+    for (i = 0; i < ai->lists[0].count; ++i) {
+        slot = aoe_ai_int_list_at_ror(&ai->lists[0], i);
+        if (slot && *slot == ai->field_f7c) break;
+    }
+    while (i < ai->lists[0].count) {
+        int32_t unit;
+        ++done;
+        slot = aoe_ai_int_list_at_ror(&ai->lists[0], i);
+        unit = slot ? *slot : -1;
+        if (aoe_ai_int_list_contains_ror(idle, unit)) {
+            aoe_ai_tactical_try_explore_ror(ai, unit, 1, ops, info, info_ops);
+        } else if (!aoe_ai_tactical_regather_ror(ai, unit, ops, info, info_ops)) {
+            aoe_ai_tactical_add_gatherer_ror(ai, unit);
+            ++i;
+            continue;
+        }
+        aoe_ai_tactical_plan_gatherers_ror(ai, ops);
+        if (++i >= ai->lists[0].count) break;
+        slot = aoe_ai_int_list_at_ror(&ai->lists[0], i);
+        ai->field_f7c = slot ? *slot : -1;
+        if (round_spent(ops, start, budget)) return done;
+    }
+    ai->field_f7c = -1;
+    return done;
+}

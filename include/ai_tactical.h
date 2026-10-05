@@ -361,6 +361,10 @@ typedef struct {
        -1, -1); the computer player's +0xddc list gains an ID (once). */
     int (*can_gather)(void *context, int32_t id, int32_t target, int32_t drop);
     void (*player_ddc_add)(void *context, int32_t id);
+    /* Our first object whose unit AI task is `task`, accepted by the
+       player's vtable +0x4c with `accept`, with +0x44 at most 0 (0x0040bad0
+       with those and 0; its eighth argument is unused): its ID, else -1. */
+    int32_t (*first_tasked)(void *context, int32_t task, int32_t accept);
 } AoeAiTacticalOpsRor;
 
 /* 0x004e0630: in list order, the group with task `task` and +0x180
@@ -897,6 +901,31 @@ int aoe_ai_tactical_defend_object_ror(AoeAiTacticalRor *ai, int32_t enemy, int32
    without a pending 0x65 item skips the age-2 test. */
 void aoe_ai_tactical_research_ages_ror(AoeAiTacticalRor *ai,
                                        const AoeAiTacticalOpsRor *ops);
+/* 0x004d2f40: the villager round; returns the list-0 units handled. With
+   list 0 empty, +0xf7c becomes -1 and 0. When +0xf7c is -1 (a new round):
+   - While list 1 is below its +0x10c want: an idle villager (with a town
+     centre the farthest from its truncated tile, 0x004d93a0 mode -1;
+     else 0x004d90b0 mode -1); failing that, only while +0x9cc gatherers
+     exceed the +0x9d0 wanted, a gatherer with task 0x261, else 0x265,
+     both accepted with 0x25d and +0x44 exactly 0 (four tries, passing
+     +0xd88[3..0] to an unused argument), not on list 1, is released
+     (0x004e1940). None ends this; one already on list 1 ends it, else it
+     joins list 1.
+   - While list 1 is above its want, its first unit leaves and is stopped
+     (0x004da110 with 100).
+   - While gatherers are below the wanted, idle villagers found as above
+     become gatherers (0x004e18a0) until none is found or added.
+   - +0xf7c becomes list 0's first unit; with `budget` ms gone since
+     `start` (timeGetTime) the call ends with 0.
+   Then from +0xf7c's place in list 0 (none: -1 and the count): each unit
+   counts; one on list 1 is tried as an explorer (0x004da200 with 1), any
+   other is re-tasked (0x004da330) and when that gives 0 it becomes a
+   gatherer (0x004e18a0) and the next is taken at once. Otherwise the
+   gatherer plan runs (0x004d9be0), +0xf7c moves to the next unit, and
+   the call ends once the budget is spent. At the end +0xf7c is -1. */
+int32_t aoe_ai_tactical_villager_round_ror(AoeAiTacticalRor *ai, uint32_t start, uint32_t budget,
+                                           const AoeAiTacticalOpsRor *ops, AoeAiInfoRor *info,
+                                           const AoeAiInfoOpsRor *info_ops);
 /* 0x004da330: re-tasks gatherer `unit`. 0 when it has no entry among the
    first +0x9cc, its world object or unit AI is gone. 1 (nothing done)
    within 5000 ms (timeGetTime) of the entry's last check (+0x14, then

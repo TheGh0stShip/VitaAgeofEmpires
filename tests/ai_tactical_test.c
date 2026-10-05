@@ -1149,6 +1149,35 @@ static void gather_tests(void) {
     aoe_ai_tactical_release_ror(&ai);
 }
 
+static void villager_round_tests(void) {
+    static AoeAiTacticalRor ai;
+    AoeAiTacticalOpsRor ops;
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    memset(&ops, 0, sizeof ops);
+    ops.object = tobject;
+    ops.world_object = tobject;
+    ops.order = order;
+    /* Empty list 0: -1 and 0. */
+    ai.field_f7c = 5;
+    assert(aoe_ai_tactical_villager_round_ror(&ai, 0, 10, &ops, NULL, NULL) == 0 &&
+           ai.field_f7c == -1);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[0], 10);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[0], 11);
+    /* List 1 holds 11 beyond its want of 0: it leaves and is stopped. 10
+       and 11 have no gatherer entries, so they become gatherers. */
+    aoe_ai_int_list_add_unique_ror(&ai.lists[1], 11);
+    ai.lists[1].field_8 = 0;
+    orders = 0;
+    assert(aoe_ai_tactical_villager_round_ror(&ai, 0, 10, &ops, NULL, NULL) == 2);
+    assert(ai.lists[1].count == 0 && orders == 1 && last_order.unit == 11);
+    assert(ai.field_9cc == 2 && ai.field_f7c == -1);
+    /* Resuming at 11 handles it alone (re-tasked within 5000 ms: 1). */
+    ai.field_f7c = 11;
+    assert(aoe_ai_tactical_villager_round_ror(&ai, 0, 10, &ops, NULL, NULL) == 1);
+    orders = 0;
+    aoe_ai_tactical_release_ror(&ai);
+}
+
 static uint32_t rg_ms;
 static uint32_t rg_real(void *c) { (void)c; return rg_ms += 4; }
 static int32_t rg_centre(void *c) { (void)c; return 60; }
@@ -1673,6 +1702,7 @@ int main(void) {
     upgrades_tests();
     run_groups_tests();
     gather_tests();
+    villager_round_tests();
 
     aoe_ai_tactical_init_ror(&ai, 3, NULL);
     assert(ai.module.id == 0x3f1 && !strcmp(ai.module.name, "TacAI"));

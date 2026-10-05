@@ -1,6 +1,7 @@
 #include "tile_map.h"
 
 #include <assert.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -36,6 +37,20 @@ static void setE(AoeTileMapRor *m, int x, int y, int e) {
     AoeMapTileRor *t = &m->tiles[y * m->width + x];
     t->terrain_elevation = (uint8_t)((t->terrain_elevation & 0x1f) | (e << 5));
 }
+
+static int32_t g_seed = -1, g_used, g_rand = 41, g_srands, g_flag = 7, g_setup, g_gen, g_fin, g_flag_during;
+static char g_log[2][64];
+static int g_logs;
+static int32_t gs(void *c) { (void)c; return g_seed; }
+static void gu(void *c, int32_t v) { (void)c; g_used = v; }
+static int32_t gr(void *c) { (void)c; return g_rand++; }
+static void gsr(void *c, uint32_t v) { (void)c; (void)v; ++g_srands; }
+static void gl(void *c, const char *l) { (void)c; snprintf(g_log[g_logs++ & 1], 64, "%s", l); }
+static uint8_t gf(void *c) { (void)c; return (uint8_t)g_flag; }
+static void gsf(void *c, uint8_t v) { (void)c; g_flag = v; }
+static void gsetup(void *c, AoeTileMapRor *m, int32_t w, int32_t a, int32_t b) { (void)c; (void)m; (void)w; (void)a; (void)b; ++g_setup; g_flag_during = g_flag; }
+static void ggen(void *c) { (void)c; ++g_gen; }
+static void gfin(void *c) { (void)c; ++g_fin; }
 
 int main(void) {
     AoeTileMapOpsRor ops = {NULL, t_resize, t_refresh, t_rect, t_cell, t_begin, t_end, t_border, t_used};
@@ -119,6 +134,17 @@ int main(void) {
     aoe_tilemap_pick_terrain_ror(5, &cell, &ops);
     assert(cell == 5);
     aoe_tilemap_nothing_ror(&m);
+    {
+        AoeTileMapGenOpsRor gen = {NULL, gs, gu, gr, gsr, gl, gf, gsf, gsetup, ggen, gfin};
+        assert(aoe_tilemap_generate_ror(&m, 0, -1, -1, 1, 2, &ops, &gen));
+        assert(g_used == 41 && !strcmp(g_log[0], "Random Map Seed = 41"));
+        assert(!strcmp(g_log[1], "After Random Map Generation random number is 42"));
+        assert(g_srands == 3 && g_setup == 1 && g_gen == 1 && g_fin == 1 && g_flag_during == 3);
+        assert(g_flag == 7 && m.width == 2);
+        g_seed = 9;
+        assert(aoe_tilemap_generate_ror(&m, 0, 4, 3, 1, 2, &ops, &gen) && g_used == 9);
+        assert(m.width == 4 && m.height == 3);
+    }
     free(m.tiles);
     return 0;
 }

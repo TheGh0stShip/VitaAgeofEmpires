@@ -1,5 +1,7 @@
 #include "tile_map.h"
 
+#include <stdio.h>
+
 #include "aoe_stream.h"
 
 void aoe_tilemap_set_shape_ror(AoeTileMapRor *m, uint8_t i, int16_t w, int16_t h, int16_t offset) {
@@ -228,4 +230,33 @@ void aoe_tilemap_nothing_ror(AoeTileMapRor *m) { (void)m; }
 void aoe_tilemap_invalidate_around_ror(AoeTileMapRor *m, float x, float y) {
     int32_t tx = (int32_t)x, ty = (int32_t)y;
     aoe_tilemap_invalidate_ror(m, tx - 2, ty - 2, tx + 1, ty + 1, 0);
+}
+
+int aoe_tilemap_generate_ror(AoeTileMapRor *m, int32_t world, int32_t w, int32_t h, int32_t a,
+                             int32_t b, const AoeTileMapOpsRor *ops,
+                             const AoeTileMapGenOpsRor *gen) {
+    uint8_t saved = gen->world_flag(gen->context);
+    int32_t seed;
+    char line[64];
+    int ok;
+    gen->set_world_flag(gen->context, 3);
+    seed = gen->game_seed(gen->context);
+    if (seed == -1) seed = gen->rand(gen->context);
+    gen->set_used_seed(gen->context, seed);
+    snprintf(line, sizeof line, "Random Map Seed = %d", (int)seed);
+    gen->log(gen->context, line);
+    if (w < 0) w = m->width;
+    if (h < 0) h = m->height;
+    gen->srand(gen->context, (uint32_t)seed);
+    ok = aoe_tilemap_new_filled_ror(m, NULL, world, 0, w, h, ops);
+    gen->srand(gen->context, (uint32_t)seed);
+    gen->rm_setup(gen->context, m, world, a, b);
+    gen->srand(gen->context, (uint32_t)seed);
+    gen->rm_generate(gen->context);
+    gen->rm_finish(gen->context);
+    snprintf(line, sizeof line, "After Random Map Generation random number is %d",
+             (int)gen->rand(gen->context));
+    gen->log(gen->context, line);
+    gen->set_world_flag(gen->context, saved);
+    return ok;
 }

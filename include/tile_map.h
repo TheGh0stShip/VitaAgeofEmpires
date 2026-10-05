@@ -108,4 +108,28 @@ void aoe_tilemap_pick_terrain_ror(uint8_t terrain, uint8_t *cell, const AoeTileM
 /* 0x00446540: an empty map method. */
 void aoe_tilemap_nothing_ror(AoeTileMapRor *m);
 
+/* 0x00446550 (map +0x28): a random map. The world's +0x1d becomes 3
+   for the duration; the seed is the game's +0x2c (or rand() when -1),
+   kept at +0x34 and logged ("Random Map Seed = %d"); a size below 0
+   keeps the map's. With srand(seed) before each: a new map of terrain 0
+   (0x00444580), the controller's +0x14(map, world, a, b, 1), then its
+   +0x00 and +0x18; then "After Random Map Generation random number is
+   %d" with the next rand(). */
+typedef struct {
+    void *context;
+    int32_t (*game_seed)(void *context);
+    void (*set_used_seed)(void *context, int32_t seed);
+    int32_t (*rand)(void *context);
+    void (*srand)(void *context, uint32_t seed);
+    void (*log)(void *context, const char *line);
+    uint8_t (*world_flag)(void *context);
+    void (*set_world_flag)(void *context, uint8_t v);
+    void (*rm_setup)(void *context, AoeTileMapRor *map, int32_t world, int32_t a, int32_t b);
+    void (*rm_generate)(void *context);
+    void (*rm_finish)(void *context);
+} AoeTileMapGenOpsRor;
+int aoe_tilemap_generate_ror(AoeTileMapRor *m, int32_t world, int32_t w, int32_t h, int32_t a,
+                             int32_t b, const AoeTileMapOpsRor *ops,
+                             const AoeTileMapGenOpsRor *gen);
+
 #endif

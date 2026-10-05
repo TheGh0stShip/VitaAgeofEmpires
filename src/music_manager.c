@@ -331,3 +331,27 @@ int aoe_music_state_ror(const AoeMusicRor *m, uint8_t *source, int32_t *from, in
     }
     return 1;
 }
+
+void aoe_music_suspend_ror(AoeMusicRor *m, AoeMusicSavedRor *saved) {
+    if (!m) return;
+    aoe_music_state_ror(m, &saved->source, &saved->from, &saved->to, &saved->track, saved->file,
+                        &saved->loop, &saved->position);
+    aoe_music_reset_ror(m);
+}
+
+int aoe_music_resume_saved_ror(AoeMusicRor *m, const AoeMusicSavedRor *saved) {
+    if (!m) return 1;
+    if (saved->from != 0) {
+        if (saved->from == saved->to) {
+            aoe_music_play_track_ror(m, saved->from, saved->loop, saved->position);
+            return 1;
+        }
+        if (saved->to != 0) {
+            aoe_music_play_range_ror(m, saved->from, saved->to, saved->loop, saved->track,
+                                     saved->position);
+            return 1;
+        }
+    }
+    if (saved->file[0] != '\0') aoe_music_play_file_ror(m, saved->file, saved->loop, saved->position);
+    return 1;
+}

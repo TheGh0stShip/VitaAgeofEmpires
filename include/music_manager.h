@@ -129,4 +129,19 @@ void aoe_music_track_done_ror(AoeMusicRor *m);
 int aoe_music_state_ror(const AoeMusicRor *m, uint8_t *source, int32_t *from, int32_t *to,
                         int32_t *track, char *file, int32_t *loop, int32_t *position);
 
+/* What the game keeps of the music while it is away (game +0x70..+0x80,
+   +0x184, +0x188). */
+typedef struct {
+    uint8_t source;
+    int32_t from, to, track;
+    char file[0x104];
+    int32_t loop, position;
+} AoeMusicSavedRor;
+
+/* 0x00419260: with music, its state saved and the music stopped and
+   forgotten (0x00450870). 0x004192a0: resumed from the saved state: one
+   track (from == to), a range, else the named file; 1 always. */
+void aoe_music_suspend_ror(AoeMusicRor *m, AoeMusicSavedRor *saved);
+int aoe_music_resume_saved_ror(AoeMusicRor *m, const AoeMusicSavedRor *saved);
+
 #endif

@@ -111,6 +111,17 @@ int main(void) {
         m.sound = &snd;
         assert(aoe_music_play_track_ror(&m, 2, 0, 0) && strcmp(last_path, "dir/music2.wav") == 0 && wav_plays == 1);
     }
+    /* Suspend and resume (0x00419260 / 0x004192a0). */
+    {
+        AoeMusicSavedRor saved;
+        aoe_music_suspend_ror(&m, &saved);
+        assert(saved.source == 3 && saved.from == 2 && saved.to == 2 && !m.playing);
+        assert(aoe_music_resume_saved_ror(&m, &saved) && m.playing && wav_plays == 2);
+        saved.from = 0;
+        snprintf(saved.file, sizeof saved.file, "song");
+        assert(aoe_music_resume_saved_ror(&m, &saved) && strcmp(m.file, "song") == 0 && m.from == 0);
+        assert(aoe_music_resume_saved_ror(NULL, &saved) == 1);
+    }
     puts("music manager ok");
     return 0;
 }

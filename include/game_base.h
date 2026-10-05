@@ -2,6 +2,7 @@
 #define VITA_AOE_GAME_BASE_H
 
 #include <stdint.h>
+#include <stdio.h>
 
 /* Patched Rise of Rome 1.0a base game object pieces (global 0x00580e38,
    0x00416e30..0x0041c290) and the per-player sync checksum
@@ -48,11 +49,13 @@ int aoe_player_checksums_ror(AoePlayerChecksumRor *player, uint32_t *checksum,
 
 typedef struct {
     uint32_t total;   /* +0x528 + 0x20 i */
-    uint32_t field_4; /* +0x52c */
-    uint32_t field_8; /* +0x530 */
+    uint32_t field_4; /* +0x52c: the last second's total */
+    uint32_t field_8; /* +0x530: when that second ended */
+    uint32_t counted; /* +0x534: part of the busy sum */
+    uint32_t held;    /* +0x538: not rolled over each second */
     uint32_t last;    /* +0x53c */
     uint32_t max;     /* +0x540 */
-    uint32_t field_1c;/* +0x544 */
+    uint32_t field_1c;/* +0x544: the last second's max */
 } AoeGameTimingRor;
 
 typedef struct {
@@ -117,6 +120,30 @@ uint32_t aoe_game_timing_last_ror(const AoeGameBaseRor *game, int32_t slot);
 uint32_t aoe_game_timing_total_ror(const AoeGameBaseRor *game, int32_t slot);
 int32_t aoe_game_timing_514_ror(const AoeGameBaseRor *game);
 int32_t aoe_game_field_40_ror(const AoeGameBaseRor *game);
+
+/* 0x004190b0: slots 1, 2, 3, 10 and 13 counted, slots 0 and 4 held. */
+void aoe_game_timing_setup_ror(AoeGameBaseRor *game);
+
+/* +0x130 0x0041af70: the once-a-second rollover: every slot not held
+   keeps its total and max as the last second's and restarts; slot 0 gets
+   the time since the last rollover (the counted sum the first time),
+   slot 4 the idle rest (slot 0 less the counted sum, not below 0) and
+   slot 9 slot 2 less slots 6 and 7 (not below 0); +0x51c / +0x520 /
+   +0x524 become per-second rates of +0x504 / +0x508 / +0x50c (1000 / (ms
+   per item); 1000, 0, 0 when undefined); then +0x134 (`hook`) and, with
+   the performance log (global 0x00580df0) in mode 4, one log line; the
+   three counts move to +0x510..+0x518 and restart. */
+typedef struct {
+    void *context;
+    void (*hook)(void *context);            /* +0x134 */
+    FILE *log;                              /* 0x00580df4 when 0x00580df0 */
+    uint32_t world_id;                      /* world +0x04 */
+    int32_t globals[4];                     /* 0x00580dfc..0x00580e08 */
+    int16_t gaia_counts[2];                 /* player 0's +0x28 / +0x2c counts */
+    int32_t other_counts[2];                /* the rest of the players' */
+} AoeGameRolloverOpsRor;
+void aoe_game_timing_rollover_ror(AoeGameBaseRor *game, uint32_t now,
+                                  const AoeGameRolloverOpsRor *ops);
 
 /* 0x00417470: the string into a 0x200 static buffer (global 0x00580b78);
    0x00417490: LoadStringA, "" on failure, last byte cleared. */

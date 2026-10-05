@@ -3,6 +3,7 @@
 #include "game_base.h"
 
 #include <assert.h>
+#include <stdio.h>
 #include <string.h>
 
 typedef struct {
@@ -113,5 +114,40 @@ int main(void) {
     aoe_game_mark_3f8_ror(&g, &ops);
     assert(g.state == 0x15 && g.field_3f8 == 1 && env.reset == 1);
     assert(aoe_game_default_true_ror(&g, 3) == 1);
+    {
+        /* Timing rollover (0x0041af70) after the setup (0x004190b0). */
+        static AoeGameBaseRor tg;
+        AoeGameRolloverOpsRor rops;
+        FILE *logf = tmpfile();
+        char line[512];
+        memset(&rops, 0, sizeof rops);
+        aoe_game_timing_setup_ror(&tg);
+        aoe_game_timing_sample_ror(&tg, 1, 100);
+        aoe_game_timing_sample_ror(&tg, 2, 300);
+        aoe_game_timing_sample_ror(&tg, 5, 40);
+        aoe_game_timing_sample_ror(&tg, 6, 50);
+        tg.timing_504[0] = 20; /* frames */
+        tg.timing_504[1] = 4;
+        aoe_game_timing_rollover_ror(&tg, 5000, &rops);
+        /* First time: slot 0 = the busy sum (100 + 300). */
+        assert(tg.timing[0].field_4 == 400 && tg.timing[0].field_8 == 5000);
+        assert(tg.timing[1].field_4 == 100 && tg.timing[1].total == 0 && tg.timing[1].field_1c == 100);
+        assert(tg.timing[5].field_4 == 40 && tg.timing[4].field_4 == 0);
+        assert(tg.timing[9].field_4 == 250);
+        assert(tg.timing_504[6] == 50 && tg.timing_504[7] == 10 && tg.timing_504[8] == 0);
+        assert(tg.timing_504[3] == 20 && tg.timing_504[0] == 0);
+        aoe_game_timing_sample_ror(&tg, 3, 200);
+        tg.timing_504[0] = 3;
+        aoe_game_timing_rollover_ror(&tg, 6000, &rops);
+        assert(tg.timing[0].field_4 == 1000 && tg.timing[4].field_4 == 800);
+        assert(tg.timing_504[6] == 3);
+        tg.mode = 4;
+        rops.log = logf;
+        tg.timing_504[1] = 2;
+        aoe_game_timing_rollover_ror(&tg, 6500, &rops);
+        rewind(logf);
+        assert(fgets(line, sizeof line, logf) && strncmp(line, "0, 0, 0, 0, 0, 0, 0, 0, 0, 2, ", 30) == 0);
+        fclose(logf);
+    }
     return 0;
 }

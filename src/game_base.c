@@ -294,3 +294,76 @@ void aoe_game_cursor_set_ror(AoeGameBaseRor *g, uintptr_t cursor,
     if (g->cursor_shown && (!g->cursor_capable || g->software_cursor))
         system_cursor(ops, g->cursor);
 }
+
+void aoe_game_timing_setup_ror(AoeGameBaseRor *g) {
+    g->timing[1].counted = 1;
+    g->timing[2].counted = 1;
+    g->timing[3].counted = 1;
+    g->timing[10].counted = 1;
+    g->timing[13].counted = 1;
+    g->timing[0].held = 1;
+    g->timing[4].held = 1;
+}
+
+static uint32_t per_second(uint32_t elapsed, uint32_t count, uint32_t none) {
+    uint32_t per;
+    if (elapsed == 0 || count == 0) return none;
+    per = elapsed / count;
+    return per == 0 ? none : 1000u / per;
+}
+
+void aoe_game_timing_rollover_ror(AoeGameBaseRor *g, uint32_t now,
+                                  const AoeGameRolloverOpsRor *ops) {
+    AoeGameTimingRor *t = g->timing;
+    uint32_t busy = 0, elapsed, n;
+    int i;
+    for (i = 0; i < AOE_GAME_TIMING_SLOTS; ++i) {
+        if (t[i].held) continue;
+        t[i].field_4 = t[i].total;
+        t[i].field_1c = t[i].max;
+        t[i].total = 0;
+        t[i].max = 0;
+        t[i].field_8 = now;
+        if (t[i].counted) busy += t[i].field_4;
+    }
+    if (t[0].field_8 == 0)
+        t[0].field_4 = busy;
+    else
+        t[0].field_4 = now - t[0].field_8;
+    elapsed = t[0].field_4;
+    t[0].field_8 = now;
+    t[4].field_4 = busy < elapsed ? elapsed - busy : 0;
+    if (t[6].field_4 + t[7].field_4 < t[2].field_4)
+        t[9].field_4 = t[2].field_4 - t[6].field_4 - t[7].field_4;
+    else
+        t[9].field_4 = 0;
+    g->timing_504[6] = (int32_t)per_second(elapsed, (uint32_t)g->timing_504[0], 1000);
+    g->timing_504[8] = (int32_t)per_second(elapsed, (uint32_t)g->timing_504[2], 0);
+    g->timing_504[7] = (int32_t)per_second(elapsed, (uint32_t)g->timing_504[1], 0);
+    if (ops->hook) ops->hook(ops->context);
+    if (ops->log && g->mode == 4) {
+        n = (uint32_t)g->timing_504[1];
+#define PER(v) (n ? (unsigned long)((v) / n) : 0ul)
+        fprintf(ops->log,
+                "%lu, %ld, %ld, %ld, %ld, %d, %d, %d, %d, %lu, %lu, %lu, %lu, %lu, %lu, %lu, "
+                "%lu, %lu, %lu, %lu, %lu, %lu, %lu, %lu, %lu, %lu, %lu, %d, %d, %d \n",
+                (unsigned long)ops->world_id, (long)ops->globals[0], (long)ops->globals[1],
+                (long)ops->globals[2], (long)ops->globals[3], ops->gaia_counts[0],
+                ops->gaia_counts[1], (int)ops->other_counts[0], (int)ops->other_counts[1],
+                (unsigned long)n, (unsigned long)(uint32_t)g->timing_504[2],
+                (unsigned long)(uint32_t)g->timing_504[7],
+                (unsigned long)(uint32_t)g->timing_504[8], PER(t[6].field_4),
+                (unsigned long)t[6].field_1c, PER(t[7].field_4), (unsigned long)t[7].field_1c,
+                PER(t[3].field_4), (unsigned long)t[3].field_1c, PER(t[1].field_4),
+                (unsigned long)t[1].field_1c, PER(t[12].field_4 + t[10].field_4),
+                (unsigned long)(t[12].field_1c + t[10].field_1c), PER(t[13].field_4),
+                (unsigned long)t[13].field_1c, PER(t[4].field_4), (unsigned long)t[4].field_1c,
+                0, -1, -1);
+#undef PER
+        fflush(ops->log);
+    }
+    g->timing_504[3] = g->timing_504[0];
+    g->timing_504[4] = g->timing_504[1];
+    g->timing_504[5] = g->timing_504[2];
+    g->timing_504[0] = g->timing_504[1] = g->timing_504[2] = 0;
+}

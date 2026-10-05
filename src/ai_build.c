@@ -1212,3 +1212,17 @@ int aoe_ai_build_list_add_item_ror(AoeAiBuildListRor *list, AoeAiObjectFn object
     return aoe_ai_build_list_insert_ror(list, objects, context, type, 1, category, from, cap,
                                         position);
 }
+
+void aoe_ai_con_plan_note_ror(AoeAiConPlanRor *plan, int32_t type, float x, float y,
+                              int32_t value,
+                              void (*mark)(void *context, int32_t type, int32_t x, int32_t y,
+                                           uint8_t state),
+                              void *context) {
+    for (AoeAiConItemRor *it = plan->plan.next; it && it != &plan->plan; it = it->next) {
+        if (it->plan.type == type && it->plan.x == x && it->plan.y == y) {
+            it->field_78 = value;
+            return;
+        }
+    }
+    if (mark) mark(context, type, (int32_t)x, (int32_t)y, 1);
+}

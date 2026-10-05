@@ -428,4 +428,14 @@ void aoe_ai_ror_build_skip_ror(AoeAiRorBuildListRor *list, const AoeAiRorBuildOp
 int aoe_ai_build_list_add_item_ror(AoeAiBuildListRor *list, AoeAiObjectFn objects,
                                    void *context, int32_t type, int32_t cap, int32_t position);
 
+/* 0x004ba000(object, value), on the RoR plan: the planned item of the
+   object's type at its exact position gets +0x78 = value; with none, the
+   object's site is marked in the owner's (+0x314) information AI
+   (0x004c3300 with the type, the truncated x and y and state 1). */
+void aoe_ai_con_plan_note_ror(AoeAiConPlanRor *plan, int32_t type, float x, float y,
+                              int32_t value,
+                              void (*mark)(void *context, int32_t type, int32_t x, int32_t y,
+                                           uint8_t state),
+                              void *context);
+
 #endif

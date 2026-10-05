@@ -38,6 +38,10 @@ static int32_t ror_flag;
 static void ror_hook(void *c, int32_t a) { (void)c; (void)a; ++ror_hooks; }
 static void ror_update(void *c) { (void)c; ++ror_updates; }
 static int32_t ror_value(void *c, int32_t id) { (void)c; return id == 0xb1 ? 109 : id == 0x72 ? 4 : 2; }
+static int32_t mark_type = -1, mark_x, mark_y;
+static void mark_fn(void *c, int32_t t, int32_t x, int32_t y, uint8_t s) {
+    (void)c; (void)s; mark_type = t; mark_x = x; mark_y = y;
+}
 static int32_t extra_count(void *c, int32_t type) { (void)c; return type == 0x67 ? 10 : 0; }
 static int32_t retry_count(void *c, int32_t type, int32_t category) {
     (void)c; (void)type; (void)category; return 0;
@@ -277,6 +281,11 @@ int main(void) {
     con = aoe_ai_con_plan_at_ror(&plan, 11.0f, 11.0f);
     assert(con && !strcmp(con->plan.name, "House") &&
            con->plan.unique_id == -1 && con->plan.type == 109);
+    /* 0x004ba000: a planned item at the spot, else a mark. */
+    aoe_ai_con_plan_note_ror(&plan, 109, 11.0f, 11.0f, 7, mark_fn, NULL);
+    assert(con->field_78 == 7 && mark_type == -1);
+    aoe_ai_con_plan_note_ror(&plan, 109, 20.5f, 3.0f, 7, mark_fn, NULL);
+    assert(mark_type == 109 && mark_x == 20 && mark_y == 3);
     aoe_ai_con_plan_add_ror(&plan, 11.0f, 11.0f, 3);
     aoe_ai_con_plan_drop_ror(&plan, 11.0f, 11.0f, 1);
     assert(con->counter == 2);

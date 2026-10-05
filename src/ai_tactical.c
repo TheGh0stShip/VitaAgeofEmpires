@@ -1282,3 +1282,118 @@ void aoe_ai_tactical_gather_order_ror(AoeAiTacticalRor *ai,
         ai->field_d98[order[i]] = value[i];
     }
 }
+
+/* Gatherer entries of another kind than 0, -1 (and `keep`) get +8 = 5. */
+static void park_gatherers(AoeAiTacticalRor *ai, int32_t keep) {
+    int32_t i;
+    for (i = 0; i < ai->field_9cc && i < AOE_AI_TAC_GATHERERS; ++i) {
+        int32_t k = ai->gatherers[i][1];
+        if (k != 0 && k != keep && k != -1) ai->gatherers[i][2] = 5;
+    }
+}
+
+void aoe_ai_tactical_plan_gatherers_ror(AoeAiTacticalRor *ai,
+                                        const AoeAiTacticalOpsRor *ops) {
+    int32_t i, total, deficit = 0, short_n = 0, n, left;
+    int split = 0;
+    if (!ai || !ops) return;
+    for (i = 0; i < 4; ++i) ai->field_d68[i] = 0;
+    for (i = 0; i < ai->field_9cc && i < AOE_AI_TAC_GATHERERS; ++i) {
+        int32_t *e = ai->gatherers[i], kind = e[1], task, target;
+        AoeAiWorldObjectRor o;
+        if (!ops->object || !ops->object(ops->context, e[0], &o) || !ops->unit_task ||
+            !ops->unit_task(ops->context, e[0], &task))
+            continue;
+        if (ops->unit_ai_target && ops->unit_ai_target(ops->context, e[0], &target))
+            e[4] = target;
+        if (!(task == 0x261 && o.type_id == 0x103 && kind == 0)) {
+            if (task == 0x261 && o.type_id == 0x103 &&
+                !aoe_ai_int_list_contains_ror(&ai->list_d58, o.id))
+                e[1] = 0;
+            if (kind < 0) continue;
+        }
+        if (kind >= 4) continue;
+        if (task == 0x261 || task == 0x265 ||
+            aoe_ai_int_list_contains_ror(&ai->list_d58, e[0]))
+            ++ai->field_d68[kind];
+    }
+    for (i = 0; i < 4; ++i) ai->field_d78[i] = 0;
+    if (aoe_ai_tactical_age_is_ror(ops, 1)) {
+        if (ai->sn[181] == 1) {
+            int32_t far = ops->info_best_distance ? ops->info_best_distance(ops->context, 0) : -1;
+            int32_t wood = ops->resource_amount ? ops->resource_amount(ops->context, 1) : 0;
+            split = 1;
+            if (ops->age_open && ops->age_open(ops->context, 2) && far != -1 &&
+                (wood > 0x78 || ai->field_f8c == 1)) {
+                ai->field_d78[0] = ai->field_9d0;
+                park_gatherers(ai, 0);
+                ai->field_fa4 = 1;
+            } else {
+                ai->field_fa4 = 0;
+                ai->field_d78[1] = ai->field_9d0;
+            }
+        } else {
+            ai->field_fa4 = 0;
+        }
+    } else if (aoe_ai_tactical_age_is_ror(ops, 2)) {
+        if (ai->sn[182] == 1) {
+            int32_t wood = ops->resource_amount ? ops->resource_amount(ops->context, 1) : 0;
+            split = 1;
+            if (ops->age_open && ops->age_open(ops->context, 3) &&
+                (wood > 0xf0 ||
+                 ((ops->resource_amount ? ops->resource_amount(ops->context, 1) : 0) > 0x78 &&
+                  (ops->info_best_distance ? ops->info_best_distance(ops->context, 0) : -1) <
+                      0x14))) {
+                ai->field_d78[0] = ai->field_9d0;
+                park_gatherers(ai, 0);
+                ai->field_fa4 = 1;
+            } else {
+                ai->field_fa4 = 0;
+                ai->field_d78[1] = ai->field_9d0;
+            }
+        } else {
+            ai->field_fa4 = 0;
+        }
+    } else if (aoe_ai_tactical_age_is_ror(ops, 3)) {
+        if (ai->sn[183] == 1) {
+            split = 1;
+            if (!ops->age_open || !ops->age_open(ops->context, 4)) {
+                int32_t v = ai->field_9d0 / 3;
+                ai->field_fa4 = 0;
+                ai->field_d78[0] = ai->field_d78[3] = ai->field_d78[1] = v;
+            } else {
+                int32_t v = ai->field_9d0 / 2;
+                ai->field_d78[0] = ai->field_d78[3] = v;
+                park_gatherers(ai, 3);
+                ai->field_fa4 = 1;
+            }
+        } else {
+            ai->field_fa4 = 0;
+        }
+    }
+    if (!split) {
+        n = ai->field_9d0;
+        ai->field_d78[2] = (ai->sn[158] + ai->sn[119]) * n / 100;
+        ai->field_d78[3] = (ai->sn[159] + ai->sn[118]) * n / 100;
+        ai->field_d78[1] = (ai->sn[157] + ai->sn[120]) * n / 100;
+        ai->field_d78[0] = (ai->sn[156] + ai->sn[117]) * n / 100;
+    }
+    total = ai->field_d78[0] + ai->field_d78[1] + ai->field_d78[2] + ai->field_d78[3];
+    n = ai->field_9d0;
+    for (i = 0; i < 4; ++i)
+        if (ai->field_d98[i] < 0) {
+            deficit -= ai->field_d98[i];
+            ++short_n;
+        }
+    for (i = 0; i < short_n; ++i) {
+        int32_t r = ai->field_d88[i];
+        if (r < 0 || r > 3) continue;
+        ai->field_d78[r] -= ai->field_d98[r] * (n - total) / deficit;
+    }
+    total = ai->field_d78[0] + ai->field_d78[1] + ai->field_d78[2] + ai->field_d78[3];
+    left = ai->field_9d0 - total;
+    if (left > 0) {
+        ai->field_d78[0] += left / 2 + (left % 2 == 1);
+        ai->field_d78[1] += left / 2;
+    }
+}

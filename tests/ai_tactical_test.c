@@ -449,6 +449,57 @@ static void costs4(void *c, AoeAiCountersRor *k, int32_t limit) {
     aoe_ai_counters_set_ror(k, 3, 100);
 }
 
+static int t_target(void *c, int32_t id, int32_t *t) { (void)c; (void)id; *t = 77; return 1; }
+static int t_age_open(void *c, int32_t a) { (void)c; return a == 2; }
+static int32_t t_best(void *c, int32_t k) { (void)c; (void)k; return 5; }
+
+static void plan_tests(void) {
+    static AoeAiTacticalRor ai;
+    AoeAiTacticalOpsRor ops;
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    memset(&ops, 0, sizeof ops);
+    ops.object = tobject;
+    ops.unit_task = ttask;
+    ops.unit_ai_target = t_target;
+    ops.resource = tresource;
+    ops.resource_amount = amount;
+    ops.age_open = t_age_open;
+    ops.info_best_distance = t_best;
+    /* A farmer (900, kind 2, task 0x261) moves to kind 0 but counts as 2;
+       901 (task 0x262) does not count; 804 (task 0x265) counts as 3. */
+    ai.gatherers[0][0] = 900; ai.gatherers[0][1] = 2;
+    ai.gatherers[1][0] = 901; ai.gatherers[1][1] = 1;
+    ai.gatherers[2][0] = 804; ai.gatherers[2][1] = 3;
+    ai.field_9cc = 3;
+    ai.field_9d0 = 20;
+    ai.sn[156] = 40; ai.sn[157] = 30; ai.sn[158] = 10; ai.sn[159] = 10;
+    ai.sn[117] = ai.sn[118] = ai.sn[119] = ai.sn[120] = 0;
+    ai.field_d98[2] = -10;
+    ai.field_d88[0] = 2; ai.field_d88[1] = 0; ai.field_d88[2] = 1; ai.field_d88[3] = 3;
+    /* Age 2 (resource 6 is 2.6) without number 182: by numbers 8, 6, 2, 2,
+       then stone gains -(-10) x (20 - 18) / 10. */
+    aoe_ai_tactical_plan_gatherers_ror(&ai, &ops);
+    assert(ai.field_d68[2] == 1 && ai.field_d68[3] == 1 && ai.field_d68[1] == 0 &&
+           ai.gatherers[0][1] == 0 && ai.gatherers[0][4] == 77);
+    assert(ai.field_d78[0] == 8 && ai.field_d78[1] == 6 && ai.field_d78[2] == 4 &&
+           ai.field_d78[3] == 2);
+    /* Leftovers (4) go half (rounded up) to food, half to wood. */
+    ai.field_d98[2] = 0;
+    ai.field_9d0 = 23;
+    aoe_ai_tactical_plan_gatherers_ror(&ai, &ops);
+    assert(ai.field_d78[0] == 9 + 2 && ai.field_d78[1] == 6 + 2 && ai.field_d78[2] == 2 &&
+           ai.field_d78[3] == 2);
+    /* Age 1 with number 181: all on food (wood 400 > 120), others parked. */
+    tres[6] = 1.2f;
+    ai.sn[181] = 1;
+    ai.field_9d0 = 10;
+    aoe_ai_tactical_plan_gatherers_ror(&ai, &ops);
+    assert(ai.field_d78[0] == 10 && ai.field_d78[1] == 0 && ai.field_fa4 == 1 &&
+           ai.gatherers[1][2] == 5 && ai.gatherers[2][2] == 5 && ai.gatherers[0][2] != 5);
+    tres[6] = 2.6f;
+    aoe_ai_tactical_release_ror(&ai);
+}
+
 static void gather_order_tests(void) {
     static AoeAiTacticalRor ai;
     AoeAiTacticalOpsRor ops;
@@ -587,6 +638,7 @@ int main(void) {
     step_and_added_tests();
     removed_and_path_tests();
     gather_order_tests();
+    plan_tests();
 
     aoe_ai_tactical_init_ror(&ai, 3, NULL);
     assert(ai.module.id == 0x3f1 && !strcmp(ai.module.name, "TacAI"));

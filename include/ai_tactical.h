@@ -246,6 +246,13 @@ typedef struct {
        `limit` items) and the Resource AI's amount `i` (0x004c8c60). */
     void (*build_costs)(void *context, AoeAiCountersRor *costs, int32_t limit);
     int32_t (*resource_amount)(void *context, int32_t i);
+    /* The Build AI's age test (0x004b94b0 with mode 1) and the information
+       AI's best distance `k` (+0x540, the computer player's +0x122c for
+       0). */
+    int (*age_open)(void *context, int32_t age);
+    int32_t (*info_best_distance)(void *context, int32_t k);
+    /* A unit AI's target (+0x34, 0x0040f6e0); 0 without a unit AI. */
+    int (*unit_ai_target)(void *context, int32_t id, int32_t *target);
 } AoeAiTacticalOpsRor;
 
 /* 0x004e0630: in list order, the group with task `task` and +0x180
@@ -314,6 +321,26 @@ int32_t aoe_ai_tactical_villager_near_ror(AoeAiTacticalRor *ai, int32_t mode,
    +0xd88 lists them in order. */
 void aoe_ai_tactical_gather_order_ror(AoeAiTacticalRor *ai,
                                       const AoeAiTacticalOpsRor *ops);
+/* 0x004d9be0: gatherer planning. +0xd68 counts, per resource kind 0..3,
+   the gatherers (own objects with a unit AI) whose AI task is 0x261 or
+   0x265, or that are on +0xd58; each entry's +0x10 takes its AI's target,
+   and a farmer (type 0x103, task 0x261) of another kind not on +0xd58 is
+   moved to kind 0 (counted under its old kind this time). The wanted
+   split +0xd78 of +0x9d0 gatherers: in age 1 with number 181 set, all on
+   food when age 2 is open, food has a known target and wood is above 120
+   or +0xf8c is 1 (others then get +8 = 5; +0xfa4 1), else all on wood
+   (+0xfa4 0); in age 2 with number 182, all on food when age 3 is open
+   and wood is above 240 or above 120 with the food target within 20,
+   else all on wood; in age 3 with number 183, without age 4 open a third
+   each on food, wood and gold (+0xfa4 0), with it half on food and gold
+   (others than stone get +8 = 5; +0xfa4 1). Otherwise (+0xfa4 0 unless no
+   age matched) by numbers: food 156 + 117, wood 157 + 120, stone 158 +
+   119, gold 159 + 118, percent of +0x9d0. Then, when some surplus
+   (+0xd98) is negative, the first that many kinds of +0xd88 lose surplus
+   x (+0x9d0 - the total) / the summed shortage; what is left of +0x9d0
+   goes half (rounded up) to food and half to wood. */
+void aoe_ai_tactical_plan_gatherers_ror(AoeAiTacticalRor *ai,
+                                        const AoeAiTacticalOpsRor *ops);
 /* 0x004dc650: ftol(number 34 / f), at most 99. */
 int32_t aoe_ai_tactical_effort_ror(const AoeAiTacticalRor *ai, float f);
 /* 0x004e2f90: +0xd68[i] (0..3, else -1). 0x004e2f30 / 0x004e2f60 /

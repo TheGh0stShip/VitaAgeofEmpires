@@ -1,4 +1,6 @@
 #include "ai_tactical.h"
+#include "value_grid.h"
+#include "aoe_ftol.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -963,4 +965,41 @@ int aoe_ai_tactical_explore_spot_ror(AoeAiTacticalRor *ai, int32_t unit,
         }
     }
     return aoe_ai_info_explore_toward_ror(info, unit, out, info_ops) != 0;
+}
+
+static int32_t square_min2(int32_t v) { return v < 2 ? 2 : v * v; }
+
+static void tac_box(const AoeAiInfoRor *info, AoeValueGridRor *g, float x, float y, int32_t r,
+                    uint8_t value, int lower) {
+    int32_t a[2] = {aoe_ftol32(x - (float)r), aoe_ftol32(y - (float)r)};
+    int32_t b[2] = {aoe_ftol32((float)r + x), aoe_ftol32((float)r + y)};
+    aoe_ai_info_clamp_ror(info, a);
+    aoe_ai_info_clamp_ror(info, b);
+    if (lower) aoe_value_grid_lower_box_ror(g, a[0], a[1], b[0], b[1], value);
+    else aoe_value_grid_set_box_ror(g, a[0], a[1], b[0], b[1], value);
+}
+
+void aoe_ai_tactical_block_sites_ror(const AoeAiTacticalRor *ai, const AoeAiInfoRor *info,
+                                     AoeValueGridRor *g, const AoeAiInfoOpsRor *ops) {
+    int32_t i;
+    for (i = 0; i < ai->groups_len; ++i) {
+        const AoeAiUnitGroupRor *grp = ai->groups[i];
+        int32_t r;
+        if (!grp || grp->loc_19c[0] == -1.0f) continue;
+        r = square_min2(grp->field_160);
+        tac_box(info, g, grp->loc_19c[0], grp->loc_19c[1], r / 2, 0xff, 0);
+        tac_box(info, g, grp->loc_19c[0], grp->loc_19c[1], r, 10, 1);
+    }
+    for (i = 0; i < ai->lists[3].count; ++i) {
+        AoeAiWorldObjectRor o;
+        int32_t c[2], d[2];
+        memset(&o, 0, sizeof o);
+        if (!ops || !ops->object || !ops->object(ops->context, ai->lists[3].data[i], &o)) continue;
+        c[0] = aoe_ftol32(o.x), c[1] = aoe_ftol32(o.y);
+        aoe_ai_info_clamp_ror(info, c);
+        d[0] = aoe_ftol32(o.x), d[1] = aoe_ftol32(o.y);
+        aoe_ai_info_clamp_ror(info, d);
+        aoe_value_grid_set_box_ror(g, c[0], c[1], d[0], d[1], 0xff);
+        tac_box(info, g, o.x, o.y, square_min2(1), 10, 1);
+    }
 }

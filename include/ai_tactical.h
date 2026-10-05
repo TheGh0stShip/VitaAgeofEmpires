@@ -393,4 +393,14 @@ int aoe_ai_tactical_explore_spot_ror(AoeAiTacticalRor *ai, int32_t unit,
                                      AoeAiInfoRor *info,
                                      const AoeAiInfoOpsRor *info_ops);
 
+/* 0x004e0d80(grid): the information AI's site grid (mode 0) avoids
+   our forces: each group with a location (+0x19c x not -1) blocks a box
+   of half the side of its +0x160's area (0x004c2dc0: 2 below 2, else the
+   square) around it and lowers the full-sized box by 10; each unit of
+   list 3 (+0x124) blocks its tile and lowers the box 2 around it by 10.
+   Boxes are clamped to the map (the information AI's 0x004c2d60). */
+struct AoeValueGridRor;
+void aoe_ai_tactical_block_sites_ror(const AoeAiTacticalRor *ai, const AoeAiInfoRor *info,
+                                     struct AoeValueGridRor *grid, const AoeAiInfoOpsRor *ops);
+
 #endif

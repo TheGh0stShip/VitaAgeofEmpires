@@ -1,6 +1,7 @@
 /* Patched RoR 1.0a information-AI members (0x004bc230..0x004c6880). */
 #include "ai_info.h"
 #include "value_grid.h"
+#include "ai_tactical.h"
 
 #include <assert.h>
 #include <math.h>
@@ -637,6 +638,29 @@ static void site_tests(void) {
        up and left lowered. */
     assert(aoe_value_grid_get_ror(&g, 12, 10) == 20 && aoe_value_grid_get_ror(&g, 12, 6) == 30);
     assert(aoe_value_grid_get_ror(&g, 15, 15) == 255 && aoe_value_grid_get_ror(&g, 13, 13) == 10);
+    {
+        /* 0x004e0d80: groups and list-3 units keep the AI from building
+           on its forces. */
+        static AoeAiTacticalRor tac;
+        static AoeAiUnitGroupRor grp;
+        AoeAiUnitGroupRor *gs[1] = {&grp};
+        int32_t unit_ids[1] = {900};
+        aoe_value_grid_fill_ror(&g, 20);
+        grp.loc_19c[0] = 4.0f;
+        grp.loc_19c[1] = 4.0f;
+        grp.field_160 = 2;
+        tac.groups = gs;
+        tac.groups_len = 1;
+        tac.lists[3].data = unit_ids;
+        tac.lists[3].count = 1;
+        aoe_ai_tactical_block_sites_ror(&tac, &info, &g, &ops);
+        /* Area 4: a box of 2 around (4, 4) blocked, 4 around lowered. */
+        assert(aoe_value_grid_get_ror(&g, 2, 2) == 255 && aoe_value_grid_get_ror(&g, 6, 6) == 255);
+        assert(aoe_value_grid_get_ror(&g, 1, 1) == 10 && aoe_value_grid_get_ror(&g, 0, 8) == 10);
+        assert(aoe_value_grid_get_ror(&g, 9, 4) == 20);
+        assert(aoe_value_grid_get_ror(&g, 10, 10) == 255 && aoe_value_grid_get_ror(&g, 12, 12) == 10);
+        assert(aoe_value_grid_get_ror(&g, 13, 13) == 20);
+    }
     aoe_value_grid_free_ror(&g);
 }
 

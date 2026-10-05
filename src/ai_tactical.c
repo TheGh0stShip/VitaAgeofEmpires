@@ -3427,3 +3427,783 @@ void aoe_ai_tactical_fill_soldier_groups_ror(AoeAiTacticalRor *ai, const AoeAiTa
         if (slot) aoe_ai_unit_group_add_ror(best, *slot, group_ops);
     }
 }
+
+/* 0x004d3ab0: the +0xfac block as the information AI's scan state. */
+static void scan_load(const AoeAiTacticalRor *ai, AoeAiInfoGroupScanRor *s) {
+    const int32_t *b = ai->block_fac;
+    s->best_id = b[0];
+    memcpy(&s->best_score, &b[1], 4);
+    s->best_index = b[2];
+    s->next = b[3];
+    s->field_10 = b[4];
+    s->field_14 = b[5];
+    s->walls = (uint8_t)b[6];
+    s->wall_id = b[7];
+    memcpy(&s->wall_score, &b[8], 4);
+    s->wall_index = b[9];
+    s->running = b[10];
+}
+
+static void scan_store(AoeAiTacticalRor *ai, const AoeAiInfoGroupScanRor *s) {
+    int32_t *b = ai->block_fac;
+    b[0] = s->best_id;
+    memcpy(&b[1], &s->best_score, 4);
+    b[2] = s->best_index;
+    b[3] = s->next;
+    b[4] = s->field_10;
+    b[5] = s->field_14;
+    b[6] = (b[6] & ~0xff) | s->walls;
+    b[7] = s->wall_id;
+    memcpy(&b[8], &s->wall_score, 4);
+    b[9] = s->wall_index;
+    b[10] = s->running;
+}
+
+enum { GT_DONE, GT_NEXT, GT_SUSPEND };
+
+typedef struct {
+    AoeAiTacticalRor *ai;
+    const AoeAiTacticalOpsRor *ops;
+    const AoeAiUnitGroupOpsRor *gops;
+    const AoeAiStrategyRor *strategy;
+    AoeAiInfoRor *info;
+    const AoeAiInfoOpsRor *iops;
+    uint32_t start;
+} GroupTaskCtx;
+
+static int32_t gt_now(const GroupTaskCtx *c) {
+    return c->ops->game_time ? (int32_t)c->ops->game_time(c->ops->context) : 0;
+}
+
+static uint32_t gt_secs_since(const GroupTaskCtx *c, int32_t t) {
+    return (uint32_t)(gt_now(c) - t) / 1000u;
+}
+
+static double gt_range(const GroupTaskCtx *c, int32_t id) {
+    return c->ops->range ? c->ops->range(c->ops->context, id) : 0.0;
+}
+
+static int gt_198(const GroupTaskCtx *c, int32_t id, int32_t x, int32_t y, int32_t z, float r,
+                  int32_t target, int32_t a, int32_t b) {
+    return c->ops->reach_198 ? c->ops->reach_198(c->ops->context, id, x, y, z, r, target, a, b) : 0;
+}
+
+static int gt_1a4(const GroupTaskCtx *c, int32_t id, int32_t x, int32_t y, int32_t z, float r,
+                  int32_t target, int32_t a, int32_t b) {
+    return c->ops->reach_1a4 ? c->ops->reach_1a4(c->ops->context, id, x, y, z, r, target, a, b) : 0;
+}
+
+static int gt_transport(const GroupTaskCtx *c, int32_t id) {
+    return c->ops->wants_transport && c->ops->wants_transport(c->ops->context, id) == 1;
+}
+
+static int gt_engage(const GroupTaskCtx *c, int32_t id, int32_t target) {
+    return c->ops->can_engage &&
+           c->ops->can_engage(c->ops->context, id, target, (float)gt_range(c, id)) == 1;
+}
+
+/* The group's target and state cleared (+0x184, +0x188, +0x18c, +0x2cc,
+   +0x180 1, type 0). */
+static void gt_reset(AoeAiUnitGroupRor *g) {
+    g->type = 0;
+    g->field_180 = 1;
+    g->field_184 = -1;
+    g->field_2cc = 0;
+    g->field_188 = -1;
+    aoe_ai_unit_group_set_location_ror(g->loc_18c, -1.0f, -1.0f, -1.0f);
+}
+
+static void gt_target(AoeAiUnitGroupRor *g, int32_t id, int32_t type, float x, float y, float z) {
+    g->field_184 = id;
+    g->field_188 = type;
+    aoe_ai_unit_group_set_location_ror(g->loc_18c, x, y, z);
+}
+
+/* Boarding a transport for target `id`: task 0xe, +0x180 0xd, +0x1c0 200. */
+static void gt_board(const GroupTaskCtx *c, AoeAiUnitGroupRor *g, int32_t id, int32_t type,
+                     float x, float y, float z) {
+    aoe_ai_unit_group_update_ror(g, c->gops, 0xe, 1, 0);
+    g->field_180 = 0xd;
+    gt_target(g, id, type, x, y, z);
+    g->type = 1;
+    g->field_1c0 = 200;
+}
+
+/* The +0xd28 first player's sliced scan target; GT_SUSPEND while it runs. */
+static int gt_scan(const GroupTaskCtx *c, AoeAiUnitGroupRor *g, AoeAiInfoObjectRor **out) {
+    AoeAiInfoGroupScanRor scan;
+    int32_t *first = aoe_ai_int_list_at_ror(&c->ai->list_d28, 0);
+    scan_load(c->ai, &scan);
+    *out = c->info ? aoe_ai_info_group_target_ror(c->info, (uint32_t)(first ? *first : 0), g,
+                                                  &scan, c->start, c->iops)
+                   : NULL;
+    scan_store(c->ai, &scan);
+    return c->ai->block_fac[10] == 1 ? GT_SUSPEND : GT_DONE;
+}
+
+/* 0x004d3ab0: a type-0 group finds its target. */
+static int gt_type0(const GroupTaskCtx *c, AoeAiUnitGroupRor *g) {
+    AoeAiTacticalRor *ai = c->ai;
+    const AoeAiTacticalOpsRor *ops = c->ops;
+    AoeAiInfoObjectRor *t = NULL;
+    AoeAiWorldObjectRor cmd;
+    int have_cmd = 0;
+    int32_t found = 1;
+    if (g->task == 100 || g->task == 0x67) {
+        uint32_t secs;
+        int32_t kind;
+        if (ai->field_e18 == 0) {
+            ai->block_fac[10] = 0;
+            return GT_NEXT;
+        }
+        if (ai->sn[162] != 0 && g->task != 0x67) {
+            /* The original reads the target ID through a null pointer. */
+            g->field_180 = 1;
+            return GT_DONE;
+        }
+        secs = gt_secs_since(c, ai->field_d0c);
+        if ((ai->field_d0c != 0 && ai->sn[47] == 2 && secs != 0 &&
+             secs < (uint32_t)aoe_ai_tactical_d24_limit_ror(ai, 0x2e)) ||
+            (ai->field_d0c != 0 && ai->sn[47] == 1 &&
+             secs < (uint32_t)aoe_ai_tactical_d24_limit_ror(ai, 0x2e))) {
+            ai->block_fac[10] = 0;
+            return GT_NEXT;
+        }
+        kind = c->strategy ? aoe_ai_strategy_ai_victory_kind_ror(c->strategy) : -1;
+        if (kind == 0 || kind == 4) {
+            int32_t want = kind == 0 ? aoe_ai_tactical_free_target_ror(ai, c->strategy)
+                                     : aoe_ai_tactical_free_second_ror(ai, c->strategy);
+            t = c->info ? aoe_ai_info_find_object_ror(c->info, want) : NULL;
+            if (!t && c->info) {
+                int32_t *first = aoe_ai_int_list_at_ror(&ai->list_d28, 0);
+                t = aoe_ai_info_engage_target_ror(c->info, (uint32_t)(first ? *first : 0), 1, 1,
+                                                  g->commander, &found, c->iops);
+            }
+        } else if (gt_scan(c, g, &t) == GT_SUSPEND) {
+            return GT_SUSPEND;
+        }
+        if (!t) {
+            g->field_180 = 1;
+            ai->block_fac[10] = 0;
+            return GT_NEXT;
+        }
+        ++t->field_10;
+        if (!ops->object || !ops->object(ops->context, g->commander, &cmd)) {
+            g->field_180 = 1;
+            return GT_DONE;
+        }
+        have_cmd = 1;
+        if (gt_198(c, cmd.id, t->x, t->y, t->z, (float)gt_range(c, cmd.id), t->id, t->owner,
+                   0x1b)) {
+            ai->field_d0c = gt_now(c);
+            if (ai->sn[71] == 1) ai->field_d14 = gt_now(c);
+            gt_target(g, t->id, t->type_id, t->x, t->y, t->z);
+            g->type = 1;
+            aoe_ai_tactical_share_with_allies_ror(ai, t->owner, t->x, t->y, ops);
+        } else {
+            if (g->task == 0x67) {
+                g->field_180 = 1;
+                g->field_1d0 = -1;
+                return GT_DONE;
+            }
+            if (!gt_1a4(c, cmd.id, t->x, t->y, t->z, (float)gt_range(c, cmd.id), t->id, t->owner,
+                        0x1b)) {
+                g->field_2cc = 0;
+                g->field_180 = 1;
+                g->field_1d0 = -1;
+                ai->block_fac[10] = 0;
+                return GT_NEXT;
+            }
+            if (!gt_transport(c, cmd.id)) {
+                g->field_180 = 1;
+                g->field_1d0 = -1;
+                return GT_DONE;
+            }
+            gt_board(c, g, t->id, t->type_id, t->x, t->y, t->z);
+            g->field_1d0 = -1;
+            return GT_DONE;
+        }
+    } else if (g->task == 0x65 || g->task == 0x68) {
+        float r2;
+        t = c->info ? aoe_ai_info_free_resource_ror(c->info, g->commander, c->iops) : NULL;
+        if (!t || !ops->object || !ops->object(ops->context, g->commander, &cmd)) {
+            g->field_180 = 1;
+            return GT_DONE;
+        }
+        have_cmd = 1;
+        r2 = (float)(t->type_id == 0x6d ? ai->sn[22] : ai->sn[57]);
+        if (gt_198(c, cmd.id, t->x, t->y, t->z, (float)gt_range(c, cmd.id), t->id, -1, -1)) {
+            t->field_10 = 1;
+            gt_target(g, t->id, t->type_id, t->x, t->y, t->z);
+            aoe_ai_unit_group_set_location_ror(g->loc_19c, t->x, t->y, t->z);
+            g->type = 1;
+        } else if (gt_1a4(c, cmd.id, t->x, t->y, t->z, r2, t->id, -1, -1) &&
+                   gt_transport(c, cmd.id)) {
+            t->field_10 = 1;
+            gt_board(c, g, t->id, t->type_id, t->x, t->y, t->z);
+            return GT_DONE;
+        } else {
+            g->field_180 = 1;
+            return GT_DONE;
+        }
+    } else if (g->task == 0x6d) {
+        AoeAiWorldObjectRor tc;
+        int32_t centre, x, y, z, b4e;
+        float r;
+        if (gt_secs_since(c, g->field_1cc) < 60) {
+            g->field_180 = 1;
+            return GT_DONE;
+        }
+        centre = ops->first_center ? ops->first_center(ops->context) : -1;
+        if (centre == -1 || !ops->object || !ops->object(ops->context, centre, &tc) ||
+            !ops->object(ops->context, g->commander, &cmd)) {
+            g->field_180 = 1;
+            return GT_DONE;
+        }
+        have_cmd = 1;
+        x = aoe_ftol32(tc.x);
+        y = aoe_ftol32(tc.y);
+        z = aoe_ftol32(tc.z);
+        r = (float)ai->sn[23];
+        b4e = ops->object_4e ? ops->object_4e(ops->context, tc.id) : 0;
+        if (gt_198(c, cmd.id, x, y, z, r, tc.id, -1, -1)) {
+            gt_target(g, tc.id, b4e, tc.x, tc.y, tc.z);
+            aoe_ai_unit_group_set_location_ror(g->loc_19c, tc.x, tc.y, tc.z);
+            g->type = 1;
+        } else if (gt_1a4(c, cmd.id, x, y, z, r, tc.id, -1, -1)) {
+            if (!gt_transport(c, cmd.id)) {
+                g->field_180 = 1;
+                return GT_DONE;
+            }
+            gt_board(c, g, tc.id, b4e, tc.x, tc.y, tc.z);
+            return GT_DONE;
+        } else {
+            g->field_1cc = gt_now(c);
+            g->field_180 = 1;
+            return GT_DONE;
+        }
+    }
+    if (c->strategy && aoe_ai_strategy_ai_victory_kind_ror(c->strategy) == 0xb &&
+        (g->task == 100 || g->task == 0x67) && ai->sn[103] == 1 && t && have_cmd) {
+        aoe_ai_info_penalize_objects_ror(c->info, t->owner, t->id, c->iops);
+        aoe_ai_info_penalize_areas_ror(c->info, t->owner, c->iops);
+        if (ops->path_to) {
+            AoeUnitPathRor *path = ops->path_to(ops->context, cmd.id, t->x, t->y, 1,
+                                                (float)gt_range(c, cmd.id), t->id);
+            if (path) aoe_ai_tactical_path_waypoints_ror(g, path);
+        }
+    }
+    if (found == 0 && g->field_180 == 2)
+        aoe_ai_unit_group_update_ror(g, c->gops, 0x15, 1, 0);
+    else
+        aoe_ai_unit_group_update_ror(g, c->gops, g->field_180, 1, 0);
+    return GT_DONE;
+}
+
+/* 0x004d3ab0, +0x180 0xd: boarding the transport. */
+static int gt_boarding(const GroupTaskCtx *c, AoeAiUnitGroupRor *g) {
+    AoeAiTacticalRor *ai = c->ai;
+    const AoeAiTacticalOpsRor *ops = c->ops;
+    AoeAiUnitGroupRor *boat;
+    AoeAiWorldObjectRor o;
+    int32_t k, any = 0;
+    if (g->field_1c0 != 200) {
+        ai->block_fac[10] = 0;
+        return GT_NEXT;
+    }
+    if (g->field_1c4 == -1) {
+        int32_t pt[2];
+        if (!ops->object || !ops->object(ops->context, g->commander, &o)) {
+            ai->block_fac[10] = 0;
+            return GT_NEXT;
+        }
+        pt[0] = aoe_ftol32(o.x);
+        pt[1] = aoe_ftol32(o.y);
+        boat = aoe_ai_tactical_nearest_group_ror(ai, 0x6a, 1, -1, pt, -1, ops);
+        if (!boat) boat = aoe_ai_tactical_nearest_group_ror(ai, 0x6a, 0, -1, pt, -1, ops);
+        if (boat) {
+            g->field_1c4 = boat->id;
+            g->field_1c8 = boat->task;
+            boat->field_180 = 0xc;
+            boat->type = 1;
+            boat->field_1c4 = g->id;
+        }
+    } else {
+        boat = aoe_ai_tactical_find_group_ror(ai, g->field_1c4, -1, -1, -1);
+    }
+    if (!boat) {
+        g->field_1c4 = -1;
+        g->field_1c8 = -1;
+        ai->block_fac[10] = 0;
+        return GT_NEXT;
+    }
+    if (ops->object && ops->object(ops->context, boat->commander, &o) && ops->transport_full &&
+        ops->transport_full(ops->context, boat->commander)) {
+        g->field_180 = 0xf;
+        ai->block_fac[10] = 0;
+        return GT_NEXT;
+    }
+    for (k = 0; k < aoe_ai_unit_group_count_ror(g); ++k) {
+        int32_t m = aoe_ai_unit_group_member_ror(g, k), task;
+        if (ops->object && ops->object(ops->context, m, &o) && ops->unit_task &&
+            ops->unit_task(ops->context, m, &task) && task == -1) {
+            any = 1;
+            aoe_ai_tactical_order_2cd_ror(ai, m, boat->commander, ops);
+        }
+    }
+    if (!any) g->field_180 = 0xf;
+    ai->block_fac[10] = 0;
+    return GT_NEXT;
+}
+
+/* 0x004d3ab0, +0x180 0xf: loading, then sailing. */
+static int gt_loading(const GroupTaskCtx *c, AoeAiUnitGroupRor *g) {
+    AoeAiTacticalRor *ai = c->ai;
+    const AoeAiTacticalOpsRor *ops = c->ops;
+    AoeAiUnitGroupRor *boat = aoe_ai_tactical_find_group_ror(ai, g->field_1c4, -1, -1, -1);
+    AoeAiWorldObjectRor o;
+    int32_t k, all_in = 1, x, y, out[2];
+    int32_t zone = 0xff;
+    if (!boat || !ops->object || !ops->object(ops->context, boat->commander, &o)) {
+        g->field_184 = -1;
+        g->field_2cc = 0;
+        g->field_188 = -1;
+        g->field_180 = 1;
+        g->type = 0;
+        ai->block_fac[10] = 0;
+        return GT_NEXT;
+    }
+    if (ops->transport_full && ops->transport_full(ops->context, boat->commander))
+        aoe_ai_unit_group_prune_ror(g, c->gops);
+    for (k = 0; k < aoe_ai_unit_group_count_ror(g); ++k) {
+        int32_t m = aoe_ai_unit_group_member_ror(g, k), task, held, action;
+        if (!ops->object(ops->context, m, &o)) {
+            aoe_ai_log_ror(&ai->module, "    Unit %d is invalid.", m);
+            continue;
+        }
+        if (!ops->unit_task || !ops->unit_task(ops->context, m, &task)) {
+            aoe_ai_log_ror(&ai->module, "    Unit %d has invalid unitAI.", m);
+            continue;
+        }
+        if (m == g->commander && c->iops && c->iops->tile_zone)
+            zone = c->iops->tile_zone(c->iops->context, m, aoe_ftol32(g->loc_18c[0]),
+                                      aoe_ftol32(g->loc_18c[1]));
+        held = ops->container_of ? ops->container_of(ops->context, m) : -1;
+        if (held != -1 && held == boat->commander) {
+            if (task != -1) aoe_ai_tactical_order_stop_ror(ops, m, 100);
+        } else if (held != -1) {
+            aoe_ai_unit_group_remove_ror(g, m, c->gops);
+        } else {
+            all_in = 0;
+            action = -1;
+            if (ops->unit_action) ops->unit_action(ops->context, m, &action);
+            if (action != 0x2bc && action != 0x2cd)
+                aoe_ai_tactical_order_2cd_ror(ai, aoe_ai_unit_group_member_ror(g, k),
+                                              boat->commander, ops);
+        }
+    }
+    if (!all_in) return GT_DONE;
+    x = aoe_ftol32(g->loc_18c[0]);
+    y = aoe_ftol32(g->loc_18c[1]);
+    if (!c->info || !aoe_ai_info_approach_tile_ror(c->info, x, y, out, 1, 1, g->field_184, 0xf,
+                                                   g->commander, c->iops)) {
+        out[0] = x;
+        out[1] = y;
+    }
+    aoe_ai_tactical_order_2ca_ror(ai, boat->commander, (float)out[0] + 0.5f,
+                                  (float)out[1] + 0.5f, ops);
+    aoe_ai_unit_group_set_location_ror(boat->loc_18c, (float)out[0], (float)out[1], -1.0f);
+    boat->field_180 = 0xc;
+    boat->field_188 = zone & 0xff;
+    g->field_180 = 0x10;
+    aoe_ai_unit_group_update_ror(g, c->gops, 0x16, 0, 1);
+    if (aoe_ai_unit_group_count_ror(boat) > 1) {
+        for (k = 0; k < aoe_ai_unit_group_count_ror(boat); ++k) {
+            int32_t m = aoe_ai_unit_group_member_ror(boat, k);
+            if (m == boat->commander || !ops->object(ops->context, m, &o)) continue;
+            aoe_ai_tactical_order_2bd_ror(ai, m, boat->commander, o.type_28 * 0.5f, 0x63, ops);
+        }
+    }
+    return GT_DONE;
+}
+
+/* 0x004d3ab0, +0x180 0x10: unloading. GT_DONE + 1 falls through to the
+   later states. */
+enum { GT_FALL = 3 };
+static int gt_landing(const GroupTaskCtx *c, AoeAiUnitGroupRor *g) {
+    AoeAiTacticalRor *ai = c->ai;
+    const AoeAiTacticalOpsRor *ops = c->ops;
+    AoeAiUnitGroupRor *boat = aoe_ai_tactical_find_group_ror(ai, g->field_1c4, -1, -1, -1);
+    AoeAiWorldObjectRor bc, o, cmd;
+    int32_t k, all_out = 1, idle = 1, task;
+    if (!boat || !ops->object || !ops->object(ops->context, boat->commander, &bc) ||
+        !ops->unit_task || !ops->unit_task(ops->context, boat->commander, &task) ||
+        bc.owner != ops->self) {
+        g->field_184 = -1;
+        g->field_2cc = 0;
+        g->field_188 = -1;
+        g->field_180 = 1;
+        g->type = 0;
+        ai->block_fac[10] = 0;
+        return GT_NEXT;
+    }
+    for (k = 0; k < aoe_ai_unit_group_count_ror(g); ++k) {
+        int32_t m = aoe_ai_unit_group_member_ror(g, k);
+        AoeAiWorldObjectRor t;
+        if (!ops->object(ops->context, m, &o) || !ops->unit_task(ops->context, m, &task)) continue;
+        if (ops->container_of && ops->container_of(ops->context, m) != -1) {
+            all_out = 0;
+            continue;
+        }
+        idle = 0;
+        if (g->task == 100 && ops->object(ops->context, g->field_184, &t)) {
+            int32_t cur = -1;
+            if (ops->unit_ai_target) ops->unit_ai_target(ops->context, m, &cur);
+            if (cur != g->field_184 && gt_engage(c, m, g->field_184))
+                aoe_ai_tactical_order_attack_ror(ai, m, g->loc_18c[0], g->loc_18c[1],
+                                                 g->field_184, -1, NULL, 0, 0, ops);
+        } else {
+            aoe_ai_tactical_order_stop_ror(ops, m, 100);
+        }
+    }
+    if (idle == 1) {
+        int32_t state = 0;
+        if (ops->head_action_state && ops->head_action_state(ops->context, boat->commander, &state) &&
+            state != 2)
+            return GT_DONE;
+        aoe_ai_tactical_order_2ca_ror(ai, boat->commander, boat->loc_18c[0] + 0.5f,
+                                      boat->loc_18c[1] + 0.5f, ops);
+        boat->field_180 = 0xc;
+        return GT_DONE;
+    }
+    if (all_out == 0) {
+        ai->block_fac[10] = 0;
+        return GT_NEXT;
+    }
+    {
+        AoeAiUnitGroupRor *b2 = aoe_ai_tactical_find_group_ror(ai, g->field_1c4, -1, -1, -1);
+        if (b2) {
+            AoeAiWorldObjectRor tc;
+            int32_t centre;
+            b2->field_184 = -1;
+            b2->field_188 = -1;
+            b2->field_180 = 1;
+            b2->type = 0;
+            centre = ops->first_center ? ops->first_center(ops->context) : -1;
+            if (centre != -1 && ops->object(ops->context, centre, &tc))
+                aoe_ai_tactical_order_move_ror(ops, b2->commander, tc.x, tc.y, 0x32);
+        }
+    }
+    if (g->task == 100) {
+        if (ops->object(ops->context, g->commander, &cmd) && gt_engage(c, cmd.id, g->field_184)) {
+            ai->field_d0c = gt_now(c);
+            if (ai->sn[71] == 1) ai->field_d14 = gt_now(c);
+            g->field_180 = 2;
+            aoe_ai_unit_group_update_ror(g, c->gops, g->field_180, 1, 0);
+            return GT_DONE;
+        }
+        g->type = 1;
+        g->field_180 = 7;
+        aoe_ai_unit_group_update_ror(g, c->gops, 7, 0, 1);
+        ai->block_fac[10] = 0;
+        return GT_NEXT;
+    }
+    if (g->task == 0x65 || g->task == 0x6d) {
+        aoe_ai_unit_group_set_location_ror(g->loc_19c, g->loc_18c[0], g->loc_18c[1],
+                                           g->loc_18c[2]);
+        g->type = 0;
+        g->field_180 = 1;
+        aoe_ai_unit_group_update_ror(g, c->gops, 1, 1, 1);
+        ai->block_fac[10] = 0;
+        return GT_NEXT;
+    }
+    return GT_FALL;
+}
+
+/* 0x004d3ab0: +0x180 2 with +0x1d0 -1, the attack. */
+static int gt_attack(const GroupTaskCtx *c, AoeAiUnitGroupRor *g) {
+    AoeAiTacticalRor *ai = c->ai;
+    const AoeAiTacticalOpsRor *ops = c->ops;
+    AoeAiWorldObjectRor o, tgt, cmd;
+    int32_t k;
+    if (ai->sn[91] < 100) {
+        for (k = 0; k < aoe_ai_unit_group_count_ror(g);) {
+            int32_t m = aoe_ai_unit_group_member_ror(g, k), v, pct = 0;
+            if (!ops->object || !ops->object(ops->context, m, &o)) {
+                ++k;
+                continue;
+            }
+            v = aoe_ai_unit_group_value_ror(g, k);
+            if (v > 0) pct = (v - aoe_ftol32(o.hp)) * 100 / v;
+            if (pct <= ai->sn[91]) {
+                ++k;
+                continue;
+            }
+            aoe_ai_tactical_order_move_ror(ops, m, g->loc_1ac[0], g->loc_1ac[1], 100);
+            aoe_ai_unit_group_remove_ror(g, aoe_ai_unit_group_member_ror(g, k), c->gops);
+            if (aoe_ai_unit_group_count_ror(g) == 0) break;
+        }
+    }
+    if (ops->object && ops->object(ops->context, g->field_184, &tgt) && tgt.state <= 2) {
+        if (g->field_18 == -1) {
+            if (ops->is_ally && ops->is_ally(ops->context, tgt.owner)) {
+                gt_reset(g);
+                if (ops->object(ops->context, g->commander, &cmd))
+                    aoe_ai_unit_group_set_location_ror(g->loc_19c, cmd.x, cmd.y, cmd.z);
+                return GT_DONE;
+            }
+            if (aoe_ai_unit_group_settled_ror(g, c->gops, 0) == 1) {
+                if (!ops->object(ops->context, g->commander, &cmd)) {
+                    ai->block_fac[10] = 0;
+                    return GT_NEXT;
+                }
+                if (gt_engage(c, cmd.id, g->field_184)) {
+                    aoe_ai_unit_group_update_ror(g, c->gops, 0x14, 0, 1);
+                    return GT_DONE;
+                }
+                aoe_ai_unit_group_set_location_ror(g->loc_19c, cmd.x, cmd.y, cmd.z);
+                gt_reset(g);
+                return GT_DONE;
+            }
+            aoe_ai_unit_group_update_ror(g, c->gops, 0x14, 0, 1);
+            return GT_DONE;
+        }
+        if (g->field_18 == 4 && tgt.owner == ops->self && ops->active_unit &&
+            ops->active_unit(ops->context, tgt.id)) {
+            const float *p1, *p2;
+            aoe_ai_unit_group_add_ror(g, tgt.id, c->gops);
+            p1 = c->strategy ? aoe_ai_strategy_ai_target_point_ror(c->strategy) : NULL;
+            p2 = c->strategy ? aoe_ai_strategy_ai_second_point_ror(c->strategy) : NULL;
+            gt_reset(g);
+            if (p1 && p2)
+                aoe_ai_unit_group_set_location_ror(g->loc_19c, (p2[0] + p1[0]) * 0.5f,
+                                                   (p2[1] + p1[1]) * 0.5f, (p2[2] + p1[2]) * 0.5f);
+        }
+        if (gt_secs_since(c, g->field_1cc) > (uint32_t)ai->sn[76]) {
+            gt_reset(g);
+            ai->block_fac[10] = 0;
+            return GT_NEXT;
+        }
+        return GT_FALL;
+    }
+    if (ai->sn[49] == 2) {
+        gt_reset(g);
+        aoe_ai_unit_group_update_ror(g, c->gops, g->field_180, 1, 0);
+        ai->block_fac[10] = 0;
+        return GT_NEXT;
+    }
+    if (!ops->object || !ops->object(ops->context, g->commander, &cmd)) {
+        ai->block_fac[10] = 0;
+        return GT_NEXT;
+    }
+    {
+        AoeAiInfoObjectRor *t;
+        int32_t old;
+        if (gt_scan(c, g, &t) == GT_SUSPEND) return GT_SUSPEND;
+        if (t && gt_198(c, cmd.id, t->x, t->y, t->z, (float)gt_range(c, cmd.id), t->id, t->owner,
+                        0x1b) == 1) {
+            gt_target(g, t->id, t->type_id, t->x, t->y, t->z);
+            g->type = 1;
+            aoe_ai_unit_group_update_ror(g, c->gops, 2, 0, 0);
+            return GT_DONE;
+        }
+        old = g->field_188;
+        gt_reset(g);
+        if (ai->sn[49] == 0) {
+            aoe_ai_unit_group_set_location_ror(g->loc_19c, cmd.x, cmd.y, cmd.z);
+            ai->block_fac[10] = 0;
+            return GT_NEXT;
+        }
+        if (ai->sn[49] != 3 || old == 0x7e || old == 0x59) {
+            ai->block_fac[10] = 0;
+            return GT_NEXT;
+        }
+        if (ai->sn[135] == 1) {
+            int32_t r = ai->sn[136], y = aoe_ftol32(cmd.y), x = aoe_ftol32(cmd.x);
+            aoe_ai_info_mark_rect_ror(c->info, x - r, y - r, x + r, y + r, c->iops);
+        }
+        g->type = 1;
+        g->field_180 = 7;
+        aoe_ai_unit_group_update_ror(g, c->gops, 7, 0, 1);
+        ai->block_fac[10] = 0;
+        return GT_NEXT;
+    }
+}
+
+/* 0x004d3ab0: the type-1 states after the transport ones. */
+static int gt_states(const GroupTaskCtx *c, AoeAiUnitGroupRor *g) {
+    AoeAiTacticalRor *ai = c->ai;
+    const AoeAiTacticalOpsRor *ops = c->ops;
+    AoeAiWorldObjectRor o;
+    int r;
+    if (g->field_180 == 0xc) return GT_DONE;
+    if (g->field_180 == 0x13) {
+        uint32_t secs;
+        if (aoe_ai_unit_group_in_range_ror(g, c->gops)) return GT_DONE;
+        secs = gt_secs_since(c, g->field_1cc);
+        if (aoe_ai_unit_group_settled_ror(g, c->gops, 1) == 1 && secs > 5) {
+            g->field_1cc = gt_now(c);
+            aoe_ai_unit_group_update_ror(g, c->gops, 9, 1, 0);
+        }
+        return GT_DONE;
+    }
+    if (g->field_180 == 3) {
+        if (gt_secs_since(c, g->field_1cc) > (uint32_t)ai->sn[76]) {
+            gt_reset(g);
+            ai->block_fac[10] = 0;
+            return GT_NEXT;
+        }
+        if (aoe_ai_unit_group_in_range_ror(g, c->gops)) {
+            g->field_180 = 1;
+            g->type = 0;
+            if (g->task == 0x65 || g->task == 0x68) {
+                AoeAiInfoObjectRor *t =
+                    c->info ? aoe_ai_info_find_object_ror(c->info, g->field_184) : NULL;
+                if (t) t->field_10 = 0;
+            }
+            if ((ops->build_count ? ops->build_count(ops->context) : 0) == 0 &&
+                ((g->task == 100 && aoe_ai_tactical_count_groups_ror(ai, 100, -1) > 1) ||
+                 g->task != 100)) {
+                if (g->task == 0x66) --ai->sn[42];
+                else if (g->task == 0x65) --ai->sn[38];
+                else if (g->task == 100) --ai->sn[36];
+                aoe_ai_unit_group_clear_ror(g, c->gops);
+                g->field_180 = 0;
+            }
+            ai->block_fac[10] = 0;
+            return GT_NEXT;
+        }
+    }
+    if (g->field_180 == 7) {
+        AoeAiWorldObjectRor cmd, to;
+        AoeAiInfoObjectRor *t;
+        int have_cmd = ops->object && ops->object(ops->context, g->commander, &cmd);
+        if (gt_scan(c, g, &t) == GT_SUSPEND) return GT_SUSPEND;
+        if (have_cmd && t && ops->object(ops->context, t->id, &to)) {
+            if (gt_198(c, cmd.id, t->x, t->y, t->z, (float)gt_range(c, cmd.id), t->id, t->owner,
+                       0x1b) == 1) {
+                g->field_180 = 2;
+                gt_target(g, t->id, t->type_id, t->x, t->y, t->z);
+                g->type = 1;
+                aoe_ai_unit_group_update_ror(g, c->gops, 2, 0, 1);
+                return GT_DONE;
+            }
+            if (gt_1a4(c, cmd.id, t->x, t->y, t->z, (float)gt_range(c, cmd.id), t->id, t->owner,
+                       0x1b) == 1 &&
+                gt_transport(c, cmd.id)) {
+                gt_board(c, g, t->id, t->type_id, t->x, t->y, t->z);
+                g->field_1d0 = -1;
+                return GT_DONE;
+            }
+        }
+        if (gt_secs_since(c, g->field_1cc) > (uint32_t)ai->sn[88] * 4u) {
+            g->field_180 = 7;
+            aoe_ai_unit_group_update_ror(g, c->gops, 7, 0, 1);
+            return GT_DONE;
+        }
+    }
+    if (g->field_180 == 2 && g->field_1d0 == -1) {
+        r = gt_attack(c, g);
+        if (r != GT_FALL) return r;
+    }
+    if (g->field_180 == 2 && g->field_1d0 != -1) {
+        if (!ops->object || !ops->object(ops->context, g->commander, &o) || !ops->unit_task) {
+            ai->block_fac[10] = 0;
+            return GT_NEXT;
+        }
+        {
+            int32_t task;
+            if (!ops->unit_task(ops->context, g->commander, &task)) {
+                ai->block_fac[10] = 0;
+                return GT_NEXT;
+            }
+        }
+        if (!ops->unit_ai_12c || ops->unit_ai_12c(ops->context, g->commander) == 0)
+            g->field_1d0 = -1;
+        ai->block_fac[10] = 0;
+        return GT_NEXT;
+    }
+    if (g->field_180 == 4) {
+        AoeAiWorldObjectRor t;
+        if (aoe_ai_unit_group_settled_ror(g, c->gops, 1) == 1 &&
+            !aoe_ai_unit_group_in_range_ror(g, c->gops)) {
+            aoe_ai_unit_group_update_ror(g, c->gops, 9, 1, 0);
+            return GT_DONE;
+        }
+        if (!ops->object || !ops->object(ops->context, g->field_184, &t) ||
+            (c->info && aoe_ai_info_better_resource_ror(c->info, g->commander, g->field_188,
+                                                        t.type_class, c->iops))) {
+            if (ops->object && ops->object(ops->context, g->field_184, &t) && c->info) {
+                AoeAiInfoObjectRor *f = aoe_ai_info_find_object_ror(c->info, g->field_184);
+                if (f) f->field_10 = 0;
+            }
+            g->field_180 = 1;
+            g->type = 0;
+            ai->block_fac[10] = 0;
+            return GT_NEXT;
+        }
+    }
+    if (g->field_180 == 3 || g->field_180 == 0xd) return GT_NEXT;
+    {
+        int32_t hp = aoe_ai_unit_group_hit_points_ror(g, c->gops), a = 0, b = 0;
+        if (g->field_168 != 0) a = (g->field_168 - hp) * 100 / g->field_168;
+        if (g->field_16c != 0) b = (g->field_16c - aoe_ai_unit_group_count_ror(g)) * 100 /
+                                   g->field_16c;
+        if (a > ai->sn[30] || b > ai->sn[31]) {
+            g->field_180 = 3;
+            aoe_ai_unit_group_update_ror(g, c->gops, 3, 1, 0);
+            return GT_DONE;
+        }
+    }
+    return GT_NEXT;
+}
+
+/* 0x004d3ab0: see the header. */
+void aoe_ai_tactical_group_tasks_ror(AoeAiTacticalRor *ai, uint32_t start, uint32_t budget,
+                                     const AoeAiTacticalOpsRor *ops,
+                                     const AoeAiUnitGroupOpsRor *group_ops,
+                                     const AoeAiStrategyRor *strategy, AoeAiInfoRor *info,
+                                     const AoeAiInfoOpsRor *info_ops) {
+    GroupTaskCtx c;
+    int32_t i = 0;
+    if (!ai || !ops) return;
+    c.ai = ai;
+    c.ops = ops;
+    c.gops = group_ops;
+    c.strategy = strategy;
+    c.info = info;
+    c.iops = info_ops;
+    c.start = start;
+    if (ai->field_f84 != -1) {
+        while (i < ai->groups_len && ai->groups[i]->id != ai->field_f84) ++i;
+        if (i == ai->groups_len) i = 0;
+    }
+    for (; i < ai->groups_len; ++i) {
+        AoeAiUnitGroupRor *g = ai->groups[i];
+        int r;
+        if (g->task == 0x6b || g->task == 0x6c || g->task == 0x6a || g->field_180 == 0 ||
+            g->field_180 == 1)
+            continue;
+        if (!aoe_ai_unit_group_settled_ror(g, group_ops, 1)) g->field_1cc = gt_now(&c);
+        if (g->type == 0) {
+            r = gt_type0(&c, g);
+        } else if (g->field_180 == 0xd) {
+            r = gt_boarding(&c, g);
+        } else if (g->field_180 == 0xf) {
+            r = gt_loading(&c, g);
+        } else {
+            r = g->field_180 == 0x10 ? gt_landing(&c, g) : GT_FALL;
+            if (r == GT_FALL) r = gt_states(&c, g);
+        }
+        if (r == GT_SUSPEND) {
+            ai->field_f84 = g->id;
+            return;
+        }
+        i = group_index(ai, g) < 0 ? i - 1 : group_index(ai, g);
+        if (r == GT_DONE) ai->block_fac[10] = 0;
+        if (ai->block_fac[10] != 0) return;
+        ai->field_f84 = i + 1 < ai->groups_len ? ai->groups[i + 1]->id : -1;
+        if (ops->real_ms && ops->real_ms(ops->context) - start >= budget) return;
+    }
+    ai->field_f84 = -1;
+}

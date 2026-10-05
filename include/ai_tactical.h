@@ -372,6 +372,32 @@ typedef struct {
     /* An object's action list is not empty (0x004065f0): the head
        action's (0x004045b0) target, +0x1c. */
     int (*head_action_target)(void *context, int32_t id, int32_t *target);
+    /* Unit vtable +0x198 path test to (x, y, z) within `radius` toward
+       `target` with a result slot, then 1, `a`, `b`; +0x1a4, the same
+       with 0x16 and 1 before `a`, `b` (a route needing a crossing);
+       +0x1a8 with 2 (and two result slots) is 1 when a transport is
+       wanted; +0x1cc toward point (x, y, z) within `range` and `target`:
+       the path (NULL for none). */
+    int (*reach_198)(void *context, int32_t id, int32_t x, int32_t y, int32_t z, float radius,
+                     int32_t target, int32_t a, int32_t b);
+    int (*reach_1a4)(void *context, int32_t id, int32_t x, int32_t y, int32_t z, float radius,
+                     int32_t target, int32_t a, int32_t b);
+    int (*wants_transport)(void *context, int32_t id);
+    AoeUnitPathRor *(*path_to)(void *context, int32_t id, int32_t x, int32_t y, int32_t z,
+                               float range, int32_t target);
+    /* An object's +0x4e byte; the object holding it (+0x20, its ID; -1
+       for none); a transport is full (its type's +0x2c byte at most its
+       +0x24 list's +8 count); its action list's head state (+0xc byte;
+       0 without actions); its unit AI's +0x12c. */
+    int32_t (*object_4e)(void *context, int32_t id);
+    int32_t (*container_of)(void *context, int32_t id);
+    int (*transport_full)(void *context, int32_t id);
+    int (*head_action_state)(void *context, int32_t id, int32_t *state);
+    int32_t (*unit_ai_12c)(void *context, int32_t id);
+    /* The build list's item count (0x00408ce0 on the Build AI) and a
+       listed active unit (0x004c81a0). */
+    int32_t (*build_count)(void *context);
+    int (*active_unit)(void *context, int32_t id);
 } AoeAiTacticalOpsRor;
 
 /* 0x004e0630: in list order, the group with task `task` and +0x180
@@ -908,6 +934,72 @@ int aoe_ai_tactical_defend_object_ror(AoeAiTacticalRor *ai, int32_t enemy, int32
    without a pending 0x65 item skips the age-2 test. */
 void aoe_ai_tactical_research_ages_ror(AoeAiTacticalRor *ai,
                                        const AoeAiTacticalOpsRor *ops);
+/* 0x004d3ab0: the group tasks, resuming after the group whose ID is
+   +0xf84 (from the first when none matches); groups of task 0x6a, 0x6b,
+   0x6c or with +0x180 0 or 1 are passed over. An unsettled group
+   (0x004cea40 with 600 allowed) stamps +0x1cc with the game time.
+   Type 0 (no target yet):
+   - Tasks 100 / 0x67 need +0xe18; with numbers 47 (2 or 1) and +0xd0c a
+     wait of 0x004e0bc0(0x2e) seconds from +0xd0c holds them. The target
+     is the strategy's free target (victory kind 0, 0x004e0b00) or second
+     (kind 4) when remembered (0x004bd710), else the engage target of
+     +0xd28's first player (0x004bf7d0, buildings and naval skipped) for
+     the commander; other kinds use the sliced group scan (0x004bffa0 in
+     +0xfac), whose running pass suspends the call. Each target's +0x10
+     rises. Reachable (+0x198, the commander's range, its owner, 0x1b):
+     +0xd0c (and with number 71 +0xd14) take the time, +0x184 / +0x188 /
+     +0x18c the target, type 1, and allies are told (0x004e2cd0). Else
+     task 0x67 gives up (+0x180 1, +0x1d0 -1); a crossing (+0x1a4) that
+     wants a transport (+0x1a8) makes it task 0xe and +0x180 0xd with the
+     target and +0x1c0 200; without a crossing +0x2cc 0 too.
+   - Tasks 0x65 / 0x68: the free resource (0x004c1310) by +0x198 within
+     range (its +0x10 then 1; +0x19c too), else by transport within
+     number 22 (type 0x6d) or 57.
+   - Task 0x6d, 60 s after +0x1cc: our town centre, by +0x198 within
+     number 23 (+0x188 its +0x4e byte; +0x19c too), else by transport;
+     neither restamps +0x1cc.
+   Failures set +0x180 1. With victory kind 0xb, tasks 100 / 0x67 and
+   number 103 at 1, a found target and commander: the pathfinder
+   penalties (0x004bd360, 0x004bd590) and waypoints along the commander's
+   +0x1cc path (0x004e21c0). The group is then updated with its +0x180
+   (or 0x15 when the engage target found none and +0x180 is 2).
+   Type 1, by +0x180:
+   - 0xd (with +0x1c0 200): a transport group (task 0x6a at +0x180 1,
+     else 0, nearest the commander, joined both ways through +0x1c4 and
+     taken to 0xc, type 1) is boarded (0x004dc310) by idle members; a full
+     one or none boarding: 0xf.
+   - 0xf: members inside another object leave the group, idle ones inside
+     the boat stop, those outside board; once all are in, the boat goes
+     (0x004dc420) to a landing tile (0x004c42a0 near +0x184, else +0x18c)
+     with +0x188 the commander's zone there, the group takes 0x10 and task
+     0x16, and the boat's crew follow its commander (0x004db9f0).
+   - 0x10: landed members attack +0x184 (task 100, 0x004dbe10) or stop;
+     the boat waits, then leaves for our town centre; task 100 attacks
+     (+0x180 2) or regroups (7); tasks 0x65 / 0x6d start over.
+   - 0x13: settled and out of range for 5 s: task 9. 3: retreat until in
+     range (then the group may be disbanded, numbers 36 / 38 / 42 down)
+     or number 76 seconds pass. 7: a new scan target, by land (2) or
+     transport, else after number 88 x 4 seconds task 7 again.
+   - 2: members hurt beyond number 91 percent retreat to +0x1ac and leave;
+     a target owned by an ally ends the attack, an active unit of ours
+     targeted with +0x18 4 joins; past number 76 seconds the group
+     resets; a gone target finds another or resets (number 49: 2 updates
+     with 1, 0 rallies at the commander, 3 marks number 136 around it
+     with number 135 and regroups with 7).
+   - 4: settled and out of range: task 9; a gone target or a better
+     resource (0x004c1450) frees the old one (+0x10 0) and +0x180 1.
+   Then (not 3 or 0xd) losses of hit points or members over numbers 30 /
+   31 percent of +0x168 / +0x16c: task 3. Each group handled stores the
+   next one's ID in +0xf84; the call ends once `budget` ms have passed
+   since `start`. Port notes: the original reads a null target ID for
+   tasks 100 with number 162 set (it then gives up here), divides by a
+   zero +0x168 / +0x16c (taken as 0 here) and logs its "invalid" lines
+   without the ID. */
+void aoe_ai_tactical_group_tasks_ror(AoeAiTacticalRor *ai, uint32_t start, uint32_t budget,
+                                     const AoeAiTacticalOpsRor *ops,
+                                     const AoeAiUnitGroupOpsRor *group_ops,
+                                     const AoeAiStrategyRor *strategy, AoeAiInfoRor *info,
+                                     const AoeAiInfoOpsRor *info_ops);
 /* 0x004dcf40: fills the soldier groups (tasks 100, 0x65, 0x66) as
    0x004dee90 does the boats, from list 2 (0x004ddd30) and the soldier
    surplus (0x004ddf30), with these differences: groups of type 1 are

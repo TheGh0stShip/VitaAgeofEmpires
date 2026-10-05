@@ -1276,6 +1276,47 @@ static void fill_soldier_groups_tests(void) {
     aoe_ai_tactical_release_ror(&ai);
 }
 
+static void group_tasks_tests(void) {
+    static AoeAiTacticalRor ai;
+    AoeAiTacticalOpsRor ops;
+    AoeAiUnitGroupRor *g[4];
+    int32_t i;
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    memset(&ops, 0, sizeof ops);
+    ops.object = tobject;
+    ops.game_time = ttime;
+    for (i = 0; i < 4; ++i) g[i] = aoe_ai_tactical_new_group_ror(&ai, 1);
+    /* Task 100 without +0xe18 waits. */
+    g[0]->task = 100;
+    g[0]->field_180 = 2;
+    ai.field_e18 = 0;
+    /* Task 0x6d within 60 s of +0x1cc gives up. */
+    g[1]->task = 0x6d;
+    g[1]->field_180 = 2;
+    g[1]->field_1cc = 290000;
+    /* A retreat past number 76 seconds resets. */
+    g[2]->task = 0x65;
+    g[2]->type = 1;
+    g[2]->field_180 = 3;
+    g[2]->field_184 = 5;
+    g[2]->field_1cc = 100000;
+    ai.sn[76] = 10;
+    /* Another state with all hit points lost retreats (task 3). */
+    g[3]->task = 0x66;
+    g[3]->type = 1;
+    g[3]->field_180 = 5;
+    g[3]->field_168 = 100;
+    g[3]->field_16c = 0;
+    ai.sn[30] = 50;
+    ai.sn[31] = 50;
+    aoe_ai_tactical_group_tasks_ror(&ai, 0, 100, &ops, NULL, NULL, NULL, NULL);
+    assert(g[0]->field_180 == 2 && g[0]->type == 0);
+    assert(g[1]->field_180 == 1);
+    assert(g[2]->field_180 == 1 && g[2]->field_184 == -1 && g[2]->type == 0);
+    assert(g[3]->field_180 == 3 && ai.field_f84 == -1);
+    aoe_ai_tactical_release_ror(&ai);
+}
+
 static uint32_t rg_ms;
 static uint32_t rg_real(void *c) { (void)c; return rg_ms += 4; }
 static int32_t rg_centre(void *c) { (void)c; return 60; }
@@ -1804,6 +1845,7 @@ int main(void) {
     boat_groups_tests();
     fill_boat_groups_tests();
     fill_soldier_groups_tests();
+    group_tasks_tests();
 
     aoe_ai_tactical_init_ror(&ai, 3, NULL);
     assert(ai.module.id == 0x3f1 && !strcmp(ai.module.name, "TacAI"));

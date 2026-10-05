@@ -785,5 +785,22 @@ int main(void) {
         }
     }
     aoe_ui_ez_release_ror(&ez);
+    {
+        /* 0x00496560 victory condition controls per kind. */
+        AoeEditorConditionPlanRor cp;
+        assert(!aoe_editor_condition_plan_ror(5, 0, &cp) && cp.shown == 0);
+        assert(aoe_editor_condition_plan_ror(5, 1, &cp));
+        assert(cp.help_id == 0x7768 && cp.tab_count == 2 &&
+               cp.focus == AOE_EDITOR_COND_PLAYER &&
+               (cp.shown & AOE_EDITOR_COND_CLASS));
+        assert(aoe_editor_condition_plan_ror(4, 1, &cp));
+        assert(cp.help_id == 0x7767 && (cp.shown & AOE_EDITOR_COND_AREA) &&
+               !(cp.shown & AOE_EDITOR_COND_UNIT));
+        assert(aoe_editor_condition_plan_ror(13, 1, &cp) &&
+               cp.help_id == 0x776c && cp.focus == AOE_EDITOR_COND_AMOUNT);
+        assert(aoe_editor_condition_plan_ror(18, 1, &cp) &&
+               cp.shown == AOE_EDITOR_COND_RELIC && cp.focus == 0);
+        assert(!aoe_editor_condition_plan_ror(19, 1, &cp));
+    }
     return 0;
 }

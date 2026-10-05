@@ -145,4 +145,39 @@ void aoe_scenario_editor_player_page_ror(AoeUiButtonRor *buttons[12], AoeUiPanel
                                          int32_t show, int (*player_on)(void *context, int32_t i),
                                          void *context);
 
+/* Victory condition page controls (editor +0x738..+0x76c). */
+enum {
+    AOE_EDITOR_COND_CLASS = 1u << 0,        /* +0x738 */
+    AOE_EDITOR_COND_PLAYER = 1u << 1,       /* +0x740 */
+    AOE_EDITOR_COND_SUBTYPE = 1u << 2,      /* +0x744 */
+    AOE_EDITOR_COND_TECH = 1u << 3,         /* +0x748 */
+    AOE_EDITOR_COND_RELIC = 1u << 4,        /* +0x74c */
+    AOE_EDITOR_COND_UNIT = 1u << 5,         /* +0x750 */
+    AOE_EDITOR_COND_TARGET = 1u << 6,       /* +0x754 */
+    AOE_EDITOR_COND_AREA = 1u << 7,         /* +0x758 */
+    AOE_EDITOR_COND_AMOUNT_LABEL = 1u << 8, /* +0x764 */
+    AOE_EDITOR_COND_PLAYER_LABEL = 1u << 9, /* +0x768 */
+    AOE_EDITOR_COND_AMOUNT = 1u << 10       /* +0x76c */
+};
+
+typedef struct {
+    uint32_t shown;    /* controls made visible (+0x14(show)) */
+    int32_t help_id;   /* amount edit help (0x004542c0(id, -1)); 0 none */
+    uint32_t focus;    /* one control bit; 0 clears the focus only */
+    int tab_count;     /* 2 sets the tab order (+0xcc) player, amount */
+} AoeEditorConditionPlanRor;
+
+/* 0x00496560(kind, show): clears editor +0x4a0. With show 0 every
+   condition control above is hidden (no focus change). Otherwise the
+   focus is first cleared (0x00453eb0(NULL)) and kind picks:
+   1 unit+target; 2 unit+target+area; 3 class+amount (help 0x7766);
+   4 those + target+area (0x7767); 5 class+amount+player (0x7768, tab
+   order); 6/9 unit; 7 class+player; 8 player; 10..14 amount (0x7769..
+   0x776d); 15 tech; 16 amount (0x776e); 17 amount+subtype (0x776f);
+   18 relic. The amount, else player, edit gets the focus where shown,
+   except kind 17 which focuses the amount before showing the subtype.
+   Returns 0 for show 0 or an unknown kind (focus cleared only). */
+int aoe_editor_condition_plan_ror(int32_t kind, int32_t show,
+                                  AoeEditorConditionPlanRor *plan);
+
 #endif

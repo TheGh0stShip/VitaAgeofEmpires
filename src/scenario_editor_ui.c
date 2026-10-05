@@ -251,3 +251,70 @@ void aoe_scenario_editor_player_page_ror(AoeUiButtonRor *buttons[12], AoeUiPanel
     else
         *current = (int16_t)(aoe_ui_dropdown_selection_ror(players) + 1);
 }
+
+int aoe_editor_condition_plan_ror(int32_t kind, int32_t show,
+                                  AoeEditorConditionPlanRor *plan) {
+    const uint32_t amount = AOE_EDITOR_COND_AMOUNT_LABEL |
+                            AOE_EDITOR_COND_AMOUNT;
+    const uint32_t player = AOE_EDITOR_COND_PLAYER_LABEL |
+                            AOE_EDITOR_COND_PLAYER;
+    AoeEditorConditionPlanRor p = {0};
+    int ok = 1;
+    if (!show) {
+        p.shown = 0;
+        ok = 0;
+    } else {
+        switch (kind) {
+        case 1:
+            p.shown = AOE_EDITOR_COND_UNIT | AOE_EDITOR_COND_TARGET;
+            break;
+        case 2:
+            p.shown = AOE_EDITOR_COND_UNIT | AOE_EDITOR_COND_TARGET |
+                      AOE_EDITOR_COND_AREA;
+            break;
+        case 3:
+        case 4:
+            p.shown = AOE_EDITOR_COND_CLASS | amount;
+            if (kind == 4)
+                p.shown |= AOE_EDITOR_COND_TARGET | AOE_EDITOR_COND_AREA;
+            p.help_id = kind == 3 ? 0x7766 : 0x7767;
+            p.focus = AOE_EDITOR_COND_AMOUNT;
+            break;
+        case 5:
+            p.shown = AOE_EDITOR_COND_CLASS | amount | player;
+            p.help_id = 0x7768;
+            p.tab_count = 2;
+            p.focus = AOE_EDITOR_COND_PLAYER;
+            break;
+        case 6:
+        case 9:
+            p.shown = AOE_EDITOR_COND_UNIT;
+            break;
+        case 7:
+        case 8:
+            p.shown = player | (kind == 7 ? AOE_EDITOR_COND_CLASS : 0);
+            p.focus = AOE_EDITOR_COND_PLAYER;
+            break;
+        case 10: case 11: case 12: case 13: case 14: case 16:
+            p.shown = amount;
+            p.help_id = kind == 16 ? 0x776e : 0x7769 + (kind - 10);
+            p.focus = AOE_EDITOR_COND_AMOUNT;
+            break;
+        case 15:
+            p.shown = AOE_EDITOR_COND_TECH;
+            break;
+        case 17:
+            p.shown = amount | AOE_EDITOR_COND_SUBTYPE;
+            p.help_id = 0x776f;
+            p.focus = AOE_EDITOR_COND_AMOUNT;
+            break;
+        case 18:
+            p.shown = AOE_EDITOR_COND_RELIC;
+            break;
+        default:
+            ok = 0;
+        }
+    }
+    if (plan) *plan = p;
+    return ok;
+}

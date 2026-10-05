@@ -46,6 +46,9 @@ typedef struct {
     /* Palette cache: 0x0042eb90(name, id, 1) and DeleteObject. */
     uintptr_t (*create_palette)(void *context, const char *name, int32_t id);
     void (*delete_palette)(void *context, uintptr_t palette);
+    /* GetTextExtentPoint32A width of `count` bytes in a font. */
+    int32_t (*text_width)(void *context, uintptr_t font, const char *text,
+                          int32_t count);
 } AoeUiPlatformRor;
 
 typedef struct AoeUiNodeRor {
@@ -320,6 +323,8 @@ void aoe_ui_panel_slot_e0_ror(AoeUiPanelRor *p);
 int32_t aoe_ui_panel_ignore_ror(AoeUiPanelRor *p, uint32_t a, uint32_t b);
 int32_t aoe_ui_panel_no_action_ror(AoeUiPanelRor *p, int32_t x, int32_t y,
                                    int32_t ctrl, int32_t shift);
+/* A slot returning 0 (+0xb0 default). */
+int32_t aoe_ui_panel_zero_ror(AoeUiPanelRor *p);
 int32_t aoe_ui_panel_no_char_action_ror(AoeUiPanelRor *p, int32_t a,
                                         int32_t b);
 

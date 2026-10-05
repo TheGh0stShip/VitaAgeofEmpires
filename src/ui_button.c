@@ -469,8 +469,6 @@ static int32_t zero_action(AoeUiPanelRor *p, int32_t x, int32_t y, int32_t c, in
     return 0;
 }
 
-static int32_t no_b0(AoeUiPanelRor *p) { (void)p; return 0; }
-
 static void stop_sound(AoeUiPanelRor *p) { B(p)->sound = NULL; }
 
 static int32_t restart_sound(AoeUiPanelRor *p) {
@@ -521,7 +519,7 @@ const AoeUiButtonVtblRor aoe_ui_button_vtable_ror = {
       left_drag, left_up, zero_action, right_down,
       aoe_ui_panel_no_action_ror, right_drag, right_up, zero_action},
      key_action,
-     no_b0,
+     aoe_ui_panel_zero_ror,
      aoe_ui_panel_no_char_action_ror,
      aoe_ui_panel_action_ror,
      aoe_ui_panel_get_true_rect_ror,

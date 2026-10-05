@@ -803,7 +803,7 @@ static int32_t no_key_action(AoeUiPanelRor *p, int32_t a, int32_t b,
     return 0;
 }
 
-static int32_t no_b0(AoeUiPanelRor *p) { (void)p; return 0; }
+int32_t aoe_ui_panel_zero_ror(AoeUiPanelRor *p) { (void)p; return 0; }
 
 int aoe_ui_panel_capture_ror(AoeUiPanelRor *p) {
     AoeUiSystemRor *s = p ? p->system : NULL;
@@ -991,7 +991,7 @@ const AoeUiPanelVtblRor aoe_ui_panel_vtable_ror = {
      aoe_ui_panel_no_action_ror, aoe_ui_panel_no_action_ror,
      aoe_ui_panel_no_action_ror},
     no_key_action,
-    no_b0,
+    aoe_ui_panel_zero_ror,
     aoe_ui_panel_no_char_action_ror,
     aoe_ui_panel_action_ror,
     aoe_ui_panel_get_true_rect_ror,

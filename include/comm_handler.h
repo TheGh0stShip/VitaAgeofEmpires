@@ -265,3 +265,93 @@ int aoe_comm_tx_purge_ror(AoeCommRor *c);
 int aoe_comm_rx_deliver_ror(AoeCommRor *c);
 
 #endif
+
+#ifndef VITA_AOE_COMM_HANDLER_DP_H
+#define VITA_AOE_COMM_HANDLER_DP_H
+
+/* DirectPlay sessions and the lobby (0x00424500..0x00425e30). */
+typedef struct {
+    void *context;
+    /* DirectPlay: create (Ordinal 1 and the interface; 0 success),
+       release (the count left), close the session, the caps (twice),
+       the session description (its GUID and player count), create our
+       player (our ID), destroy it, our player's caps (three dwords), a
+       player's data (0 success). */
+    int32_t (*create)(void *context, const uint32_t guid[4]);
+    int32_t (*release)(void *context);
+    int32_t (*close)(void *context);
+    int32_t (*caps)(void *context);
+    int32_t (*session)(void *context, uint32_t guid[4], int32_t *players);
+    int32_t (*create_player)(void *context, const char *name, const char *info, int32_t *id);
+    int32_t (*destroy_player)(void *context, int32_t id);
+    int32_t (*player_caps)(void *context, int32_t id, int32_t out[3]);
+    int32_t (*player_data)(void *context, int32_t id);
+    void (*set_self_dpid)(void *context, int32_t id);
+    /* The command queue's take (first / for a turn). */
+    uint8_t *(*take_first)(void *context);
+    uint8_t *(*take_turn)(void *context, uint32_t turn);
+    /* 0x00422ce0 one unlink step (the new level). */
+    int32_t (*unlink_step)(void *context);
+} AoeCommDpOpsRor;
+
+/* 0x004255e0 close the session (the GUID and turns cleared); 0x00425660
+   release DirectPlay (the GUID cleared); 0x00425560 the caps (guaranteed
+   delivery on); 0x004254a0 the session description (+0x12fc, +0x127c);
+   0x004257a0 our player destroyed; 0x00424dd0 our caps (+0x1484..);
+   0x004249a0 our player created (failing closes and releases, state 1);
+   0x00424500 DirectPlay created (not twice); 0x00424ea0 present;
+   0x00424ee0 every active slot refreshed (0x17a4). */
+int32_t aoe_comm_dp_close_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp);
+int32_t aoe_comm_dp_release_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp);
+int32_t aoe_comm_dp_caps_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp);
+int32_t aoe_comm_dp_session_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp, int32_t *players);
+int32_t aoe_comm_dp_release_player_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp);
+int32_t aoe_comm_dp_player_caps_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp);
+int aoe_comm_dp_add_self_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp);
+int32_t aoe_comm_dp_create_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp);
+int aoe_comm_dp_present_ror(const AoeCommRor *c);
+void aoe_comm_refresh_all_ror(AoeCommRor *c);
+/* 0x0041e9c0: playing slots whose data cannot be read are dropped
+   (0x4b to everyone; dropped unless stopping). 0x0041ead0: the next
+   command to run (alone or in the lobby: the first queued; else the one
+   for this turn). 0x004237c0: unlink to a level (at least 1), step by
+   step until there or stuck. */
+void aoe_comm_check_players_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp);
+uint8_t *aoe_comm_next_command_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp);
+int32_t aoe_comm_unlink_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp, int32_t level);
+
+/* The lobby (0x00425a10..0x00425e30). */
+typedef struct {
+    uint32_t window;      /* +0x00 */
+    void *iface;          /* +0x08 */
+    int32_t field_c;      /* +0x0c */
+    const uint8_t *settings; /* +0x10: the connection settings */
+    uint8_t launched;     /* +0x14 */
+    int has_poster;       /* +0x18 */
+} AoeLobbyRor;
+typedef struct {
+    void *context;
+    void (*release_iface)(void *context, void *iface);
+    int32_t (*send)(void *context, void *iface, const uint8_t *data, uint32_t size);
+    void (*free_settings)(void *context, const uint8_t *settings);
+} AoeLobbyOpsRor;
+/* 0x00425a10 constructor (with a window poster); 0x00425a80 destructor;
+   0x00425ab0 released (settings freed, the interface released, not
+   launched); 0x00425af0 launched (also 0x004241e0); 0x00425dc0 hosting
+   (settings flags bit 1); 0x00425de0 the player name pointer; 0x00425e00
+   the 80-byte session block copied; 0x00425e30 a lobby message (a 0x30
+   header: 5, 0, the game GUID, four values, the size; then the data).
+   0x00425b20: the enumeration callback (logs, 1). */
+void aoe_lobby_init_ror(AoeLobbyRor *l, uint32_t window);
+void aoe_lobby_release_ror(AoeLobbyRor *l, const AoeLobbyOpsRor *ops);
+void aoe_lobby_destroy_ror(AoeLobbyRor *l, const AoeLobbyOpsRor *ops);
+uint8_t aoe_lobby_launched_ror(const AoeLobbyRor *l);
+uint32_t aoe_lobby_hosting_ror(const AoeLobbyRor *l, uint32_t flags);
+int aoe_lobby_name_ror(const AoeLobbyRor *l, const char *name, const char **out);
+int aoe_lobby_session_ror(const AoeLobbyRor *l, const uint8_t session[80], uint8_t out[80]);
+int32_t aoe_lobby_send_ror(AoeLobbyRor *l, const AoeLobbyOpsRor *ops, const uint32_t guid[4],
+                           const void *data, uint32_t size, int32_t a, int32_t b, int32_t c,
+                           int32_t d);
+int aoe_lobby_enum_player_ror(int32_t dpid, const char *name, uint8_t flags);
+
+#endif

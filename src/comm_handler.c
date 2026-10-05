@@ -706,3 +706,229 @@ int aoe_comm_rx_deliver_ror(AoeCommRor *c) {
     }
     return 0;
 }
+
+/* ---- DirectPlay sessions ---- */
+
+static const uint32_t null_guid[4] = {0, 0, 0, 0};
+
+int32_t aoe_comm_dp_close_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp) {
+    int32_t hr = 0;
+    uint32_t slot;
+    if (OPS->dp_present(CTX)) hr = dp->close(dp->context);
+    memcpy(c->guid_12fc, c->guid_1318, sizeof c->guid_12fc);
+    OPS->report(CTX, hr, "Close Session");
+    for (slot = 1; slot <= c->count; ++slot) c->last_turn[slot] = 0;
+    return hr;
+}
+
+int32_t aoe_comm_dp_release_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp) {
+    (void)null_guid;
+    if (OPS->dp_present(CTX)) {
+        dp->release(dp->context);
+        logf_(c, "1 Release COMM links");
+        memcpy(c->guid_12dc, c->guid_1318, sizeof c->guid_12dc);
+    }
+    return 0;
+}
+
+int32_t aoe_comm_dp_caps_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp) {
+    int32_t hr;
+    if (!OPS->dp_present(CTX)) return E_FAIL_HR;
+    hr = dp->caps(dp->context);
+    OPS->report(CTX, hr, "Get Caps");
+    hr = dp->caps(dp->context);
+    OPS->report(CTX, hr, "Get guaranteed Caps");
+    c->gtd = 1;
+    return hr;
+}
+
+int32_t aoe_comm_dp_session_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp, int32_t *players) {
+    uint32_t guid[4];
+    int32_t hr;
+    if (!OPS->dp_present(CTX)) return (int32_t)0x80004005;
+    hr = dp->session(dp->context, guid, players);
+    OPS->report(CTX, hr, "Get Session Desc");
+    if (hr == 0) {
+        memcpy(c->guid_12fc, guid, sizeof guid);
+        logf_(c, "RX Current Players");
+    }
+    return hr;
+}
+
+int32_t aoe_comm_dp_release_player_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp) {
+    int32_t hr, me = OPS->self_dpid(CTX);
+    if (!OPS->dp_present(CTX) || me == 0) return 0;
+    hr = dp->destroy_player(dp->context, me);
+    OPS->report(CTX, hr, "Release Player");
+    if (hr == 0) {
+        dp->set_self_dpid(dp->context, 0);
+        c->self = 0;
+    }
+    return hr;
+}
+
+int32_t aoe_comm_dp_player_caps_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp) {
+    int32_t caps[3] = {0, 0, 0}, hr, me = OPS->self_dpid(CTX);
+    if (!OPS->dp_present(CTX) || me == 0) return E_FAIL_HR;
+    hr = dp->player_caps(dp->context, me, caps);
+    OPS->report(CTX, hr, "Get Player Caps");
+    if (hr != 0) return hr;
+    c->caps[0] = 1;
+    c->gtd = 1;
+    c->caps[3] = caps[0];
+    c->caps[4] = caps[1];
+    c->caps[5] = caps[2];
+    return 0;
+}
+
+int aoe_comm_dp_add_self_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp) {
+    int32_t id = 0, hr;
+    if (!OPS->dp_present(CTX)) return 0;
+    hr = dp->create_player(dp->context, c->name, c->info, &id);
+    OPS->report(CTX, hr, "Add SELF PLAYER");
+    if (hr != 0) {
+        aoe_comm_dp_close_ror(c, dp);
+        aoe_comm_dp_release_ror(c, dp);
+        c->state = 1;
+        return 0;
+    }
+    dp->set_self_dpid(dp->context, id);
+    logf_(c, "Rcvd DPID");
+    aoe_comm_dp_player_caps_ror(c, dp);
+    return 1;
+}
+
+int32_t aoe_comm_dp_create_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp) {
+    int32_t hr;
+    if (OPS->dp_present(CTX)) {
+        logf_(c, "Already have conversation.");
+        return (int32_t)0x88770005;
+    }
+    hr = dp->create(dp->context, c->guid_12dc);
+    OPS->report(CTX, hr, "DPCreate");
+    if (hr != 0) memcpy(c->guid_12dc, c->guid_1318, sizeof c->guid_12dc);
+    return hr;
+}
+
+int aoe_comm_dp_present_ror(const AoeCommRor *c) { return OPS->dp_present(CTX); }
+
+void aoe_comm_refresh_all_ror(AoeCommRor *c) {
+    uint32_t slot;
+    for (slot = c->low; slot <= c->high; ++slot) OPS->refresh(CTX, slot, 0);
+    post(c, 0x17a4, 0);
+}
+
+void aoe_comm_check_players_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp) {
+    uint32_t slot;
+    for (slot = 1; slot <= c->count; ++slot) {
+        uint8_t m[12];
+        if (!aoe_comm_playing_ror(c, slot)) continue;
+        if (dp->player_data(dp->context, c->dpid[slot]) == 0) continue;
+        put32(m, slot);
+        put32(m + 4, (uint32_t)c->dpid[slot]);
+        put32(m + 8, c->turn);
+        OPS->message(CTX, 0x4b, m, sizeof m);
+        if (c->stop_turn[slot] == 0) OPS->drop(CTX, slot, c->dpid[slot]);
+    }
+}
+
+uint8_t *aoe_comm_next_command_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp) {
+    if (!c->multiplayer || c->state == 3) return dp->take_first(dp->context);
+    return dp->take_turn(dp->context, c->turn);
+}
+
+int32_t aoe_comm_unlink_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp, int32_t level) {
+    int32_t start, now;
+    c->status = aoe_comm_link_level_ror(c);
+    if (level < 1) level = 1;
+    start = now = c->status;
+    while (now > level) {
+        now = dp->unlink_step(dp->context);
+        c->status = now;
+        if (now == start) {
+            snprintf(c->text, sizeof c->text, "Unlink from level %d Failed", (int)start);
+            logf_(c, c->text);
+            return aoe_comm_link_level_ror(c);
+        }
+    }
+    logf_(c, "AFTER UNLINKING");
+    return aoe_comm_link_level_ror(c);
+}
+
+/* ---- the lobby ---- */
+
+void aoe_lobby_init_ror(AoeLobbyRor *l, uint32_t window) {
+    l->window = window;
+    l->has_poster = 1;
+    l->field_c = 0;
+    l->settings = NULL;
+    l->iface = NULL;
+    l->launched = 0;
+}
+
+void aoe_lobby_release_ror(AoeLobbyRor *l, const AoeLobbyOpsRor *ops) {
+    if (l->settings) {
+        ops->free_settings(ops->context, l->settings);
+        l->settings = NULL;
+    }
+    if (l->iface) {
+        ops->release_iface(ops->context, l->iface);
+        l->iface = NULL;
+    }
+    l->launched = 0;
+    l->field_c = 0;
+}
+
+void aoe_lobby_destroy_ror(AoeLobbyRor *l, const AoeLobbyOpsRor *ops) {
+    l->has_poster = 0;
+    aoe_lobby_release_ror(l, ops);
+}
+
+uint8_t aoe_lobby_launched_ror(const AoeLobbyRor *l) { return l->launched; }
+
+uint32_t aoe_lobby_hosting_ror(const AoeLobbyRor *l, uint32_t flags) {
+    return l->launched ? (flags >> 1) & 1u : 0;
+}
+
+int aoe_lobby_name_ror(const AoeLobbyRor *l, const char *name, const char **out) {
+    if (!l->launched) return 0;
+    *out = name;
+    return 1;
+}
+
+int aoe_lobby_session_ror(const AoeLobbyRor *l, const uint8_t session[80], uint8_t out[80]) {
+    if (!l->launched) return 0;
+    memcpy(out, session, 80);
+    return 1;
+}
+
+int32_t aoe_lobby_send_ror(AoeLobbyRor *l, const AoeLobbyOpsRor *ops, const uint32_t guid[4],
+                           const void *data, uint32_t size, int32_t a, int32_t b, int32_t c,
+                           int32_t d) {
+    uint8_t *m;
+    uint32_t total = size + 0x30;
+    int32_t hr;
+    int i;
+    if (!l->launched) return 0;
+    m = calloc(total, 1);
+    if (!m) return (int32_t)0x8007000e;
+    put32(m + 0x00, 5);
+    put32(m + 0x04, 0);
+    for (i = 0; i < 4; ++i) put32(m + 8 + 4 * i, guid[i]);
+    put32(m + 0x18, (uint32_t)a);
+    put32(m + 0x1c, (uint32_t)b);
+    put32(m + 0x20, (uint32_t)c);
+    put32(m + 0x24, (uint32_t)d);
+    put32(m + 0x28, total);
+    if (size) memcpy(m + 0x2c, data, size);
+    hr = ops->send(ops->context, l->iface, m, total);
+    free(m);
+    return hr;
+}
+
+int aoe_lobby_enum_player_ror(int32_t dpid, const char *name, uint8_t flags) {
+    (void)dpid;
+    (void)name;
+    (void)flags; /* 0x10 remote, 8 local: logged only */
+    return 1;
+}

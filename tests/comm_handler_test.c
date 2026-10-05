@@ -36,6 +36,30 @@ static void block(void *c, uint8_t out[0x1d0]) { (void)c; memset(out, 7, 0x1d0);
 static uint8_t seq_fn(void *c, uint32_t t) { (void)c; (void)t; return 3; }
 static int to_slot(void *c, uint32_t s) { (void)c; return s == 2 || s == 4; }
 
+static int32_t dp_created, dp_closed, released, unlink_left = 3;
+static int32_t d_create(void *c, const uint32_t g[4]) { (void)c; (void)g; dp_created++; return 0; }
+static int32_t d_release(void *c) { (void)c; released++; dp = 0; return 0; }
+static int32_t d_close(void *c) { (void)c; dp_closed++; return 0; }
+static int32_t d_caps(void *c) { (void)c; return 0; }
+static int32_t d_session(void *c, uint32_t g[4], int32_t *p) { (void)c; g[0] = 9; *p = 3; return 0; }
+static int32_t d_create_player(void *c, const char *n, const char *i, int32_t *id) { (void)c; (void)n; (void)i; *id = 555; return 0; }
+static int32_t d_destroy(void *c, int32_t id) { (void)c; (void)id; return 0; }
+static int32_t d_pcaps(void *c, int32_t id, int32_t o[3]) { (void)c; (void)id; o[0] = 1; o[1] = 2; o[2] = 3; return 0; }
+static int32_t d_pdata(void *c, int32_t id) { (void)c; return id == 400 ? 1 : 0; }
+static void d_self(void *c, int32_t id) { (void)c; self_id = id; }
+static uint8_t first_buf = 1, turn_buf = 2;
+static uint8_t *d_first(void *c) { (void)c; return &first_buf; }
+static uint8_t *d_turn(void *c, uint32_t t) { (void)c; (void)t; return &turn_buf; }
+static int32_t d_unlink(void *c) { (void)c; return --unlink_left; }
+static const AoeCommDpOpsRor dops = {NULL, d_create, d_release, d_close, d_caps, d_session,
+                                     d_create_player, d_destroy, d_pcaps, d_pdata, d_self,
+                                     d_first, d_turn, d_unlink};
+static int lobby_sent;
+static void l_release(void *c, void *i) { (void)c; (void)i; }
+static int32_t l_send(void *c, void *i, const uint8_t *d, uint32_t n) { (void)c; (void)i; lobby_sent = (int)n; assert(d[0] == 5 && d[0x2c] == 'z'); return 0; }
+static void l_free(void *c, const uint8_t *s) { (void)c; (void)s; }
+static const AoeLobbyOpsRor lops = {NULL, l_release, l_send, l_free};
+
 static const AoeCommOpsRor ops = {
     NULL, dp_present, self_dpid, dp_send, set_data, message, chat, post, log_, report, drop,
     refresh, run, queue_local, NULL, NULL, NULL, string, now, srand_, rand_, block};
@@ -174,6 +198,41 @@ int main(void) {
     c.dpid[4] = 400;
     drops = 0;
     assert(aoe_comm_drop_player_ror(&c, 4) && drops == 1);
+    /* Sessions. */
+    {
+        int32_t players = 0;
+        uint32_t guid[4] = {0, 0, 0, 0};
+        dp = 0;
+        assert(aoe_comm_dp_create_ror(&c, &dops) == 0 && dp_created == 1);
+        dp = 1;
+        assert(aoe_comm_dp_create_ror(&c, &dops) == (int32_t)0x88770005);
+        assert(aoe_comm_dp_session_ror(&c, &dops, &players) == 0 && players == 3 && c.guid_12fc[0] == 9);
+        assert(aoe_comm_dp_add_self_ror(&c, &dops) && self_id == 555 && c.caps[5] == 3 && c.gtd == 1);
+        assert(aoe_comm_dp_close_ror(&c, &dops) == 0 && c.guid_12fc[0] == 0 && c.last_turn[1] == 0);
+        drops = 0;
+        aoe_comm_check_players_ror(&c, &dops);
+        assert(drops == 1); /* slot 4 (dpid 400) cannot be read */
+        c.multiplayer = 0;
+        assert(*aoe_comm_next_command_ror(&c, &dops) == 1);
+        c.multiplayer = 1;
+        c.state = 5;
+        assert(*aoe_comm_next_command_ror(&c, &dops) == 2);
+        assert(aoe_comm_dp_release_player_ror(&c, &dops) == 0 && self_id == 0 && c.self == 0);
+        aoe_comm_dp_release_ror(&c, &dops);
+        assert(released == 1 && !dp);
+        (void)guid;
+    }
+    {
+        AoeLobbyRor l;
+        uint32_t g[4] = {1, 2, 3, 4};
+        aoe_lobby_init_ror(&l, 7);
+        assert(aoe_lobby_send_ror(&l, &lops, g, "z", 1, 0, 0, 0, 0) == 0 && lobby_sent == 0);
+        l.launched = 1;
+        assert(aoe_lobby_send_ror(&l, &lops, g, "z", 1, 0, 0, 0, 0) == 0 && lobby_sent == 0x31);
+        assert(aoe_lobby_hosting_ror(&l, 2) == 1 && aoe_lobby_hosting_ror(&l, 1) == 0);
+        aoe_lobby_release_ror(&l, &lops);
+        assert(!aoe_lobby_launched_ror(&l));
+    }
     puts("comm_handler_test: ok");
     return 0;
 }

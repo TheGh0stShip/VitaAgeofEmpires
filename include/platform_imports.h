@@ -6,13 +6,13 @@
    and name come from EMPIRESX.EXE's import directory; ordinal imports
    are named from their call shapes:
    - 0x005223a6 VERSION.VerQueryValueA, 0x005223ac GetFileVersionInfoA,
-     0x005223b2 GetFileVersionInfoSizeA: only the version check
-     0x0043d390 calls them; the port has no Windows version resources.
+     0x005223b2 GetFileVersionInfoSizeA: only the game's file version
+     check calls them; the port has no Windows version resources.
    - 0x005223b8 DPLAYX ordinal 1, called (guid, &play, NULL) by 0x00424500
      and from the provider callback 0x00428540: DirectPlayCreate.
      0x005223c4 ordinal 2, called (0x00428540, context) by 0x00428380:
      DirectPlayEnumerateA. 0x005223be ordinal 4, called (NULL, &lobby,
-     NULL, NULL, 0) by 0x00425bb0: DirectPlayLobbyCreateA. The port's
+     NULL, NULL, 0) by the lobby set-up: DirectPlayLobbyCreateA. The port's
      sessions go through the platform callbacks of net_lists.h and
      comm_handler.h instead.
    - 0x005223ca DSOUND ordinal 1, called (NULL, &sound, NULL) by

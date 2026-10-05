@@ -1178,6 +1178,44 @@ static void villager_round_tests(void) {
     aoe_ai_tactical_release_ror(&ai);
 }
 
+static int bg_open(void *c, int32_t id) { (void)c; (void)id; return 1; }
+static int bg_task(void *c, int32_t id, int32_t *t) { (void)c; (void)id; *t = -1; return 1; }
+
+static void boat_groups_tests(void) {
+    static AoeAiTacticalRor ai;
+    AoeAiTacticalOpsRor ops;
+    AoeAiUnitGroupRor *g[5];
+    static const int32_t tasks[5] = {0x6a, 0x6c, 0x6b, 0x6c, 0x6c};
+    static const int32_t f180[5] = {0, 2, 10, 0xb, 0xb};
+    int32_t i;
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    memset(&ops, 0, sizeof ops);
+    ops.object = tobject;
+    ops.info_zone_open = bg_open;
+    ops.unit_task = bg_task;
+    for (i = 0; i < 5; ++i) {
+        g[i] = aoe_ai_tactical_new_group_ror(&ai, 1);
+        g[i]->task = tasks[i];
+        g[i]->field_180 = f180[i];
+        g[i]->type = i >= 2;
+        g[i]->commander = 70 + i;
+    }
+    g[2]->field_184 = 899; /* gone */
+    g[3]->field_184 = 5;
+    g[4]->field_184 = 899;
+    aoe_ai_tactical_boat_groups_ror(&ai, &ops, NULL, NULL, NULL);
+    /* An empty 0x6a group is settled: +0x180 1. */
+    assert(g[0]->field_180 == 1);
+    /* No trade dock, the zone open: 8 and type 1. */
+    assert(g[1]->field_180 == 8 && g[1]->type == 1);
+    /* A gone target resets. */
+    assert(g[2]->field_180 == 1 && g[2]->type == 0 && g[2]->field_184 == -1);
+    /* An idle commander resets, and the next group is passed over. */
+    assert(g[3]->field_180 == 1 && g[3]->field_184 == -1);
+    assert(g[4]->field_180 == 0xb && g[4]->field_184 == 899);
+    aoe_ai_tactical_release_ror(&ai);
+}
+
 static uint32_t rg_ms;
 static uint32_t rg_real(void *c) { (void)c; return rg_ms += 4; }
 static int32_t rg_centre(void *c) { (void)c; return 60; }
@@ -1703,6 +1741,7 @@ int main(void) {
     run_groups_tests();
     gather_tests();
     villager_round_tests();
+    boat_groups_tests();
 
     aoe_ai_tactical_init_ror(&ai, 3, NULL);
     assert(ai.module.id == 0x3f1 && !strcmp(ai.module.name, "TacAI"));

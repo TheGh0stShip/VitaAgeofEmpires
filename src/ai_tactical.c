@@ -2974,3 +2974,216 @@ int32_t aoe_ai_tactical_villager_round_ror(AoeAiTacticalRor *ai, uint32_t start,
     ai->field_f7c = -1;
     return done;
 }
+
+/* 0x004d6390: a group's target and state cleared. */
+static void boat_reset(AoeAiUnitGroupRor *g) {
+    g->type = 0;
+    g->field_180 = 1;
+    g->field_184 = -1;
+    g->field_2cc = 0;
+    g->field_188 = -1;
+    aoe_ai_unit_group_set_location_ror(g->loc_18c, -1.0f, -1.0f, -1.0f);
+}
+
+static int boat_skipped(const AoeAiUnitGroupRor *g) {
+    return g->task >= 100 && g->task <= 0x69;
+}
+
+static void boat_target(AoeAiUnitGroupRor *g, int32_t id, int32_t type, float x, float y,
+                        float z) {
+    g->field_184 = id;
+    g->field_188 = type;
+    aoe_ai_unit_group_set_location_ror(g->loc_18c, x, y, z);
+    g->type = 1;
+}
+
+/* 0x004d6390: the +0x180 10 / 0xb steps; 1 when the original skips the
+   next group. */
+static int boat_step_10(AoeAiUnitGroupRor *g, const AoeAiTacticalOpsRor *ops) {
+    AoeAiWorldObjectRor o;
+    int32_t task;
+    if (!ops->object || !ops->object(ops->context, g->field_184, &o)) {
+        boat_reset(g);
+        return -1;
+    }
+    if (ops->object(ops->context, g->commander, &o) && ops->unit_task &&
+        ops->unit_task(ops->context, g->commander, &task) && task == -1) {
+        boat_reset(g);
+        return 1;
+    }
+    return 0;
+}
+
+static int boat_step_b(AoeAiUnitGroupRor *g, const AoeAiTacticalOpsRor *ops,
+                       const AoeAiUnitGroupOpsRor *group_ops, AoeAiInfoRor *info,
+                       const AoeAiInfoOpsRor *info_ops) {
+    AoeAiWorldObjectRor o;
+    AoeAiInfoObjectRor *dock;
+    int32_t task, head;
+    if (!ops->object || !ops->object(ops->context, g->field_184, &o)) {
+        boat_reset(g);
+        return 0;
+    }
+    if (!ops->object(ops->context, g->commander, &o) || !ops->unit_task ||
+        !ops->unit_task(ops->context, g->commander, &task))
+        return 0;
+    if (task == -1) {
+        boat_reset(g);
+        return 1;
+    }
+    if (!ops->head_action_target || !ops->head_action_target(ops->context, g->commander, &head))
+        return 0;
+    dock = info ? aoe_ai_info_nearest_trade_dock_ror(info, head, info_ops) : NULL;
+    if (!dock || dock->id == g->field_184) return 0;
+    if (!ops->can_reach_slot ||
+        !ops->can_reach_slot(ops->context, g->commander, dock->x, dock->y, dock->z, 1.0f,
+                             dock->id)) {
+        g->field_180 = 1;
+        return 0;
+    }
+    boat_target(g, dock->id, dock->type_id, (float)dock->x, (float)dock->y, (float)dock->z);
+    aoe_ai_unit_group_update_ror(g, group_ops, g->field_180, 1, 1);
+    return 0;
+}
+
+/* 0x004d6390: see the header. */
+void aoe_ai_tactical_boat_groups_ror(AoeAiTacticalRor *ai, const AoeAiTacticalOpsRor *ops,
+                                     const AoeAiUnitGroupOpsRor *group_ops,
+                                     AoeAiInfoRor *info, const AoeAiInfoOpsRor *info_ops) {
+    int32_t i;
+    if (!ai || !ops) return;
+    for (i = 0; i < ai->groups_len; ++i) {
+        AoeAiUnitGroupRor *g = ai->groups[i];
+        int ready;
+        if (boat_skipped(g) || (g->field_180 != 0 && g->field_180 != 1)) continue;
+        ready = aoe_ai_unit_group_in_range_ror(g, group_ops);
+        if (g->field_160 <= aoe_ai_unit_group_count_ror(g)) {
+            if (!ready && aoe_ai_unit_group_count_ror(g) > 1) {
+                aoe_ai_unit_group_update_ror(g, group_ops, 9, 1, 0);
+                continue;
+            }
+            if (aoe_ai_unit_group_settled_ror(g, group_ops, 1)) {
+                if (g->task == 0x6b) g->field_180 = 10;
+                else if (g->task == 0x6c) g->field_180 = 0xb;
+                else if (g->task == 0x6a) g->field_180 = 1;
+                continue;
+            }
+        }
+        if (!ready) aoe_ai_unit_group_update_ror(g, group_ops, 9, 1, 0);
+    }
+    for (i = 0; i < ai->groups_len; ++i) {
+        AoeAiUnitGroupRor *g = ai->groups[i];
+        AoeAiWorldObjectRor c;
+        int skip;
+        if (boat_skipped(g) || g->field_180 == 0 || g->field_180 == 1) continue;
+        if (g->type == 0) {
+            if (g->task == 0x6b || g->task == 0x6c) {
+                int open;
+                if (!ops->object || !ops->object(ops->context, g->commander, &c)) {
+                    g->field_180 = 1;
+                    continue;
+                }
+                if (g->task == 0x6b) {
+                    AoeAiWorldObjectRor t;
+                    int32_t target = -1, drop = -1, tried[5], n = 0, k;
+                    if (aoe_ai_tactical_count_groups_8_ror(ai) > 0 && ops->info_zone_open &&
+                        ops->info_zone_open(ops->context, g->commander) == 1) {
+                        for (k = 0; k < 5; ++k) {
+                            float pos[2] = {0.0f, 0.0f};
+                            int r;
+                            target = info ? aoe_ai_info_pick_target_ror(info, 0, c.id, pos, &drop,
+                                                                        tried, n, info_ops)
+                                          : -1;
+                            if (drop == -1)
+                                r = ops->can_reach &&
+                                    ops->can_reach(ops->context, c.id, aoe_ftol32(pos[0]),
+                                                   aoe_ftol32(pos[1]), aoe_ftol32(c.z), 1.0f,
+                                                   target);
+                            else
+                                r = ops->can_gather &&
+                                    ops->can_gather(ops->context, c.id, target, drop);
+                            if (r == 0)
+                                tried[n++] = target;
+                            else if (r == 1)
+                                break;
+                        }
+                    }
+                    if (target >= 0 && ops->object(ops->context, target, &t)) {
+                        boat_target(g, target, t.type_id, t.x, t.y, t.z);
+                        aoe_ai_unit_group_update_ror(g, group_ops, g->field_180, 1, 0);
+                        continue;
+                    }
+                } else {
+                    AoeAiInfoObjectRor *dock =
+                        info ? aoe_ai_info_nearest_trade_dock_ror(info, g->commander, info_ops)
+                             : NULL;
+                    if (dock) {
+                        if (!ops->can_reach_slot ||
+                            !ops->can_reach_slot(ops->context, c.id, dock->x, dock->y, dock->z,
+                                                 1.0f, dock->id)) {
+                            g->field_180 = 1;
+                            continue;
+                        }
+                        boat_target(g, dock->id, dock->type_id, (float)dock->x, (float)dock->y,
+                                    (float)dock->z);
+                        aoe_ai_unit_group_update_ror(g, group_ops, g->field_180, 1, 0);
+                        continue;
+                    }
+                }
+                open = ops->info_zone_open && ops->info_zone_open(ops->context, g->commander) == 1;
+                if (open) {
+                    g->field_180 = 8;
+                    aoe_ai_unit_group_update_ror(g, group_ops, g->field_180, 1, 0);
+                    g->type = 1;
+                } else {
+                    g->field_180 = 1;
+                }
+            } else {
+                aoe_ai_unit_group_update_ror(g, group_ops, g->field_180, 1, 0);
+            }
+            continue;
+        }
+        if (g->field_180 == 8) {
+            int found = g->task == 0x6c && info &&
+                        aoe_ai_info_nearest_trade_dock_ror(info, g->commander, info_ops) != NULL;
+            if (g->task == 0x6b) {
+                if (aoe_ai_tactical_count_groups_8_ror(ai) > 1) {
+                    float pos[2] = {0.0f, 0.0f};
+                    int32_t drop = -1;
+                    if (info && aoe_ai_info_pick_target_ror(info, 0, g->commander, pos, &drop, NULL,
+                                                            0, info_ops) != -1)
+                        found = 1;
+                } else {
+                    int32_t action = -1;
+                    if (ops->object && ops->object(ops->context, g->commander, &c) &&
+                        ops->unit_action && ops->unit_action(ops->context, g->commander, &action) &&
+                        action != 0x2c1) {
+                        g->field_180 = 8;
+                        aoe_ai_unit_group_update_ror(g, group_ops, g->field_180, 1, 0);
+                        g->type = 1;
+                    }
+                }
+            }
+            if (found) {
+                if (!ops->object || !ops->object(ops->context, g->commander, &c)) continue;
+                boat_reset(g);
+                aoe_ai_unit_group_set_location_ror(g->loc_19c, c.x, c.y, c.z);
+                aoe_ai_unit_group_update_ror(g, group_ops, g->field_180, 1, 0);
+                continue;
+            }
+        }
+        skip = 0;
+        if (g->field_180 == 10) {
+            int r = boat_step_10(g, ops);
+            if (r == -1) continue;
+            if (r == 1) {
+                /* The original moves on and runs the 0xb step on the next
+                   group, then passes it. */
+                if (++i >= ai->groups_len) break;
+                g = ai->groups[i];
+            }
+        }
+        if (g->field_180 == 0xb) skip = boat_step_b(g, ops, group_ops, info, info_ops);
+        if (skip) ++i;
+    }
+}

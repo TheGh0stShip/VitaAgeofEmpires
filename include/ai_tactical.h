@@ -365,6 +365,13 @@ typedef struct {
        player's vtable +0x4c with `accept`, with +0x44 at most 0 (0x0040bad0
        with those and 0; its eighth argument is unused): its ID, else -1. */
     int32_t (*first_tasked)(void *context, int32_t task, int32_t accept);
+    /* Unit vtable +0x198 as `can_reach` but with a result slot for its
+       fourth argument (the original never reads it back). */
+    int (*can_reach_slot)(void *context, int32_t id, int32_t x, int32_t y, int32_t z,
+                          float radius, int32_t target);
+    /* An object's action list is not empty (0x004065f0): the head
+       action's (0x004045b0) target, +0x1c. */
+    int (*head_action_target)(void *context, int32_t id, int32_t *target);
 } AoeAiTacticalOpsRor;
 
 /* 0x004e0630: in list order, the group with task `task` and +0x180
@@ -901,6 +908,42 @@ int aoe_ai_tactical_defend_object_ror(AoeAiTacticalRor *ai, int32_t enemy, int32
    without a pending 0x65 item skips the age-2 test. */
 void aoe_ai_tactical_research_ages_ror(AoeAiTacticalRor *ai,
                                        const AoeAiTacticalOpsRor *ops);
+/* 0x004d6390: the boat groups (tasks other than 100..0x69).
+   First, each with +0x180 0 or 1: one with more wanted (+0x160) than held
+   is updated with task 9 (0x004cd2d0, recording) unless ready (members in
+   range, 0x004ce950); so is one not ready holding more than one. Others,
+   when settled (0x004cea40 with 600 allowed), get +0x180 10 (task 0x6b),
+   0xb (0x6c) or 1 (0x6a); unsettled ones not ready get task 9.
+   Then each with another +0x180:
+   - Type 0, task 0x6b (no commander: +0x180 1): with a group at +0x180 8
+     (0x004e34e0) and the commander in the information AI's open zone
+     (0x004bc690), up to five food targets (0x004bc7b0) are tested
+     (+0x198 to the truncated position and the commander's height, or
+     with a drop site +0x19c); a failure excludes the target, a pass ends
+     the tries. An existing target becomes +0x184 / +0x188 / +0x18c and
+     type 1, then the group is updated with its +0x180. Without one, in
+     the open zone +0x180 becomes 8 and the group is updated, then type 1;
+     else +0x180 is 1.
+   - Type 0, task 0x6c (no commander: +0x180 1): the nearest trade dock
+     (0x004c1ac0) the commander can reach (+0x198 with a result slot)
+     becomes the target as above (else +0x180 1); without a dock, as for
+     0x6b without a target.
+   - Type 0, other tasks: updated with +0x180.
+   - Otherwise, at +0x180 8: a task-0x6c group with a trade dock, or a
+     task-0x6b group with a food target when more than one group is at 8,
+     is reset (type 0, +0x180 1, +0x184 / +0x188 -1, +0x18c -1s, +0x2cc 0)
+     with +0x19c at its commander, and updated with 1. A task-0x6b group
+     alone at 8 whose commander's action is not 0x2c1 is updated with 8
+     and takes type 1.
+   - At +0x180 10, or 0xb: a gone target resets the group; an idle
+     commander (task -1) does too, and the original then moves on to the
+     next group for the 0xb step (and past it). For 0xb, a commander with
+     actions whose head targets an object with a trade dock nearest it
+     other than +0x184 the commander can reach gets that dock (type 1,
+     updated with +0x180, forced); unreachable: +0x180 1. */
+void aoe_ai_tactical_boat_groups_ror(AoeAiTacticalRor *ai, const AoeAiTacticalOpsRor *ops,
+                                     const AoeAiUnitGroupOpsRor *group_ops,
+                                     AoeAiInfoRor *info, const AoeAiInfoOpsRor *info_ops);
 /* 0x004d2f40: the villager round; returns the list-0 units handled. With
    list 0 empty, +0xf7c becomes -1 and 0. When +0xf7c is -1 (a new round):
    - While list 1 is below its +0x10c want: an idle villager (with a town

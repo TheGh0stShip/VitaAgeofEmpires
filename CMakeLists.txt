@@ -612,6 +612,11 @@ target_include_directories(aoe_player_outcome_dispatch PUBLIC include)
 target_link_libraries(aoe_player_outcome_dispatch PUBLIC aoe_player_outcome)
 target_compile_options(aoe_player_outcome_dispatch PRIVATE -Wall -Wextra)
 
+# --- player-class worker ---
+add_library(aoe_player_selection STATIC src/player_selection.c)
+target_include_directories(aoe_player_selection PUBLIC include)
+target_compile_options(aoe_player_selection PRIVATE -Wall -Wextra)
+
 if(VITA)
   include("${VITASDK}/share/vita.cmake" REQUIRED)
 else()
@@ -1408,6 +1413,11 @@ else()
   target_link_libraries(player_outcome_dispatch_test PRIVATE aoe_player_outcome_dispatch)
   target_compile_options(player_outcome_dispatch_test PRIVATE -UNDEBUG)
   add_test(NAME original_outcome_dispatch COMMAND player_outcome_dispatch_test)
+  # --- player-class worker ---
+  add_executable(player_selection_test tests/player_selection_test.c)
+  target_link_libraries(player_selection_test PRIVATE aoe_player_selection)
+  target_compile_options(player_selection_test PRIVATE -UNDEBUG)
+  add_test(NAME original_ror_player_selection COMMAND player_selection_test)
   add_executable(cdtrack_tool tools/cdtrack_tool.c)
   add_executable(cpx_tool tools/cpx_tool.c)
   target_link_libraries(cpx_tool PRIVATE aoe_cpx)

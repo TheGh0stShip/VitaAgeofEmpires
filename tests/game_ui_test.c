@@ -99,7 +99,9 @@ static void press(AoeMenuDialogRor *m, int i) {
 }
 
 static char loaded[64], deleted[64];
-static int deletes, open_screens;
+static int deletes, open_screens, new_names;
+static void new_name(void *c, AoeUiPanelRor *p) { (void)c; (void)p; ++new_names; }
+static int32_t no_players(void *c) { (void)c; return 0; }
 static void open_open_screen(void *c) { (void)c; ++open_screens; }
 static void list_files(void *c, const char *pat, void (*found)(void *, const char *), void *u) {
     (void)c;
@@ -504,6 +506,22 @@ int main(void) {
         assert(aoe_ui_ez_info_id_ror(&st->ez) == 0xc384 &&
                !strcmp(aoe_ui_ez_info_name_ror(&st->ez), "scr2"));
         aoe_ui_system_close_ror(&sys, "Wait Screen");
+    }
+    /* The single player menu. */
+    {
+        AoeSinglePlayerMenuRor *m = calloc(1, sizeof *m);
+        AoeUiPanelRor *mp = &m->ez.panel;
+        ops.open_new_name = new_name;
+        ops.campaign_players = no_players;
+        assert(aoe_single_player_menu_init_ror(m, &ui, &area));
+        assert(strcmp(m->buttons[1]->text1[0], "S9224") == 0 && m->buttons[5]->hotkey == 0x1b);
+        assert(m->buttons[5]->panel.y - mp->y == (0x76 + 250) * 600 / 480);
+        assert(aoe_settings_flag_97d_ror(&settings) == 1);
+        mp->vt->action(mp, &m->buttons[1]->panel, 1, 0, 0);
+        assert(new_names == 1 && aoe_ui_system_find_ror(&sys, "Single Player Menu") == mp);
+        mp->vt->action(mp, &m->buttons[2]->panel, 1, 0, 0);
+        assert(aoe_settings_option_ae5_ror(&settings) == 1 && aoe_settings_flag_8fc_ror(&settings) == 0);
+        assert(!aoe_ui_system_find_ror(&sys, "Single Player Menu"));
     }
     aoe_ui_system_close_ror(&sys, "Game Screen");
     free(sys.panels);

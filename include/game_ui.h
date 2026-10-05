@@ -87,6 +87,17 @@ typedef struct {
     void (*open_main_menu)(void *context);
     /* A networked game (0x0041b760). */
     int (*networked)(void *context);
+    /* Screens the single player menu makes: "MP Setup Screen"
+       (0x00487f40), "Select Scenario Screen" (0x0049b360), "Load Saved
+       Game Screen" (0x00485c90), "Name Selection Screen" (0x0048dec0) and
+       the new-name dialog over a screen (0x0048e800); the campaign file's
+       player count (0x0043cd00). */
+    void (*open_mp_setup)(void *context);
+    void (*open_select_scenario)(void *context);
+    void (*open_load_saved)(void *context);
+    void (*open_name_selection)(void *context);
+    void (*open_new_name)(void *context, AoeUiPanelRor *parent);
+    int32_t (*campaign_players)(void *context);
 } AoeGameUiOpsRor;
 
 typedef struct {
@@ -389,5 +400,30 @@ extern const AoeUiEzVtblRor aoe_status_screen_vtable_ror;
 int aoe_status_screen_init_ror(AoeStatusScreenRor *st, AoeGameUiRor *ui, AoeUiAreaRor *area,
                                const char *name, const char *text, int32_t text_id,
                                const char *info_name, int32_t info_id);
+
+/* The single player menu "Single Player Menu" (vtable 0x0054793c,
+   0x0049e040..0x0049e330): title 9220 and six 300 x 40 buttons at x 170
+   from y 118 every 50: random map (9226), campaign (9224), death match
+   (9227), scenario (9221), saved game (9223) and cancel (9225, Escape),
+   and the hidden close button. 0x0049e040 constructor ("scr2", 50052;
+   the settings' +0x97d set and its scenario name cleared); 0x0049e2a0
+   destructor (deleting 0x0049e280). +0xb8 0x0049e330: the game setup
+   (+0x8fc, +0x9a0, +0x9a4, +0xae5 and +0x1190 cleared; +0xae5 set for
+   death match; +0x8fc set for a scenario, which goes to the scenario
+   choice instead), the saved games, the campaign (the name choice when
+   the campaign file has players, else the new name dialog over this
+   screen), the main menu, or the program closes; each with the wait
+   cursor. */
+typedef struct {
+    AoeUiEzRor ez;
+    AoeUiTextRor *title;              /* +0x478 */
+    AoeUiButtonRor *buttons[6];       /* +0x47c..+0x490 */
+    AoeUiButtonRor *close;            /* +0x498 */
+    AoeGameUiRor *ui;
+} AoeSinglePlayerMenuRor;
+
+extern const AoeUiEzVtblRor aoe_single_player_menu_vtable_ror;
+int aoe_single_player_menu_init_ror(AoeSinglePlayerMenuRor *m, AoeGameUiRor *ui,
+                                    AoeUiAreaRor *area);
 
 #endif

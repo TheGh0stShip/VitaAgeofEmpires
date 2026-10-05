@@ -1,0 +1,67 @@
+#ifndef VITA_AOE_GAME_UI_H
+#define VITA_AOE_GAME_UI_H
+
+#include <stdint.h>
+
+#include "game_base.h"
+#include "game_settings.h"
+#include "ui_dialog.h"
+#include "ui_ez.h"
+
+/* The game-side context shared by the Patched Rise of Rome 1.0a screens
+   and in-game dialogs: the panel system (0x005830e8), the game object
+   (0x00580e38) pieces they read, and callbacks for screens that are not
+   translated yet. */
+
+typedef struct {
+    void *context;
+    /* Screens and dialogs opened from others. */
+    void (*open_save_screen)(void *context, int32_t mode);
+    void (*open_options)(void *context, AoeUiPanelRor *parent);
+    void (*open_achievements)(void *context, const char *title);
+    void (*open_diplomacy)(void *context, AoeUiPanelRor *parent);
+    void (*open_mission)(void *context);
+    /* The viewed player's game state byte (+0x80: 0 playing). */
+    uint8_t (*player_state)(void *context, void *player);
+} AoeGameUiOpsRor;
+
+typedef struct {
+    AoeUiSystemRor *system;
+    const AoeUiEzOpsRor *ez_ops;
+    AoeGameBaseRor *game;
+    AoeGameSettingsRor *settings;
+    const AoeGameBaseOps *game_ops;
+    const AoeGameUiOpsRor *ops;
+    int32_t quit_requested;          /* global 0x007c0338 */
+} AoeGameUiRor;
+
+/* The in-game menu "Menu Dialog" (vtable 0x00543bb8,
+   0x00433c30..0x00434010): 400 wide, 300 high, 335 in a multiplayer game
+   while the viewed player still plays, 105 more in single player. One
+   column of 360 x 30 buttons at x 20: Quit (command 4); Resign (12, that
+   multiplayer case); Achievements (7); Mission (9); in single player Save
+   (1), Load (3) and Restart (11); Options (5); Help (8); Diplomacy (10);
+   Cancel (6, Escape). */
+typedef struct {
+    AoeUiDialogRor dialog;
+    AoeUiButtonRor *buttons[11];     /* +0x490.. */
+    int32_t count;
+    AoeGameUiRor *ui;
+} AoeMenuDialogRor;
+
+extern const AoeUiEzVtblRor aoe_menu_dialog_vtable_ror;
+
+/* 0x00433c30 constructor (with its setup); 0x00433fa0 destructor
+   (deleting 0x00433f80). +0xb8 0x00434010: the commands. Save closes the
+   menu after opening the save screen; Load, Quit, Restart and Resign
+   show the game screen and ask yes/no (strings 3100, 3101, 3102, 3103 as
+   "QuitAndLoadDialog", "QuitGameDialog", "RestartDialog",
+   "ResignDialog", 450 x 100; Quit also raises the quit request); Help
+   shows the game screen and its help; Cancel and Help resume a paused
+   single-player game. Port choice: the original opens the question on
+   the menu after closing it, so its answers reach the menu's parent; the
+   port opens it on that parent (the game screen). */
+int aoe_menu_dialog_init_ror(AoeMenuDialogRor *m, AoeGameUiRor *ui,
+                             AoeUiPanelRor *parent);
+
+#endif

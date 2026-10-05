@@ -457,7 +457,7 @@ int aoe_ui_help_dialog_init_ror(AoeUiHelpDialogRor *d, AoeUiSystemRor *system,
     d->text->panel.vt->set_fixed_position(&d->text->panel, 10, 10, 0x14a,
                                           (fh + 1) * lines);
     row = fh * lines + 0x14;
-    if (ops && ops->has_help_file && ops->has_help_file(ops->context) &&
+    if (ops && ops->single_player && ops->single_player(ops->context) &&
         page >= 0) {
         const char *s = aoe_ui_string_static_ror(system, page);
         if (s && *s)

@@ -124,7 +124,7 @@ int main(void) {
     {
         AoeUiEzRor *owner = calloc(1, sizeof(*owner));
         AoeUiHelpDialogRor *h = calloc(1, sizeof(*h));
-        ops.has_help_file = has_help;
+        ops.single_player = has_help;
         ops.win_help_key = win_key;
         aoe_ui_ez_init_named_ror(owner, &sys, &ops, "Game Screen");
         assert(aoe_ui_ez_setup_ror(owner, &area, NULL, NULL, -1, 1, 0, 0, 0, 0, 0));

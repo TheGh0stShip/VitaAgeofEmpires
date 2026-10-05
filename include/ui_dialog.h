@@ -112,8 +112,9 @@ const char *aoe_ui_list_dialog_text_ror(const AoeUiListDialogRor *d);
 
 /* The help dialog "Help Dialog" (vtable 0x00543948,
    0x00433310..0x00433830): help text in a 340-wide box placed beside the
-   point (x, y) inside the parent, an OK button (Escape) and, with a help
-   file and a help page string, a "more help" button (string 9277). */
+   point (x, y) inside the parent, an OK button (Escape) and, in a
+   single-player game with a help page string, a "more help" button
+   (string 9277). */
 typedef struct {
     AoeUiDialogRor dialog;
     int32_t page;                   /* +0x490: the help page string ID */

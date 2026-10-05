@@ -60,9 +60,9 @@ typedef struct {
     void (*cursor)(void *context, int help, int32_t mode);
     int32_t (*pointer_state)(void *context);
     void (*set_pointer_state)(void *context, int32_t state);
-    /* Whether the game found its help file (+0x97d), and WinHelp by
-       keyword. */
-    int (*has_help_file)(void *context);
+    /* Whether this is a single-player game (game +0x97d), and WinHelp
+       by keyword. */
+    int (*single_player)(void *context);
     void (*win_help_key)(void *context, const char *keyword);
     /* The help popup; WinHelp for help mode 1. */
     void (*help_popup)(void *context, const char *panel_name,

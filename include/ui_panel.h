@@ -47,7 +47,11 @@ typedef struct {
     uint32_t (*now_ms)(void *context);                  /* timeGetTime */
     int (*key_down)(void *context, int virtual_key);    /* GetKeyState < 0 */
     int (*iconic)(void *context, AoeUiAreaRor *area);   /* IsIconic */
-    /* Game vtable +0x20(id, buffer, size): the string table. */
+    /* Game vtable +0x20(id, buffer, size): the string table. In Rise of
+       Rome 1.0a this is 0x004ff530: languagex.dll, then language.dll
+       (0x00417490). LoadStringA keeps only the low 16 bits of the ID, so
+       callers' IDs above 0xffff (0x1d4ed, 0x1d4f7, ...) name strings
+       0xd4ed, 0xd4f7, ...; a backend must truncate the same way. */
     void (*string)(void *context, int32_t id, char *out, int size);
     /* Palette cache: load (name, id, 1) and DeleteObject. */
     uintptr_t (*create_palette)(void *context, const char *name, int32_t id);

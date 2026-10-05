@@ -28,7 +28,10 @@ typedef struct {
     uintptr_t font;            /* +0x10c */
     uint32_t color, shadow;    /* +0x110 0xffffff, +0x114 0 */
     const int32_t *game_mode;  /* game +0x1b0 */
-    /* The tooltip formats (strings 120046, 120045, 120047, 120048). */
+    /* The tooltip formats: IDs 0x1d4ee, 0x1d4ed, 0x1d4ef, 0x1d4f0, which
+       LoadStringA truncates to 54510..54512 / 54509 in language.dll
+       ("Wood inventory: %d", "Food inventory: %d", "Gold inventory: %d",
+       "Stone inventory: %d"); languagex.dll has none of them. */
     const char *(*string)(void *context, int32_t id);
     void *string_context;
 } AoeResourcePanelRor;

@@ -23,9 +23,17 @@ static void to(void *c, int32_t x, int32_t y, const char *t, int32_t n,
     ++nouts;
 }
 static void te(void *c) { (void)c; }
+/* language.dll strings 54509..54512, reached through the 16-bit
+   truncation of IDs 0x1d4ed..0x1d4f0. */
 static const char *str(void *c, int32_t id) {
     (void)c;
-    return id == 0x1d4ef ? "Gold: %d" : "?%d";
+    switch (id & 0xffff) {
+    case 54509: return "Food inventory: %d";
+    case 54510: return "Wood inventory: %d";
+    case 54511: return "Gold inventory: %d";
+    case 54512: return "Stone inventory: %d";
+    }
+    return NULL;
 }
 
 int main(void) {
@@ -85,7 +93,13 @@ int main(void) {
 
     /* The tooltip by column. */
     assert(p->vt->get_help(p, help, &page, 10 + 0xa0, 5));
-    assert(strcmp(help, "Gold: 400") == 0 && page == -1);
+    assert(strcmp(help, "Gold inventory: 400") == 0 && page == -1);
+    assert(p->vt->get_help(p, help, &page, 10 + 0x10, 5) &&
+           strcmp(help, "Wood inventory: 5") == 0);
+    assert(p->vt->get_help(p, help, &page, 10 + 0x40, 5) &&
+           strcmp(help, "Food inventory: 101") == 0);
+    assert(p->vt->get_help(p, help, &page, 10 + 0xb0, 5) &&
+           strcmp(help, "Stone inventory: 300") == 0);
     assert(!p->vt->get_help(p, help, &page, 400, 5));
 
     p->vt->destroy(p);

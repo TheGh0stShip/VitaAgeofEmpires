@@ -202,7 +202,7 @@ int32_t aoe_game_ror_end_text_id_ror(uint8_t won);
 /* The tribe game going to a menu screen: 0x00500c60 the main menu
    (0x00486600, "Main Menu") and 0x00500b40 the campaign selection
    (0x0047a7c0, "Campaign Selection Screen"). A playing video is ended
-   first (0x00506300); a screen that cannot be made, or whose setup
+   first; a screen that cannot be made, or whose setup
    failed, gives 0 (the failed one deleted); else it is shown, the game
    mode becomes 2 (+0x0c) and, with a music manager and the menu music not
    held (+0xc1c), the menu music starts by the manager's source: 1 CD track
@@ -210,7 +210,7 @@ int32_t aoe_game_ror_end_text_id_ror(uint8_t won);
 typedef struct {
     void *context;
     int video_playing;                          /* +0xc00 */
-    void (*end_video)(void *context);           /* 0x00506300 */
+    void (*end_video)(void *context);
     /* Makes and registers the screen: 1 made, 0 failed (deleted). */
     int (*make_screen)(void *context);
     void (*show_named)(void *context, const char *name);
@@ -224,7 +224,7 @@ int aoe_game_ror_to_menu_ror(const char *screen, const AoeGameRorMenuOpsRor *ops
 
 /* Leaving a session. 0x005063e0: outside a networked game the comm
    object is reset (0x0041df70); in one that is running (states 4..7)
-   the turn markers go out (0x00421680), the comm is polled (0x0041f3d0)
+   the turn markers go out (0x00421680), the comm is polled
    and, with commands still unacknowledged (0x00421b10), the wait cursor
    and status 1216 show while polling continues for at least 500 ms and
    then as long as some remain, up to 15 s from the start (stopping early

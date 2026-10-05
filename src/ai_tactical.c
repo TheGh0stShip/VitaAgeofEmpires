@@ -1121,29 +1121,85 @@ void aoe_ai_tactical_unit_removed_ror(AoeAiTacticalRor *ai, int32_t unit,
     aoe_ai_tactical_ungroup_ror(ai, unit, group_ops);
 }
 
+/* One unit of the path collections: on +0xd48 (counted) when it exists
+   with a unit AI, is not on +0xd58 and its path matches. */
+static int32_t collect_one(AoeAiTacticalRor *ai, int32_t id, int32_t n, int32_t mode,
+                           const AoeAiTacticalOpsRor *ops, int16_t *type_class) {
+    int32_t task, count;
+    AoeAiWorldObjectRor o;
+    int has_path, take;
+    if (!ops || !ops->world_object || !ops->world_object(ops->context, id, &o) ||
+        !ops->unit_task || !ops->unit_task(ops->context, id, &task))
+        return 0;
+    if (aoe_ai_int_list_contains_ror(&ai->list_d58, id)) return 0;
+    if (type_class && *type_class != 0 && o.type_class != 0x12 && o.type_class != 0xd)
+        return 0;
+    has_path = ops->path_count && ops->path_count(ops->context, id, &count);
+    if (mode < 0) take = !has_path || count < n;
+    else if (mode < 1) take = has_path && count == n;
+    else take = has_path && n < count;
+    if (!take) return 0;
+    aoe_ai_int_list_add_unique_ror(&ai->list_d48, id);
+    return 1;
+}
+
 int32_t aoe_ai_tactical_collect_by_path_ror(AoeAiTacticalRor *ai, int32_t n,
                                             int32_t mode, int32_t reset,
                                             const AoeAiTacticalOpsRor *ops) {
-    int32_t i, taken = 0;
+    int32_t i, taken = 0, *v;
     if (!ai) return 0;
     if (reset == 1) ai->list_d48.count = 0;
-    for (i = 0; i < ai->lists[2].count; ++i) {
-        int32_t *v = aoe_ai_int_list_at_ror(&ai->lists[2], i), id, task, count;
-        AoeAiWorldObjectRor o;
-        int has_path, take;
-        if (!v) continue;
-        id = *v;
-        if (!ops || !ops->world_object || !ops->world_object(ops->context, id, &o) ||
-            !ops->unit_task || !ops->unit_task(ops->context, id, &task))
-            continue;
-        if (aoe_ai_int_list_contains_ror(&ai->list_d58, id)) continue;
-        has_path = ops->path_count && ops->path_count(ops->context, id, &count);
-        if (mode < 0) take = !has_path || count < n;
-        else if (mode < 1) take = has_path && count == n;
-        else take = has_path && n < count;
-        if (!take) continue;
-        aoe_ai_int_list_add_unique_ror(&ai->list_d48, id);
-        ++taken;
-    }
+    for (i = 0; i < ai->lists[2].count; ++i)
+        if ((v = aoe_ai_int_list_at_ror(&ai->lists[2], i)))
+            taken += collect_one(ai, *v, n, mode, ops, NULL);
     return taken;
+}
+
+int32_t aoe_ai_tactical_collect_support_ror(AoeAiTacticalRor *ai, int32_t n,
+                                            int32_t mode,
+                                            const AoeAiTacticalOpsRor *ops) {
+    int32_t i, taken = 0, *v;
+    int16_t support = 1;
+    if (!ai) return 0;
+    ai->list_d48.count = 0;
+    for (i = 0; i < ai->lists[5].count; ++i)
+        if ((v = aoe_ai_int_list_at_ror(&ai->lists[5], i)))
+            taken += collect_one(ai, *v, n, mode, ops, NULL);
+    for (i = 0; i < ai->lists[2].count; ++i)
+        if ((v = aoe_ai_int_list_at_ror(&ai->lists[2], i)))
+            taken += collect_one(ai, *v, n, mode, ops, &support);
+    return taken;
+}
+
+/* No path and no action. */
+static int villager_idle(const AoeAiTacticalOpsRor *ops, int32_t id) {
+    int32_t count, action;
+    if (ops->path_count && ops->path_count(ops->context, id, &count)) return 0;
+    return ops->unit_action && ops->unit_action(ops->context, id, &action) && action == -1;
+}
+
+int32_t aoe_ai_tactical_idle_villager_ror(AoeAiTacticalRor *ai, int32_t mode,
+                                          const AoeAiTacticalOpsRor *ops) {
+    int32_t pass, i, *v, task;
+    AoeAiWorldObjectRor o;
+    if (!ai || !ops || !ops->world_object || !ops->unit_task) return -1;
+    for (pass = 0; pass < 2; ++pass) {
+        for (i = 0; i < ai->lists[0].count; ++i) {
+            int32_t id;
+            if (!(v = aoe_ai_int_list_at_ror(&ai->lists[0], i))) continue;
+            id = *v;
+            if (aoe_ai_int_list_contains_ror(&ai->list_d58, id)) continue;
+            if (!ops->world_object(ops->context, id, &o) ||
+                !ops->unit_task(ops->context, id, &task))
+                continue;
+            if (pass == 0 || mode != 0) {
+                if ((pass == 0 || mode != 3) && aoe_ai_tactical_has_gatherer_ror(ai, id))
+                    continue;
+                if ((pass == 0 || mode != 1) && aoe_ai_int_list_contains_ror(&ai->lists[1], id))
+                    continue;
+            }
+            if (villager_idle(ops, id)) return o.id;
+        }
+    }
+    return -1;
 }

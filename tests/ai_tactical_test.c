@@ -426,10 +426,12 @@ static void step_and_added_tests(void) {
 
 static int path_n(void *c, int32_t id, int32_t *n) {
     (void)c;
-    if (id == 40) return 0;
+    if (id == 40 || id >= 900) return 0;
     *n = id - 40;
     return 1;
 }
+
+static int idle_action(void *c, int32_t id, int32_t *a) { (void)c; (void)id; *a = -1; return 1; }
 
 static void removed_and_path_tests(void) {
     static AoeAiTacticalRor ai;
@@ -466,6 +468,27 @@ static void removed_and_path_tests(void) {
     assert(aoe_ai_tactical_collect_by_path_ror(&ai, 2, 1, 1, &ops) == 1 &&
            ai.list_d48.count == 1 && ai.list_d48.data[0] == 44);
     assert(aoe_ai_tactical_collect_by_path_ror(&ai, 2, 1, 0, &ops) == 1 && ai.list_d48.count == 1);
+    /* 0x004d8be0: list 5 (any class), then list 2's priests (801) and
+       siege (802) only; 801 / 802 have 761 / 762 waypoints. */
+    aoe_ai_int_list_add_unique_ror(&ai.lists[5], 41);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[2], 801);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[2], 802);
+    assert(aoe_ai_tactical_collect_support_ror(&ai, 100, 1, &ops) == 2 &&
+           ai.list_d48.count == 2 && ai.list_d48.data[0] == 801);
+    assert(aoe_ai_tactical_collect_support_ror(&ai, 2, -1, &ops) == 1 &&
+           ai.list_d48.data[0] == 41);
+    /* 0x004d90b0 over list 0: 900 (gatherer), 901 (on list 1), 902 idle. */
+    ops.unit_action = idle_action;
+    aoe_ai_int_list_add_unique_ror(&ai.lists[0], 900);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[0], 901);
+    aoe_ai_tactical_add_gatherer_ror(&ai, 900);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[1], 901);
+    assert(aoe_ai_tactical_idle_villager_ror(&ai, 2, &ops) == -1);
+    assert(aoe_ai_tactical_idle_villager_ror(&ai, 0, &ops) == 900);
+    assert(aoe_ai_tactical_idle_villager_ror(&ai, 3, &ops) == 900);
+    assert(aoe_ai_tactical_idle_villager_ror(&ai, 1, &ops) == 901);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[0], 902);
+    assert(aoe_ai_tactical_idle_villager_ror(&ai, 2, &ops) == 902);
     aoe_ai_tactical_release_ror(&ai);
 }
 

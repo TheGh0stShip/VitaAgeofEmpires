@@ -284,6 +284,17 @@ void aoe_ai_tactical_unit_removed_ror(AoeAiTacticalRor *ai, int32_t unit,
 int32_t aoe_ai_tactical_collect_by_path_ror(AoeAiTacticalRor *ai, int32_t n,
                                             int32_t mode, int32_t reset,
                                             const AoeAiTacticalOpsRor *ops);
+/* 0x004d8be0: the same test (+0xd48 always emptied first) over list 5,
+   then over list 2's priests and siege (class 0x12, 0xd). */
+int32_t aoe_ai_tactical_collect_support_ror(AoeAiTacticalRor *ai, int32_t n,
+                                            int32_t mode,
+                                            const AoeAiTacticalOpsRor *ops);
+/* 0x004d90b0: an idle villager (no path and no action): first one of
+   list 0 not on +0xd58, with a unit AI, not a gatherer (0x004e1a10) and
+   not on list 1; failing that, by `mode`: 0 any, 3 not on list 1, 1 not
+   a gatherer, others neither. Its ID, else -1. */
+int32_t aoe_ai_tactical_idle_villager_ror(AoeAiTacticalRor *ai, int32_t mode,
+                                          const AoeAiTacticalOpsRor *ops);
 /* 0x004dc650: ftol(number 34 / f), at most 99. */
 int32_t aoe_ai_tactical_effort_ror(const AoeAiTacticalRor *ai, float f);
 /* 0x004e2f90: +0xd68[i] (0..3, else -1). 0x004e2f30 / 0x004e2f60 /

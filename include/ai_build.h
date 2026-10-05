@@ -319,6 +319,24 @@ int aoe_ai_con_plan_save_ror(const AoeAiConPlanRor *plan,
 int aoe_ai_con_plan_load_ror(AoeAiConPlanRor *plan, int32_t player,
                              AoeAiLogRor *log, AoeOutcomeStream *in);
 
+/* The RoR build list (vtable 0x00548acc): the base list and the
+   computer player it belongs to (+0x5bc). 0x004b7650 / 0x004b76a0
+   construct it as the base (0x00407bf0 / load 0x00407d50) with no
+   owner; 0x004b76d0 releases it (0x004081f0); 0x004b76e0 sets the owner.
+   0x004b8fb0: the item with this unique ID (if any) is no longer in
+   progress; always 1. */
+typedef struct {
+    AoeAiBuildListRor base;
+    void *owner; /* +0x5bc */
+} AoeAiRorBuildListRor;
+
+void aoe_ai_ror_build_list_init_ror(AoeAiRorBuildListRor *list, int32_t player, AoeAiLogRor *log);
+int aoe_ai_ror_build_list_load_ror(AoeAiRorBuildListRor *list, int32_t player, AoeAiLogRor *log,
+                                   AoeOutcomeStream *in, float version);
+void aoe_ai_ror_build_list_release_ror(AoeAiRorBuildListRor *list);
+void aoe_ai_ror_build_list_set_owner_ror(AoeAiRorBuildListRor *list, void *owner);
+int aoe_ai_build_list_stop_ror(AoeAiBuildListRor *list, int32_t unique_id);
+
 /* The RoR build list (vtable 0x00548acc) over the same list:
    0x004b9300 adds research `type` (5, 7 or 8 only; else 0) built at
    0x2d, cap 1, at `position` (-1: after the leading built items);

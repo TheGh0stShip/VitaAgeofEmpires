@@ -136,7 +136,7 @@ int aoe_wonder_action_activate_ror(AoeWonderActionRor *action, int arg,
 int aoe_wonder_action_update_ror(AoeWonderActionRor *action,
                                  const AoeObjectActionOps *ops,
                                  uint8_t *result);
-/* Destructor 0x004b7250 (unless tearing down): removes the vision it gave
+/* Destructor 0x004b7250 (deleting 0x004b7200; unless tearing down): removes the vision it gave
    other players; a built wonder clears the countdown (restarting it at
    2000 when the owner has another standing wonder, template 276) and
    sends event 0x6e. `owner_has_other` reports that other wonder. */

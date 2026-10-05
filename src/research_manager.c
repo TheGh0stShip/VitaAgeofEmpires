@@ -197,3 +197,15 @@ void aoe_research_costs_ror(const AoeResearchOwnerRor *owner, int16_t id,
     for (i = 0; i < 3; ++i)
         if (amounts[i] < 1) types[i] = -1;
 }
+
+void aoe_research_action_readout_ror(const AoeResearchCompletionManagerRor *manager,
+                                     const DatTechs *techs, uint8_t action_state, int16_t tech,
+                                     int16_t *id, int16_t *percent, char *name, int16_t size) {
+    *id = tech;
+    *percent = action_state == 1 ? 100 : aoe_research_percent_ror(manager, techs, tech);
+    if (name && size > 0) {
+        const char *src = aoe_research_name_ror(manager, techs, tech);
+        strncpy(name, src ? src : "", (size_t)size);
+        name[size - 1] = '\0';
+    }
+}

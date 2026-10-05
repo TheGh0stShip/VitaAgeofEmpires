@@ -70,4 +70,11 @@ int32_t aoe_research_hotkey_ror(const AoeResearchCompletionManagerRor *manager,
 void aoe_research_costs_ror(const AoeResearchOwnerRor *owner, int16_t id,
                             int16_t types[3], int16_t amounts[3]);
 
+/* 0x004b6420 (the research action's readout): the tech (+0x40), its
+   percent (100 once the action is in state 1, else 0x004eb61f) and, when
+   asked, its name copied into `size` bytes (cut and terminated). */
+void aoe_research_action_readout_ror(const AoeResearchCompletionManagerRor *manager,
+                                     const DatTechs *techs, uint8_t action_state, int16_t tech,
+                                     int16_t *id, int16_t *percent, char *name, int16_t size);
+
 #endif

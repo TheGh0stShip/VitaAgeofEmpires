@@ -68,6 +68,14 @@ int main(void) {
     CHECK(aoe_research_percent_ror(&m, &techs, 1) == 100);
     CHECK(strcmp(aoe_research_name_ror(&m, &techs, 1), "Other") == 0);
     CHECK(aoe_research_name_ror(&m, &techs, 5) == NULL);
+    {
+        int16_t id, pct;
+        char nm[4];
+        aoe_research_action_readout_ror(&m, &techs, 0, 0, &id, &pct, NULL, 0);
+        CHECK(id == 0 && pct == 25);
+        aoe_research_action_readout_ror(&m, &techs, 1, 1, &id, &pct, nm, sizeof nm);
+        CHECK(id == 1 && pct == 100 && strcmp(nm, "Oth") == 0);
+    }
     CHECK(aoe_research_language_name_ror(&m, &techs, 0) == 7);
     CHECK(aoe_research_button_ror(&m, &techs, 0) == 4);
     CHECK(aoe_research_help_ror(&m, &techs, 1) == 100);

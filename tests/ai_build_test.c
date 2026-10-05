@@ -201,9 +201,21 @@ int main(void) {
         r->permanent_skip = 1;
         aoe_ai_build_list_retry_ror(&list, retry_count, NULL);
         assert(r->build_attempts == 0 && !r->permanent_skip);
+        r->in_progress = 1;
+        assert(aoe_ai_build_list_stop_ror(&list, r->plan.unique_id) && r->in_progress == 0);
+        assert(aoe_ai_build_list_stop_ror(&list, 999));
     }
     aoe_ai_build_list_release_ror(&list);
     assert(log.closes == 1 && !list.excluded);
+    {
+        AoeAiRorBuildListRor rl;
+        int owner;
+        aoe_ai_ror_build_list_init_ror(&rl, 3, &sink);
+        assert(rl.owner == NULL && rl.base.count == 0);
+        aoe_ai_ror_build_list_set_owner_ror(&rl, &owner);
+        assert(rl.owner == &owner);
+        aoe_ai_ror_build_list_release_ror(&rl);
+    }
 
     /* Construction plan: origin offsets, duplicates and culling. */
     aoe_ai_con_plan_init_ror(&plan, 1, &sink);

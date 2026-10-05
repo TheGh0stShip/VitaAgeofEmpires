@@ -165,7 +165,7 @@ int aoe_research_action_update_ror(AoeResearchAction *action,
 int aoe_research_action_cancel_ror(AoeResearchAction *action,
                                    const AoeResearchActionOps *ops);
 
-/* Destructor 0x004b60f0, only for an action not in state 1: stop without
+/* Destructor 0x004b60f0 (deleting 0x004b6090), only for an action not in state 1: stop without
    refund, then (unless quiet) event 0x65, owner +0x118(-1) and signal
    0x1f9. The resources stay spent. Returns 0 for missing bindings. */
 int aoe_research_action_destroy_ror(AoeResearchAction *action,

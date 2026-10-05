@@ -1037,3 +1037,28 @@ void aoe_ai_build_list_retry_ror(AoeAiBuildListRor *list,
         i->permanent_skip = 0;
     }
 }
+
+void aoe_ai_ror_build_list_init_ror(AoeAiRorBuildListRor *list, int32_t player, AoeAiLogRor *log) {
+    aoe_ai_build_list_init_ror(&list->base, player, log);
+    list->owner = NULL;
+}
+
+int aoe_ai_ror_build_list_load_ror(AoeAiRorBuildListRor *list, int32_t player, AoeAiLogRor *log,
+                                   AoeOutcomeStream *in, float version) {
+    list->owner = NULL;
+    return aoe_ai_build_list_load_ror(&list->base, player, log, in, version);
+}
+
+void aoe_ai_ror_build_list_release_ror(AoeAiRorBuildListRor *list) {
+    aoe_ai_build_list_release_ror(&list->base);
+}
+
+void aoe_ai_ror_build_list_set_owner_ror(AoeAiRorBuildListRor *list, void *owner) {
+    list->owner = owner;
+}
+
+int aoe_ai_build_list_stop_ror(AoeAiBuildListRor *list, int32_t unique_id) {
+    AoeAiBuildItemRor *item = aoe_ai_build_list_find_ror(list, unique_id);
+    if (item) item->in_progress = 0;
+    return 1;
+}

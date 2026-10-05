@@ -10,7 +10,8 @@ typedef struct {
     uint8_t mirror_horizontal;
 } AoeGraphicFrame;
 
-/* RoR 0x004a6d10 / base 0x004b2e60. Selects the stored SLP frame for a
+/* RoR 0x004a6d10 (patched RoR 1.0a 0x004a5520, the same logic) / base
+   0x004b2e60. Selects the stored SLP frame for a
    graphic angle and animation frame. The original caller bounds angles;
    this portable API rejects invalid ones and does not mutate output. */
 int aoe_graphic_select_frame(const DatGraphic *graphic,

@@ -448,10 +448,42 @@ void aoe_ui_text_set_active_slot_ror(AoeUiPanelRor *p, int32_t active) {
                                      p->active ? t->scrollbar_shown : 0);
 }
 
-static int32_t left_down(AoeUiPanelRor *p, int32_t x, int32_t y, int32_t c, int32_t s) {
+int32_t aoe_ui_text_left_down_ror(AoeUiPanelRor *p, int32_t x, int32_t y, int32_t c, int32_t s) {
     (void)x; (void)y; (void)c; (void)s;
     if (p->parent) p->parent->vt->action(p->parent, p, 1, 0, 0);
     return 0;
+}
+
+void aoe_ui_text_set_alignment_ror(AoeUiTextRor *t, int32_t vertical,
+                                   int32_t align) {
+    if (!t) return;
+    t->vertical = vertical;
+    t->align = align;
+    redraw(t, 1);
+}
+
+int aoe_ui_text_setup_ror(AoeUiTextRor *t, AoeUiAreaRor *area,
+                          AoeUiPanelRor *parent, int32_t x, int32_t y,
+                          int32_t w, int32_t h, uintptr_t font,
+                          int32_t font_width, int32_t line_height,
+                          void *background, int16_t background_w,
+                          int16_t background_h, int32_t fill,
+                          uint8_t fill_color, int32_t border,
+                          uint8_t border_color, int16_t max_chars,
+                          const char *text) {
+    if (!t) return 0;
+    aoe_ui_panel_setup_ror(&t->panel, area, parent, x, y, w, h, 0);
+    t->fill = fill;
+    t->fill_color = fill_color;
+    t->border = border;
+    t->border_color = border_color;
+    t->max_chars = max_chars;
+    if (border) t->bevel_type = 1;
+    ((const AoeUiTextVtblRor *)t->panel.vt)->set_text(t, text);
+    aoe_ui_text_set_font_ror(t, font, font_width, line_height);
+    aoe_ui_text_set_alignment_ror(t, 0, 0);
+    aoe_ui_text_set_background_ror(t, background, background_w, background_h);
+    return 1;
 }
 
 int aoe_ui_text_set_text_ror(AoeUiTextRor *t, const char *text) {
@@ -652,7 +684,7 @@ const AoeUiTextVtblRor aoe_ui_text_vtable_ror = {
      aoe_ui_panel_mouse_move_ror,
      aoe_ui_panel_mouse_up_ror,
      aoe_ui_panel_mouse_dbl_ror,
-     {aoe_ui_panel_no_action_ror, left_down, aoe_ui_panel_no_action_ror,
+     {aoe_ui_panel_no_action_ror, aoe_ui_text_left_down_ror, aoe_ui_panel_no_action_ror,
       aoe_ui_panel_no_action_ror, aoe_ui_panel_no_action_ror,
       aoe_ui_panel_no_action_ror, aoe_ui_panel_no_action_ror,
       aoe_ui_panel_no_action_ror, aoe_ui_panel_no_action_ror,

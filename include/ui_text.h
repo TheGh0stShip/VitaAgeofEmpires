@@ -158,6 +158,24 @@ int aoe_ui_text_set_text_id_ror(AoeUiTextRor *t, int32_t string_id);
    the column-2 offset; 0x0046a760 for row 0. */
 void aoe_ui_text_line_rect_ror(AoeUiTextRor *t, int16_t row, int16_t line,
                                AoeUiRectRor *out, int32_t *column_offset);
+/* 0x00468790 setup: the panel, fill, border, line limit, the text (slot
+   +0xec), the font, alignment 0/0 (0x004f7cf0) and the background picture
+   (0x004690b0 loads it by name; here it is passed loaded with its size). */
+int aoe_ui_text_setup_ror(AoeUiTextRor *t, AoeUiAreaRor *area,
+                          AoeUiPanelRor *parent, int32_t x, int32_t y,
+                          int32_t w, int32_t h, uintptr_t font,
+                          int32_t font_width, int32_t line_height,
+                          void *background, int16_t background_w,
+                          int16_t background_h, int32_t fill,
+                          uint8_t fill_color, int32_t border,
+                          uint8_t border_color, int16_t max_chars,
+                          const char *text);
+/* 0x004f7cf0: vertical (+0x110) and horizontal (+0x114) alignment. */
+void aoe_ui_text_set_alignment_ror(AoeUiTextRor *t, int32_t vertical,
+                                   int32_t align);
+/* +0x84 0x0046a090: a left press notifies the parent (action 1). */
+int32_t aoe_ui_text_left_down_ror(AoeUiPanelRor *p, int32_t x, int32_t y,
+                                  int32_t c, int32_t s);
 /* Text vtable slots shared with subclasses: +0x0c 0x00468910, +0x14
    0x004692c0, +0xac 0x004695c0 keys, +0xb8 0x00469690 action, +0xe4
    0x00468fc0 lines, +0xf0 0x004691e0 bevel. */

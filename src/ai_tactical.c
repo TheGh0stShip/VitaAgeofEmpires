@@ -2489,3 +2489,73 @@ void aoe_ai_tactical_start_play_ror(AoeAiTacticalRor *ai, const AoeAiTacticalOps
     g->type = 1;
     aoe_ai_unit_group_update_ror(g, group_ops, 2, 1, 1);
 }
+
+static int reaches(const AoeAiTacticalOpsRor *ops, int32_t unit, const AoeAiWorldObjectRor *e) {
+    AoeAiWorldObjectRor u;
+    float r;
+    if (!ops->world_object || !ops->world_object(ops->context, unit, &u)) return 0;
+    r = ops->range ? (float)ops->range(ops->context, unit) : 0.0f;
+    return ops->can_reach && ops->can_reach(ops->context, unit, aoe_ftol32(e->x),
+                                            aoe_ftol32(e->y), aoe_ftol32(e->z), r, e->id) == 1;
+}
+
+void aoe_ai_tactical_defend_ror(AoeAiTacticalRor *ai, int32_t enemy,
+                                const AoeAiTacticalOpsRor *ops,
+                                const AoeAiUnitGroupOpsRor *group_ops) {
+    AoeAiWorldObjectRor e;
+    AoeAiUnitGroupRor *g;
+    uint32_t start;
+    int32_t pt[2], sent = 0, i, v;
+    if (!ai || !ops || !ops->object) return;
+    start = ops->real_ms ? ops->real_ms(ops->context) : 0;
+    if (!ops->object(ops->context, enemy, &e)) return;
+    pt[0] = aoe_ftol32(e.x);
+    pt[1] = aoe_ftol32(e.y);
+    g = aoe_ai_tactical_ready_group_ror(ai, 100, ai->sn[20], pt, group_ops);
+    if (!g) g = aoe_ai_tactical_ready_group_ror(ai, 0x67, ai->sn[20], pt, group_ops);
+    if (g && reaches(ops, g->commander, &e)) {
+        g->field_184 = enemy;
+        g->field_188 = e.type_id;
+        aoe_ai_unit_group_set_location_ror(g->loc_18c, e.x, e.y, e.z);
+        g->field_180 = 2;
+        aoe_ai_unit_group_update_ror(g, group_ops, 2, 1, 0);
+        return;
+    }
+    for (i = 0; i < ai->lists[2].count; ++i) {
+        int32_t *p = aoe_ai_int_list_at_ror(&ai->lists[2], i), id, task, target;
+        AoeAiWorldObjectRor u;
+        if (i > 1 && ops->real_ms && ops->real_ms(ops->context) - start > 10) return;
+        if (!p) continue;
+        id = *p;
+        if (!ops->world_object || !ops->world_object(ops->context, id, &u) || !ops->unit_task ||
+            !ops->unit_task(ops->context, id, &task))
+            continue;
+        if (task == 600 && ops->unit_ai_target && ops->unit_ai_target(ops->context, id, &target) &&
+            target != -1) {
+            AoeAiWorldObjectRor t;
+            if (target == enemy) {
+                ++sent;
+                continue;
+            }
+            if (ops->world_object(ops->context, target, &t)) {
+                int32_t *first = aoe_ai_int_list_at_ror(&ai->list_d28, 0);
+                if (t.owner == (first ? *first : 0)) continue;
+            }
+        }
+        if (!((ops->object_distance ? ops->object_distance(ops->context, id, enemy) : 0.0) <
+              (double)25.0f))
+            continue;
+        if (!reaches(ops, id, &e)) continue;
+        if (aoe_ai_tactical_order_attack_ror(ai, id, e.x, e.y, enemy, e.owner, NULL, 0, 0, ops) == 1)
+            ++sent;
+    }
+    v = aoe_ai_tactical_pick_unit_ror(ai, pt, 1, 700, -1000, -1000, 1, ops);
+    while (v != -1 && sent < 6) {
+        AoeAiWorldObjectRor u;
+        if (!ops->object(ops->context, v, &u)) return;
+        if (!reaches(ops, v, &e)) return;
+        aoe_ai_tactical_order_attack_ror(ai, v, e.x, e.y, enemy, e.owner, NULL, 0, 0, ops);
+        ++sent;
+        v = aoe_ai_tactical_pick_unit_ror(ai, pt, 1, 700, 0x2c9, 0x2c9, 1, ops);
+    }
+}

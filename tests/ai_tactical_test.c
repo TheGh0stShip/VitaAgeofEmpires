@@ -1004,6 +1004,43 @@ static void ask_and_play_tests(void) {
     aoe_ai_tactical_release_ror(&ai);
 }
 
+static int def_reach(void *c, int32_t id, int32_t x, int32_t y, int32_t z, float r, int32_t t) {
+    (void)c; (void)x; (void)y; (void)z; (void)r; (void)t; return id != 72;
+}
+static double def_dist(void *c, int32_t a, int32_t b) { (void)c; (void)b; return a == 71 ? 30.0 : 5.0; }
+static int def_task(void *c, int32_t id, int32_t *t) { (void)c; (void)id; *t = 3; return 1; }
+
+static void defend_tests(void) {
+    static AoeAiTacticalRor ai;
+    AoeAiTacticalOpsRor ops;
+    AoeAiUnitGroupRor *g;
+    int32_t i;
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    memset(&ops, 0, sizeof ops);
+    ops.object = tobject;
+    ops.world_object = tobject;
+    ops.unit_task = def_task;
+    ops.can_reach = def_reach;
+    ops.object_distance = def_dist;
+    ops.order = order;
+    ops.self = 2;
+    /* Soldiers 70 (sent), 71 (too far), 72 (cannot reach). */
+    for (i = 70; i <= 72; ++i) aoe_ai_int_list_add_unique_ror(&ai.lists[2], i);
+    orders = 0;
+    aoe_ai_tactical_defend_ror(&ai, 500, &ops, NULL);
+    assert(orders == 1 && last_order.unit == 70 && last_order.target == 500);
+    /* A ready group within number 20 takes over. */
+    g = aoe_ai_tactical_new_group_ror(&ai, 1);
+    g->task = 100;
+    g->commander = 70;
+    ai.sn[20] = 50;
+    orders = 0;
+    aoe_ai_tactical_defend_ror(&ai, 500, &ops, NULL);
+    assert(g->field_184 == 500 && g->field_180 == 2 && g->field_188 == 1);
+    orders = 0;
+    aoe_ai_tactical_release_ror(&ai);
+}
+
 static void scout_tests(void) {
     static AoeAiTacticalRor ai;
     AoeAiTacticalOpsRor ops;
@@ -1449,6 +1486,7 @@ int main(void) {
     insert_and_trade_tests();
     surplus_tests();
     ask_and_play_tests();
+    defend_tests();
 
     aoe_ai_tactical_init_ror(&ai, 3, NULL);
     assert(ai.module.id == 0x3f1 && !strcmp(ai.module.name, "TacAI"));

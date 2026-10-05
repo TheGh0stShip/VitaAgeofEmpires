@@ -352,6 +352,8 @@ typedef struct {
     int32_t (*choose_play)(void *context, int32_t player, const int32_t *ids,
                            int32_t count, int32_t *play, int32_t *cast,
                            int32_t *cast_count, int32_t *leader);
+    /* timeGetTime(). */
+    uint32_t (*real_ms)(void *context);
 } AoeAiTacticalOpsRor;
 
 /* 0x004e0630: in list order, the group with task `task` and +0x180
@@ -677,6 +679,19 @@ void aoe_ai_tactical_ask_allies_ror(AoeAiTacticalRor *ai, const AoeAiTacticalOps
    (0x004cd2d0 with task 2, recording, forced). */
 void aoe_ai_tactical_start_play_ror(AoeAiTacticalRor *ai, const AoeAiTacticalOpsRor *ops,
                                     const AoeAiUnitGroupOpsRor *group_ops);
+/* 0x004e3560: answer an attack by `enemy`: a ready group of task 100,
+   else 0x67, within number 20 of its tile (0x004e07f0) whose commander can
+   reach it (path test with its range toward the enemy) is set on it
+   (+0x184 the enemy, +0x188 its type, +0x18c its position, +0x180 2) and
+   updated (task 2, recording); otherwise list-2 soldiers already fighting
+   it count, and others (not fighting +0xd28's first player's units)
+   within 25 that can reach it are sent (0x004dbe10 with its owner,
+   kind 0), stopping once 10 ms have passed after the second; then up to
+   six in all, the nearest villagers (0x004d9760 skipping 700, then also
+   0x2c9; type 0x103 allowed) are sent while they can reach it. */
+void aoe_ai_tactical_defend_ror(AoeAiTacticalRor *ai, int32_t enemy,
+                                const AoeAiTacticalOpsRor *ops,
+                                const AoeAiUnitGroupOpsRor *group_ops);
 /* 0x004dc650: ftol(number 34 / f), at most 99. */
 int32_t aoe_ai_tactical_effort_ror(const AoeAiTacticalRor *ai, float f);
 /* 0x004e2f90: +0xd68[i] (0..3, else -1). 0x004e2f30 / 0x004e2f60 /

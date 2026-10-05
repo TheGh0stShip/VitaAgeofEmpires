@@ -1246,3 +1246,24 @@ int aoe_ai_con_plan_fits_ror(const AoeAiConPlanRor *plan, const AoeAiPlanItemRor
     }
     return fallback ? fallback(context, item) : 0;
 }
+
+int32_t aoe_ai_ror_build_costs_ror(const AoeAiRorBuildListRor *list, AoeAiCountersRor *costs,
+                                   int32_t limit, AoeAiCostFn research_cost,
+                                   AoeAiCostFn object_cost, void *context) {
+    int32_t n = 0;
+    aoe_ai_counters_fill_ror(costs, 0);
+    for (const AoeAiBuildItemRor *it = list->base.sentinel.next;
+         it && it != &list->base.sentinel; it = it->next) {
+        int16_t pairs[6] = {-1, 0, -1, 0, -1, 0};
+        if (it->built || it->in_progress || it->category == 6) continue;
+        if (it->cap != -1 && it->built_count > it->cap) continue;
+        if (it->category == 1 || it->category == 4) {
+            if (research_cost) research_cost(context, it->plan.type, pairs);
+        } else if (object_cost) {
+            object_cost(context, it->plan.type, pairs);
+        }
+        for (int i = 0; i < 3; ++i) aoe_ai_counters_add_ror(costs, pairs[2 * i], pairs[2 * i + 1]);
+        if (++n == limit) return n;
+    }
+    return n;
+}

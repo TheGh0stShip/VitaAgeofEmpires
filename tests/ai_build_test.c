@@ -44,6 +44,8 @@ static void mark_fn(void *c, int32_t t, int32_t x, int32_t y, uint8_t s) {
 }
 static int fit_fallbacks;
 static int fit_fallback(void *c, const AoeAiPlanItemRor *i) { (void)c; (void)i; ++fit_fallbacks; return 1; }
+static void cost_tech(void *c, int32_t t, int16_t p[6]) { (void)c; (void)t; p[0] = 0; p[1] = 50; }
+static void cost_obj(void *c, int32_t t, int16_t p[6]) { (void)c; p[0] = 1; p[1] = (int16_t)t; p[2] = 2; p[3] = 5; }
 static int32_t extra_count(void *c, int32_t type) { (void)c; return type == 0x67 ? 10 : 0; }
 static int32_t retry_count(void *c, int32_t type, int32_t category) {
     (void)c; (void)type; (void)category; return 0;
@@ -264,6 +266,18 @@ int main(void) {
             aoe_ai_ror_build_skip_ror(&rl, &ro);
             assert(b->plan.skip == 1 && b->build_attempts == 4 && b->skip_cycles == 1);
             assert(ror_updates == 3);
+            {
+                /* 0x004b8960: costs of the pending items. */
+                AoeAiCountersRor costs;
+                aoe_ai_counters_init_ror(&costs, 4);
+                b->plan.skip = 0;
+                a->built = 0;
+                assert(aoe_ai_ror_build_costs_ror(&rl, &costs, 5, cost_tech, cost_obj, NULL) == 2);
+                assert(costs.values[1] == 109 + 12 && costs.values[2] == 10 && costs.values[0] == 0);
+                assert(aoe_ai_ror_build_costs_ror(&rl, &costs, 1, cost_tech, cost_obj, NULL) == 1);
+                assert(costs.values[1] == 109);
+                aoe_ai_counters_release_ror(&costs);
+            }
         }
         aoe_ai_ror_build_list_release_ror(&rl);
     }

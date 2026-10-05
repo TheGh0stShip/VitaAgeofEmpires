@@ -3313,3 +3313,232 @@ AoeAiInfoObjectRor *aoe_ai_info_engage_target_ror(
     }
     return best;
 }
+
+static float unit_range(const AoeAiInfoOpsRor *ops, int32_t id) {
+    return ops->range ? (float)ops->range(ops->context, id) : 0.0f;
+}
+
+/* The group list becomes the noticed blockers that still exist, then the
+   target; +0x320 / +0x324 take its owner and the zone. */
+static void adopt_target(AoeAiInfoRor *info, AoeAiUnitGroupRor *group,
+                         AoeAiIntListRor *blockers, int32_t target, uint8_t owner,
+                         uint8_t zone, const AoeAiInfoOpsRor *ops) {
+    AoeAiWorldObjectRor o;
+    int32_t j, *v;
+    group->field_2cc = 0;
+    for (j = 0; j < blockers->count; ++j) {
+        v = aoe_ai_int_list_at_ror(blockers, j);
+        if (!v || !ops->object(ops->context, *v, &o)) continue;
+        aoe_ai_info_notice_id_ror(info, *v, ops);
+        v = aoe_ai_int_list_at_ror(blockers, j);
+        if (v) aoe_ai_unit_group_list_add_ror(group, *v);
+    }
+    aoe_ai_unit_group_list_add_ror(group, target);
+    group->field_320 = owner;
+    group->field_324 = zone;
+}
+
+static void scan_reset(AoeAiInfoGroupScanRor *scan) {
+    scan->best_id = -1;
+    scan->best_score = -1.0f;
+    scan->best_index = -1;
+    scan->next = 0;
+    scan->field_10 = scan->field_14 = -1;
+    scan->walls = 0;
+    scan->wall_id = -1;
+    scan->wall_score = -1.0f;
+    scan->wall_index = -1;
+    scan->running = 1;
+}
+
+/* An enemy-owned object below state 3 the commander can engage. */
+static int engageable(const AoeAiInfoOpsRor *ops, int32_t commander, int32_t id) {
+    AoeAiWorldObjectRor o;
+    if (!ops->object(ops->context, id, &o) || !ops->is_enemy ||
+        ops->is_enemy(ops->context, o.owner) != 1 || o.state > 2)
+        return 0;
+    return ops->can_engage &&
+           ops->can_engage(ops->context, commander, id, unit_range(ops, commander)) == 1;
+}
+
+AoeAiInfoObjectRor *aoe_ai_info_group_target_ror(AoeAiInfoRor *info, uint32_t player,
+                                                 AoeAiUnitGroupRor *group,
+                                                 AoeAiInfoGroupScanRor *scan,
+                                                 uint32_t start_ms,
+                                                 const AoeAiInfoOpsRor *ops) {
+    AoeAiWorldObjectRor cmd;
+    int32_t commander, i, dummy;
+    int boat, priest;
+    uint8_t zone;
+    if (!info || !group || !scan || !ops || !ops->object) return NULL;
+    commander = group->commander;
+    if (!ops->object(ops->context, commander, &cmd) || !ops->unit_ai_target ||
+        !ops->unit_ai_target(ops->context, commander, &dummy)) {
+        scan->running = 0;
+        return NULL;
+    }
+    zone = ops->zone ? ops->zone(ops->context, commander) : 0;
+    priest = cmd.type_class == 0x12;
+    boat = aoe_class_is_boat_ror(cmd.type_class) == 1;
+    if (scan->running == 0) {
+        if ((uint32_t)group->field_320 == player && group->field_2cc > 0 &&
+            group->field_324 == zone) {
+            int32_t last = aoe_ai_unit_group_list_ror(group, group->field_2cc - 1);
+            if (engageable(ops, commander, last)) {
+                group->field_2cc = 0;
+                aoe_ai_unit_group_list_add_ror(group, last);
+                return aoe_ai_info_find_object_ror(info, last);
+            }
+            for (i = 0; i < group->field_2cc - 1; ++i) {
+                int32_t id = aoe_ai_unit_group_list_ror(group, i);
+                if (engageable(ops, commander, id))
+                    return aoe_ai_info_find_object_ror(info, id);
+            }
+        }
+        if (scan->running == 0) {
+            AoeAiInfoObjectRor *w = aoe_ai_info_wonder_ror(info, -1, ops);
+            if (w) {
+                AoeAiIntListRor blockers;
+                uint8_t wz = ops->tile_zone ? ops->tile_zone(ops->context, commander, w->x, w->y)
+                                            : 0;
+                if (wz != zone && !boat) return w;
+                if (ops->can_engage &&
+                    ops->can_engage(ops->context, commander, w->id,
+                                    unit_range(ops, commander)) == 1) {
+                    group->field_2cc = 0;
+                    aoe_ai_unit_group_list_add_ror(group, w->id);
+                    group->field_324 = zone;
+                    group->field_320 = w->owner;
+                    return w;
+                }
+                memset(&blockers, 0, sizeof blockers);
+                if (ops->path_blockers &&
+                    ops->path_blockers(ops->context, commander, w->id,
+                                       unit_range(ops, commander), (int32_t)player, 0x1b,
+                                       &blockers) == 1) {
+                    adopt_target(info, group, &blockers, w->id, w->owner, zone, ops);
+                    free(blockers.data);
+                    return w;
+                }
+                free(blockers.data);
+            }
+            scan_reset(scan);
+        }
+    }
+    for (i = scan->next; i < info->object_count; ++i) {
+        AoeAiInfoObjectRor *e;
+        AoeAiWorldObjectRor obj;
+        int32_t ox, oy, dx, dy;
+        uint8_t tz;
+        float damage, ttk, endurance, ratio, dist, f14, rnd, f10, near_zone, chasers,
+            wall = 0.0f, a, b, score;
+        if (i > scan->next && ops->now_ms &&
+            ops->now_ms(ops->context) - start_ms >= ops->time_slice) {
+            scan->next = i;
+            return NULL;
+        }
+        e = &info->objects[i];
+        if (e->owner != player || !ops->object(ops->context, e->id, &obj) || obj.state > 2 ||
+            obj.hp == 0.0f)
+            continue;
+        if (!boat && aoe_class_is_boat_ror(obj.type_class) == 1) continue;
+        ox = aoe_ftol32(obj.x);
+        oy = aoe_ftol32(obj.y);
+        tz = ops->tile_zone ? ops->tile_zone(ops->context, commander, ox, oy) : 0;
+        if (!boat && e->type_id == 0x2d && zone != tz) continue;
+        if (scan->walls == 0 && e->type_class == 0x1b) continue;
+        if (scan->walls == 1 && e->type_class != 0x1b) continue;
+        dx = e->x - ox;
+        if (dx < 0) dx = -dx;
+        dy = e->y - oy;
+        if (dy < 0) dy = -dy;
+        if ((dx > 5 || dy > 5) && !(ops->vision && ops->vision(ops->context, ox, oy) == 0xf))
+            continue;
+        if (priest && (!ops->unit_ai_c4 || !ops->unit_ai_c4(ops->context, commander, e->id)))
+            continue;
+        damage = aoe_ai_info_group_damage_ror(info, group, e->id, ops);
+        endurance = aoe_ai_info_group_endurance_ror(info, group, &obj, ops);
+        if (damage == 0.0f || endurance == 0.0f) continue;
+        ttk = obj.hp / damage;
+        ratio = endurance / ttk;
+        dx = e->x - aoe_ftol32(cmd.x);
+        dy = e->y - aoe_ftol32(cmd.y);
+        dist = (float)sqrt((double)(dy * dy + dx * dx));
+        if (dist < 1.0f) dist = 1.0f;
+        f14 = (float)e->field_14;
+        rnd = info_sn(ops, 0x53) > 0
+                  ? (float)((ops->rand ? ops->rand(ops->context) : 0) % info_sn(ops, 0x53))
+                  : 0.0f;
+        f10 = (float)((double)info_sn(ops, 0x59) * (double)e->field_10);
+        near_zone = zone == tz ? (float)info_sn(ops, 0x7a) : 0.0f;
+        chasers = 0.0f;
+        if (info_sn(ops, 0xb9) > 0) {
+            int32_t n = 0, k, t;
+            AoeAiWorldObjectRor m;
+            for (k = 0; k < aoe_ai_unit_group_count_ror(group); ++k) {
+                int32_t id = aoe_ai_unit_group_member_ror(group, k);
+                if (ops->object(ops->context, id, &m) &&
+                    ops->unit_ai_target(ops->context, id, &t) && t == e->id)
+                    ++n;
+            }
+            chasers = (float)((double)info_sn(ops, 0xb9) * (double)n);
+        }
+        if (scan->walls == 1 && scan->wall_id != -1) {
+            const AoeAiInfoObjectRor *c = &info->objects[scan->wall_index];
+            int32_t wx = e->x - c->x, wy = e->y - c->y;
+            double d = sqrt((double)(wy * wy + wx * wx));
+            wall = d < 1.0 ? 1000.0f : (float)(25000.0 / d);
+        }
+        if (aoe_ai_info_key_building_ror(obj.type_class, obj.type_id) == 1)
+            wall = (float)((double)wall + (obj.type_id == 0x6d || obj.type_id == 0x2d
+                                               ? 200.0
+                                               : 300.0));
+        a = (float)((double)info_sn(ops, 0x50) * (double)f14);
+        b = (float)((double)info_sn(ops, 0x4d) / (double)dist + (double)a);
+        score = (float)((double)info_sn(ops, 0xb8) * (double)ratio + (double)b +
+                        (double)wall + (double)chasers + (double)near_zone + (double)f10 +
+                        (double)rnd);
+        if (scan->best_id != -1 && !(score > scan->best_score)) continue;
+        if (scan->walls == 0 && ops->speed && ops->speed(ops->context, e->id) == 0.0) {
+            scan->wall_id = e->id;
+            scan->wall_index = i;
+            scan->wall_score = score;
+        }
+        {
+            AoeAiIntListRor blockers;
+            int take = 0;
+            memset(&blockers, 0, sizeof blockers);
+            if (zone != tz) {
+                take = 1;
+            } else if (ops->can_engage &&
+                       ops->can_engage(ops->context, commander, e->id,
+                                       unit_range(ops, commander)) == 1) {
+                take = 1;
+            } else if (ops->path_blockers &&
+                       ops->path_blockers(ops->context, commander, e->id,
+                                          unit_range(ops, commander), (int32_t)player,
+                                          scan->walls ? -1 : 0x1b, &blockers) == 1) {
+                take = 1;
+            }
+            if (take) {
+                adopt_target(info, group, &blockers, e->id, e->owner, zone, ops);
+                scan->best_id = e->id;
+                scan->best_index = i;
+                scan->best_score = score;
+            }
+            free(blockers.data);
+        }
+    }
+    if (scan->best_id != -1) {
+        ++info->objects[scan->best_index].field_10;
+        scan->running = 0;
+        return aoe_ai_info_find_object_ror(info, aoe_ai_unit_group_list_ror(group, 0));
+    }
+    if (scan->walls == 0) {
+        scan->walls = 1;
+        scan->next = 0;
+    } else {
+        scan->running = 0;
+    }
+    return NULL;
+}

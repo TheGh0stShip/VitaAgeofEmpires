@@ -1236,6 +1236,7 @@ static int at_object(void *c, int32_t id, AoeAiWorldObjectRor *o) {
     o->id = id;
     o->state = 2;
     o->hp = 10.0f;
+    o->owner = (int16_t)(id >= 60 ? 2 : 1);
     switch (id) {
     case 7: case 8: o->x = o->y = 5.5f; return 1;
     case 60: o->x = 7.2f; o->y = 5.0f; return 1;
@@ -1372,6 +1373,74 @@ static void engage_tests(void) {
     found = 0;
     assert(aoe_ai_info_engage_target_ror(&info, 2, 0, 0, 9, &found, &ops) == &objs[2] &&
            found == 1);
+}
+
+static int gt_engage_ok = 60;
+static int gt_engage(void *c, int32_t id, int32_t target, float r) {
+    (void)c; (void)id; (void)r; return target == gt_engage_ok;
+}
+static uint32_t gt_now_value;
+static uint32_t gt_now(void *c) { (void)c; return gt_now_value; }
+static double gt_range(void *c, int32_t id) { (void)c; (void)id; return 4.0; }
+
+static void group_target_tests(void) {
+    static AoeAiInfoRor info;
+    static AoeAiInfoObjectRor objs[2];
+    static AoeAiUnitGroupRor group;
+    AoeAiInfoGroupScanRor scan;
+    AoeAiInfoOpsRor ops;
+    memset(&ops, 0, sizeof ops);
+    memset(&scan, 0, sizeof scan);
+    ops.object = at_object;
+    ops.unit_ai_target = at_ai;
+    ops.zone = at_zone;
+    ops.tile_zone = at_tile_zone;
+    ops.sn = eng_sn;
+    ops.value_104 = at_v104;
+    ops.value_100 = at_v100;
+    ops.head_action = at_head;
+    ops.is_enemy = at_enemy;
+    ops.can_engage = gt_engage;
+    ops.range = gt_range;
+    ops.now_ms = gt_now;
+    ops.time_slice = 10;
+    aoe_ai_unit_group_init_ror(&group);
+    aoe_ai_unit_group_add_ror(&group, 7, NULL);
+    aoe_ai_unit_group_add_ror(&group, 8, NULL);
+    group.commander = 7;
+    objs[0].id = 60; objs[0].owner = 2; objs[0].x = 7; objs[0].y = 5;
+    objs[1].id = 62; objs[1].owner = 2; objs[1].x = 15; objs[1].y = 5;
+    info.objects = objs;
+    info.object_count = 2;
+    /* A full scan: 60 (100 / 2) beats 62 (100 / 10) and is engaged. */
+    assert(aoe_ai_info_group_target_ror(&info, 2, &group, &scan, 0, &ops) == &objs[0]);
+    assert(scan.running == 0 && scan.best_id == 60 && scan.best_score == 50.0f &&
+           objs[0].field_10 == 1 && group.field_2cc == 1 &&
+           aoe_ai_unit_group_list_ror(&group, 0) == 60 && group.field_320 == 2 &&
+           group.field_324 == 1);
+    /* The listed target is still engageable. */
+    assert(aoe_ai_info_group_target_ror(&info, 2, &group, &scan, 0, &ops) == &objs[0] &&
+           objs[0].field_10 == 1);
+    /* Sliced: the time is up after the first entry. */
+    group.field_320 = 5;
+    gt_now_value = 10;
+    assert(aoe_ai_info_group_target_ror(&info, 2, &group, &scan, 0, &ops) == NULL);
+    assert(scan.running == 1 && scan.next == 1 && scan.best_id == 60);
+    gt_now_value = 0;
+    assert(aoe_ai_info_group_target_ror(&info, 2, &group, &scan, 0, &ops) == &objs[0] &&
+           objs[0].field_10 == 2);
+    /* Nothing engageable: the wall pass follows, then the scan stops. */
+    gt_engage_ok = 99;
+    group.field_320 = 5;
+    assert(aoe_ai_info_group_target_ror(&info, 2, &group, &scan, 0, &ops) == NULL);
+    assert(scan.running == 1 && scan.walls == 1 && scan.next == 0 && scan.wall_id == -1);
+    assert(aoe_ai_info_group_target_ror(&info, 2, &group, &scan, 0, &ops) == NULL &&
+           scan.running == 0);
+    /* No commander: the scan stops. */
+    group.commander = 9;
+    scan.running = 1;
+    assert(aoe_ai_info_group_target_ror(&info, 2, &group, &scan, 0, &ops) == NULL &&
+           scan.running == 0);
 }
 
 static void lifecycle_tests(void) {
@@ -1523,6 +1592,7 @@ int main(void) {
     approach_tests();
     attack_target_tests();
     engage_tests();
+    group_target_tests();
     memset(&ops, 0, sizeof ops);
     ops.self = 1;
     ops.object = object;

@@ -278,7 +278,30 @@ typedef struct {
     /* The world's play list (+0xa0) and a unit's play category there. */
     AoeAiPlayListRor *(*plays)(void *context);
     AoeAiCategoryFn play_category;
+    /* Unit vtable +0x194 (target, range, 0, 1, -1, -1): it can engage the
+       target from here; +0x1a0 (target, range, 0, 1, player, class, list):
+       a way there, listing the player's objects of that class (-1 any) in
+       the way; +0xfc (speed). */
+    int (*can_engage)(void *context, int32_t id, int32_t target, float range);
+    int (*path_blockers)(void *context, int32_t id, int32_t target, float range,
+                         int32_t player, int32_t type_class,
+                         AoeAiIntListRor *blockers);
+    double (*speed)(void *context, int32_t id);
 } AoeAiInfoOpsRor;
+
+/* The 44-byte progress of 0x004bffa0's sliced scan. */
+typedef struct {
+    int32_t best_id;        /* +0, -1 none */
+    float best_score;       /* +4 */
+    int32_t best_index;     /* +8 */
+    int32_t next;           /* +0xc, the entry to resume at */
+    int32_t field_10, field_14; /* -1 */
+    uint8_t walls;          /* +0x18, the wall pass */
+    int32_t wall_id;        /* +0x1c: a stationary candidate */
+    float wall_score;       /* +0x20 */
+    int32_t wall_index;     /* +0x24 */
+    int32_t running;        /* +0x28 */
+} AoeAiInfoGroupScanRor;
 
 /* The 36-byte summary 0x004c2de0 fills: the farthest distance, two words
    it never sets (left 0 here), the hit points word (the upper half never
@@ -673,6 +696,46 @@ AoeAiInfoObjectRor *aoe_ai_info_engage_target_ror(
     AoeAiInfoRor *info, uint32_t player, int32_t skip_buildings,
     int32_t skip_naval, int32_t unit, int32_t *found,
     const AoeAiInfoOpsRor *ops);
+/* 0x004bffa0: a target for `group` (its commander needs a unit AI; else
+   the scan stops) among `player`'s remembered objects, scanned in slices
+   from `scan`.
+   - Not running: when the group's +0x320 is `player`, its +0x2cc list is
+     not empty and +0x324 is the commander's zone, its last entry, an
+     enemy's object below state 3 the commander can engage (vtable +0x194
+     with its range), becomes the only entry and is returned; else the
+     first earlier entry that passes is returned. Then an enemy wonder
+     (0x004c5980 with -1) in another zone is returned outright to a
+     non-boat; otherwise it is engaged directly (the list becomes it) or
+     through its blockers (class 0x1b of `player`, each noticed (0x004be0d0)
+     and listed before it), setting +0x320 to its owner and +0x324 to the
+     zone, and returned. Failing that the scan starts (scores -1, pass 0,
+     next 0, running).
+   - The scan: past its first entry of a call, once the world's time slice
+     has passed since `start_ms` it stops there (NULL). Entries of
+     `player` that exist below state 3 with hit points (boats only for a
+     boat), docks only in the commander's zone for a non-boat, walls
+     (class 0x1b) only in the wall pass and never in the first, within 5
+     tiles of the sighting or visible, passing a priest commander's test,
+     with nonzero group damage (0x004c62f0) and endurance (0x004c6400),
+     score in floats number 184 x endurance / (hit points / damage) +
+     number 77 / max(1, tile distance from the commander) + number 80 x
+     +0x14 + (wall pass with a stationary candidate: 25000 / its distance,
+     1000 within 1) + 200 for a key building that is a town centre or dock
+     (0x004be250), 300 for another + number 185 x members whose AI targets
+     it + number 122 in the commander's zone + number 89 x +0x10 + rand()
+     % number 83. A better score (or the first) records, in the first
+     pass, a stationary object (speed 0.0) as the wall candidate; then
+     in another zone, or when engaged directly or through blockers (class
+     0x1b, any in the wall pass), the group list becomes the blockers and
+     it, +0x320 / +0x324 are set and it is the best so far.
+   - At the end: a best target counts in its +0x10, the scan stops and the
+     group list's first entry is returned; else the wall pass begins (next
+     call) or, after it, the scan stops. */
+AoeAiInfoObjectRor *aoe_ai_info_group_target_ror(AoeAiInfoRor *info, uint32_t player,
+                                                 AoeAiUnitGroupRor *group,
+                                                 AoeAiInfoGroupScanRor *scan,
+                                                 uint32_t start_ms,
+                                                 const AoeAiInfoOpsRor *ops);
 int32_t aoe_ai_info_pick_target_ror(AoeAiInfoRor *info, int32_t k,
                                     int32_t id, float pos[2], int32_t *drop,
                                     const int32_t *exclude,

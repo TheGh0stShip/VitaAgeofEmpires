@@ -85,6 +85,8 @@ typedef struct {
     void (*open_editor_open_screen)(void *context);
     void (*open_campaign_editor)(void *context);
     void (*open_main_menu)(void *context);
+    /* A networked game (0x0041b760). */
+    int (*networked)(void *context);
 } AoeGameUiOpsRor;
 
 typedef struct {
@@ -369,5 +371,23 @@ typedef struct {
 extern const AoeUiEzVtblRor aoe_scenario_editor_menu_vtable_ror;
 int aoe_scenario_editor_menu_init_ror(AoeScenarioEditorMenuRor *m, AoeGameUiRor *ui,
                                       AoeUiAreaRor *area);
+
+/* The status screen (vtable 0x00547a68, 0x0049e7a0..0x0049eb80): a
+   named screen showing one message (font 4, centred, wrapped, 560 x 400
+   at 40, 40), from a string (0x0049e7a0) or a string ID (0x0049e9a0).
+   Its background: the given info name and ID, else the current screen's
+   (unless that is the "Achievements Screen"), else "scr2" / 50052 (or
+   "scr3" / 50053 in a networked game). 0x0049eb80 destructor (deleting
+   0x0049e980). */
+typedef struct {
+    AoeUiEzRor ez;
+    AoeUiTextRor *text;               /* +0x478 */
+    AoeGameUiRor *ui;
+} AoeStatusScreenRor;
+
+extern const AoeUiEzVtblRor aoe_status_screen_vtable_ror;
+int aoe_status_screen_init_ror(AoeStatusScreenRor *st, AoeGameUiRor *ui, AoeUiAreaRor *area,
+                               const char *name, const char *text, int32_t text_id,
+                               const char *info_name, int32_t info_id);
 
 #endif

@@ -490,6 +490,21 @@ int main(void) {
         mp->vt->action(mp, &m->buttons[1]->panel, 1, 0, 0);
         assert(open_screens == 1 && !aoe_ui_system_find_ror(&sys, "Scenario Editor Menu"));
     }
+    /* The status screen. */
+    {
+        AoeStatusScreenRor *st = calloc(1, sizeof *st);
+        assert(aoe_status_screen_init_ror(st, &ui, &area, "Wait Screen", "Please wait", 0, "scrx",
+                                          77));
+        assert(aoe_ui_ez_info_id_ror(&st->ez) == 77 && st->text);
+        assert(st->text->panel.width == 0x230 * 800 / 640);
+        aoe_ui_system_close_ror(&sys, "Wait Screen");
+        st = calloc(1, sizeof *st);
+        sys.screen = NULL;
+        assert(aoe_status_screen_init_ror(st, &ui, &area, "Wait Screen", NULL, 9, NULL, -1));
+        assert(aoe_ui_ez_info_id_ror(&st->ez) == 0xc384 &&
+               !strcmp(aoe_ui_ez_info_name_ror(&st->ez), "scr2"));
+        aoe_ui_system_close_ror(&sys, "Wait Screen");
+    }
     aoe_ui_system_close_ror(&sys, "Game Screen");
     free(sys.panels);
     return 0;

@@ -500,6 +500,77 @@ static void plan_tests(void) {
     aoe_ai_tactical_release_ror(&ai);
 }
 
+static int32_t p4c_unit = -1, p4c_sum;
+static void t_p4c(void *c, int32_t u, int32_t a, int32_t b, int32_t cc, int32_t d) {
+    (void)c; p4c_unit = u; p4c_sum = a + b + cc + d;
+}
+static AoeAiConItemRor t_site;
+static int t_freed, t_reach_ok = 1;
+static int32_t t_bo_builder = -1, t_bo_type, t_bo_uid;
+static float t_bo_x;
+static AoeAiConItemRor *t_choose(void *c, AoeAiBuildItemRor *it, int32_t b, int32_t *srch,
+                                 int32_t arg) {
+    (void)c; (void)it; (void)b; (void)srch; (void)arg; return &t_site;
+}
+static void t_free(void *c, AoeAiConItemRor *site) { (void)c; assert(site == &t_site); ++t_freed; }
+static int t_reach(void *c, int32_t id, int32_t x, int32_t y, int32_t z, float r) {
+    (void)c; (void)id; (void)z;
+    assert(x == 12 && y == 7 && r == 2.0f);
+    return t_reach_ok;
+}
+static void t_build_order(void *c, int32_t b, int32_t type, float x, float y, int32_t uid) {
+    (void)c; (void)y; t_bo_builder = b; t_bo_type = type; t_bo_x = x; t_bo_uid = uid;
+}
+static int t_action(void *c, int32_t id, int32_t *a) { (void)c; *a = id == 31 ? 0x2be : 3; return 1; }
+
+static void build_start_tests(void) {
+    static AoeAiTacticalRor ai;
+    static AoeAiBuildItemRor item;
+    AoeAiTacticalOpsRor ops;
+    const float wp[8] = {3.5f, 4.5f, 0, 0, 9.0f, 1.0f, 0, 0};
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    memset(&ops, 0, sizeof ops);
+    ops.player_44 = p44;
+    ops.player_4c = t_p4c;
+    /* 0x004da710 */
+    assert(aoe_ai_tactical_task_unit_ror(&ai, 30, 1, 2, 3, 4, wp, 2, &ops) == 1);
+    assert(id44 == 30 && bytes44[0] == 9 && bytes44[1] == 1 && bytes44[2] == 1 &&
+           p4c_unit == 30 && p4c_sum == 10 && ai.list_d58.count == 1);
+    aoe_ai_tactical_task_unit_ror(&ai, 30, 0, 0, 0, 0, NULL, 0, &ops);
+    assert(ai.list_d58.count == 1);
+
+    /* 0x004da830: the site (12.5, 7.5) of type 0x114; units 31 (busy
+       building) and 32 on list 0; 32 is picked and starts. */
+    ops.object = tobject;
+    ops.world_object = tobject;
+    ops.unit_task = ttask;
+    ops.unit_action = t_action;
+    ops.con_choose = t_choose;
+    ops.con_free = t_free;
+    ops.can_reach = t_reach;
+    ops.build_order = t_build_order;
+    aoe_ai_build_item_init_ror(&item);
+    aoe_ai_plan_item_set_unique_id_ror(&item.plan, 66);
+    aoe_ai_plan_item_set_position_ror(&t_site.plan, AOE_AI_ITEM_X, 12.5f);
+    aoe_ai_plan_item_set_position_ror(&t_site.plan, AOE_AI_ITEM_Y, 7.5f);
+    t_site.plan.type = 0x114;
+    aoe_ai_int_list_add_unique_ror(&ai.lists[0], 31);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[0], 32);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[1], 32);
+    assert(aoe_ai_tactical_start_build_ror(&ai, -1, &item, NULL, 0, &ops) == 1);
+    assert(t_bo_builder == 32 && t_bo_type == 0x114 && t_bo_x == 12.5f && t_bo_uid == 66 &&
+           item.in_progress == 1 && item.built == 0 && ai.lists[1].count == 0 &&
+           ai.field_e44 == 1 && t_freed == 1 &&
+           aoe_ai_int_list_contains_ror(&ai.list_d58, 32));
+    /* Unreachable: the site is still deleted. */
+    t_reach_ok = 0;
+    assert(aoe_ai_tactical_start_build_ror(&ai, 33, &item, NULL, 0, &ops) == 0 && t_freed == 2);
+    /* No next item: 0 without a site. */
+    assert(aoe_ai_tactical_start_build_ror(&ai, 33, NULL, NULL, 0, &ops) == 0 && t_freed == 2);
+    aoe_ai_build_item_release_ror(&item);
+    aoe_ai_tactical_release_ror(&ai);
+}
+
 static void gather_order_tests(void) {
     static AoeAiTacticalRor ai;
     AoeAiTacticalOpsRor ops;
@@ -639,6 +710,7 @@ int main(void) {
     removed_and_path_tests();
     gather_order_tests();
     plan_tests();
+    build_start_tests();
 
     aoe_ai_tactical_init_ror(&ai, 3, NULL);
     assert(ai.module.id == 0x3f1 && !strcmp(ai.module.name, "TacAI"));

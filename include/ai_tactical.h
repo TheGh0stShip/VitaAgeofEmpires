@@ -253,6 +253,24 @@ typedef struct {
     int32_t (*info_best_distance)(void *context, int32_t k);
     /* A unit AI's target (+0x34, 0x0040f6e0); 0 without a unit AI. */
     int (*unit_ai_target)(void *context, int32_t id, int32_t *target);
+    /* The tribe player's vtable +0x4c (unit and four values: a task
+       order) and +0xfc (builder, type, x, y, unique ID: a build order). */
+    void (*player_4c)(void *context, int32_t unit, int32_t a, int32_t b,
+                      int32_t c, int32_t d);
+    void (*build_order)(void *context, int32_t builder, int32_t type,
+                        float x, float y, int32_t unique_id);
+    /* The Build AI's next item (0x004b8110 with 0), the ConAI's site for
+       it (0x004b98e0 with our +0xe4c search state; NULL for none) and
+       deleting such a site (its vtable destructor with 1). */
+    AoeAiBuildItemRor *(*build_next)(void *context);
+    AoeAiConItemRor *(*con_choose)(void *context, AoeAiBuildItemRor *item,
+                                   int32_t builder, int32_t *search,
+                                   int32_t arg);
+    void (*con_free)(void *context, AoeAiConItemRor *site);
+    /* A unit's vtable +0x198 path test to tile (x, y) at height z within
+       `radius` (then -1, 0, 1, -1, -1). */
+    int (*can_reach)(void *context, int32_t id, int32_t x, int32_t y,
+                     int32_t z, float radius);
 } AoeAiTacticalOpsRor;
 
 /* 0x004e0630: in list order, the group with task `task` and +0x180
@@ -341,6 +359,26 @@ void aoe_ai_tactical_gather_order_ror(AoeAiTacticalRor *ai,
    goes half (rounded up) to food and half to wood. */
 void aoe_ai_tactical_plan_gatherers_ror(AoeAiTacticalRor *ai,
                                         const AoeAiTacticalOpsRor *ops);
+/* 0x004da710: `count` waypoints (16 bytes apart, x then y) go to the
+   player for the unit (0x004e1570 with the truncated x and y) when given;
+   the unit is marked tasked (+0xd58, once) and the tribe player's vtable
+   +0x4c gets it with `a`..`d`. 1. */
+int aoe_ai_tactical_task_unit_ror(AoeAiTacticalRor *ai, int32_t unit, int32_t a,
+                                  int32_t b, int32_t c, int32_t d,
+                                  const float *waypoints, int32_t count,
+                                  const AoeAiTacticalOpsRor *ops);
+/* 0x004da830: start building `item` (NULL: the Build AI's next; none
+   gives 0) at `site` (NULL: the ConAI's choice for it and `builder`; none
+   gives 0) with `builder` (-1: the nearest list-0 unit to the site's
+   truncated tile not doing 0x2be, 0x2ce or 0x2bc, 0x004d9760). A builder
+   that exists with a unit AI and passes the path test to the site
+   (radius 2.0) is used: the item becomes in progress and not built, the
+   builder leaves list 1 and is marked tasked, a wonder (type 0x114) sets
+   +0xe44, and the build order (type, x, y, the item's unique ID) goes
+   out; 1. The site is deleted in every case that reaches it. */
+int aoe_ai_tactical_start_build_ror(AoeAiTacticalRor *ai, int32_t builder,
+                                    AoeAiBuildItemRor *item, AoeAiConItemRor *site,
+                                    int32_t arg, const AoeAiTacticalOpsRor *ops);
 /* 0x004dc650: ftol(number 34 / f), at most 99. */
 int32_t aoe_ai_tactical_effort_ror(const AoeAiTacticalRor *ai, float f);
 /* 0x004e2f90: +0xd68[i] (0..3, else -1). 0x004e2f30 / 0x004e2f60 /

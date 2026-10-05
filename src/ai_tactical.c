@@ -1397,3 +1397,65 @@ void aoe_ai_tactical_plan_gatherers_ror(AoeAiTacticalRor *ai,
         ai->field_d78[1] += left / 2;
     }
 }
+
+int aoe_ai_tactical_task_unit_ror(AoeAiTacticalRor *ai, int32_t unit, int32_t a,
+                                  int32_t b, int32_t c, int32_t d,
+                                  const float *waypoints, int32_t count,
+                                  const AoeAiTacticalOpsRor *ops) {
+    int32_t i;
+    if (!ai) return 1;
+    if (waypoints)
+        for (i = 0; i < count; ++i)
+            aoe_ai_tactical_player_44_ror(ops, unit, (uint8_t)aoe_ftol32(waypoints[4 * i]),
+                                          (uint8_t)aoe_ftol32(waypoints[4 * i + 1]));
+    aoe_ai_int_list_add_unique_ror(&ai->list_d58, unit);
+    if (ops && ops->player_4c) ops->player_4c(ops->context, unit, a, b, c, d);
+    return 1;
+}
+
+static void free_site(const AoeAiTacticalOpsRor *ops, AoeAiConItemRor *site) {
+    if (site && ops->con_free) ops->con_free(ops->context, site);
+}
+
+int aoe_ai_tactical_start_build_ror(AoeAiTacticalRor *ai, int32_t builder,
+                                    AoeAiBuildItemRor *item, AoeAiConItemRor *site,
+                                    int32_t arg, const AoeAiTacticalOpsRor *ops) {
+    AoeAiWorldObjectRor b;
+    int32_t task, sx, sy;
+    if (!ai || !ops) return 0;
+    if (!item && !(item = ops->build_next ? ops->build_next(ops->context) : NULL)) return 0;
+    if (!site && !(site = ops->con_choose ? ops->con_choose(ops->context, item, builder,
+                                                            ai->block_e4c, arg)
+                                          : NULL))
+        return 0;
+    if (builder == -1) {
+        int32_t tile[2];
+        tile[0] = aoe_ftol32(aoe_ai_plan_item_float_ror(&site->plan, AOE_AI_ITEM_X));
+        tile[1] = aoe_ftol32(aoe_ai_plan_item_float_ror(&site->plan, AOE_AI_ITEM_Y));
+        builder = aoe_ai_tactical_pick_unit_ror(ai, tile, 1, 0x2be, 0x2ce, 0x2bc, 0, ops);
+    }
+    if (!ops->world_object || !ops->world_object(ops->context, builder, &b) ||
+        !ops->unit_task || !ops->unit_task(ops->context, builder, &task)) {
+        free_site(ops, site);
+        return 0;
+    }
+    sx = aoe_ftol32(aoe_ai_plan_item_float_ror(&site->plan, AOE_AI_ITEM_X));
+    sy = aoe_ftol32(aoe_ai_plan_item_float_ror(&site->plan, AOE_AI_ITEM_Y));
+    if (!ops->can_reach ||
+        !ops->can_reach(ops->context, builder, sx, sy, aoe_ftol32(b.z), 2.0f)) {
+        free_site(ops, site);
+        return 0;
+    }
+    aoe_ai_build_item_put_ror(item, AOE_AI_BUILD_IN_PROGRESS, 1);
+    aoe_ai_build_item_put_ror(item, AOE_AI_BUILD_BUILT, 0);
+    aoe_ai_int_list_remove_ror(&ai->lists[1], builder);
+    aoe_ai_int_list_add_unique_ror(&ai->list_d58, builder);
+    if (aoe_ai_plan_item_type_ror(&site->plan) == 0x114) ai->field_e44 = 1;
+    if (ops->build_order)
+        ops->build_order(ops->context, builder, aoe_ai_plan_item_type_ror(&site->plan),
+                         aoe_ai_plan_item_float_ror(&site->plan, AOE_AI_ITEM_X),
+                         aoe_ai_plan_item_float_ror(&site->plan, AOE_AI_ITEM_Y),
+                         aoe_ai_plan_item_unique_id_ror(&item->plan));
+    free_site(ops, site);
+    return 1;
+}

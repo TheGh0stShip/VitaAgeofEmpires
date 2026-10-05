@@ -677,6 +677,12 @@ void aoe_scenario_editor_save_default_ror(AoeScenarioEditorRor *e);
 const char *aoe_scenario_editor_test_save_ror(AoeScenarioEditorRor *e);
 void aoe_scenario_editor_store_techs_ror(AoeScenarioEditorRor *e);
 void aoe_scenario_editor_show_techs_ror(AoeScenarioEditorRor *e);
+/* +0x30 0x00494910 draw: the ez draw, then, when the bevel is on, there
+   is a view and the panel's rect equals its clip, the editor's three-ring
+   bevel (+0x320..+0x325) above the view (0, 0 .. width - 1, view top - 1)
+   and below it (0, view bottom + 1 .. width - 1, height - 1) between
+   begin_draw(0) and end_draw ("scr_sed::draw" lock). */
+void aoe_scenario_editor_draw_ror(AoeScenarioEditorRor *e);
 
 /* The "Save Game Screen" (vtable 0x00547234, 0x0048eca0..0x0048fac0):
    a name field over the existing saved games (.gam / .gmx in the game

@@ -643,6 +643,19 @@ int main(void) {
         assert(aoe_ui_system_find_ror(&sys, "Scenario Menu Dialog"));
         aoe_ui_system_close_ror(&sys, "Scenario Menu Dialog");
         aoe_scenario_editor_idle_ror(&ed);
+        {
+            /* 0x00494910: the bevel needs a view and rect == clip. */
+            AoeUiPanelRor view_panel = {0};
+            view_panel.rect.top = 40;
+            view_panel.rect.bottom = 400;
+            ed.view = &view_panel;
+            ed.ez.bevel_on = 1;
+            ed.ez.panel.clip = ed.ez.panel.rect;
+            aoe_scenario_editor_draw_ror(&ed);
+            ed.ez.panel.clip.left++;
+            aoe_scenario_editor_draw_ror(&ed);
+            ed.view = NULL;
+        }
         /* File operations. */
         ops.scenario_players = scen_players;
         ops.scenario_file = scen_file;

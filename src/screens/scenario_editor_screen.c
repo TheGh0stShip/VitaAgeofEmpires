@@ -1,6 +1,9 @@
 #include "game_ui.h"
 
 #include "ui_dialog.h"
+#include "draw_prims.h"
+#include "draw_system.h"
+#include "../ui_ez_slots.h"
 
 uint8_t aoe_scenario_editor_modified_ror(const AoeScenarioEditorRor *e) { return e->modified; }
 
@@ -195,4 +198,25 @@ void aoe_scenario_editor_show_techs_ror(AoeScenarioEditorRor *e) {
         if (e->techs[i] && ops && ops->scenario_tech)
             aoe_ui_button_set_state_ror(
                 e->techs[i], ops->scenario_tech(ops->context, e->current_player - 1, i) == 0);
+}
+
+void aoe_scenario_editor_draw_ror(AoeScenarioEditorRor *e) {
+    AoeUiPanelRor *p = &e->ez.panel;
+    const AoeUiRectRor *r = &p->rect, *c = &p->clip;
+    struct AoeDrawSurfaceRor *s;
+    aoe_ui_ez_draw_slot_ror(p);
+    if (!e->ez.bevel_on || !e->view || r->left != c->left ||
+        r->top != c->top || r->right != c->right || r->bottom != c->bottom)
+        return;
+    p->vt->begin_draw(p, 0);
+    s = p->area ? p->area->surface : NULL;
+    if (s && aoe_surface_lock_ror(s, 1)) {
+        const AoeUiRectRor *v = &e->view->rect;
+        aoe_draw_bevel3_ror(&s->view, 0, 0, p->width - 1, v->top - 1,
+                            e->ez.bevel);
+        aoe_draw_bevel3_ror(&s->view, 0, v->bottom + 1, p->width - 1,
+                            p->height - 1, e->ez.bevel);
+        aoe_surface_unlock_ror(s);
+    }
+    p->vt->end_draw(p);
 }

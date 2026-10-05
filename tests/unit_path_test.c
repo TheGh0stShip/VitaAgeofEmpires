@@ -49,6 +49,7 @@ int main(void) {
         assert(aoe_unit_path_append_ror(&q, 1, 1, 1, 1) && q.capacity >= 6 &&
                q.points[5].x == 1 && q.points[0].x == 9);
     }
+    aoe_unit_path_free_ror(&q);
     aoe_unit_path_init_ror(&q, -1);
     assert(!q.points && q.capacity == 0);
     aoe_unit_path_free_ror(&p);

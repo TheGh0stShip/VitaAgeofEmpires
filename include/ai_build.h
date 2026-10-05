@@ -463,4 +463,31 @@ int32_t aoe_ai_ror_build_costs_ror(const AoeAiRorBuildListRor *list, AoeAiCounte
                                    int32_t limit, AoeAiCostFn research_cost,
                                    AoeAiCostFn object_cost, void *context);
 
+/* 0x004b8ce0(reason, object, unique ID, x, y, z, arg), a build attempt
+   that failed: the player's hook takes `arg` unless -1; the reason gives
+   the plan flag (1 for -1, 0, 8 and anything outside -1..8; 0 for 1..7)
+   and the mark state (0 for -1, else 2). For reason 8 with the object
+   alive: a listed unit (0x004c81a0) makes the tactical AI avoid the
+   planned item's footprint at (x, y) (half sizes around its centre) or,
+   without one, x +- 2 by y +- 2; otherwise the construction plan's +0x58
+   (x, y, 10). Then the plan's +0x4c (x, y, flag); the item with the
+   unique ID is no longer in progress, the information AI's mark of its
+   type at the truncated (x, y) takes the state (0x004c34c0), and a 0x114
+   type clears the owner's +0x122b0. Always 1. */
+typedef struct {
+    void *context;
+    void (*player_hook)(void *context, int32_t arg);
+    int (*object_alive)(void *context, int32_t id);
+    int (*listed_unit)(void *context, int32_t id);
+    const AoeAiConItemRor *(*plan_at)(void *context, float x, float y);
+    void (*avoid)(void *context, int32_t id, float x0, float y0, float x1, float y1);
+    void (*plan_block)(void *context, float x, float y, int32_t value);
+    void (*plan_note)(void *context, float x, float y, int32_t flag);
+    void (*set_mark)(void *context, int32_t type, int32_t x, int32_t y, uint8_t state);
+    int32_t *owner_flag_122b0;
+} AoeAiRorBuildFailOpsRor;
+int aoe_ai_ror_build_failed_ror(AoeAiRorBuildListRor *list, const AoeAiRorBuildFailOpsRor *ops,
+                                int32_t reason, int32_t object, int32_t unique_id, float x,
+                                float y, int32_t arg);
+
 #endif

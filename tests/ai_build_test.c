@@ -46,6 +46,17 @@ static int fit_fallbacks;
 static int fit_fallback(void *c, const AoeAiPlanItemRor *i) { (void)c; (void)i; ++fit_fallbacks; return 1; }
 static void cost_tech(void *c, int32_t t, int16_t p[6]) { (void)c; (void)t; p[0] = 0; p[1] = 50; }
 static void cost_obj(void *c, int32_t t, int16_t p[6]) { (void)c; p[0] = 1; p[1] = (int16_t)t; p[2] = 2; p[3] = 5; }
+static int fail_notes = -1, fail_mark_state = -1;
+static float fail_box[4];
+static int fail_alive(void *c, int32_t id) { (void)c; return id == 5; }
+static int fail_listed(void *c, int32_t id) { (void)c; (void)id; return 1; }
+static void fail_avoid(void *c, int32_t id, float a, float b, float d, float e) {
+    (void)c; (void)id; fail_box[0] = a; fail_box[1] = b; fail_box[2] = d; fail_box[3] = e;
+}
+static void fail_note(void *c, float x, float y, int32_t f) { (void)c; (void)x; (void)y; fail_notes = f; }
+static void fail_mark(void *c, int32_t t, int32_t x, int32_t y, uint8_t s) {
+    (void)c; (void)t; (void)x; (void)y; fail_mark_state = s;
+}
 static int32_t extra_count(void *c, int32_t type) { (void)c; return type == 0x67 ? 10 : 0; }
 static int32_t retry_count(void *c, int32_t type, int32_t category) {
     (void)c; (void)type; (void)category; return 0;
@@ -277,6 +288,19 @@ int main(void) {
                 assert(aoe_ai_ror_build_costs_ror(&rl, &costs, 1, cost_tech, cost_obj, NULL) == 1);
                 assert(costs.values[1] == 109);
                 aoe_ai_counters_release_ror(&costs);
+            }
+            {
+                /* 0x004b8ce0: a failed attempt. */
+                AoeAiRorBuildFailOpsRor fo = {NULL, NULL, fail_alive, fail_listed, NULL, fail_avoid,
+                                              NULL, fail_note, fail_mark, NULL};
+                a->in_progress = 1;
+                assert(aoe_ai_ror_build_failed_ror(&rl, &fo, 8, 5, a->plan.unique_id, 10.0f, 4.0f, -1));
+                assert(fail_box[0] == 8.0f && fail_box[3] == 6.0f && fail_notes == 1);
+                assert(!a->in_progress && fail_mark_state == 2);
+                assert(aoe_ai_ror_build_failed_ror(&rl, &fo, 3, 5, a->plan.unique_id, 1.0f, 1.0f, -1));
+                assert(fail_notes == 0);
+                assert(aoe_ai_ror_build_failed_ror(&rl, &fo, -1, 5, a->plan.unique_id, 1.0f, 1.0f, -1));
+                assert(fail_notes == 1 && fail_mark_state == 0);
             }
         }
         aoe_ai_ror_build_list_release_ror(&rl);

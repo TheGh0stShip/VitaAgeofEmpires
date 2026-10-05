@@ -1267,3 +1267,38 @@ int32_t aoe_ai_ror_build_costs_ror(const AoeAiRorBuildListRor *list, AoeAiCounte
     }
     return n;
 }
+
+int aoe_ai_ror_build_failed_ror(AoeAiRorBuildListRor *list, const AoeAiRorBuildFailOpsRor *ops,
+                                int32_t reason, int32_t object, int32_t unique_id, float x,
+                                float y, int32_t arg) {
+    int32_t flag = 1;
+    uint8_t state = 2;
+    AoeAiBuildItemRor *it;
+    if (arg != -1 && ops->player_hook) ops->player_hook(ops->context, arg);
+    if (reason == -1) state = 0;
+    else if (reason >= 1 && reason <= 7) flag = 0;
+    if (reason == 8 && ops->object_alive && ops->object_alive(ops->context, object)) {
+        if (ops->listed_unit && ops->listed_unit(ops->context, object) == 1) {
+            const AoeAiConItemRor *c = ops->plan_at ? ops->plan_at(ops->context, x, y) : NULL;
+            if (ops->avoid) {
+                if (c)
+                    ops->avoid(ops->context, object, c->plan.x - c->plan.size_x * 0.5f,
+                               c->plan.y - c->plan.size_y * 0.5f, c->plan.size_x * 0.5f + c->plan.x,
+                               c->plan.size_y * 0.5f + c->plan.y);
+                else
+                    ops->avoid(ops->context, object, x - 2.0f, y - 2.0f, x + 2.0f, y + 2.0f);
+            }
+        } else if (ops->plan_block) {
+            ops->plan_block(ops->context, x, y, 10);
+        }
+    }
+    if (ops->plan_note) ops->plan_note(ops->context, x, y, flag);
+    it = aoe_ai_build_list_find_ror(&list->base, unique_id);
+    if (it) {
+        it->in_progress = 0;
+        if (ops->set_mark)
+            ops->set_mark(ops->context, it->plan.type, (int32_t)x, (int32_t)y, state);
+        if (it->plan.type == 0x114 && ops->owner_flag_122b0) *ops->owner_flag_122b0 = 0;
+    }
+    return 1;
+}

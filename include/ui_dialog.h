@@ -110,4 +110,37 @@ int aoe_ui_list_dialog_setup_ror(
 int16_t aoe_ui_list_dialog_selected_ror(const AoeUiListDialogRor *d);
 const char *aoe_ui_list_dialog_text_ror(const AoeUiListDialogRor *d);
 
+/* The help dialog "Help Dialog" (vtable 0x00543948,
+   0x00433310..0x00433830): help text in a 340-wide box placed beside the
+   point (x, y) inside the parent, an OK button (Escape) and, with a help
+   file and a help page string, a "more help" button (string 9277). */
+typedef struct {
+    AoeUiDialogRor dialog;
+    int32_t page;                   /* +0x490: the help page string ID */
+    char owner[0x104];              /* +0x494: the screen to go back to */
+    void *field_594;                /* +0x594 */
+    AoeUiTextRor *text;             /* +0x598 */
+    AoeUiButtonRor *ok, *more;      /* +0x59c, +0x5a0 */
+} AoeUiHelpDialogRor;
+
+extern const AoeUiEzVtblRor aoe_ui_help_dialog_vtable_ror;
+
+/* 0x00433310 constructor with its setup 0x00433410: the dialog over
+   `parent` (340 x 400, its popup info), the text (font 11, wrapped), then
+   the height from the text's lines: (font height + 1) * (bottom + 2) +
+   55; x right of the point when it fits (|px - 5 - x|), else left
+   (|x - px - 345|), else centred less 170; y above the point when it fits
+   (|y - h - py - 10|), else below (|y - py + 10|), else centred; both at
+   least 0. The buttons sit at font height * lines + 20, OK at 110 (195
+   with "more help" at 25), 120 x 25, font 11. 0x00433380 destructor
+   (deleting 0x004332f0). */
+int aoe_ui_help_dialog_init_ror(AoeUiHelpDialogRor *d, AoeUiSystemRor *system,
+                                const AoeUiEzOpsRor *ops,
+                                AoeUiPanelRor *parent, const char *owner,
+                                const char *text, int32_t page, int32_t x,
+                                int32_t y);
+/* Slots: +0xb8 0x00433770 (OK goes back to the owner screen and closes
+   the dialog; "more help" also opens WinHelp at the page's keyword),
+   +0x70 0x00433830 (a press outside the dialog is OK). */
+
 #endif

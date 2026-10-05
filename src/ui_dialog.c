@@ -1,10 +1,13 @@
 #include "ui_dialog.h"
 
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "ui_ez_slots.h"
 
 #define DLG(p) ((AoeUiDialogRor *)(p))
+#define EZ_VT_OF(d) ((const AoeUiEzVtblRor *)(d)->dialog.ez.panel.vt)
 #define MSG(p) ((AoeUiMessageDialogRor *)(p))
 
 int aoe_ui_dialog_init_ror(AoeUiDialogRor *d, AoeUiSystemRor *system,
@@ -371,6 +374,150 @@ const AoeUiEzVtblRor aoe_ui_list_dialog_vtable_ror = {
                     aoe_ui_panel_handle_paint_ror, aoe_ui_ez_no_key_action_ror,
                     aoe_ui_panel_zero_ror, list_action,
                     aoe_ui_ez_set_focus_slot_ror),
+    aoe_ui_ez_draw_background_slot_ror,
+    aoe_ui_ez_set_reference_slot_ror,
+};
+
+/* ---- the help dialog ---- */
+
+#define HLP(p) ((AoeUiHelpDialogRor *)(p))
+
+static int32_t iabs(int32_t v) { return v < 0 ? -v : v; }
+
+static void help_layout(AoeUiHelpDialogRor *d, AoeUiPanelRor *parent,
+                        int32_t at_x, int32_t at_y, int32_t lines,
+                        int32_t font_h) {
+    AoeUiPanelRor *p = &d->dialog.ez.panel;
+    int32_t h = (font_h + 1) * lines + 0x37, x, y, above;
+    int32_t px = parent->x, py = aoe_ui_panel_y_ror(parent);
+    int32_t pw = aoe_ui_panel_width_ror(parent);
+    int32_t ph = aoe_ui_panel_height_ror(parent);
+    if (pw + px >= at_x + 0x163)
+        x = iabs(px - 5 - at_x);
+    else if (px + 10 > at_x - 0x159)
+        x = pw / 2 - 0xaa;
+    else
+        x = iabs(at_x - px - 0x159);
+    if (x < 0) x = 0;
+    above = at_y - h;
+    if (py <= above - 10)
+        y = iabs(above - py - 10);
+    else if (ph + py >= h + at_y + 10)
+        y = iabs(at_y - py + 10);
+    else
+        y = ph / 2 - h / 2;
+    if (y < 0) y = 0;
+    p->vt->set_fixed_position(p, x, y, 0x154, h);
+    EZ_VT_OF(d)->set_reference(&d->dialog.ez, p->max_w, p->max_h);
+}
+
+static void help_destroy(AoeUiPanelRor *p) {
+    AoeUiHelpDialogRor *d = HLP(p);
+    free_child(d->ok);
+    free_child(d->more);
+    free_child(d->text);
+    d->ok = d->more = NULL;
+    d->text = NULL;
+    aoe_ui_dialog_release_ror(&d->dialog);
+}
+
+int aoe_ui_help_dialog_init_ror(AoeUiHelpDialogRor *d, AoeUiSystemRor *system,
+                                const AoeUiEzOpsRor *ops,
+                                AoeUiPanelRor *parent, const char *owner,
+                                const char *text, int32_t page, int32_t x,
+                                int32_t y) {
+    AoeUiEzRor *ez, *pez = (AoeUiEzRor *)parent;
+    uintptr_t font = 0;
+    int32_t fw = 0, fh = 0, lines, row;
+    AoeUiPanelRor *tab[2];
+    size_t n;
+    if (!d) return 0;
+    aoe_ui_dialog_init_ror(&d->dialog, system, ops, "Help Dialog");
+    d->dialog.ez.panel.vt = &aoe_ui_help_dialog_vtable_ror.base;
+    ez = &d->dialog.ez;
+    d->ok = d->more = NULL;
+    d->field_594 = NULL;
+    d->text = NULL;
+    n = owner ? strlen(owner) : 0;
+    if (n >= sizeof(d->owner)) n = sizeof(d->owner) - 1;
+    if (n) memcpy(d->owner, owner, n);
+    d->owner[n] = '\0';
+    d->page = page;
+    if (ops && ops->font) ops->font(ops->context, 0xb, &font, &fw, &fh);
+    if (!parent ||
+        !aoe_ui_dialog_setup_ror(&d->dialog, parent->area, parent, 0x154, 400,
+                                 aoe_ui_ez_popup_name_ror(pez),
+                                 aoe_ui_ez_popup_id_ror(pez), 1))
+        return 0;
+    aoe_ui_ez_create_text_ror(ez, &ez->panel, &d->text, text, 10, 10, 0x14a,
+                              0x186, 0xb, 0, 0, 1);
+    if (!d->text) return 0;
+    lines = d->text->bottom + 2;
+    help_layout(d, parent, x, y, lines, fh);
+    d->text->panel.vt->set_fixed_position(&d->text->panel, 10, 10, 0x14a,
+                                          (fh + 1) * lines);
+    row = fh * lines + 0x14;
+    if (ops && ops->has_help_file && ops->has_help_file(ops->context) &&
+        page >= 0) {
+        const char *s = aoe_ui_string_static_ror(system, page);
+        if (s && *s)
+            aoe_ui_ez_create_button_id_ror(ez, &ez->panel, &d->more, 0x243d, 0,
+                                           0x19, row, 0x78, 0x19, 0xb, 0, 0);
+    }
+    aoe_ui_ez_create_button_id_ror(ez, &ez->panel, &d->ok, 0xfa1, 0,
+                                   d->more ? 0xc3 : 0x6e, row, 0x78, 0x19, 0xb,
+                                   0, 0);
+    if (!d->ok) return 0;
+    d->ok->hotkey = 0x1b;
+    d->ok->hotkey_shift = 0;
+    aoe_ui_panel_set_current_ror(&ez->panel, &d->ok->panel);
+    tab[0] = &d->ok->panel;
+    tab[1] = d->more ? &d->more->panel : NULL;
+    aoe_ui_panels_tab_cycle_ror(tab, (int16_t)(d->more ? 2 : 1));
+    return 1;
+}
+
+static int32_t help_action(AoeUiPanelRor *p, AoeUiPanelRor *from,
+                           int32_t code, int32_t value, int32_t extra) {
+    AoeUiHelpDialogRor *d = HLP(p);
+    if (code == 1 && from) {
+        AoeUiSystemRor *s = p->system;
+        int32_t page = d->page;
+        const AoeUiEzOpsRor *ops = d->dialog.ez.ops;
+        if (d->ok && from == &d->ok->panel) {
+            aoe_ui_system_show_named_ror(s, d->owner, 0);
+            aoe_ui_system_close_ror(s, "Help Dialog");
+            return 1;
+        }
+        if (d->more && from == &d->more->panel) {
+            char keyword[0x200];
+            const char *k = aoe_ui_string_static_ror(s, page);
+            snprintf(keyword, sizeof(keyword), "%s", k ? k : "");
+            aoe_ui_system_show_named_ror(s, d->owner, 0);
+            aoe_ui_system_close_ror(s, "Help Dialog");
+            if (ops && ops->win_help_key) ops->win_help_key(ops->context, keyword);
+            return 1;
+        }
+    }
+    return aoe_ui_ez_action_slot_ror(p, from, code, value, extra);
+}
+
+static int32_t help_mouse_down(AoeUiPanelRor *p, uint8_t button, int32_t x,
+                               int32_t y, int32_t c, int32_t s) {
+    AoeUiHelpDialogRor *d = HLP(p);
+    if (!p->vt->is_inside(p, x, y)) {
+        p->vt->action(p, d->ok ? &d->ok->panel : NULL, 1, 0, 0);
+        return 1;
+    }
+    return aoe_ui_ez_mouse_down_slot_ror(p, button, x, y, c, s);
+}
+
+const AoeUiEzVtblRor aoe_ui_help_dialog_vtable_ror = {
+    AOE_UI_EZ_SLOTS_M(help_destroy, aoe_ui_panel_handle_idle_ror,
+                      aoe_ui_panel_handle_paint_ror,
+                      aoe_ui_ez_no_key_action_ror, aoe_ui_panel_zero_ror,
+                      help_action, aoe_ui_ez_set_focus_slot_ror,
+                      help_mouse_down),
     aoe_ui_ez_draw_background_slot_ror,
     aoe_ui_ez_set_reference_slot_ror,
 };

@@ -149,6 +149,17 @@ void aoe_ui_system_show_ror(AoeUiSystemRor *s, AoeUiPanelRor *p, int restore) {
     if (restore) aoe_ui_system_restore_modal_ror(s);
 }
 
+int aoe_ui_system_show_named_ror(AoeUiSystemRor *s, const char *name,
+                                 int restore) {
+    AoeUiPanelRor *p = aoe_ui_system_find_ror(s, name);
+    if (!p) return 0;
+    if (s->capture) aoe_ui_panel_release_capture_ror(s->capture);
+    s->modal = NULL;
+    s->keyboard = NULL;
+    aoe_ui_system_show_ror(s, p, restore);
+    return 1;
+}
+
 int aoe_ui_system_add_ror(AoeUiSystemRor *s, AoeUiPanelRor *p, int show,
                           int restore) {
     if (!s || !p) return 0;

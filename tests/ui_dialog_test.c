@@ -25,6 +25,9 @@ static int32_t record(AoeUiPanelRor *p, AoeUiPanelRor *from, int32_t code,
     codes[n++] = code;
     return 1;
 }
+static int has_help(void *c) { (void)c; return 1; }
+static char keyword[64];
+static void win_key(void *c, const char *k) { (void)c; snprintf(keyword, sizeof(keyword), "%s", k); }
 static int idles, blocked;
 static void game_idle(void *c) { (void)c; ++idles; }
 static int idle_blocked(void *c) { (void)c; return blocked; }
@@ -114,6 +117,39 @@ int main(void) {
     l->dialog.ez.panel.vt->action(&l->dialog.ez.panel, &l->cancel->panel, 1, 0, 0);
     assert(n == 2 && codes[1] == 2);
     assert(aoe_ui_system_close_ror(&sys, "Pick"));
+
+    /* The help dialog beside (100, 100) on a full-screen easy panel: two
+       text lines (font 12): height 13 * 2 + 55 = 81; x |0 - 5 - 100|, y
+       |100 - 81 - 0 - 10|. */
+    {
+        AoeUiEzRor *owner = calloc(1, sizeof(*owner));
+        AoeUiHelpDialogRor *h = calloc(1, sizeof(*h));
+        ops.has_help_file = has_help;
+        ops.win_help_key = win_key;
+        aoe_ui_ez_init_named_ror(owner, &sys, &ops, "Game Screen");
+        assert(aoe_ui_ez_setup_ror(owner, &area, NULL, NULL, -1, 1, 0, 0, 0, 0, 0));
+        assert(aoe_ui_help_dialog_init_ror(h, &sys, &ops, &owner->panel,
+                                           "Game Screen", "Help", 77, 100, 100));
+        assert(h->page == 77 && strcmp(h->owner, "Game Screen") == 0);
+        assert(h->dialog.ez.panel.x == 105 && h->dialog.ez.panel.y == 9 &&
+               h->dialog.ez.panel.width == 340 && h->dialog.ez.panel.height == 81);
+        /* Rows: 12 * 2 + 20; with "more help", OK moves to 195. */
+        assert(h->more && h->ok && h->ok->panel.x - 105 == 195 &&
+               h->more->panel.x - 105 == 25 && h->ok->panel.y - 9 == 44 &&
+               h->ok->hotkey == 0x1b);
+        /* More help: back to the owner screen, closed, WinHelp keyword. */
+        h->dialog.ez.panel.vt->action(&h->dialog.ez.panel, &h->more->panel, 1, 0, 0);
+        assert(!aoe_ui_system_find_ror(&sys, "Help Dialog") &&
+               strcmp(keyword, "S77") == 0 && sys.screen == &owner->panel);
+        /* A press outside a new one closes it like OK. */
+        h = calloc(1, sizeof(*h));
+        assert(aoe_ui_help_dialog_init_ror(h, &sys, &ops, &owner->panel,
+                                           "Game Screen", "Help", -1, 700, 500));
+        assert(!h->more && h->ok->panel.x - h->dialog.ez.panel.x == 110);
+        h->dialog.ez.panel.vt->mouse_down(&h->dialog.ez.panel, 1, 0, 0, 0, 0);
+        assert(!aoe_ui_system_find_ror(&sys, "Help Dialog"));
+        assert(aoe_ui_system_close_ror(&sys, "Game Screen"));
+    }
     aoe_ui_panel_release_ror(&other);
     aoe_ui_panel_release_ror(&screen);
     free(sys.panels);

@@ -252,6 +252,10 @@ void aoe_ui_system_show_ror(AoeUiSystemRor *s, AoeUiPanelRor *p, int restore);
 void aoe_ui_system_restore_modal_ror(AoeUiSystemRor *s);
 int aoe_ui_system_back_ror(AoeUiSystemRor *s, int close);
 void aoe_ui_system_set_keyboard_ror(AoeUiSystemRor *s, AoeUiPanelRor *p);
+/* 0x00451be0: show the registered panel `name` as the screen (capture
+   released, no modal or keyboard panel); 0 when it is not registered. */
+int aoe_ui_system_show_named_ror(AoeUiSystemRor *s, const char *name,
+                                 int restore);
 void aoe_ui_panel_set_previous_ror(AoeUiPanelRor *p, AoeUiPanelRor *previous);
 /* Modal panels: 0x00451ce0 makes `p` (or none) modal, chaining the old
    one behind it (+0x08) and giving it its parent's focus; the panel that

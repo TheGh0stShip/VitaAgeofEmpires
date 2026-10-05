@@ -189,7 +189,7 @@ void aoe_world_reset_ror(AoeWorldBaseRor *w) {
 
 void aoe_world_clear_times_ror(AoeWorldBaseRor *w) {
     w->game_time = w->old_time = w->time_step = 0;
-    w->field_84 = 0;
+    w->step_seconds = 0.0f;
     w->field_10 = 0;
     w->last_ms = 0;
     w->field_1c = 0;

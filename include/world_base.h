@@ -190,7 +190,7 @@ struct AoeWorldBaseRor {
     int32_t seed;               /* +0x78, 14 */
     int16_t field_7c;           /* +0x7c, 1 */
     int32_t data_arg;           /* +0x80 */
-    int32_t field_84;           /* +0x84 */
+    float step_seconds;         /* +0x84: the last step in seconds */
     void **objects;             /* +0x88 */
     int32_t field_8c;           /* +0x8c */
     int32_t objects_cap;        /* +0x90, 10000 */

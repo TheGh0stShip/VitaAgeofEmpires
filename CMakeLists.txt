@@ -630,7 +630,7 @@ add_library(aoe_unit_class STATIC src/unit_class.c)
 target_include_directories(aoe_unit_class PUBLIC include)
 target_compile_options(aoe_unit_class PRIVATE -Wall -Wextra)
 
-add_library(aoe_ui_panel STATIC src/ui_panel.c src/ui_button.c src/command_button.c src/resource_panel.c
+add_library(aoe_ui_panel STATIC src/ui_panel.c src/ui_button.c src/command_button.c src/resource_panel.c src/info_panel.c
             src/ui_text.c
             src/ui_scrollbar.c
             src/ui_list.c
@@ -1485,6 +1485,10 @@ else()
   target_link_libraries(resource_panel_test PRIVATE aoe_ui_panel)
   target_compile_options(resource_panel_test PRIVATE -UNDEBUG)
   add_test(NAME original_ror_resource_panel COMMAND resource_panel_test)
+  add_executable(info_panel_test tests/info_panel_test.c)
+  target_link_libraries(info_panel_test PRIVATE aoe_ui_panel)
+  target_compile_options(info_panel_test PRIVATE -UNDEBUG)
+  add_test(NAME original_ror_info_panel COMMAND info_panel_test)
   add_executable(ui_list_test tests/ui_list_test.c)
   target_link_libraries(ui_list_test PRIVATE aoe_ui_panel)
   target_compile_options(ui_list_test PRIVATE -UNDEBUG)

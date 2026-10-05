@@ -12,6 +12,11 @@ compiler and linked dependencies; the expected VitaSDK ABI uses ARM EABI,
 ARMv7 application profile and VFP-register argument passing. Never infer the
 floating-point calling convention merely from VFP/NEON availability.
 
+VitaSDK's compiler also uses signed plain `char`, small (variable-size) enums
+and a 64-bit `long double`; see `docs/VITA_ABI.md`. Never store enum types in
+serialized or layout-asserted structures. Keep the `armv7-hardfloat` and
+`vita-cross` CI lanes passing.
+
 ## Host/target boundaries
 
 Linux and WSL x86-64 normally use LP64; Windows x64 uses LLP64. Host tools and

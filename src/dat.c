@@ -478,8 +478,67 @@ int dat_parse_map_geometry(const DatBlob *blob, const DatTerrains *terrains,
 
 void dat_free_random_maps(DatRandomMaps *maps) {
     if (!maps) return;
+    if (maps->maps)
+        for (uint32_t i = 0; i < maps->count; ++i) {
+            free(maps->maps[i].lands);
+            free(maps->maps[i].terrains);
+            free(maps->maps[i].objects);
+            free(maps->maps[i].elevations);
+        }
     free(maps->maps);
     memset(maps, 0, sizeof(*maps));
+}
+
+static int32_t lei32(const uint8_t *p) {
+    return (int32_t)le32(p);
+}
+
+static void decode_random_map_land(const uint8_t *p, DatRandomMapLand *land) {
+    land->id = lei32(p);
+    land->field_04 = p[0x04];
+    land->field_08 = lei32(p + 0x08);
+    land->field_0c = lei32(p + 0x0c);
+    land->field_10 = p[0x10];
+    land->placement_mode = p[0x11];
+    land->x = lei32(p + 0x14);
+    land->y = lei32(p + 0x18);
+    land->area_percent = p[0x1c];
+    land->per_player = p[0x1d];
+    land->field_20 = lei32(p + 0x20);
+    land->field_24 = lei32(p + 0x24);
+    land->field_28 = lei32(p + 0x28);
+}
+
+static void decode_random_map_terrain(const uint8_t *p,
+                                      DatRandomMapTerrain *terrain) {
+    terrain->field_00 = lei32(p);
+    terrain->field_04 = lei32(p + 0x04);
+    terrain->field_08 = lei32(p + 0x08);
+    terrain->field_0c = lei32(p + 0x0c);
+    terrain->field_10 = lei32(p + 0x10);
+    terrain->field_14 = lei32(p + 0x14);
+}
+
+static void decode_random_map_object(const uint8_t *p,
+                                     DatRandomMapObject *object) {
+    object->field_00 = lei32(p);
+    object->field_04 = lei32(p + 0x04);
+    object->field_08 = p[0x08];
+    object->field_09 = p[0x09];
+    object->field_0c = lei32(p + 0x0c);
+    object->field_10 = lei32(p + 0x10);
+    object->field_14 = lei32(p + 0x14);
+    object->field_18 = lei32(p + 0x18);
+    object->field_1c = lei32(p + 0x1c);
+    object->field_20 = lei32(p + 0x20);
+    object->field_24 = lei32(p + 0x24);
+    object->field_28 = lei32(p + 0x28);
+}
+
+static void decode_random_map_elevation(const uint8_t *p,
+                                        DatRandomMapElevation *elevation) {
+    for (unsigned i = 0; i < 6; ++i)
+        elevation->values[i] = lei32(p + 4 * i);
 }
 
 int dat_parse_random_maps(const DatBlob *blob, const DatMapGeometry *geometry,
@@ -514,19 +573,66 @@ int dat_parse_random_maps(const DatBlob *blob, const DatMapGeometry *geometry,
         offset += 72;
     }
     for (uint32_t i = 0; i < count; ++i) {
-        const DatRandomMap *map = &maps->maps[i];
+        DatRandomMap *map = &maps->maps[i];
         const uint32_t expected[4] = {map->land_count, map->terrain_count,
                                       map->unit_count, map->elevation_count};
+        const uint8_t *settings;
         if (blob->size - offset < 36) goto fail;
-        offset += 36; /* nine map settings; map ID omitted on pass two */
+        /* Nine map settings (header +0x04..+0x24); the map ID is omitted on
+           pass two and these values replace the first-pass copies. */
+        settings = blob->bytes + offset;
+        for (unsigned m = 0; m < 4; ++m)
+            map->edge_margin[m] = lei32(settings + 4 * m);
+        map->field_14 = lei32(settings + 0x10);
+        map->land_edge_distance = lei32(settings + 0x14);
+        map->field_1c = lei32(settings + 0x18);
+        map->land_percent = lei32(settings + 0x1c);
+        map->field_24 = lei32(settings + 0x20);
+        offset += 36;
         for (unsigned section = 0; section < 4; ++section) {
+            const uint8_t *records;
+            const size_t stride = record_size[section];
             uint32_t items;
             if (blob->size - offset < 8) goto fail;
             items = le32(blob->bytes + offset);
             if (items != expected[section] ||
-                items > (blob->size - offset - 8) / record_size[section])
+                items > (blob->size - offset - 8) / stride)
                 goto fail;
-            offset += 8 + (size_t)items * record_size[section];
+            records = blob->bytes + offset + 8;
+            switch (section) {
+            case 0:
+                map->lands = calloc(items ? items : 1, sizeof(*map->lands));
+                if (!map->lands) goto fail;
+                for (uint32_t r = 0; r < items; ++r)
+                    decode_random_map_land(records + (size_t)r * stride,
+                                           &map->lands[r]);
+                break;
+            case 1:
+                map->terrains = calloc(items ? items : 1,
+                                       sizeof(*map->terrains));
+                if (!map->terrains) goto fail;
+                for (uint32_t r = 0; r < items; ++r)
+                    decode_random_map_terrain(records + (size_t)r * stride,
+                                              &map->terrains[r]);
+                break;
+            case 2:
+                map->objects = calloc(items ? items : 1,
+                                      sizeof(*map->objects));
+                if (!map->objects) goto fail;
+                for (uint32_t r = 0; r < items; ++r)
+                    decode_random_map_object(records + (size_t)r * stride,
+                                             &map->objects[r]);
+                break;
+            default:
+                map->elevations = calloc(items ? items : 1,
+                                         sizeof(*map->elevations));
+                if (!map->elevations) goto fail;
+                for (uint32_t r = 0; r < items; ++r)
+                    decode_random_map_elevation(records + (size_t)r * stride,
+                                                &map->elevations[r]);
+                break;
+            }
+            offset += 8 + (size_t)items * stride;
         }
     }
     maps->next_offset = offset;

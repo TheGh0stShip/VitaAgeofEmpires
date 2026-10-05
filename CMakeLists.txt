@@ -656,9 +656,9 @@ target_include_directories(aoe_ui_panel PUBLIC include)
 target_link_libraries(aoe_ui_panel PUBLIC aoe_palette_fade aoe_draw_prims aoe_shape)
 target_compile_options(aoe_ui_panel PRIVATE -Wall -Wextra)
 
-add_library(aoe_scenario_info STATIC src/scenario_info.c)
+add_library(aoe_scenario_info STATIC src/scenario_info.c src/scenario_editor_player.c)
 target_include_directories(aoe_scenario_info PUBLIC include)
-target_link_libraries(aoe_scenario_info PUBLIC aoe_player_outcome)
+target_link_libraries(aoe_scenario_info PUBLIC aoe_player_outcome aoe_scn)
 target_compile_options(aoe_scenario_info PRIVATE -Wall -Wextra)
 
 add_library(aoe_ai_build STATIC src/ai_module.c src/ai_build.c

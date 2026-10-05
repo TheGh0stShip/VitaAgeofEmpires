@@ -1,6 +1,7 @@
 /* Patched RoR 1.0a scenario-info accessors 0x00506e40..0x00507cc0, the
    player apply 0x005076c0 and the condition installer 0x00507800. */
 #include "scenario_info.h"
+#include "scenario_editor_player.h"
 
 #include <assert.h>
 #include <string.h>
@@ -263,6 +264,33 @@ int main(void) {
         assert(radio[0] == 0 && radio[1] == 1 && radio[2] == 2 &&
                radio[4] == -1);
         assert(allied[2] == 1 && allied[0] == 0 && allied[7] == 0);
+    }
+    {
+        /* 0x00492780 editor player page store and show. */
+        static AoeScenarioInfoRor pi;
+        static AoeScenarioObjectRor po;
+        static char ai[3][0xe0];
+        AoeEditorPlayerFormRor f = {{"200", "150", "100", "50"}, "Caesar",
+                                    1, 2, "Fast", "City", "Rules"};
+        AoeEditorPlayerShownRor shown;
+        AoeScenarioFileOpsRor fo = {0};
+        float world[4];
+        fo.game_state = 7;
+        po.ai_name[3] = ai[0];
+        po.city_name[3] = ai[1];
+        po.per_name[3] = ai[2];
+        aoe_editor_store_player_ror(&pi, &po, 3, &f, world);
+        assert(pi.start_resources[3][2] == 200 && pi.start_resources[3][1] == 150);
+        assert(pi.start_resources[3][3] == 100 && pi.start_resources[3][0] == 50);
+        assert(world[0] == 200.0f && world[3] == 50.0f);
+        assert(!strcmp(po.player_name[3], "Caesar") && po.value_18cc[3] == 1 &&
+               po.value_190c[3] == 3);
+        assert(!strcmp(ai[0], "Fast") && !strcmp(ai[2], "Rules"));
+        assert(!aoe_editor_show_player_ror(&pi, &po, 3, NULL, &shown));
+        assert(aoe_editor_show_player_ror(&pi, &po, 3, &fo, &shown));
+        assert(!strcmp(shown.resource[0], "200") && !strcmp(shown.resource[3], "50"));
+        assert(shown.kind_line == 1 && shown.value_line == 2);
+        assert(!strcmp(shown.city, "City") && !strcmp(shown.name, "Caesar"));
     }
     return 0;
 }

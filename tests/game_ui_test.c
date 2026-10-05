@@ -98,6 +98,22 @@ static void press(AoeMenuDialogRor *m, int i) {
     p->vt->action(p, &m->buttons[i]->panel, 1, m->buttons[i]->ids[0], 0);
 }
 
+static char loaded[64], deleted[64];
+static int deletes;
+static void list_files(void *c, const char *pat, void (*found)(void *, const char *), void *u) {
+    (void)c;
+    if (strstr(pat, ".scn")) {
+        found(u, "zed.scn");
+        found(u, "alpha.scn");
+    } else {
+        found(u, "beta.scx");
+    }
+}
+static int file_exists(void *c, const char *path) { (void)c; return strstr(path, "beta.scn") == NULL; }
+static void delete_file(void *c, const char *path) { (void)c; ++deletes; snprintf(deleted, sizeof deleted, "%s", path); }
+static const char *scen_dir(void *c) { (void)c; return "scen/"; }
+static void editor_load(void *c, const char *f, int32_t flag) { (void)c; (void)flag; snprintf(loaded, sizeof loaded, "%s", f); }
+
 int main(void) {
     AoeUiPlatformRor pf = {0};
     static AoeUiSystemRor sys;
@@ -424,6 +440,39 @@ int main(void) {
         aoe_ui_system_show_ror(&sys, cp, 0);
         assert(cp->vt->key_action(cp, 0xd, 0, 0, 1, 0) == 1);
         assert(!aoe_ui_system_find_ror(&sys, "Credits Screen"));
+    }
+    /* The editor's open screen. */
+    {
+        AoeScenarioEditorOpenRor *o = calloc(1, sizeof *o);
+        AoeUiPanelRor *op = &o->ez.panel;
+        ops.list_files = list_files;
+        ops.file_exists = file_exists;
+        ops.delete_file = delete_file;
+        ops.scenario_dir = scen_dir;
+        ops.editor_load = editor_load;
+        assert(aoe_scenario_editor_open_init_ror(o, &ui, &area, NULL, -1));
+        assert(aoe_ui_system_find_ror(&sys, "Scenario Editor Open") == op);
+        assert(aoe_ui_text_count_ror(&o->list->text) == 3);
+        assert(!strcmp(aoe_ui_text_line_ror(&o->list->text, 0), "alpha"));
+        assert(!strcmp(aoe_ui_text_line_ror(&o->list->text, 2), "zed"));
+        assert(o->cancel->hotkey == 0x1b && o->del->hotkey == 0x2e);
+        assert(op->current == &o->list->text.panel);
+        /* Open picks the .scx when there is no .scn. */
+        aoe_ui_text_select_ror(&o->list->text, 1);
+        op->vt->action(op, &o->list->text.panel, 3, 0, 0);
+        assert(!strcmp(loaded, "beta.scx"));
+        aoe_ui_text_select_ror(&o->list->text, 0);
+        op->vt->action(op, &o->open->panel, 1, 0, 0);
+        assert(!strcmp(loaded, "alpha.scn"));
+        /* Delete asks, yes deletes both files and the line. */
+        op->vt->action(op, &o->del->panel, 1, 0, 0);
+        assert(aoe_ui_system_find_ror(&sys, "Cancel Dialog"));
+        op->vt->action(op, aoe_ui_system_find_ror(&sys, "Cancel Dialog"), 0, 0, 0);
+        assert(!aoe_ui_system_find_ror(&sys, "Cancel Dialog") && deletes == 2);
+        assert(!strcmp(deleted, "scen/alpha.scx") && aoe_ui_text_count_ror(&o->list->text) == 2);
+        /* Cancel without an editor screen: the editor menu. */
+        op->vt->action(op, &o->cancel->panel, 1, 0, 0);
+        assert(!aoe_ui_system_find_ror(&sys, "Scenario Editor Open"));
     }
     aoe_ui_system_close_ror(&sys, "Game Screen");
     free(sys.panels);

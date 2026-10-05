@@ -68,6 +68,16 @@ typedef struct {
     uint8_t *(*read_file)(void *context, const char *path, uint32_t *size);
     int32_t (*music_track)(void *context);
     void (*play_music)(void *context, int32_t from, int32_t to);
+    /* Files: each name matching a wildcard pattern (FindFirst / Next),
+       whether a file exists (OpenFile OF_EXIST), delete one (remove). The
+       scenario directory (game info +0xc17). */
+    void (*list_files)(void *context, const char *pattern,
+                       void (*found)(void *user, const char *name), void *user);
+    int (*file_exists)(void *context, const char *path);
+    void (*delete_file)(void *context, const char *path);
+    const char *(*scenario_dir)(void *context);
+    /* 0x00504e50: the editor on a scenario file (0: a new one). */
+    void (*editor_load)(void *context, const char *file, int32_t flag);
 } AoeGameUiOpsRor;
 
 typedef struct {
@@ -299,5 +309,37 @@ extern const AoeUiEzVtblRor aoe_credits_screen_vtable_ror;
 int aoe_credits_screen_init_ror(AoeCreditsScreenRor *c, AoeGameUiRor *ui,
                                 AoeUiAreaRor *area);
 void aoe_credits_screen_leave_ror(AoeCreditsScreenRor *c);
+
+/* The editor's "Scenario Editor Open" screen (vtable 0x005475b8,
+   0x0049aaa0..0x0049af70): the scenarios in the scenario directory
+   (.scn, then .scx, without the extension, sorted), Open, Delete (with a
+   yes/no "Cancel Dialog") and Cancel (Escape). */
+typedef struct {
+    AoeUiEzRor ez;
+    AoeUiTextRor *title;              /* +0x478 */
+    AoeUiListRor *list;               /* +0x47c */
+    AoeUiScrollbarRor *scrollbar;     /* +0x480 */
+    AoeUiButtonRor *open;             /* +0x484 */
+    AoeUiButtonRor *cancel;           /* +0x488 */
+    AoeUiButtonRor *del;              /* +0x48c */
+    AoeGameUiRor *ui;
+} AoeScenarioEditorOpenRor;
+
+extern const AoeUiEzVtblRor aoe_scenario_editor_open_vtable_ror;
+
+/* 0x0049aaa0 constructor (the current screen's info name and ID; title
+   9421 at 20, 20, 600 x 30 in font 1; the list 600 x 340 at 20, 70 in
+   font 11 with its 20-wide scrollbar; Open (4001), Delete (9417, the
+   Delete key) and Cancel (4002, Escape) 180 x 30 at x 30, 230, 430 and
+   y 440; both Open and Delete disabled with nothing to pick; the list
+   has the focus and the four cycle by Tab). 0x0049ae10 fills the list;
+   0x0049ad70 destructor (deleting 0x0049ad50). +0xb8 0x0049af70: the
+   delete confirmation (9418 with the name; yes deletes both files),
+   Open or a double-click (the .scn, else the .scx, else the message
+   9423), Cancel (back to the editor screen, else the editor menu). */
+int aoe_scenario_editor_open_init_ror(AoeScenarioEditorOpenRor *o, AoeGameUiRor *ui,
+                                      AoeUiAreaRor *area, const char *info_name,
+                                      int32_t info_id);
+void aoe_scenario_editor_open_fill_ror(AoeScenarioEditorOpenRor *o);
 
 #endif

@@ -1,4 +1,6 @@
 #include "ui_ez.h"
+#include "ui_ez_slots.h"
+#include "ui_dialog.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -108,7 +110,7 @@ void aoe_ui_ez_release_ror(AoeUiEzRor *ez) {
     aoe_ui_panel_release_ror(&ez->panel);
 }
 
-static void ez_destroy(AoeUiPanelRor *p) { aoe_ui_ez_release_ror(EZ(p)); }
+void aoe_ui_ez_destroy_slot_ror(AoeUiPanelRor *p) { aoe_ui_ez_release_ror(EZ(p)); }
 
 /* ---- settings ---- */
 
@@ -119,7 +121,7 @@ void aoe_ui_ez_set_info_ror(AoeUiEzRor *ez, const char *name, int32_t id) {
     ez->info_id = id;
 }
 
-static void set_reference(AoeUiEzRor *ez, int32_t w, int32_t h) {
+void aoe_ui_ez_set_reference_slot_ror(AoeUiEzRor *ez, int32_t w, int32_t h) {
     ez->ref_w = w;
     ez->ref_h = h;
 }
@@ -352,7 +354,7 @@ int aoe_ui_ez_setup_ror(AoeUiEzRor *ez, AoeUiAreaRor *area,
     if (!aoe_ui_panel_setup_ror(&ez->panel, area, parent, x, y, w, h, 0))
         return 0;
     EZ_VT(ez)->set_reference(ez, w, h);
-    if (info_name)
+    if (full)
         ez->panel.vt->set_position_mode(&ez->panel, 1, 0, 0, 0, 0, 0, 0, 0, 0,
                                         NULL, NULL, NULL, NULL);
     if (!ez->ops || !ez->ops->load_info) return 1;
@@ -742,21 +744,23 @@ void aoe_ui_ez_place_ror(AoeUiEzRor *ez, AoeUiPanelRor *child, int32_t x,
 
 /* ---- dialogs ---- */
 
-static void dialog(AoeUiEzRor *ez, const char *name, int32_t x, int32_t y,
-                   int32_t type, const char *text, int32_t w, int32_t h) {
-    if (ez->ops && ez->ops->dialog)
-        ez->ops->dialog(ez->ops->context, ez, name, ez->popup_name,
-                        ez->popup_id, x, y, type, text, w, h);
+static void dialog(AoeUiEzRor *ez, const char *name, int32_t w, int32_t h,
+                   int32_t type, const char *text, int32_t bw, int32_t bh) {
+    AoeUiMessageDialogRor *m = calloc(1, sizeof(*m));
+    if (!m) return;
+    aoe_ui_message_dialog_init_ror(m, ez->panel.system, ez->ops, name);
+    aoe_ui_message_dialog_setup_ror(m, &ez->panel, ez->popup_name,
+                                    ez->popup_id, w, h, (uint8_t)type, text,
+                                    bw, bh);
 }
 
 static void close_existing(AoeUiEzRor *ez, const char *name) {
-    if (ez->ops && ez->ops->panel_exists && ez->ops->close_panel &&
-        ez->ops->panel_exists(ez->ops->context, name))
-        ez->ops->close_panel(ez->ops->context, name);
+    if (aoe_ui_system_find_ror(ez->panel.system, name))
+        aoe_ui_system_close_ror(ez->panel.system, name);
 }
 
 void aoe_ui_ez_help_dialog_ror(AoeUiEzRor *ez, const char *text,
-                               const char *name, int32_t x, int32_t y) {
+                               const char *name, int32_t w, int32_t h) {
     uint8_t *mode;
     char copy[0x100];
     if (!ez || !ez->ops || !ez->ops->help_mode) return;
@@ -769,28 +773,28 @@ void aoe_ui_ez_help_dialog_ror(AoeUiEzRor *ez, const char *text,
     *mode = 2;
     copy_name(copy, sizeof(copy), name && *name ? name : "OKDialog");
     close_existing(ez, copy);
-    dialog(ez, copy, x, y, 5, text, 0x5a, 0x1e);
+    dialog(ez, copy, w, h, 5, text, 0x5a, 0x1e);
 }
 
 void aoe_ui_ez_ok_dialog_ror(AoeUiEzRor *ez, const char *text,
-                             const char *name, int32_t x, int32_t y) {
+                             const char *name, int32_t w, int32_t h) {
     char copy[0x100];
     if (!ez) return;
     copy_name(copy, sizeof(copy), name && *name ? name : "OKDialog");
     close_existing(ez, copy);
-    dialog(ez, copy, x, y, 0, text, 0x5a, 0x1e);
+    dialog(ez, copy, w, h, 0, text, 0x5a, 0x1e);
 }
 
 void aoe_ui_ez_yes_no_dialog_ror(AoeUiEzRor *ez, const char *text,
-                                 const char *name, int32_t x, int32_t y) {
-    if (ez) dialog(ez, name && *name ? name : "YesNoDialog", x, y, 2, text,
+                                 const char *name, int32_t w, int32_t h) {
+    if (ez) dialog(ez, name && *name ? name : "YesNoDialog", w, h, 2, text,
                    0x5a, 0x1e);
 }
 
 void aoe_ui_ez_yes_no_cancel_dialog_ror(AoeUiEzRor *ez, const char *text,
-                                        const char *name, int32_t x,
-                                        int32_t y) {
-    if (ez) dialog(ez, name && *name ? name : "YesNoCancelDialog", x, y, 4,
+                                        const char *name, int32_t w,
+                                        int32_t h) {
+    if (ez) dialog(ez, name && *name ? name : "YesNoCancelDialog", w, h, 4,
                    text, 0x78, 0x19);
 }
 
@@ -801,33 +805,33 @@ static const char *string_of(AoeUiEzRor *ez, int32_t id, char *buf, int size) {
 }
 
 void aoe_ui_ez_help_dialog_id_ror(AoeUiEzRor *ez, int32_t text_id,
-                                  const char *name, int32_t x, int32_t y) {
+                                  const char *name, int32_t w, int32_t h) {
     char text[0x100];
     if (ez) aoe_ui_ez_help_dialog_ror(ez, string_of(ez, text_id, text, sizeof(text)),
-                                      name, x, y);
+                                      name, w, h);
 }
 
 void aoe_ui_ez_ok_dialog_id_ror(AoeUiEzRor *ez, int32_t text_id,
-                                const char *name, int32_t x, int32_t y) {
+                                const char *name, int32_t w, int32_t h) {
     char text[0x100];
     if (ez) aoe_ui_ez_ok_dialog_ror(ez, string_of(ez, text_id, text, sizeof(text)),
-                                    name, x, y);
+                                    name, w, h);
 }
 
 void aoe_ui_ez_yes_no_dialog_id_ror(AoeUiEzRor *ez, int32_t text_id,
-                                    const char *name, int32_t x, int32_t y) {
+                                    const char *name, int32_t w, int32_t h) {
     char text[0x100];
     if (ez) aoe_ui_ez_yes_no_dialog_ror(ez, string_of(ez, text_id, text, sizeof(text)),
-                                        name, x, y);
+                                        name, w, h);
 }
 
 void aoe_ui_ez_yes_no_cancel_dialog_id_ror(AoeUiEzRor *ez, int32_t text_id,
-                                           const char *name, int32_t x,
-                                           int32_t y) {
+                                           const char *name, int32_t w,
+                                           int32_t h) {
     char text[0x100];
     if (ez)
         aoe_ui_ez_yes_no_cancel_dialog_ror(
-            ez, string_of(ez, text_id, text, sizeof(text)), name, x, y);
+            ez, string_of(ez, text_id, text, sizeof(text)), name, w, h);
 }
 
 /* ---- help mode ---- */
@@ -878,11 +882,11 @@ int32_t aoe_ui_ez_help_press_ror(AoeUiEzRor *ez, uint8_t button, int32_t x,
 
 /* ---- slots ---- */
 
-static void ez_begin_draw(AoeUiPanelRor *p, int32_t clear) {
+void aoe_ui_ez_begin_draw_slot_ror(AoeUiPanelRor *p, int32_t clear) {
     aoe_ui_panel_begin_draw_ror(p, clear);
 }
 
-static void ez_draw(AoeUiPanelRor *p) {
+void aoe_ui_ez_draw_slot_ror(AoeUiPanelRor *p) {
     AoeUiEzRor *ez = EZ(p);
     if (p->need_restore) {
         if (ez->shadow_panel && ez->ops && ez->ops->shadow_area)
@@ -892,13 +896,13 @@ static void ez_draw(AoeUiPanelRor *p) {
     EZ_VT(ez)->draw_background(ez, p->parent_rect ? 1 : 0);
 }
 
-static int32_t ez_mouse_down(AoeUiPanelRor *p, uint8_t button, int32_t x,
+int32_t aoe_ui_ez_mouse_down_slot_ror(AoeUiPanelRor *p, uint8_t button, int32_t x,
                              int32_t y, int32_t c, int32_t s) {
     if (aoe_ui_ez_help_press_ror(EZ(p), button, x, y)) return 1;
     return aoe_ui_panel_mouse_down_ror(p, button, x, y, c, s);
 }
 
-static int32_t ez_action(AoeUiPanelRor *p, AoeUiPanelRor *from, int32_t code,
+int32_t aoe_ui_ez_action_slot_ror(AoeUiPanelRor *p, AoeUiPanelRor *from, int32_t code,
                          int32_t value, int32_t extra) {
     AoeUiEzRor *ez = EZ(p);
     static const struct { const char *name; int32_t codes; } dialogs[] = {
@@ -908,16 +912,15 @@ static int32_t ez_action(AoeUiPanelRor *p, AoeUiPanelRor *from, int32_t code,
         const char *name = aoe_ui_panel_name_ror(from);
         for (i = 0; name && i < sizeof(dialogs) / sizeof(dialogs[0]); ++i) {
             if (strcmp(name, dialogs[i].name) != 0) continue;
-            if (code >= 0 && code < dialogs[i].codes && ez->ops &&
-                ez->ops->close_panel)
-                ez->ops->close_panel(ez->ops->context, dialogs[i].name);
+            if (code >= 0 && code < dialogs[i].codes)
+                aoe_ui_system_close_ror(ez->panel.system, dialogs[i].name);
             return 1;
         }
     }
     return aoe_ui_panel_action_ror(p, from, code, value, extra);
 }
 
-static void ez_set_focus(AoeUiPanelRor *p, int32_t focus) {
+void aoe_ui_ez_set_focus_slot_ror(AoeUiPanelRor *p, int32_t focus) {
     AoeUiEzRor *ez = EZ(p);
     const AoeUiEzOpsRor *ops = ez->ops;
     aoe_ui_panel_set_focus_ror(p, focus);
@@ -938,75 +941,25 @@ static void ez_set_focus(AoeUiPanelRor *p, int32_t focus) {
     if (ez->ime_toggle && ops && ops->ime) ops->ime(ops->context, p->has_focus != 0);
 }
 
-static int32_t no_key_action(AoeUiPanelRor *p, int32_t a, int32_t b,
+int32_t aoe_ui_ez_no_key_action_ror(AoeUiPanelRor *p, int32_t a, int32_t b,
                              int32_t c, int32_t d, int32_t e) {
     (void)p; (void)a; (void)b; (void)c; (void)d; (void)e;
     return 0;
 }
 
 /* Background drawing is not translated. */
-static void ez_draw_background(AoeUiEzRor *ez, int32_t parent_rect) {
+void aoe_ui_ez_draw_background_slot_ror(AoeUiEzRor *ez, int32_t parent_rect) {
     (void)ez;
     (void)parent_rect;
 }
 
-#define EZ_PANEL_SLOTS(destroy_fn, paint_fn, help_fn)                         \
-    {destroy_fn,                                                              \
-     aoe_ui_panel_setup_ror,                                                  \
-     aoe_ui_panel_set_rect_ltrb_ror,                                          \
-     aoe_ui_panel_set_rect_ror,                                               \
-     aoe_ui_panel_set_color_ror,                                              \
-     aoe_ui_panel_set_active_ror,                                             \
-     aoe_ui_panel_set_position_mode_ror,                                      \
-     aoe_ui_panel_set_fixed_position_ror,                                     \
-     aoe_ui_panel_set_redraw_ror,                                             \
-     aoe_ui_panel_redraw_overlaps_ror,                                        \
-     ez_begin_draw,                                                           \
-     aoe_ui_panel_end_draw_ror,                                               \
-     ez_draw,                                                                 \
-     aoe_ui_panel_draw_rect_ror,                                              \
-     aoe_ui_panel_draw_offset_ror,                                            \
-     aoe_ui_panel_draw_parent_rect_ror,                                       \
-     aoe_ui_panel_draw_parent_offset_ror,                                     \
-     aoe_ui_panel_validate_ror,                                               \
-     aoe_ui_panel_handle_message_ror,                                         \
-     aoe_ui_panel_handle_idle_ror,                                            \
-     aoe_ui_panel_handle_size_ror,                                            \
-     paint_fn,                                                                \
-     aoe_ui_panel_key_down_ror,                                               \
-     aoe_ui_panel_char_ror,                                                   \
-     aoe_ui_panel_ignore_ror,                                                 \
-     aoe_ui_panel_ignore_ror,                                                 \
-     aoe_ui_panel_ignore_ror,                                                 \
-     aoe_ui_panel_ignore_ror,                                                 \
-     ez_mouse_down,                                                           \
-     aoe_ui_panel_mouse_move_ror,                                             \
-     aoe_ui_panel_mouse_up_ror,                                               \
-     aoe_ui_panel_mouse_dbl_ror,                                              \
-     {aoe_ui_panel_no_action_ror, aoe_ui_panel_no_action_ror,                 \
-      aoe_ui_panel_no_action_ror, aoe_ui_panel_no_action_ror,                 \
-      aoe_ui_panel_no_action_ror, aoe_ui_panel_no_action_ror,                 \
-      aoe_ui_panel_no_action_ror, aoe_ui_panel_no_action_ror,                 \
-      aoe_ui_panel_no_action_ror, aoe_ui_panel_no_action_ror,                 \
-      aoe_ui_panel_no_action_ror},                                            \
-     no_key_action,                                                           \
-     help_fn,                                                                 \
-     aoe_ui_panel_no_char_action_ror,                                         \
-     ez_action,                                                               \
-     aoe_ui_panel_get_true_rect_ror,                                          \
-     aoe_ui_panel_is_inside_ror,                                              \
-     ez_set_focus,                                                            \
-     aoe_ui_panel_set_tab_order_ror,                                          \
-     aoe_ui_panel_get_help_ror,                                               \
-     aoe_ui_panel_stop_sound_ror,                                             \
-     aoe_ui_panel_restart_sound_ror,                                          \
-     aoe_ui_panel_slot_e0_ror}
+
 
 const AoeUiEzVtblRor aoe_ui_ez_vtable_ror = {
-    EZ_PANEL_SLOTS(ez_destroy, aoe_ui_panel_handle_paint_ror,
+    AOE_UI_EZ_DEFAULT_SLOTS(aoe_ui_ez_destroy_slot_ror, aoe_ui_panel_handle_paint_ror,
                    aoe_ui_panel_zero_ror),
-    ez_draw_background,
-    set_reference,
+    aoe_ui_ez_draw_background_slot_ror,
+    aoe_ui_ez_set_reference_slot_ror,
 };
 
 /* ---- the screen subclass ---- */
@@ -1036,7 +989,7 @@ static int32_t screen_help(AoeUiPanelRor *p) {
 }
 
 const AoeUiEzVtblRor aoe_ui_screen_vtable_ror = {
-    EZ_PANEL_SLOTS(ez_destroy, screen_paint, screen_help),
-    ez_draw_background,
-    set_reference,
+    AOE_UI_EZ_DEFAULT_SLOTS(aoe_ui_ez_destroy_slot_ror, screen_paint, screen_help),
+    aoe_ui_ez_draw_background_slot_ror,
+    aoe_ui_ez_set_reference_slot_ror,
 };

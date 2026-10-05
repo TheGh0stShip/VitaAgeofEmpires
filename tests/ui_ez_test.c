@@ -1,5 +1,6 @@
 /* Patched RoR 1.0a easy panel 0x00454430..0x00457e50 and the value
    scrollbars 0x00468360..0x00468540. */
+#include "ui_dialog.h"
 #include "ui_ez.h"
 
 #include <assert.h>
@@ -87,21 +88,10 @@ static int32_t pstate = 42;
 static int32_t pointer_state(void *c) { (void)c; return pstate; }
 static void set_pointer_state(void *c, int32_t s) { (void)c; pstate = s; }
 
-static char closed[64], dialog_name[64], dialog_text[64];
-static int32_t dialog_type = -1, dialog_w, dialog_h, dialogs;
-static int exists(void *c, const char *n) { (void)c; return strcmp(n, "OKDialog") == 0; }
-static void close_panel(void *c, const char *n) { (void)c; snprintf(closed, sizeof(closed), "%s", n); }
-static void dialog(void *c, AoeUiEzRor *parent, const char *name, const char *info,
-                   int32_t iid, int32_t x, int32_t y, int32_t type, const char *text,
-                   int32_t w, int32_t h) {
-    (void)c; (void)parent; (void)info; (void)iid; (void)x; (void)y;
-    snprintf(dialog_name, sizeof(dialog_name), "%s", name);
-    snprintf(dialog_text, sizeof(dialog_text), "%s", text);
-    dialog_type = type;
-    dialog_w = w;
-    dialog_h = h;
-    ++dialogs;
+static AoeUiMessageDialogRor *message(AoeUiSystemRor *s, const char *name) {
+    return (AoeUiMessageDialogRor *)aoe_ui_system_find_ror(s, name);
 }
+
 static char help_text[64];
 static void help_popup(void *c, const char *panel, const char *text, int32_t page,
                        int32_t x, int32_t y) {
@@ -155,9 +145,6 @@ int main(void) {
     ops.cursor = cursor;
     ops.pointer_state = pointer_state;
     ops.set_pointer_state = set_pointer_state;
-    ops.panel_exists = exists;
-    ops.close_panel = close_panel;
-    ops.dialog = dialog;
     ops.help_popup = help_popup;
     ops.win_help = win_help;
     ops.help_mode = &help_mode;
@@ -367,40 +354,73 @@ int main(void) {
         assert(shapes_live == 0);
     }
 
-    /* Dialogs. */
+    /* Dialogs: registered message dialogs of w x h over the panel. */
     aoe_ui_ez_init_ror(&ez, &sys, &ops);
+    assert(aoe_ui_ez_setup_ror(&ez, &area, NULL, NULL, -1, 1, 0, 0, 0, 0, 0));
     aoe_ui_ez_set_popup_ror(&ez, "pop", 5);
     help_mode = 0;
-    aoe_ui_ez_help_dialog_id_ror(&ez, 7, NULL, 1, 2);
-    assert(dialogs == 1 && dialog_type == 5 && help_mode == 2 &&
-           strcmp(dialog_name, "OKDialog") == 0 &&
-           strcmp(closed, "OKDialog") == 0 && strcmp(dialog_text, "Seven") == 0);
-    aoe_ui_ez_help_dialog_ror(&ez, "again", NULL, 1, 2);
-    assert(dialogs == 1);
+    aoe_ui_ez_help_dialog_id_ror(&ez, 7, NULL, 300, 200);
+    {
+        AoeUiMessageDialogRor *m = message(&sys, "OKDialog");
+        assert(m && m->type == 5 && help_mode == 2 &&
+               m->dialog.ez.panel.width == 300 &&
+               m->dialog.ez.panel.x == 400 - 150 &&
+               strcmp(m->text->lines->text, "Seven") == 0);
+        /* One button 90 x 30 centred: gap (300 - 90) / 2. */
+        assert(m->buttons[0] && !m->buttons[1] &&
+               m->buttons[0]->panel.width == 90 &&
+               m->buttons[0]->panel.y - m->dialog.ez.panel.y == 200 - 30 - 7 &&
+               sys.modal == &m->dialog.ez.panel);
+    }
+    /* Once shown, help mode 2 blocks another; mode 1 is WinHelp. */
+    aoe_ui_ez_help_dialog_ror(&ez, "again", NULL, 300, 200);
+    assert(strcmp(message(&sys, "OKDialog")->text->lines->text, "Seven") == 0);
     help_mode = 1;
-    aoe_ui_ez_help_dialog_ror(&ez, "again", NULL, 1, 2);
-    assert(dialogs == 1 && win_helps == 1);
-    aoe_ui_ez_yes_no_dialog_ror(&ez, "q", NULL, 0, 0);
-    assert(dialog_type == 2 && strcmp(dialog_name, "YesNoDialog") == 0);
-    aoe_ui_ez_yes_no_cancel_dialog_id_ror(&ez, 7, "Mine", 0, 0);
-    assert(dialog_type == 4 && strcmp(dialog_name, "Mine") == 0 &&
-           dialog_w == 0x78 && dialog_h == 0x19);
-    aoe_ui_ez_ok_dialog_ror(&ez, "ok", NULL, 0, 0);
-    assert(dialog_type == 0 && dialog_w == 0x5a);
-
+    aoe_ui_ez_help_dialog_ror(&ez, "again", NULL, 300, 200);
+    assert(win_helps == 1);
+    /* An OK dialog of the same name replaces the old one. */
+    aoe_ui_ez_ok_dialog_ror(&ez, "ok", NULL, 300, 200);
+    assert(message(&sys, "OKDialog")->type == 0 &&
+           strcmp(message(&sys, "OKDialog")->text->lines->text, "ok") == 0);
+    aoe_ui_ez_yes_no_cancel_dialog_id_ror(&ez, 7, "Mine", 400, 200);
+    {
+        AoeUiMessageDialogRor *m = message(&sys, "Mine");
+        assert(m->type == 4 && m->buttons[2] &&
+               m->buttons[0]->panel.width == 0x78 &&
+               m->buttons[0]->panel.height == 0x19 &&
+               m->buttons[2]->hotkey == 0x1b && m->buttons[0]->hotkey == 0);
+        /* Its third button answers the parent with action 2... */
+    }
     /* A dialog's buttons close it; other codes are swallowed. */
     {
-        static AoeUiPanelRor box;
-        aoe_ui_panel_init_ror(&box, &sys);
-        aoe_ui_panel_set_name_ror(&box, "YesNoCancelDialog");
-        closed[0] = '\0';
-        assert(ez.panel.vt->action(&ez.panel, &box, 2, 0, 0) == 1 &&
-               strcmp(closed, "YesNoCancelDialog") == 0);
-        aoe_ui_panel_set_name_ror(&box, "YesNoDialog");
-        closed[0] = '\0';
-        assert(ez.panel.vt->action(&ez.panel, &box, 2, 0, 0) == 1 && !closed[0]);
-        aoe_ui_panel_release_ror(&box);
+        AoeUiPanelRor *box = &message(&sys, "Mine")->dialog.ez.panel;
+        aoe_ui_panel_set_name_ror(box, "YesNoCancelDialog");
+        assert(ez.panel.vt->action(&ez.panel, box, 2, 0, 0) == 1 &&
+               !aoe_ui_system_find_ror(&sys, "YesNoCancelDialog"));
     }
+    aoe_ui_ez_yes_no_dialog_ror(&ez, "q", NULL, 300, 200);
+    {
+        AoeUiPanelRor *box = &message(&sys, "YesNoDialog")->dialog.ez.panel;
+        assert(ez.panel.vt->action(&ez.panel, box, 2, 0, 0) == 1 &&
+               aoe_ui_system_find_ror(&sys, "YesNoDialog"));
+        assert(ez.panel.vt->action(&ez.panel, box, 1, 0, 0) == 1 &&
+               !aoe_ui_system_find_ror(&sys, "YesNoDialog"));
+    }
+    /* Clicking No (button 1) answers the parent with 1, which closes it;
+       the parent's focus comes back. */
+    {
+        AoeUiPanelRor *before = ez.panel.current;
+        AoeUiMessageDialogRor *m;
+        aoe_ui_ez_yes_no_dialog_ror(&ez, "q", NULL, 300, 200);
+        m = message(&sys, "YesNoDialog");
+        assert(ez.panel.current == &m->dialog.ez.panel);
+        m->dialog.ez.panel.vt->action(&m->dialog.ez.panel,
+                                      &m->buttons[1]->panel, 1, 0, 0);
+        assert(!aoe_ui_system_find_ror(&sys, "YesNoDialog"));
+        (void)before;
+    }
+    aoe_ui_system_close_ror(&sys, "OKDialog");
+    assert(!sys.modal || sys.modal == &ez.panel);
 
     /* Help mode: armed, then a left press shows the panel's help. */
     aoe_ui_ez_help_mode_on_ror(&ez);
@@ -430,7 +450,10 @@ int main(void) {
     assert(aoe_ui_screen_setup_ror(&ez, &area, NULL, -1, 0));
     assert(ez.panel.width == 800);
     ez.panel.vt->slot_b0(&ez.panel);
-    assert(dialog_type == 5 && strcmp(dialog_text, "Help text") == 0);
+    assert(message(&sys, "OKDialog")->type == 5 &&
+           message(&sys, "OKDialog")->dialog.ez.panel.width == 450 &&
+           strcmp(message(&sys, "OKDialog")->text->lines->text, "Help text") == 0);
+    aoe_ui_system_close_ror(&sys, "OKDialog");
     aoe_ui_ez_release_ror(&ez);
     return 0;
 }

@@ -60,15 +60,7 @@ typedef struct {
     void (*cursor)(void *context, int help, int32_t mode);
     int32_t (*pointer_state)(void *context);
     void (*set_pointer_state)(void *context, int32_t state);
-    /* Dialogs: a panel by name exists, close it; a message dialog of
-       `type` (0 OK, 2 yes/no, 4 yes/no/cancel, 5 help) with the popup
-       info; the help popup; WinHelp for help mode 1. */
-    int (*panel_exists)(void *context, const char *name);
-    void (*close_panel)(void *context, const char *name);
-    void (*dialog)(void *context, AoeUiEzRor *parent, const char *name,
-                   const char *info_file, int32_t info_id, int32_t x,
-                   int32_t y, int32_t type, const char *text, int32_t w,
-                   int32_t h);
+    /* The help popup; WinHelp for help mode 1. */
     void (*help_popup)(void *context, const char *panel_name,
                        const char *text, int32_t page, int32_t x, int32_t y);
     void (*win_help)(void *context);
@@ -78,6 +70,10 @@ typedef struct {
     const AoeUiInputOpsRor *input_ops;
     uint32_t caret_blink_ms;
     const AoeUiDropdownOpsRor *dropdown_ops;
+    /* The game's idle work, skipped while its +0x1d8 flag is set (the
+       message dialog's idle). */
+    void (*game_idle)(void *context);
+    int (*idle_blocked)(void *context);
     /* Rebuild the shadow area (not translated). */
     void (*shadow_area)(void *context, AoeUiEzRor *ez, int32_t force);
 } AoeUiEzOpsRor;
@@ -134,8 +130,8 @@ void aoe_ui_ez_reset_ror(AoeUiEzRor *ez);
 void aoe_ui_ez_free_ror(AoeUiEzRor *ez);
 void aoe_ui_ez_release_ror(AoeUiEzRor *ez);
 /* 0x004544a0 setup: the info name and ID, full-area or centred (-1)
-   placement, the reference size (+0xe8), the fixed position when there is
-   an info file, then the info: three background sets (640, 800 and 1024
+   placement, the reference size (+0xe8), position mode 1 (fill the
+   parent) for a full-area panel, then the info: three background sets (640, 800 and 1024
    wide areas; "none" falls back to the smaller set), palette, pointer,
    shadow, button pictures, popup info, background mode, fill colour,
    bevel and three colour pairs as r g b triples. */
@@ -266,25 +262,27 @@ void aoe_ui_ez_place_ror(AoeUiEzRor *ez, AoeUiPanelRor *child, int32_t x,
    / 0x00457920 OK, 0x00457a30 / 0x00457a80 yes/no, 0x00457b40 /
    0x00457b90 yes/no/cancel (the default names "OKDialog", "YesNoDialog",
    "YesNoCancelDialog"; an OK or help dialog of the same name is closed
-   first); 0x00457740 the help popup from a string ID. */
+   first); 0x00457740 the help popup from a string ID. Each creates a
+   registered message dialog (ui_dialog.h) of w x h with the popup info
+   and buttons 90 x 30 (120 x 25 for yes/no/cancel). */
 void aoe_ui_ez_help_dialog_ror(AoeUiEzRor *ez, const char *text,
-                               const char *name, int32_t x, int32_t y);
+                               const char *name, int32_t w, int32_t h);
 void aoe_ui_ez_help_dialog_id_ror(AoeUiEzRor *ez, int32_t text_id,
-                                  const char *name, int32_t x, int32_t y);
+                                  const char *name, int32_t w, int32_t h);
 void aoe_ui_ez_ok_dialog_ror(AoeUiEzRor *ez, const char *text,
-                             const char *name, int32_t x, int32_t y);
+                             const char *name, int32_t w, int32_t h);
 void aoe_ui_ez_ok_dialog_id_ror(AoeUiEzRor *ez, int32_t text_id,
-                                const char *name, int32_t x, int32_t y);
+                                const char *name, int32_t w, int32_t h);
 void aoe_ui_ez_yes_no_dialog_ror(AoeUiEzRor *ez, const char *text,
-                                 const char *name, int32_t x, int32_t y);
+                                 const char *name, int32_t w, int32_t h);
 void aoe_ui_ez_yes_no_dialog_id_ror(AoeUiEzRor *ez, int32_t text_id,
-                                    const char *name, int32_t x, int32_t y);
+                                    const char *name, int32_t w, int32_t h);
 void aoe_ui_ez_yes_no_cancel_dialog_ror(AoeUiEzRor *ez, const char *text,
-                                        const char *name, int32_t x,
-                                        int32_t y);
+                                        const char *name, int32_t w,
+                                        int32_t h);
 void aoe_ui_ez_yes_no_cancel_dialog_id_ror(AoeUiEzRor *ez, int32_t text_id,
-                                           const char *name, int32_t x,
-                                           int32_t y);
+                                           const char *name, int32_t w,
+                                           int32_t h);
 /* Help mode: 0x00457cd0 arms it (help pointer, mode 6, the pointer state
    saved and cleared), 0x00457d30 disarms it; 0x00457d80 the next press
    disarms it and a left press shows the panel's help (+0xd0) popup. */

@@ -582,7 +582,8 @@ add_library(aoe_ui_panel STATIC src/ui_panel.c src/ui_button.c
             src/ui_picture.c
             src/ui_input.c
             src/ui_dropdown.c
-            src/ui_ez.c)
+            src/ui_ez.c
+            src/ui_dialog.c)
 target_include_directories(aoe_ui_panel PUBLIC include)
 target_compile_options(aoe_ui_panel PRIVATE -Wall -Wextra)
 

@@ -441,7 +441,7 @@ int aoe_ui_string_ror(const AoeUiSystemRor *system, int32_t id, char *out,
                       int size);
 const char *aoe_ui_string_static_ror(const AoeUiSystemRor *system,
                                      int32_t id);
-/* Children broadcasts 0x00454390 (+0xd4), 0x004543b0 (+0xd8, 0 if any
+/* Children broadcasts 0x00454390 (+0xd4), 0x004543b0 (+0xd8; thunk 0x00485a90; 0 if any
    fails), 0x004543e0 (+0xe0). */
 void aoe_ui_children_stop_sound_ror(AoeUiPanelRor *p);
 int32_t aoe_ui_children_restart_sound_ror(AoeUiPanelRor *p);

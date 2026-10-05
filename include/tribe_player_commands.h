@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "player_outcome.h" /* AoeOutcomeStream */
 #include "tribe_command_builders.h"
 
 /* Patched Rise of Rome 1.0a tribe player command methods
@@ -65,5 +66,53 @@ int aoe_tribe_player_template_usable_ror(const AoeTribePlayerOpsRor *ops, int16_
    1. 0x004f2110: a research state (0x004ea9ac) other than 3 and -1. */
 int aoe_tribe_tech_state_is_one_ror(const uint8_t *entries, int32_t i);
 int aoe_tribe_research_open_ror(int16_t state);
+
+/* The RoR tribe player's own slots (vtable 0x00549a44, also
+   0x00549b80) that forward to its computer player (+0x23c), the
+   production queue, the command builder or the score history. */
+typedef struct {
+    void *context;
+    int has_ai;        /* +0x23c set */
+    int16_t player_id; /* +0x4a */
+    void (*ai_kick)(void *context, int32_t kind);                  /* 0x004c7ff0 */
+    int32_t (*ai_strategic)(void *context, int32_t i);             /* 0x004d77d0 */
+    void (*ai_log)(void *context, const char *line);               /* 0x0040c240 */
+    void (*ai_unit_added)(void *context, int32_t id);              /* AI +0x44 */
+    void (*add_unit)(void *context, void *unit, int32_t a, int32_t b, int32_t c); /* 0x0045e8d0 */
+    int (*unit_info)(void *context, void *unit, int16_t *unit_class, int32_t *id); /* +0x08 +0x14, +0x04 */
+    void (*queue_train)(void *context, int16_t player, int32_t a, int32_t b, int32_t c);    /* 0x004e94e0 */
+    void (*queue_research)(void *context, int16_t player, int32_t a, int32_t b, int32_t c); /* 0x004e9580 */
+    void (*order_ids)(void *context, int16_t player, const int32_t *ids, int32_t count, int32_t a,
+                      int32_t b, int32_t c, int32_t d);              /* 0x0042b970 */
+    void (*tribute)(void *context, int16_t player, int32_t a, int32_t resource, float amount,
+                    int32_t b);                                      /* world +0x58 +0x14 */
+    void (*sample)(void *context, int32_t skip, int32_t value);    /* 0x004b0c00 */
+} AoeTribeForwardOpsRor;
+
+/* +0x38 0x004f29d0: the AI's kick; +0x3c 0x004f29f0: its strategic
+   number (-1 without an AI); +0xe4 0x004f2a20: a formatted AI log line
+   (1024 bytes). +0xe0 0x004f2b10: the base add (0x0045e8d0), then the AI
+   hears of a unit with an ID that is not class 11. +0x108 0x004f2c20 /
+   +0x114 0x004f2c80: train / research with the first two arguments
+   swapped. +0x120 / +0x124 0x004f2d10: an order for one raw ID.
+   +0xf8 0x004f13c0: a tribute when the resource is set and the amount
+   nonzero (1), else 0. 0x004f1aa0: a score history sample of the
+   +0x50 record's +0x2c (truncated; 0 when negative). */
+void aoe_tribe_ai_kick_ror(const AoeTribeForwardOpsRor *ops, int32_t kind);
+int32_t aoe_tribe_ai_strategic_ror(const AoeTribeForwardOpsRor *ops, int32_t i);
+void aoe_tribe_ai_log_ror(const AoeTribeForwardOpsRor *ops, const char *format, ...);
+void aoe_tribe_add_unit_ror(const AoeTribeForwardOpsRor *ops, void *unit, int32_t a, int32_t b,
+                            int32_t c);
+void aoe_tribe_queue_train_ror(const AoeTribeForwardOpsRor *ops, int32_t a, int32_t b, int32_t c);
+void aoe_tribe_queue_research_ror(const AoeTribeForwardOpsRor *ops, int32_t a, int32_t b, int32_t c);
+void aoe_tribe_order_one_ror(const AoeTribeForwardOpsRor *ops, int32_t id, int32_t a, int32_t b,
+                             int32_t c, int32_t d);
+int aoe_tribe_tribute_ror(const AoeTribeForwardOpsRor *ops, int32_t a, int32_t resource,
+                          float amount, int32_t b);
+void aoe_tribe_sample_score_ror(const AoeTribeForwardOpsRor *ops, float score);
+
+/* +0x64 0x004f0280: the +0x50 record's dwords +0x00, +0x04, +0x0c,
+   +0x08 (in that order) after the empty base save (0x004ed890). */
+void aoe_tribe_save_record_ror(const int32_t record[4], AoeOutcomeStream *s);
 
 #endif

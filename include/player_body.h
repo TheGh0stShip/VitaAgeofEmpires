@@ -88,7 +88,7 @@ void aoe_player_body_finish_load_ror(AoePlayerObjectRor *player,
                                      AoeOutcomeStream *in,
                                      const AoePlayerBodyOps *ops);
 
-/* 0x0045d0a0 (vtable +0x80): the per-update steps. */
+/* 0x0045d0a0 (vtable +0x80; thunk 0x004f0270): the per-update steps. */
 void aoe_player_body_update_ror(AoePlayerObjectRor *player,
                                 const AoePlayerBodyOps *ops);
 

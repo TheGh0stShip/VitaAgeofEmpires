@@ -2,6 +2,11 @@
 
 #include "command_production.h"
 
+#include <stdarg.h>
+#include <stdio.h>
+
+#include "aoe_stream.h"
+
 #define MAX_UNITS 25
 
 static int send(const AoeTribePlayerOpsRor *ops, const uint8_t *buf, size_t n) {
@@ -128,4 +133,64 @@ int aoe_tribe_tech_state_is_one_ror(const uint8_t *entries, int32_t i) {
 
 int aoe_tribe_research_open_ror(int16_t state) {
     return state != 3 && state != -1;
+}
+
+void aoe_tribe_ai_kick_ror(const AoeTribeForwardOpsRor *ops, int32_t kind) {
+    if (ops->has_ai) ops->ai_kick(ops->context, kind);
+}
+
+int32_t aoe_tribe_ai_strategic_ror(const AoeTribeForwardOpsRor *ops, int32_t i) {
+    return ops->has_ai ? ops->ai_strategic(ops->context, i) : -1;
+}
+
+void aoe_tribe_ai_log_ror(const AoeTribeForwardOpsRor *ops, const char *format, ...) {
+    char line[1024];
+    va_list args;
+    if (!ops->has_ai) return;
+    va_start(args, format);
+    vsnprintf(line, sizeof line, format, args);
+    va_end(args);
+    ops->ai_log(ops->context, line);
+}
+
+void aoe_tribe_add_unit_ror(const AoeTribeForwardOpsRor *ops, void *unit, int32_t a, int32_t b,
+                            int32_t c) {
+    int16_t unit_class;
+    int32_t id;
+    ops->add_unit(ops->context, unit, a, b, c);
+    if (!ops->has_ai || !ops->unit_info(ops->context, unit, &unit_class, &id)) return;
+    if (unit_class != 0xb && id >= 0) ops->ai_unit_added(ops->context, id);
+}
+
+void aoe_tribe_queue_train_ror(const AoeTribeForwardOpsRor *ops, int32_t a, int32_t b, int32_t c) {
+    ops->queue_train(ops->context, ops->player_id, b, a, c);
+}
+
+void aoe_tribe_queue_research_ror(const AoeTribeForwardOpsRor *ops, int32_t a, int32_t b, int32_t c) {
+    ops->queue_research(ops->context, ops->player_id, b, a, c);
+}
+
+void aoe_tribe_order_one_ror(const AoeTribeForwardOpsRor *ops, int32_t id, int32_t a, int32_t b,
+                             int32_t c, int32_t d) {
+    int32_t ids[1];
+    ids[0] = id;
+    ops->order_ids(ops->context, ops->player_id, ids, 1, a, b, c, d);
+}
+
+int aoe_tribe_tribute_ror(const AoeTribeForwardOpsRor *ops, int32_t a, int32_t resource,
+                          float amount, int32_t b) {
+    if (resource == -1 || amount == 0.0f) return 0;
+    ops->tribute(ops->context, ops->player_id, a, resource, amount, b);
+    return 1;
+}
+
+void aoe_tribe_sample_score_ror(const AoeTribeForwardOpsRor *ops, float score) {
+    ops->sample(ops->context, 0, score < 0.0f ? 0 : (int32_t)score);
+}
+
+void aoe_tribe_save_record_ror(const int32_t record[4], AoeOutcomeStream *s) {
+    aoe_stream_put_i32(s, record[0]);
+    aoe_stream_put_i32(s, record[1]);
+    aoe_stream_put_i32(s, record[3]);
+    aoe_stream_put_i32(s, record[2]);
 }

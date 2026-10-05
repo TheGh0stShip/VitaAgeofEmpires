@@ -218,7 +218,7 @@ int aoe_world_combat_change_template_ror(AoeWorldCombatRor *combat,
    traversal of list +0x28 through 0x00451270) with each unit's class
    chain:
    - type 70/80 class-18 faith regeneration (0x004ae7d0), type 50..80
-     reload countdown (0x00426bf0);
+     reload countdown (0x00426bf0, also through the thunk 0x00449060);
    - the common predicate (prelude, attached unit, 0x004a8f40 state
      switch with the state-2 damage graphics +0x28 = 0x004a9240);
    - the 0x00415200 tail (dying states, sprites) and the 0x00406500 action

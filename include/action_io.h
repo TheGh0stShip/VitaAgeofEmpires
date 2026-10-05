@@ -38,7 +38,7 @@ typedef struct AoeActionRecordRor {
 /* 0x00406e40 (the load constructor: +0x18 / +0x1c -1, then 0x00406f10
    when asked) and 0x00406f10: the base fields after the type, the sub
    list and the graphic. 0x00407160: the save, starting with the type.
-   0x00406ed0 releases the sub list. */
+   0x00406ed0 (and its thunk 0x004b2bf0) releases the sub list. */
 int aoe_action_load_base_ror(AoeActionRecordRor *a, AoeOutcomeStream *s, int ror,
                              int32_t player_count, float version);
 void aoe_action_save_base_ror(const AoeActionRecordRor *a, AoeOutcomeStream *s, int ror);

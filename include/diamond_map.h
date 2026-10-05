@@ -155,7 +155,7 @@ struct AoeDiamondMapRor {
 
 const AoeDiamondMapVtblRor *aoe_diamond_map_vtable_ror(void);
 
-/* 0x0042c360 constructor; 0x0042c460 destructor (deleting 0x0042c440);
+/* 0x0042c360 constructor; 0x0042c460 destructor (thunk 0x00518030) (deleting 0x0042c440);
    0x0042c4f0 setup (area, parent, x, y, w, h, colour; the buffer, not
    owned). */
 void aoe_diamond_map_init_ror(AoeDiamondMapRor *m, AoeUiSystemRor *system,

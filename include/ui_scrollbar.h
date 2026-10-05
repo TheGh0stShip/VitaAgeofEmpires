@@ -70,7 +70,7 @@ void aoe_ui_scrollbar_scroll_ror(AoeUiScrollbarRor *s, int32_t code,
    part), +0x8c 0x004676a0 (drag: arrows and pages re-arm, the thumb maps
    to a position), +0x90 0x00467aa0 (release: tell the parent, code 5). */
 
-/* +0x30 0x00467bb0: the parent's background, the background frame tiled
+/* +0x30 0x00467bb0 (thunk 0x00468460): the parent's background, the background frame tiled
    (0x00467f70), the frame bevel, then the arrows (when present, pressed
    while held) and the thumb: each its picture frame centred (0x00468030)
    and its bevel (0x00467d60, from a rect 0x00467d30). */

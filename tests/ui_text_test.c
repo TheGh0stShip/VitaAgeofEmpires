@@ -37,6 +37,9 @@ static int32_t width(void *c, uintptr_t font, const char *text, int32_t n) {
     return n * 10; /* 10 pixels per character */
 }
 
+static int32_t revealed = -5;
+static void reveal_fn(void *c, AoeUiTextRor *t, int32_t i) { (void)c; (void)t; revealed = i; }
+
 int main(void) {
     AoeUiPlatformRor pf = {0};
     static AoeUiSystemRor sys;
@@ -176,6 +179,41 @@ int main(void) {
         area.surface = NULL;
     }
     aoe_ui_text_release_ror(&t);
+    {
+        static AoeUiTextRor a, b;
+        uint8_t changed = 0;
+        aoe_ui_text_init_ror(&a, &sys);
+        aoe_ui_text_init_ror(&b, &sys);
+        aoe_ui_panel_setup_ror(&a.panel, &area, NULL, 0, 0, 120, 100, 0);
+        aoe_ui_panel_setup_ror(&b.panel, &area, NULL, 0, 0, 120, 100, 0);
+        aoe_ui_text_set_font_ror(&a, 7, 8, 18);
+        aoe_ui_text_set_font_ror(&b, 7, 8, 18);
+        aoe_ui_text_append_ror(&a, "one", 0);
+        aoe_ui_text_append_ror(&a, "two", 0);
+        aoe_ui_text_select_ror(&a, 1);
+        aoe_ui_text_move_selected_ror(&a, &b, reveal_fn, NULL, &changed);
+        assert(changed && aoe_ui_text_count_ror(&a) == 1 && aoe_ui_text_count_ror(&b) == 1);
+        assert(!strcmp(aoe_ui_text_line_ror(&b, 0), "two") && revealed == 0);
+        aoe_ui_text_append_ror(&b, "three", 0);
+        aoe_ui_text_select_ror(&b, 1);
+        changed = 0;
+        aoe_ui_text_move_up_ror(&b, reveal_fn, NULL, &changed);
+        assert(changed && !strcmp(aoe_ui_text_line_ror(&b, 0), "three"));
+        assert(!strcmp(aoe_ui_text_line_ror(&b, 1), "two") && aoe_ui_text_selection_ror(&b) == 0);
+        changed = 0;
+        aoe_ui_text_move_up_ror(&b, reveal_fn, NULL, &changed);
+        assert(!changed);
+        aoe_ui_text_append_ror(&a, "three", 0);
+        aoe_ui_text_append_ror(&a, "four", 0);
+        aoe_ui_text_append_ror(&b, "five", 0);
+        assert(!aoe_ui_text_take_chosen_ror(&a, &b) && aoe_ui_text_count_ror(&a) == 3);
+        aoe_ui_text_remove_ror(&b, 2);
+        aoe_ui_text_append_ror(&a, "two", 0);
+        assert(aoe_ui_text_take_chosen_ror(&a, &b) && aoe_ui_text_count_ror(&a) == 2);
+        assert(aoe_ui_text_index_of_ror(&a, "four") >= 0 && aoe_ui_text_index_of_ror(&a, "two") == -1);
+        aoe_ui_text_release_ror(&a);
+        aoe_ui_text_release_ror(&b);
+    }
     assert(!t.lines);
     return 0;
 }

@@ -908,3 +908,39 @@ const AoeUiTextVtblRor aoe_ui_text_vtable_ror = {
     aoe_ui_text_set_text_ror,
     aoe_ui_text_bevel_slot_ror,
 };
+
+void aoe_ui_text_move_selected_ror(AoeUiTextRor *from, AoeUiTextRor *to, AoeUiTextRevealFn reveal,
+                                   void *context, uint8_t *changed) {
+    const char *text = aoe_ui_text_selected_text_ror(from);
+    if (text && *text) {
+        aoe_ui_text_append_ror(to, text, 0);
+        aoe_ui_text_select_ror(to, (int16_t)aoe_ui_text_index_of_ror(to, text));
+        aoe_ui_text_remove_ror(from, aoe_ui_text_selection_ror(from));
+        reveal(context, to, aoe_ui_text_selection_ror(to));
+    }
+    *changed = 1;
+}
+
+void aoe_ui_text_move_up_ror(AoeUiTextRor *t, AoeUiTextRevealFn reveal, void *context,
+                             uint8_t *changed) {
+    const char *text;
+    if (aoe_ui_text_selection_ror(t) <= 0) return;
+    text = aoe_ui_text_selected_text_ror(t);
+    if (text && *text) {
+        aoe_ui_text_insert_ror(t, aoe_ui_text_selection_ror(t) - 1, text, NULL, 0);
+        aoe_ui_text_remove_ror(t, aoe_ui_text_selection_ror(t) + 1);
+        aoe_ui_text_select_ror(t, (int16_t)(aoe_ui_text_selection_ror(t) - 1));
+        reveal(context, t, aoe_ui_text_selection_ror(t));
+    }
+    *changed = 1;
+}
+
+int aoe_ui_text_take_chosen_ror(AoeUiTextRor *available, const AoeUiTextRor *chosen) {
+    int16_t n = aoe_ui_text_count_ror(chosen), i;
+    for (i = 0; i < n; ++i)
+        if (aoe_ui_text_index_of_ror(available, aoe_ui_text_line_ror(chosen, i)) == -1) return 0;
+    for (i = 0; i < n; ++i)
+        aoe_ui_text_remove_ror(available,
+                               aoe_ui_text_index_of_ror(available, aoe_ui_text_line_ror(chosen, i)));
+    return 1;
+}

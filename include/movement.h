@@ -89,7 +89,8 @@ int aoe_movement_record_waypoint_ror(AoeMovementRor *m,
 
 /* Path cursor helpers: 0x00458440 reset, 0x00458450 advance (cursor +1
    while below count - 1, else clamps and returns 0), 0x004583d0 current
-   waypoint or NULL. */
+   waypoint or NULL; 0x0044be60 the unit's (path +0xa4) current
+   waypoint byte +0x0c, 0xff without one. */
 void aoe_unit_path_rewind_ror(AoeUnitPathRor *path);
 int aoe_unit_path_advance_ror(AoeUnitPathRor *path);
 const AoePathWaypointRor *aoe_unit_path_current_ror(const AoeUnitPathRor *path);

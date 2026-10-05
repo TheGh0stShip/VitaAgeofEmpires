@@ -41,7 +41,8 @@ typedef struct AoeActionRecordRor {
    0x00406ed0 (and its thunk 0x004b2bf0) releases the sub list;
    the type 0x66 destructor 0x004b4f50 is the same, as are 0x00401380
    (vtable 0x005423f8) and 0x00402620 (0x005424d4); 0x00406e80 is the
-   deleting destructor (0x00401130 and 0x00402420 for the other two). */
+   deleting destructor (0x00401130 and 0x00402420 for the other two,
+   0x004b2860 over the thunk, 0x004b4ef0 for type 0x66). */
 int aoe_action_load_base_ror(AoeActionRecordRor *a, AoeOutcomeStream *s, int ror,
                              int32_t player_count, float version);
 void aoe_action_save_base_ror(const AoeActionRecordRor *a, AoeOutcomeStream *s, int ror);

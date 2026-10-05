@@ -62,7 +62,7 @@ int32_t aoe_scenario_player_kind_ror(const AoeScenarioObjectRor *s, int32_t play
    description, the four texts " <None> " (string 10101), per player the
    kind and three values 0, an empty name, fresh AI / city-plan /
    personality names "Random" (10107) / " <None> " / "Random", no
-   embedded files. 0x00475490 (thunk 0x005068f0) frees everything (0x00474d20 deleting);
+   embedded files. 0x00475490 (thunk 0x005068f0) frees everything (0x00474d20 / 0x005068d0 deleting);
    +0x04 (an owned object) is released through `release`. */
 int aoe_scenario_reset_ror(AoeScenarioObjectRor *s,
                            void (*string)(void *context, int32_t id, char *out, int size),

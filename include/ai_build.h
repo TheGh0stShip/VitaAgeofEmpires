@@ -324,7 +324,7 @@ int aoe_ai_con_plan_load_ror(AoeAiConPlanRor *plan, int32_t player,
 /* The RoR build list (vtable 0x00548acc): the base list and the
    computer player it belongs to (+0x5bc). 0x004b7650 / 0x004b76a0
    construct it as the base (0x00407bf0 / load 0x00407d50) with no
-   owner; 0x004b76d0 releases it (0x004081f0); 0x004b76e0 sets the owner.
+   owner; 0x004b76d0 releases it (0x004081f0; deleting 0x004b7680); 0x004b76e0 sets the owner.
    0x004b8fb0: the item with this unique ID (if any) is no longer in
    progress; always 1. */
 typedef struct {

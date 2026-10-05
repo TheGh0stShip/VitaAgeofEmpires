@@ -255,7 +255,8 @@ int aoe_ai_info_known_class_ror(int32_t type_class);
 /* 0x004be250: class 3 with type 0, 0xc, 0x2d, 0x31, 0x57, 0x65, 0x68 or
    0x6d. */
 int aoe_ai_info_key_building_ror(int16_t type_class, int16_t type_id);
-/* 0x004c1ab0: the count of the +0x148 list. 0x004c3cf0: set +0x204. 0x004c6550: the current
+/* 0x004c1ab0: the count of the +0x148 list (0x004e0ba0 asks it of a
+   player's AI, +0xf0 then the info at +0xcec). 0x004c3cf0: set +0x204. 0x004c6550: the current
    target of list `i` (0..3), else -1. */
 int32_t aoe_ai_info_list_148_count_ror(const AoeAiInfoRor *info);
 void aoe_ai_info_set_field_204_ror(AoeAiInfoRor *info, int32_t value);

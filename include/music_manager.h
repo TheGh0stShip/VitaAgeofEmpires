@@ -38,6 +38,9 @@ typedef struct {
        resume, 0x004a2910 stop). */
     int (*exists)(void *context, const char *path);
     int (*wav_play)(void *context, const char *path, int32_t volume);
+    /* 0x0043ae00 the sound buffer's (0x007d3bec) +0x3c SetVolume, 1 when
+       it succeeds; 0x0043ae20 / 0x0043ae30 set / clear the paused flag
+       0x007d3bdc. */
     void (*wav_volume)(void *context, int32_t volume);
     void (*wav_pause)(void *context);
     void (*wav_resume)(void *context);

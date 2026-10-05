@@ -46,7 +46,8 @@ int aoe_sprite_instance_looped_ror(const AoeSpriteInstance *instance);
    0); +0x24 0x00416170 sets the frame; +0x38 0x00416220 restarts (marks
    the frame changed from the current one and goes to frame 0). The
    static sprite constructor 0x00415a00 stores the owner (+0x04), +0x08 1
-   and +0x0c / +0x10 0; its destructor 0x00415ab0 only resets the vtable.
+   and +0x0c / +0x10 0; its destructor 0x00415ab0 only resets the vtable (deleting 0x00415a20);
+   the animated destructor 0x00415e30 resets its own and runs that one.
    The
    animated update +0x0c is 0x00415eb0 (aoe_sprite_animation_tick). */
 void aoe_sprite_instance_set_offset_ror(AoeSpriteInstance *instance,

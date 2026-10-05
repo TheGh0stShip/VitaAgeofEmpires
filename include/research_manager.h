@@ -31,7 +31,8 @@ void aoe_research_manager_release_ror(AoeResearchCompletionManagerRor *manager);
 void aoe_research_manager_save_ror(const AoeResearchCompletionManagerRor *manager,
                                    AoeOutcomeStream *out);
 
-/* 0x004ea9ac: a tech's state (-1 outside). 0x004eb61f: percent done
+/* 0x004ea9ac: a tech's state (-1 outside; a player asks its manager
+   +0x224 through 0x004f2140). 0x004eb61f: percent done
    (researching: progress * 100 / research time, truncated; done 100;
    else 0). */
 int16_t aoe_research_state_ror(const AoeResearchCompletionManagerRor *manager,

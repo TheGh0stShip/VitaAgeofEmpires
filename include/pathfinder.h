@@ -4,7 +4,9 @@
 #include <stdint.h>
 
 /* Patched Rise of Rome 1.0a tile pathfinder (vtable 0x00544cf0,
-   constructor 0x00458570, global instance 0x006a1cc0). Grids are fixed at
+   constructor 0x00458570, global instance 0x006a1cc0 built by 0x004584e0
+   (0xff, 0xff, 0, 0, 0) and a second at 0x00583bc8 by 0x00458530 (third
+   argument 1)). Grids are fixed at
    255 x 255 cells and indexed [first * 255 + second], as 0x00458800 does.
    This header covers the exact foundation; the search body 0x00458930 is
    translated incrementally. */

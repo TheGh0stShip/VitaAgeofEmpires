@@ -75,7 +75,8 @@ typedef struct {
     AoePlayerResources *resources;
 } AoeResearchOwnerRor;
 
-/* 0x004eaf4c: whether tech `id` can start. It must be in range and in
+/* 0x004eaf4c (a player's 0x004f1850 on its manager +0x224): whether
+   tech `id` can start. It must be in range and in
    state 1 (available); otherwise *reason = -1. When owner resource 29 is
    at least 1.0, resource 3 (gold) is a reserve: a resource-3 cost first
    draws on the reserve, and any cost resource may fall short by what the

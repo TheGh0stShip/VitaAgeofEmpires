@@ -205,9 +205,8 @@ int aoe_unit_ai_notify_filter_ror(const AoeUnitAiRor *ai, uint8_t unit_state, in
 /* The unit AI's notification queue (+0x10 count, +0x14 capacity, +0x18
    records of 0x24 bytes: sender, code, extra, then six values) and its
    outgoing queue (+0x1c, +0x20, +0x24: records of six dwords). Both
-   double when full (0 when the allocation fails, the queue unchanged;
-   the original sizes the first growth from a capacity of 0 the same way,
-   which this keeps: a queue starting at capacity 0 never grows). 0x00414b00
+   double when full (0 when the allocation fails, the queue unchanged; host-only, a queue of capacity 0 is refused: the
+   original would double 0 and write past its empty array). 0x00414b00
    appends; with `front` and a non-empty queue it inserts first, copying
    each record onto the next from the front (as the original does), so
    the older records all become copies of the old first one. 0x00414ac0

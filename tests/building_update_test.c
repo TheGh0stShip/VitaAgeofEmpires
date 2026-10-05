@@ -82,11 +82,13 @@ int main(void) {
         assert(aoe_building_update_ror(&b,99,&ops,&result));
         b=initial(); t=(Trace){0}; b.elapsed_build_time=NAN;
         attach(&b,&list);
-        AoeBuildingUpdate before=b;
+        /* memcpy, not assignment: assignment leaves padding unspecified. */
+        AoeBuildingUpdate before; memcpy(&before,&b,sizeof(b));
         assert(!aoe_building_update_ror(&b,99,&ops,&result));
         assert(!memcmp(&b,&before,sizeof(b)) && !t.calls);
         b=initial(); attach(&b,&list);
-        b.elapsed_build_time=8000; before=b; ops.set_state=0;
+        b.elapsed_build_time=8000; memcpy(&before,&b,sizeof(b));
+        ops.set_state=0;
         assert(!aoe_building_update_ror(&b,99,&ops,&result));
         assert(!memcmp(&b,&before,sizeof(b)) && !t.calls);
         /* Original AL narrowing occurs before comparing against angles. */
@@ -123,7 +125,8 @@ int main(void) {
         b = initial(); t = (Trace){0}; attach(&b,&list);
         b.unit_template = &generator; b.state = 2;
         b.owner_resources = (AoePlayerResources){35,resources};
-        AoeBuildingUpdate before = b;
+        AoeBuildingUpdate before;
+        memcpy(&before, &b, sizeof(b));
         assert(!aoe_building_update_ror(&b,99,&ops,&result));
         assert(!memcmp(&b,&before,sizeof(b)) && !t.calls);
 

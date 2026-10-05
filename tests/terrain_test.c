@@ -28,6 +28,17 @@ static void check(int a, int b, int av, int bv, uint8_t expected) {
     assert(terrain_elevation_shape(tiles, 3, 3, 1, 1) == expected);
 }
 
+/* Center elevation 1 with `raised` at 2 and `low_a`/`low_b` at 0. */
+static void check3(int raised, int low_a, int low_b, uint8_t expected) {
+    ScnTile tiles[9];
+    memset(tiles, 0, sizeof(tiles));
+    for (int i = 0; i < 9; ++i) tiles[i].elevation = 1;
+    tiles[raised].elevation = 2;
+    if (low_a >= 0) tiles[low_a].elevation = 0;
+    if (low_b >= 0) tiles[low_b].elevation = 0;
+    assert(terrain_elevation_shape(tiles, 3, 3, 1, 1) == expected);
+}
+
 static void check_border(int style, int a, int b, uint8_t expected) {
     ScnTile tiles[9] = {0};
     DatTerrain terrain[2] = {0};
@@ -204,23 +215,23 @@ int main(void) {
     check(E, -1, 2, 0, 8);
     check(W, -1, 2, 0, 5);
     check(S, -1, 2, 0, 7);
+    /* Raised diagonals, as RoR 0x004493a0 / patched 0x004484f0 return
+       them (a lone raised corner gives 10/9/11/12; with the two far-side
+       cardinals lowered, 2/1/3/4). */
     check(NE, -1, 2, 0, 10);
-    check(SW, -1, 2, 0, 11);
-    check(NW, -1, 2, 0, 12);
-    check(SE, -1, 2, 0, 9);
+    check(SW, -1, 2, 0, 9);
+    check(NW, -1, 2, 0, 11);
+    check(SE, -1, 2, 0, 12);
+    check3(NE, W, S, 2);
+    check3(SW, N, E, 1);
+    check3(NW, E, S, 3);
+    check3(SE, N, W, 4);
+    /* One lowered far-side cardinal is not enough. */
+    check3(SW, N, -1, 9);
+    /* Under the old (wrong) rules this layout gave 3: the raised SW corner
+       tests N and E, not E and S. */
+    check3(SW, E, S, 9);
     ScnTile tiles[9] = {0};
-    for (int i = 0; i < 9; ++i) tiles[i].elevation = 1;
-    tiles[NE].elevation = 2; tiles[W].elevation = 0; tiles[S].elevation = 0;
-    assert(terrain_elevation_shape(tiles, 3, 3, 1, 1) == 2);
-    tiles[NE].elevation = 1; tiles[W].elevation = 1;
-    tiles[SW].elevation = 2; tiles[E].elevation = 0;
-    assert(terrain_elevation_shape(tiles, 3, 3, 1, 1) == 3);
-    tiles[SW].elevation = 1; tiles[E].elevation = 1; tiles[S].elevation = 1;
-    tiles[NW].elevation = 2; tiles[N].elevation = 0; tiles[W].elevation = 0;
-    assert(terrain_elevation_shape(tiles, 3, 3, 1, 1) == 4);
-    tiles[NW].elevation = 1; tiles[W].elevation = 1;
-    tiles[SE].elevation = 2; tiles[E].elevation = 0;
-    assert(terrain_elevation_shape(tiles, 3, 3, 1, 1) == 1);
     assert(terrain_elevation_shape(tiles, 3, 3, 3, 0) == 0);
     assert(terrain_elevation_shape(NULL, 3, 3, 1, 1) == 0);
     check_border(0, -1, -1, 0);

@@ -124,10 +124,35 @@ static int skip_player_data_115(ScnCursor *cursor, ScnMap *map) {
     }
     /* Final field, then the 1.15-only fixed player arrays/settings. */
     map->player_data_fixed_offset = cursor->offset;
-    /*
-       fixed player arrays, settings, and sixteen 0x2d0-byte records. */
-    return skip_bytes(cursor, 4 + 16 * 16 + 4 + 24 + 4 + 12 + 1024 +
-                              16 * 0x2d0 + 4 + 64 + 0x500 + 12 + 64 + 4);
+    {
+        /* Offsets within the block follow the reader's order: final field
+           (4), resources +0x1990 (16 x 16), 4, +0x1a90 (24), +0x4be8 (4),
+           +0x5140..+0x5148 (12), +0x47a8 (1024), sixteen 0x2d0-byte records
+           at +0x1aa8, 4, +0x4ba8 (64), toggles +0x4bf4 (0x500), options
+           +0x50f4 (12), ages +0x5100 (64), 4. */
+        enum {
+            RESOURCES = 4,
+            TOGGLES = 4 + 16 * 16 + 4 + 24 + 4 + 12 + 1024 + 16 * 0x2d0 +
+                      4 + 64,
+            OPTIONS = TOGGLES + 0x500,
+            AGES = OPTIONS + 12,
+            END = AGES + 64 + 4
+        };
+        const uint8_t *b = cursor->data + cursor->offset;
+        if (cursor->size - cursor->offset < END) return 0;
+        for (int i = 0; i < 16; ++i) {
+            for (int k = 0; k < 4; ++k)
+                map->start_resources[i][k] =
+                    (int32_t)le32(b + RESOURCES + i * 16 + k * 4);
+            for (int k = 0; k < 20; ++k)
+                map->tech_toggles[i][k] =
+                    (int32_t)le32(b + TOGGLES + i * 0x50 + k * 4);
+            map->starting_age[i] = (int32_t)le32(b + AGES + i * 4);
+        }
+        for (int k = 0; k < 3; ++k)
+            map->options[k] = (int32_t)le32(b + OPTIONS + k * 4);
+        return skip_bytes(cursor, END);
+    }
 }
 
 void scn_free_map(ScnMap *map) {

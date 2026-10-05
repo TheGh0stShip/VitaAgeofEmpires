@@ -1,0 +1,213 @@
+#include "command_place.h"
+
+#include <string.h>
+
+#include "le_bytes.h"
+
+size_t aoe_command_encode_place_ror(uint8_t *out, size_t out_size,
+                                    uint8_t player, float x, float y,
+                                    int16_t template_index, uint32_t value_10,
+                                    const int32_t *builder_ids, uint8_t count) {
+    size_t size = AOE_COMMAND_PLACE_HEADER_ROR + 4u * count;
+    if (!out || out_size < size || (count && !builder_ids)) return 0;
+    memset(out, 0, size);
+    out[0] = AOE_COMMAND_PLACE_ROR;
+    out[1] = count;
+    out[2] = player;
+    aoe_le_put_f32(out + 4, x);
+    aoe_le_put_f32(out + 8, y);
+    out[0x0c] = (uint8_t)(uint16_t)template_index;
+    out[0x0d] = (uint8_t)((uint16_t)template_index >> 8);
+    aoe_le_put_u32(out + 0x10, value_10);
+    for (uint8_t i = 0; i < count; ++i)
+        aoe_le_put_u32(out + 0x14 + 4u * i, (uint32_t)builder_ids[i]);
+    return size;
+}
+
+static AoeLiveUnit *lookup(const AoeCommandPlaceOps *ops, int32_t id) {
+    return id == -1 ? NULL : ops->world.resolve(ops->world.context, id);
+}
+
+static void report(const uint8_t *command, const AoeCommandPlaceOps *ops,
+                   uint8_t code, uint32_t out, int16_t index) {
+    AoeLiveUnit *builder;
+    if (!command[1] || !(builder = lookup(ops, aoe_le_i32(command + 0x14))))
+        return;
+    ops->placement_failed(ops->context, command[2], code, out, index,
+                          aoe_le_u32(command + 4), aoe_le_u32(command + 8),
+                          aoe_le_u32(command + 0x10), builder->core.unit_id);
+}
+
+int aoe_command_execute_place_ror(const uint8_t *command, size_t size,
+                                  const AoeCommandPlaceOps *ops) {
+    const DatUnit *unit_template;
+    AoeLiveUnit *foundation;
+    int16_t index;
+    uint32_t out;
+    uint8_t code;
+    float x, y;
+    int paid;
+    if (!command || size < AOE_COMMAND_PLACE_HEADER_ROR ||
+        command[0] != AOE_COMMAND_PLACE_ROR || !ops || !ops->world.resolve ||
+        !ops->player_present || !ops->player_template || !ops->resources ||
+        !ops->placement_check || !ops->find_object ||
+        !ops->placement_failed || !ops->create || !ops->owner_kind ||
+        !ops->order || size < AOE_COMMAND_PLACE_HEADER_ROR + 4u * command[1])
+        return -1;
+    index = (int16_t)(uint16_t)(command[0x0c] | (uint16_t)command[0x0d] << 8);
+    if (!ops->player_present(ops->context, command[2]) || index == -1 ||
+        !(unit_template =
+              ops->player_template(ops->context, command[2], index)))
+        return 0;
+    x = aoe_le_f32(command + 4);
+    y = aoe_le_f32(command + 8);
+    out = 0; /* see the header: never a truncated host pointer */
+    {
+        static const int32_t flags[6] = {1, 1, 1, 1, 1, 1};
+        code = ops->placement_check(ops->context, command[2], unit_template,
+                                    x, y, &out, flags);
+    }
+    if (code) {
+        report(command, ops, code, out, index);
+        return 0;
+    }
+    if (index == AOE_TEMPLATE_TOWN_CENTER_ROR) {
+        const DatUnit *center = ops->player_template(
+            ops->context, command[2], AOE_TEMPLATE_TOWN_CENTER_ROR);
+        AoeLiveUnit *existing;
+        if (center && !center->enabled &&
+            (existing = ops->find_object(ops->context, command[2],
+                                         AOE_TEMPLATE_TOWN_CENTER_ROR)) &&
+            existing->core.state <= 2)
+            return 0;
+    }
+    if (!aoe_player_cost_pay_ror(ops->resources(ops->context, command[2]),
+                                 unit_template, 1.0f, 0, &paid))
+        return -1;
+    if (!paid) {
+        report(command, ops, 0, out, index);
+        return 0;
+    }
+    foundation = ops->create(ops->context, command[2], unit_template, x, y,
+                             aoe_le_u32(command + 0x10));
+    for (unsigned i = 0; i < command[1]; ++i) {
+        AoeLiveUnit *builder = lookup(ops, aoe_le_i32(command + 0x14 + 4u * i));
+        if (!builder) continue;
+        if (!aoe_live_unit_reset_group_ror(builder,
+                                           ops->owner_kind(ops->context,
+                                                           builder)))
+            return -1;
+        ops->order(ops->context, builder, foundation, x, y);
+    }
+    return 1;
+}
+
+size_t aoe_command_encode_wall_ror(uint8_t *out, size_t out_size,
+                                   uint8_t player, uint8_t x1, uint8_t y1,
+                                   uint8_t x2, uint8_t y2,
+                                   int16_t template_index, uint32_t value_c,
+                                   const int32_t *builder_ids, uint8_t count) {
+    size_t size = AOE_COMMAND_WALL_HEADER_ROR + 4u * count;
+    if (!out || out_size < size || (count && !builder_ids)) return 0;
+    memset(out, 0, size);
+    out[0] = AOE_COMMAND_WALL_ROR;
+    out[1] = count;
+    out[2] = player;
+    out[3] = x1; out[4] = y1; out[5] = x2; out[6] = y2;
+    out[8] = (uint8_t)(uint16_t)template_index;
+    out[9] = (uint8_t)((uint16_t)template_index >> 8);
+    aoe_le_put_u32(out + 0x0c, value_c);
+    for (uint8_t i = 0; i < count; ++i)
+        aoe_le_put_u32(out + 0x10 + 4u * i, (uint32_t)builder_ids[i]);
+    return size;
+}
+
+static int sign_step(int32_t from, int32_t to) {
+    return from == to ? 0 : (to > from ? 1 : -1);
+}
+
+/* 0x004e8d00. Returns 0 for a host failure. */
+static int wall_run(const AoeCommandPlaceOps *ops, uint8_t player,
+                    const DatUnit *unit_template, AoePlayerResources *stock,
+                    uint32_t value_c, int32_t x, int32_t y, int32_t x2,
+                    int32_t y2, AoeLiveUnit **first) {
+    const int32_t flags[6] = {1, unit_template->placement_class, 0, 1, 1, 1};
+    int sx = sign_step(x, x2), sy = sign_step(y, y2);
+    for (;;) {
+        float fx = (float)((double)x + 0.5f), fy = (float)((double)y + 0.5f);
+        if (!ops->placement_check(ops->context, player, unit_template, fx, fy,
+                                  NULL, flags)) {
+            AoeLiveUnit *piece;
+            int paid;
+            if (!aoe_player_cost_pay_ror(stock, unit_template, 1.0f, 0, &paid))
+                return 0;
+            if (!paid) return 1;
+            piece = ops->create(ops->context, player, unit_template, fx, fy,
+                                value_c);
+            if (piece && !*first) *first = piece;
+        }
+        if (x == x2 && y == y2) return 1;
+        x += sx;
+        y += sy;
+    }
+}
+
+int aoe_command_execute_wall_ror(const uint8_t *command, size_t size,
+                                 const AoeCommandPlaceOps *ops) {
+    const DatUnit *unit_template;
+    AoePlayerResources *stock;
+    AoeLiveUnit *first = NULL;
+    int16_t index;
+    int32_t x1, y1, x2, y2, dx, dy;
+    uint32_t value_c;
+    uint8_t player;
+    if (!command || size < AOE_COMMAND_WALL_HEADER_ROR ||
+        command[0] != AOE_COMMAND_WALL_ROR || !ops || !ops->world.resolve ||
+        !ops->player_present || !ops->player_template || !ops->resources ||
+        !ops->placement_check || !ops->create || !ops->owner_kind ||
+        !ops->order || size < AOE_COMMAND_WALL_HEADER_ROR + 4u * command[1])
+        return -1;
+    player = command[2];
+    index = (int16_t)(uint16_t)(command[8] | (uint16_t)command[9] << 8);
+    if (!ops->player_present(ops->context, player) || index == -1 ||
+        !(unit_template = ops->player_template(ops->context, player, index)))
+        return 0;
+    stock = ops->resources(ops->context, player);
+    value_c = aoe_le_u32(command + 0x0c);
+    x1 = command[3]; y1 = command[4]; x2 = command[5]; y2 = command[6];
+    dx = x2 > x1 ? x2 - x1 : x1 - x2;
+    dy = y2 > y1 ? y2 - y1 : y1 - y2;
+    if (dx == dy) {
+        if (!wall_run(ops, player, unit_template, stock, value_c, x1, y1, x2,
+                      y2, &first))
+            return -1;
+    } else if (dy > dx) {
+        if (!wall_run(ops, player, unit_template, stock, value_c, x1, y1, x1,
+                      y2, &first))
+            return -1;
+        if (x1 != x2 &&
+            !wall_run(ops, player, unit_template, stock, value_c,
+                      x1 < x2 ? x1 + 1 : x1 - 1, y2, x2, y2, &first))
+            return -1;
+    } else {
+        if (!wall_run(ops, player, unit_template, stock, value_c, x1, y1, x2,
+                      y1, &first))
+            return -1;
+        if (y1 != y2 &&
+            !wall_run(ops, player, unit_template, stock, value_c, x2,
+                      y1 < y2 ? y1 + 1 : y1 - 1, x2, y2, &first))
+            return -1;
+    }
+    if (!first) return 0;
+    for (unsigned i = 0; i < command[1]; ++i) {
+        AoeLiveUnit *builder = lookup(ops, aoe_le_i32(command + 0x10 + 4u * i));
+        if (!builder) continue;
+        if (!aoe_live_unit_reset_group_ror(builder,
+                                           ops->owner_kind(ops->context,
+                                                           builder)))
+            return -1;
+        ops->order(ops->context, builder, first, first->core.position.x38,
+                   first->core.position.y3c);
+    }
+    return 1;
+}

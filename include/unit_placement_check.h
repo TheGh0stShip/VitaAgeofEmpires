@@ -23,6 +23,11 @@ typedef struct {
     const float *terrain_restriction;
     size_t terrain_restriction_count;
     int bypass_visibility; /* Original screen/world mode 7 branch. */
+    /* The owner's vision (player +0x38, 0x00517670): when set, a tile
+       counts as seen if its mask has the owner's visible or explored bit;
+       otherwise the active player's view bytes are used. */
+    const uint32_t *owner_tile_masks;
+    uint32_t owner_visible_mask, owner_explored_mask;
 } AoeUnitPlacementCheckContext;
 
 /* Common unit-template vtable +0x20, release RoR 0x00443700. The boolean

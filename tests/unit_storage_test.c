@@ -40,7 +40,9 @@ static void run_edition(AoePlayerEdition edition) {
     assert(state.carried_resource_type == -1 && state.carried_amount == 0.0f);
     assert(values[0] == 13.0f && values[1] == 24.0f && values[2] == 30.0f);
 
-    AoeUnitStorageState before = state;
+    /* memcpy, not assignment: assignment leaves padding unspecified. */
+    AoeUnitStorageState before;
+    memcpy(&before, &state, sizeof(before));
     float original[3];
     memcpy(original, values, sizeof(original));
     assert(!aoe_unit_storage_initialize(&unit, &resources,

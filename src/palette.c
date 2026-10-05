@@ -61,3 +61,19 @@ int palette_expand_indexed_rgba(const Palette *palette,
     }
     return 1;
 }
+
+static const PaletteColor water_ramp[AOE_WATER_CYCLE_COUNT] = {
+    {0x17, 0x27, 0x7c}, {0x27, 0x3f, 0x90}, {0x3f, 0x5f, 0x9f},
+    {0x57, 0x7b, 0xb4}, {0x3f, 0x5f, 0xa0}, {0x27, 0x3f, 0x91},
+    {0x17, 0x27, 0x7b}};
+
+void palette_water_cycle_apply(Palette *palette, int start) {
+    if (!palette || start < 0 || start >= AOE_WATER_CYCLE_COUNT) return;
+    for (int i = 0; i < AOE_WATER_CYCLE_COUNT; ++i)
+        palette->colors[AOE_WATER_CYCLE_FIRST + i] =
+            water_ramp[(start + i) % AOE_WATER_CYCLE_COUNT];
+}
+
+int palette_water_cycle_next(int start) {
+    return start <= 0 ? AOE_WATER_CYCLE_COUNT - 1 : start - 1;
+}

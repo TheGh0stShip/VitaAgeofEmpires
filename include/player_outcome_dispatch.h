@@ -3,8 +3,8 @@
 
 #include "player_outcome.h"
 
-/* Original manager vtable +0/+4: RoR 0x00510260/0x005102c0;
-   base 0x00433960/0x004339c0. The handlers are indexed by kind byte +0.
+/* Original manager vtable +0/+4: RoR 0x00510260/0x005102c0 (patched RoR
+   1.0a 0x0050dad0/0x0050db30); base 0x00433960/0x004339c0. The handlers are indexed by kind byte +0.
    Event kinds 0–4 and condition kinds 0–10, 12 use translated original
    handlers; condition kind 11 and unknown kinds are no-ops as on PC. */
 typedef struct {

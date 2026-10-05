@@ -426,7 +426,9 @@ static void test_base_followup_pumps_per_player(void) {
 static void test_missing_behavior_fails_closed(void) {
     Trace trace = {0};
     AoeWorldTickState state = initial_state();
-    AoeWorldTickState original = state;
+    /* memcpy, not assignment: assignment leaves padding unspecified. */
+    AoeWorldTickState original;
+    memcpy(&original, &state, sizeof(original));
     AoeWorldTickOps ops = ops_for(&trace);
     AoeWorldClockResult result = {0};
     ops.player.object_ops.predicate = 0;
@@ -436,7 +438,7 @@ static void test_missing_behavior_fails_closed(void) {
     assert(trace.used == 0);
     ops.player.object_ops.predicate = player_predicate;
     state.player_count = AOE_WORLD_MAX_PLAYERS + 1;
-    original = state;
+    memcpy(&original, &state, sizeof(original));
     assert(!aoe_world_tick_core(&state, AOE_WORLD_BASE, 40, 700,
                                 0, &ops, &result));
     assert(memcmp(&state, &original, sizeof(state)) == 0);
@@ -445,7 +447,7 @@ static void test_missing_behavior_fails_closed(void) {
     AoePlayerUpdateState invalid_player = {0};
     state.players[0] = &invalid_player;
     state.player_count = 1;
-    original = state;
+    memcpy(&original, &state, sizeof(original));
     assert(!aoe_world_tick_core(&state, AOE_WORLD_BASE, 40, 700,
                                 0, &ops, &result));
     assert(memcmp(&state, &original, sizeof(state)) == 0);
@@ -454,7 +456,7 @@ static void test_missing_behavior_fails_closed(void) {
     state = initial_state();
     AoeVisibilityRegistry invalid_registry = {.positive_count = 1};
     state.registry = &invalid_registry;
-    original = state;
+    memcpy(&original, &state, sizeof(original));
     assert(!aoe_world_tick_core(&state, AOE_WORLD_BASE, 40, 700,
                                 0, &ops, &result));
     assert(memcmp(&state, &original, sizeof(state)) == 0);

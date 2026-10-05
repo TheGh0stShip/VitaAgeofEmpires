@@ -5,8 +5,14 @@
 
 typedef struct AoeGraphicArtCacheEntry AoeGraphicArtCacheEntry;
 
+enum { AOE_GRAPHIC_ART_CACHE_INDEX = 2048 };
+
 typedef struct {
     AoeGraphicArtCacheEntry *entries;
+    /* Direct-mapped (graphic, frame) -> slot + 1 hint, verified on use, so
+       hits skip the archive search; a stale hint just misses. Lookups for
+       one cache must use one archive set (as clearing already requires). */
+    uint16_t index[AOE_GRAPHIC_ART_CACHE_INDEX];
     size_t capacity, max_pixel_bytes, used_pixel_bytes;
     uint64_t stamp, hits, misses, evictions;
 } AoeGraphicArtCache;

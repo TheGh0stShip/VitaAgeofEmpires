@@ -4,9 +4,11 @@ The objective is a faithful native PS Vita port of PC *Age of Empires I*,
 with the original *Rise of Rome* expansion as primary target and the base
 game retained. The user explicitly disallowed diagnostic prototypes. The
 invented skirmish and asset-browser Vita executable were removed from source;
-no VPK is produced. Any old `build/vita/VitaAgeofEmpires.vpk` or installed
-`VAOE00001` from earlier experiments is obsolete and must not be presented as
-the port. The emulator profile contains test copies of six original data
+Since 2026-10-04 the user-requested tech demo (`docs/VITA_DEMO.md`,
+`build/vita/VitaAoE.vpk`, title `VAOE00001`) runs only the reconstruction:
+original data through the translated runtime, world update and renderer.
+Older `VAOE00001` builds were obsolete prototypes (the emulator copy is
+kept as `VAOE00001.backup-20261004`). The emulator profile contains test copies of six original data
 files and one `.scn` under `ux0:data/VitaAgeofEmpires/`.
 
 Completeness correction (2026-09-26): earlier counts of functions found by
@@ -108,7 +110,200 @@ the family. They are bound to the patched dependency command opcodes
 8/9/0x0e/0x0f of dispatcher `0x0042a180` by `aoe_command_execute_dependency_ror`,
 which includes byte-exact builders for the 0x74/0x08/0x10/0x0c records, the
 owner `+0x4a` word gate, and a documented host guard for set counts above 25.
-The remaining dispatcher opcodes (0–7, 0x0a–0x0c, 0x10, 0x11) are untranslated.
+Opcode 5 (player resource add) is translated with patched RoR player
+vtable `0x00544d18` and its derived `+0x78` override `0x004f6c60`; the
+player-resource header now carries patched rather than disc addresses.
+The remaining dispatcher opcodes (0–4, 6, 7, 0x0a–0x0c, 0x10, 0x11) are
+untranslated; `0x00520c60` (world refresh) is still an explicit callback.
+`command_dispatch` now reproduces the `0x0042a180` routing (jump table
+`0x0042a230`, opcode 7 via processor vtable `0x00543498` slot `+0x00` =
+`0x0042ad40`) and reports routed-but-unbound opcodes rather than dropping
+them. See `docs/RELATED_PROJECTS.md` for the 2026-10-03 upstream survey and
+work-reduction plan.
+Opcode 7 (tribute) is translated with its exact `__ftol` reporting. The
+derived tribe router `0x004e83e0` is modelled by
+`aoe_command_dispatch_tribe_ror`: one CRT `rand()` step per command, an
+opcode-4 override, and opcodes 0x64-0x6f/0x77, all reported as UNBOUND until
+translated. The tribe processor is now traced as the one real sessions
+construct. Opcode 4 is translated for both processors, including the
+tribe override's 4.0f elevation and instant building completion through
+`0x004ad7b0`. Root setter labels are now the patched `0x004aa550` (RoR)
+and `0x004a9430` (AoE 1.0c), and its state-3 dependency-group leadership
+handoff is translated. Tribe opcode 0x77 (production queue add/cancel,
+`0x004adab0`) is translated, along with the tribe-player cost
+check/pay/refund `0x004f15f0`/`0x004f1750`/`0x004f17f0` (including the
+`values[29]` gold-substitution budget) and queue-ready adapters. Base
+opcode 0 (unit order, with its multiplayer validity gate, formation offsets
+and the `+0x54` group vector) is translated. So is task selection, the
+decision step of unit `+0x98 -> +0x1f8` (`0x004e7dc0`, `0x00508010`,
+predicate `0x004e7f90`). Next: the rest of `0x00405f20` (action creation
+through the action manager `0x004045b0/0x004045c0`), tribe opcodes
+nothing: every tribe opcode (4, 0x64-0x6f, 0x77) is translated, including
+fee tribute 0x6c, diplomacy, building placement and walls. The command layer
+is complete. The order-to-action step `0x00405f20` is translated
+(`src/unit_order.c`), including the villager job switch, head-action
+retargeting, the action routing table and acknowledgements. Next: the
+individual action classes behind the routed constructors. The move action
+(`+0x9c`, type 1) is translated against an explicit movement interface;
+next are gather 5, attack 7 and build 0x65, and the unit movement system
+(`0x0044be90`..`0x0044c2d0`) itself. The pathfinder search `0x00458930`
+and path builder `0x0045a970` are now translated (`src/pathfinder_search.c`).
+The unit movement system is now translated in `src/movement.c`:
+- movement start `0x0044bf00` with the player path budget;
+- the per-tick update `0x0044c2d0`;
+- the tick toward a point `0x0044cde0`, with facet turning, blocked waits
+  and slope and terrain speed;
+- `aoe_movement_tick_ror` binding them together.
+
+The fit check `0x0045a4f0` and the unit footprint restore/lift
+`0x004ab6e0/0x004ab7f0` are also translated (`src/pathfinder_search.c`).
+These are bound into a live world (`src/world_motion.c`,
+`src/world_combat.c`). Gather 5, attack 9, projectiles and build 0x65 are
+translated and pass real-map regressions on EXPANS_1_1. The build test
+exposed a movement translation bug: the overshoot snap at `0x0044d8af`
+compares against the float 0.25, not distance 0.
+A world update loop now runs every player's +0x28 list with the class
+update chain (`aoe_world_combat_update_world_ror`). It also corrected live
+`+0x49`: it is a dormancy flag, and the type-20 constructor wakes every
+type 20-80 unit into the updated list.
+Next:
+1. Default tasks, the farm action, damage graphics, the type-80 setter
+   and update, building production/training and the technology system
+   (research, effects, attributes, upgrades) are translated; scenario
+   buildings now load as foundations and complete like the original.
+   Scenario player load and game start are translated
+   (`src/scenario_runtime.c`, `src/game_start.c`, test
+   `ror_game_start_real`). On patched RoR 1.0a, the world's scenario loader
+   (+0x98 `0x00520170`) loads every player before any unit. A tribe player
+   (`0x004f02d0`, scenario 1.11):
+   - disables every template;
+   - takes the scenario's starting stocks (EXPANS_1_1 player 1: wood 600);
+   - clears resources 30 and 21;
+   - gets a research manager;
+   - applies its civ tech tree's tech-disables (effect 210's under option
+     +0xad9 or scenario option 2);
+   - outside the editor, applies the scenario-info settings `0x00507e50`:
+     16 tech toggles, effect 100, the starting age and resource 48.
+
+   Gaia has no research manager. The game start (`0x0050aaa0` from
+   `0x0050b7c6`) applies:
+   - effects 105/100;
+   - the civ tech trees with the civ 7/10 adjustments;
+   - the resource-level, civ 10 food and deathmatch stocks;
+   - the starting age;
+   - resources 32/33/30/45;
+   - the 23 outcome events.
+
+   Game options (game object `0x00580e38`) are `AoeGameOptionsRor`.
+   Not yet translated: the victory/relic setup before `0x0050b7c6` and the
+   +0x840 tracker (`0x004b0c00`).
+   All 19 RoR campaign scenarios now load (`campaign_build_real`). The
+   fixes, from patched 1.0a evidence:
+   - Root `+0x60` (`0x004aa350`) and `+0x64` (`0x004aa470`) are shared by
+     every class. They walk the unit tile's visibility mask (visible low 16
+     bits, explored high 16):
+     - notify mode (`+0xa5`) removes the unit from each exploring player's
+       `+0x114` object memory (`0x00517220`, category `+0xa7`);
+     - effect mode 1 makes a doppelganger (template 243, type 25,
+       `0x00436030` / `0x004364b0`) for other players who explored the
+       tile but cannot see it. This is not translated; the runtime counts
+       requests and fails if one is needed (none in the campaigns);
+     - effect mode 2 adds/removes the owner's watch.
+   - Negative-ID slot reuse (flares) overwrites the slot (`0x00523190`).
+     Only positive IDs need the untranslated rebase `0x004a8820`.
+   - Types 40/50/60/70 use high-state `0x00405d40`: clear the `+0x184`
+     action list, then the root method.
+   - Gaia is a computer player whose tribe constructor `0x004efb00` builds
+     a research manager with a rebuild. Only players 1..8 run the tribe
+     scenario load (eight stock sets), and `0x00507e50` itself skips
+     index -1.
+   - Facets and adjacency: `0x0044c7b0` is
+     `(rotation - pi/4) * angles / 2pi + 0.5`; wall adjacency runs
+     `0x004ad550` / `0x004ad620` / `0x004ad380` / `0x0044f090`.
+   - Rendering: sprites go to the view sprite list (`0x00518d90`) and are
+     drawn after all terrain, ordered by layer, then row, then queue order.
+   - Water palette 248..254 cycles (`0x004843d0`).
+   Fog memory is now in place:
+   - **Object memory.** Player `+0x114` is filled by the map update
+     `0x00517060` / `0x00517130` from newly explored cells, and the world
+     tick resets player `+0x58`.
+   - **Shared vision.** `0x00520c60` runs at load and when resource 50
+     sets `+0x104` (`src/shared_vision.c`).
+   - **Doppelgangers.** Template 243, type 25, `0x00440250` ->
+     `0x00436030` / `0x004364b0`: source links, graphic, sprite-list clone
+     (`0x004155e0`), facet, class 0x19, tile-mask pointer and dedup
+     `0x004367a0`. The update `0x00436630` runs in the world loop's
+     `+0x30` pass, bracketed by `r = rand() ... srand(r)`.
+   - **Draw.** The scene resolvers give doppelgangers their source colour,
+     controller and hidden-player mask.
+   - **Test.** `ror_doppelganger_fog_memory` removes a real gold mine out
+     of player 2's sight and checks the image's life cycle.
+   - **Not yet.** The `+0xa8`/`+0xa9` display bytes (source template
+     `+0x8e`/`+0x90`) are unparsed. Fog is still bypassed for rendering.
+   **Research and production commands (2026-10-04).** All against patched
+   RoR 1.0a:
+   - **Manager.** The research manager (`aoe_research_*_ror` in
+     `src/research_action.c`) can start, progress, stop and reset techs:
+     - check `0x004eaf4c`: when resource 29 is at least 1.0, gold is a
+       reserve that covers shortfalls;
+     - start `0x004eb100`, progress `0x004eab23`, stop with or without
+       refund `0x004eb27b`, reset `0x004ea9e4`.
+   - **Research action.** The type-0x67 action (vtable `0x00548990`):
+     - constructor `0x004b60b0`;
+     - activate `0x004b6200`;
+     - update `0x004b6290`: tick × building work rate, or 1000 per update
+       with fast research;
+     - cancel `0x004b6390`, which refunds;
+     - destructor `0x004b60f0`, which does not refund.
+   - **World binding.** Tribe commands 0x64/0x65 are bound to the world
+     (`aoe_world_combat_command_production_ror`, through `0x00406490`).
+     Building +0x184 heads run command-started train (0x66) and research
+     (0x67) actions. The type-80 setter's research removal now resets the
+     tech and rebuilds the manager.
+   - **Test.** `ror_research_and_train_commands` researches Bronze Age at a
+     real town centre in 2,800 updates (140 s, work rate 1.0), then trains a
+     commanded villager.
+   **Action-class sweep (2026-10-04).** Tracked with
+   `tools/port_worklist.py` (`docs/PORT_COVERAGE.md`):
+   - **Class table.** `world_combat` now runs heap actions through one
+     class table (`HeapActionClass`).
+   - **Translated:**
+     - repair 0x6a, with the unit +0x8c repair methods, boat meeting
+       points, unit +0x154 move-to and the +0x188 order counter;
+     - heal 0x69;
+     - conversion 0x68, with unit +0x44 change of owner for root, type 70
+       (private template copy) and type 80.
+   - **Tests.** `ror_repair_heal_convert` runs all three on EXPANS_1_1.
+   - **All action classes, in one pass:**
+     - hunt 0x6e (live targets attacked through a nested attack with its
+       own sub-action list);
+     - trade 0x6f;
+     - artifact 0x6b, discovery 0x6c, wonder 0x78 (countdown and win
+       0x45d460);
+     - enter 3 with garrisoning (+0xd0/+0xd4, contents +0x24);
+     - explore 4;
+     - fly 10;
+     - transport 12 with unloading 0x4ab280.
+   - **Zones.** Terrain-restriction zones (0x521060, `zone_map.c`) now
+     replace the one-zone stub in movement.
+   - **Tests.**
+     - `ror_hunt_and_fell`: a Hunter kills and gathers a gazelle, and a
+       Lumberjack fells a tree.
+     - `ror_garrison_and_transport`: a villager boards a transport boat
+       and is unloaded on the shore.
+   - **Open question.** No default task starts an artifact's 107 action
+     in the data (default task id -1); it arrives only through the order
+     step. What orders artifacts in a game is unconfirmed.
+   Then: the active player's view-code refresh and the type-50 visibility
+   spotting.
+2. Replace placeholder bindings (diplomacy, zones, sounds, victory
+   conditions, player +0x30 lists).
+3. The remaining action classes.
+
+Validating against original-game traces remains outstanding. Note `0x00403e70` is the base list's
+stream loader (slot 0), not the order path.
+Every base
+opcode (0-0x11; 0x0d is a no-op) is translated.
 `aoe_live_unit_player_update_step_ror` binds it into actual player +0x7c
 object-list traversal by matching listed `+0x38` references against an
 explicit owned-unit roster; unrelated list objects still go through required
@@ -194,7 +389,8 @@ A separate status-art request is fulfilled by `status/port-progress.png` and
 `tools/render_status_art.sh`. It composes genuine local AoE/RoR grass, Roman
 town buildings, Wonder construction stage, and builder sprites. It is
 explicitly labeled original-asset status art, not a Vita/game screenshot.
-The present full-port estimate is approximately 10%; `status/README.md`
+The full-port estimate was approximately 10% at first and is 15% as of
+2026-10-04 (simulation milestones; see `status/current.json`); `status/README.md`
 documents the rationale and how to regenerate the single image at a later
 percentage. This does not advance or satisfy the actual scene-alpha milestone.
 

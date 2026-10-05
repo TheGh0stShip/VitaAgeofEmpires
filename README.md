@@ -4,7 +4,7 @@
 
 **A source-backed reconstruction of Age of Empires I for a future native PlayStation Vita port.** Rise of Rome is the primary target; the base game is also supported.
 
-> Research prototype — **not playable yet**. The repository now contains host-side reconstruction libraries, asset/data tools, and a source-backed campaign-scene composition/rendering path, but it does not yet contain an integrated interactive game loop or an installable playable VPK.
+> Research prototype — **not playable yet**. The repository now contains host-side reconstruction libraries, asset/data tools, and a source-backed campaign-scene composition/rendering path, but it does not yet contain an integrated interactive game loop or a playable VPK. A non-playable [Vita tech demo](docs/VITA_DEMO.md) runs the reconstructed runtime and renderer on the console with your own game data.
 
 | | Current state |
 |---|---|

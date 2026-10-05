@@ -51,6 +51,18 @@ typedef struct {
     size_t negative_capacity;
 } AoeVisibilityRegistry;
 
+/* Per-player effects of the root +0x60/+0x64 state methods, through the
+   world's player list (+0x40): player +0x114 object-memory removal
+   (0x00517220) and the doppelganger template (243) factory +0x38. Index 0
+   is Gaia. A callback a unit needs but that is missing fails the state
+   change rather than skipping it. */
+typedef struct AoeLiveUnitPlayerEffects {
+    void *context;
+    int (*memory_remove)(void *context, int player, int32_t unit_id,
+                         uint8_t category);
+    int (*doppelganger)(void *context, int player, void *unit_core);
+} AoeLiveUnitPlayerEffects;
+
 /* Owned form of the original world +0x88..+0x9c unit tables. The counts in
    view are allocated slot counts, not the number of occupied slots. */
 typedef struct {
@@ -61,6 +73,7 @@ typedef struct {
     int32_t next_negative_id; /* world +0x6c */
     int32_t reserved_id;      /* world +0x70 */
     uint8_t special_id_mode;  /* world +0x74 */
+    const AoeLiveUnitPlayerEffects *player_effects; /* world +0x40 list */
 } AoeOwnedVisibilityRegistry;
 
 typedef struct {

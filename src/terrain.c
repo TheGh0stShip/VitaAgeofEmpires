@@ -204,10 +204,13 @@ uint8_t terrain_elevation_shape(const ScnTile *tiles, uint32_t width,
     if (e == h + 1) return 8;
     if (w == h + 1) return 5;
     if (s == h + 1) return 7;
+    /* Diagonals (RoR disc 0x004493a0, patched 1.0a 0x004484f0, base 1.0c
+       0x0044a0f0 return the same sequence): each raised corner tests the
+       two cardinals on the far side of the tile. */
     if (ne == h + 1) return w == h - 1 && s == h - 1 ? 2 : 10;
-    if (sw == h + 1) return e == h - 1 && s == h - 1 ? 3 : 11;
-    if (nw == h + 1) return n == h - 1 && w == h - 1 ? 4 : 12;
-    if (se == h + 1) return n == h - 1 && e == h - 1 ? 1 : 9;
+    if (sw == h + 1) return n == h - 1 && e == h - 1 ? 1 : 9;
+    if (nw == h + 1) return e == h - 1 && s == h - 1 ? 3 : 11;
+    if (se == h + 1) return n == h - 1 && w == h - 1 ? 4 : 12;
     return 0;
 }
 

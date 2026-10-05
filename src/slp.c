@@ -26,9 +26,36 @@ int slp_frame_count(const uint8_t *data, size_t size, uint32_t *count) {
     return 1;
 }
 
+void slp_frame_summarize(SlpFrame *frame) {
+    uint8_t mask = 0;
+    if (!frame || !frame->pixels) return;
+    free(frame->row_spans);
+    frame->row_spans = malloc((size_t)frame->height * 2 * sizeof(uint16_t));
+    for (uint32_t y = 0; y < frame->height; ++y) {
+        const SlpPixel *row = &frame->pixels[(size_t)y * frame->width];
+        uint32_t lo = 0, hi, x;
+        while (lo < frame->width && row[lo].kind == SLP_TRANSPARENT) ++lo;
+        hi = lo;
+        while (hi < frame->width && row[hi].kind == SLP_COLOR) ++hi;
+        x = hi;
+        while (x < frame->width && row[x].kind == SLP_TRANSPARENT) ++x;
+        for (uint32_t i = 0; i < frame->width; ++i)
+            mask |= (uint8_t)(1u << row[i].kind);
+        if (frame->row_spans) {
+            int simple = x == frame->width && hi < SLP_ROW_MIXED;
+            frame->row_spans[2 * y] = simple ? (uint16_t)lo : SLP_ROW_MIXED;
+            frame->row_spans[2 * y + 1] =
+                simple ? (uint16_t)hi : SLP_ROW_MIXED;
+        }
+    }
+    frame->kind_mask = mask;
+    frame->kinds_known = 1;
+}
+
 void slp_free_frame(SlpFrame *frame) {
     if (!frame) return;
     free(frame->pixels);
+    free(frame->row_spans);
     memset(frame, 0, sizeof(*frame));
 }
 
@@ -136,28 +163,65 @@ int slp_blit_graphic_indexed(const SlpFrame *frame,
         (size_t)(height - 1) >
             (indices_size - (size_t)width) / stride)
         return 0;
-    size_t count = (size_t)frame->width * frame->height;
-    for (size_t i = 0; i < count; ++i) {
-        uint8_t kind = frame->pixels[i].kind;
-        if (kind > SLP_SHADOW ||
-            (kind == SLP_SHADOW && !shadow_table))
+    if (frame->kinds_known) {
+        if (frame->kind_mask & ~((1u << SLP_TRANSPARENT) | (1u << SLP_COLOR) |
+                                 (1u << SLP_PLAYER) | (1u << SLP_SHADOW)))
             return 0;
+        if ((frame->kind_mask & (1u << SLP_SHADOW)) && !shadow_table)
+            return 0;
+    } else {
+        size_t count = (size_t)frame->width * frame->height;
+        for (size_t i = 0; i < count; ++i) {
+            uint8_t kind = frame->pixels[i].kind;
+            if (kind > SLP_SHADOW ||
+                (kind == SLP_SHADOW && !shadow_table))
+                return 0;
+        }
     }
     int64_t left = mirror_horizontal ?
         (int64_t)anchor_x + frame->hotspot_x - frame->width :
         (int64_t)anchor_x - frame->hotspot_x;
     int64_t top = (int64_t)anchor_y - frame->hotspot_y;
     uint8_t bank = (uint8_t)(((unsigned)player_color + 1u) * 16u);
-    for (uint32_t y = 0; y < frame->height; ++y) {
-        int64_t dy = top + y;
-        if (dy < 0 || dy >= height) continue;
-        for (uint32_t x = 0; x < frame->width; ++x) {
-            int64_t dx = left + x;
-            if (dx < 0 || dx >= width) continue;
+    /* Visible destination columns [x0, x1) and rows [y0, y1) in frame
+       coordinates; each pixel is written exactly as a per-pixel bounds
+       test would. */
+    int64_t x0 = left < 0 ? -left : 0, x1 = (int64_t)width - left;
+    int64_t y0 = top < 0 ? -top : 0, y1 = (int64_t)height - top;
+    if (x1 > frame->width) x1 = frame->width;
+    if (y1 > frame->height) y1 = frame->height;
+    if (x0 >= x1 || y0 >= y1) return 1;
+    for (uint32_t y = (uint32_t)y0; y < (uint32_t)y1; ++y) {
+        const SlpPixel *row = &frame->pixels[(size_t)y * frame->width];
+        uint8_t *dest = indices + (size_t)(top + y) * stride +
+                        (size_t)(left + x0);
+        uint32_t n = (uint32_t)(x1 - x0);
+        if (frame->row_spans &&
+            frame->row_spans[2 * y] != SLP_ROW_MIXED) {
+            /* Transparent outside one color run: copy the visible part. */
+            uint32_t lo = frame->row_spans[2 * y];
+            uint32_t hi = frame->row_spans[2 * y + 1];
+            if (mirror_horizontal) {
+                uint32_t mlo = frame->width - hi, mhi = frame->width - lo;
+                lo = mlo;
+                hi = mhi;
+            }
+            if (lo < (uint32_t)x0) lo = (uint32_t)x0;
+            if (hi > (uint32_t)x1) hi = (uint32_t)x1;
+            if (lo >= hi) continue;
+            dest += lo - (uint32_t)x0;
+            if (!mirror_horizontal) {
+                for (uint32_t x = lo; x < hi; ++x) *dest++ = row[x].index;
+            } else {
+                for (uint32_t x = lo; x < hi; ++x)
+                    *dest++ = row[frame->width - 1 - x].index;
+            }
+            continue;
+        }
+        for (uint32_t k = 0; k < n; ++k, ++dest) {
+            uint32_t x = (uint32_t)x0 + k;
             uint32_t sx = mirror_horizontal ? frame->width - 1 - x : x;
-            const SlpPixel *pixel =
-                &frame->pixels[(size_t)y * frame->width + sx];
-            uint8_t *dest = indices + (size_t)dy * stride + (size_t)dx;
+            const SlpPixel *pixel = &row[sx];
             if (pixel->kind == SLP_COLOR) *dest = pixel->index;
             else if (pixel->kind == SLP_PLAYER)
                 *dest = (uint8_t)(pixel->index | bank);
@@ -280,5 +344,6 @@ int slp_decode_frame(const uint8_t *data, size_t size, uint32_t frame_index,
             return 0;
         }
     }
+    slp_frame_summarize(frame);
     return 1;
 }

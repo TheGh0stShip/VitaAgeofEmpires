@@ -24,7 +24,22 @@ typedef struct {
     uint32_t width, height;
     int32_t hotspot_x, hotspot_y;
     SlpPixel *pixels;
+    /* Decoder-computed summaries used only to skip work; frames built
+       elsewhere leave them zero/NULL and blitters fall back to scanning.
+       kind_mask has bit k set when some pixel has kind k. row_spans holds
+       {lo, hi} per row when the row is transparent outside one run of
+       SLP_COLOR pixels [lo, hi) (lo == hi for an empty row), else
+       {SLP_ROW_MIXED, SLP_ROW_MIXED}. */
+    uint8_t kinds_known;
+    uint8_t kind_mask;
+    uint16_t *row_spans;
 } SlpFrame;
+
+enum { SLP_ROW_MIXED = 0xffff };
+
+/* (Re)computes kinds_known/kind_mask/row_spans from the pixels; the
+   decoder calls it. A failed row_spans allocation leaves it NULL. */
+void slp_frame_summarize(SlpFrame *frame);
 
 int slp_frame_count(const uint8_t *data, size_t size, uint32_t *count);
 int slp_decode_frame(const uint8_t *data, size_t size, uint32_t frame_index,

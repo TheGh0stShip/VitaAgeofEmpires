@@ -85,8 +85,13 @@ int aoe_unit_placement_check_ror(
             if (terrain >= context->terrain_restriction_count ||
                 context->terrain_restriction[terrain] <= 0.0f)
                 return AOE_PLACEMENT_TERRAIN_RESTRICTED;
-            if (require_visible && (context->bypass_visibility ||
-                                     (map->view_codes && map->view_codes[index])))
+            if (require_visible &&
+                (context->bypass_visibility ||
+                 (context->owner_tile_masks
+                      ? (context->owner_tile_masks[index] &
+                         (context->owner_visible_mask |
+                          context->owner_explored_mask)) != 0
+                      : map->view_codes && map->view_codes[index])))
                 saw_visible = 1;
             if (shape_mode && !allowed_shape(map->shapes[index], shape_mode))
                 return AOE_PLACEMENT_SHAPE;

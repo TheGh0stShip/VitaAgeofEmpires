@@ -38,10 +38,18 @@ static int resolve_unit(void *opaque, const AoeLiveUnit *unit,
     int owner;
     if (!resolver || !unit || !state) return 0;
     owner = unit->runtime_owner_index;
+    /* A doppelganger (class 0x19) draws with its source's colour object
+       (+0x90), under its source's ID, and not for its hidden players. */
+    if (unit->core.class_code == 0x19) owner = unit->doppel.source_owner;
     if (owner < 0 || owner >= AOE_SCENARIO_RUNTIME_PLAYERS) return 0;
     memset(state, 0, sizeof(*state));
     state->active_player = resolver->active_player;
     state->owner_color = resolver->colors[owner];
+    if (unit->core.class_code == 0x19) {
+        state->type25_controller =
+            unit->doppel.source ? &unit->doppel.source->core : NULL;
+        state->type25_hidden_players = unit->doppel.hidden_players;
+    }
     return 1;
 }
 
@@ -118,7 +126,7 @@ int main(int argc, char **argv) {
     DatBlob blob = {0}; DatIntro intro = {0}; DatSounds sounds = {0};
     DatGraphics graphics = {0}; DatTerrains terrains = {0};
     DatBorders borders = {0}; DatMapGeometry geometry = {0};
-    DatRandomMaps random_maps = {0}; DatEffects effects = {0};
+    DatRandomMaps random_maps = {0}; DatEffects effects = {0}; DatTechs techs = {0};
     DatCivilizations civs = {0}; ScnMap scenario = {0};
     AoeScenarioRuntimeRor runtime = {0};
     DrsArchive exp_graphics = {0}, base_graphics = {0};
@@ -158,6 +166,7 @@ int main(int argc, char **argv) {
         !dat_parse_random_maps(&blob, &geometry, &random_maps) ||
         !dat_parse_effects(&blob, &random_maps, &effects) ||
         !dat_parse_civilizations(&blob, &effects, &civs) ||
+        !dat_parse_techs(&blob, &civs, &techs) ||
         !scn_load_map(argv[1], (uint8_t)intro.terrain_count, &scenario) ||
         !drs_open(&exp_graphics, argv[3]) || !drs_open(&base_graphics, argv[4]) ||
         !drs_open(&terrain_drs, argv[5]) || !drs_open(&border_drs, argv[6]) ||
@@ -172,7 +181,7 @@ int main(int argc, char **argv) {
             &intro, interface_archives, 2, &color_tables) ||
         !aoe_graphic_art_cache_init(&graphic_cache, 128, 64u * 1024u * 1024u) ||
         !aoe_scenario_runtime_build_ror(&runtime, &scenario, &intro, &civs, &graphics,
-            &terrains, &borders, &geometry, 1) ||
+            &terrains, &borders, &geometry, &techs, &effects, NULL, 1) ||
         !aoe_scenario_runtime_set_active_player_ror(&runtime, 1)) goto done;
     palette_bytes = malloc(palette_match.entry->size);
     edge_bytes = read_file(argv[9], &edge_size);
@@ -251,6 +260,7 @@ done:
     drs_close(&border_drs); drs_close(&terrain_drs);
     drs_close(&base_graphics); drs_close(&exp_graphics);
     scn_free_map(&scenario); dat_free_civilizations(&civs);
+    dat_free_techs(&techs);
     dat_free_effects(&effects); dat_free_random_maps(&random_maps);
     dat_free_borders(&borders); dat_free_terrains(&terrains);
     dat_free_graphics(&graphics); dat_free_sounds(&sounds);

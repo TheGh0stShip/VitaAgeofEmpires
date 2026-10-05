@@ -149,6 +149,10 @@ typedef struct {
     const TileEdgeIndex *tile_edges;
     const TileEdgeIndex *black_edges; /* Optional in Rise of Rome. */
     TileEdgeCoveragePlane first, second; /* Caller-owned frame clip planes. */
+    /* Nonzero walks the same tiles and calls the tile callback for each
+       non-hidden projected tile without drawing terrain (an objects-only
+       pass over a terrain layer drawn separately). */
+    int skip_terrain;
 } TerrainViewVisibility;
 
 /* Object/overlay seam in the original visibility-aware tile traversal.

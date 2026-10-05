@@ -98,7 +98,7 @@ int aoe_scenario_editor_runtime_blocked(
             context->intro->terrain_count;
     check = (AoeUnitPlacementCheckContext){
         &context->runtime->map, restriction, context->intro->terrain_count,
-        1}; /* Scenario editor world/screen mode is original mode 7. */
+        1, NULL, 0, 0}; /* Scenario editor mode is original mode 7. */
     context->blocking_unit_id = -1;
     context->last_placement_result = aoe_unit_placement_check_ror(
         unit, &check, x, y, &context->blocking_unit_id,

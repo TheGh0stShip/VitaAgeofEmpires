@@ -584,6 +584,35 @@ int main(void) {
         assert(!strcmp(aoe_settings_scenario_name_ror(&settings), "Gaul"));
         assert(!aoe_ui_system_find_ror(&sys, "Select Scenario Screen"));
     }
+    /* The game settings screen (single player, random map). */
+    {
+        AoeGameSettingsScreenRor *gs = calloc(1, sizeof *gs);
+        AoeUiPanelRor *gp = &gs->ez.panel;
+        aoe_settings_set_flag_8fc_ror(&settings, 0);
+        aoe_settings_set_option_ae5_ror(&settings, 0);
+        aoe_settings_set_map_size_ror(&settings, 3);
+        aoe_settings_set_a8c_a90_ror(&settings, 7, 11000);
+        aoe_settings_set_starting_age_ror(&settings, 2);
+        assert(aoe_game_settings_screen_init_ror(gs, &ui, &area));
+        assert(gs->offset == -1 && aoe_ui_text_count_ror(&gs->list->text) == 1);
+        assert(aoe_ui_text_selected_id_ror(&gs->list->text) == -2 && gs->random_map);
+        assert(aoe_ui_dropdown_selected_id_ror(gs->size) == 3);
+        assert(aoe_ui_dropdown_selected_id_ror(gs->victory) == 7);
+        assert(aoe_ui_dropdown_selected_id_ror(gs->years) == 11000);
+        assert(gs->years->panel.active && !gs->score->panel.active && gs->size->panel.active);
+        assert(!gs->population && !gs->checks[3]);
+        /* Score victory, then OK stores it. */
+        aoe_ui_dropdown_select_ror(gs->victory, (int16_t)aoe_ui_dropdown_index_of_id_ror(gs->victory, 8));
+        gp->vt->action(gp, &gs->victory->panel, 0, 0, 0);
+        assert(aoe_ui_dropdown_selected_id_ror(gs->score) == 900 && gs->score->panel.active);
+        aoe_ui_dropdown_select_ror(gs->age, 4);
+        aoe_ui_button_set_state_ror(gs->checks[0], 1);
+        gp->vt->action(gp, &gs->ok->panel, 1, 0, 0);
+        assert(aoe_settings_int_a8c_ror(&settings) == 8 && aoe_settings_int_a90_ror(&settings) == 900);
+        assert(aoe_settings_starting_age_ror(&settings) == 4 && aoe_settings_option_ad8_ror(&settings) == 0);
+        assert(aoe_settings_map_size_ror(&settings) == 3);
+        aoe_ui_system_close_ror(&sys, "Game Settings Screen");
+    }
     aoe_ui_system_close_ror(&sys, "Game Screen");
     free(sys.panels);
     return 0;

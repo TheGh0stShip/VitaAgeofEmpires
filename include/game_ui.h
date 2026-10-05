@@ -117,6 +117,9 @@ typedef struct {
     int (*scenario_index_info)(void *context, int32_t id, const char **description,
                                int32_t *flag, int32_t *players);
     void (*arrow_cursor)(void *context);
+    /* The host shares its player data (0x00420640(0)); the time. */
+    void (*share_player_data)(void *context);
+    uint32_t (*now_ms)(void *context);
 } AoeGameUiOpsRor;
 
 typedef struct {
@@ -510,5 +513,77 @@ typedef struct {
 extern const AoeUiEzVtblRor aoe_select_scenario_vtable_ror;
 int aoe_select_scenario_init_ror(AoeSelectScenarioRor *s, AoeGameUiRor *ui, AoeUiAreaRor *area);
 void aoe_select_scenario_fill_ror(AoeSelectScenarioRor *s);
+
+/* The "Game Settings Screen" (vtable 0x00547810,
+   0x0049bf40..0x0049df10) over the "MP Setup Screen": the scenario list
+   (in a networked game every scenario; otherwise the chosen one only;
+   "Random Map" (9653, ID -2) and "Death Match" (9751, ID -1) on top with
+   "2 - 8" players when they apply), its description, and the settings:
+   map size (0..5), map type (0..8), victory (standard 0 or, with a
+   scenario, 9; conquest 1; time limit 7 with its years; score 8 with its
+   points), difficulty (4..0), starting age (0..5), resources (0, 2, 3),
+   path finding (0..2), the population limit (networked: 25..200), and
+   the check boxes (+0xad8 inverted, +0xad9, +0x985 and, networked,
+   +0x982); OK, Cancel (Escape) and help. 0x0049bf40 constructor (via
+   0x0049ced0's clearing); 0x0049cfe0 destructor (deleting 0x0049d250).
+   0x0049d4b0 fills the list, 0x0049d8c0 reads the settings, 0x0049dba0
+   stores them, 0x0049d7f0 shows the description, 0x0049dde0 /
+   0x0049df10 show what applies. +0x4c 0x0049d270 the idle (filled once;
+   networked, the host's player data each new millisecond); +0x64
+   0x0049d320 user messages (the setup screen's first); +0xb8
+   0x0049d360. */
+typedef struct {
+    AoeUiEzRor ez;
+    AoeUiTextRor *title;                        /* +0x478 */
+    int32_t random_map;                         /* +0x47c: a random map is chosen */
+    AoeUiTextRor *size_label;                   /* +0x480 */
+    AoeUiDropdownRor *size;                     /* +0x484 */
+    AoeUiTextRor *type_label;                   /* +0x488 */
+    AoeUiDropdownRor *type;                     /* +0x48c */
+    AoeUiTextRor *victory_label;                /* +0x490 */
+    AoeUiDropdownRor *victory;                  /* +0x494 */
+    AoeUiTextRor *scenario_victory;             /* +0x498 */
+    AoeUiTextRor *score_label;                  /* +0x4a0 */
+    AoeUiDropdownRor *score;                    /* +0x4a4 */
+    AoeUiTextRor *years_label;                  /* +0x4a8 */
+    AoeUiDropdownRor *years;                    /* +0x4ac */
+    AoeUiTextRor *difficulty_label;             /* +0x4b0 */
+    AoeUiDropdownRor *difficulty;               /* +0x4b4 */
+    AoeUiTextRor *age_label;                    /* +0x4b8 */
+    AoeUiDropdownRor *age;                      /* +0x4bc */
+    AoeUiTextRor *resources_label;              /* +0x4c0 */
+    AoeUiDropdownRor *resources;                /* +0x4c4 */
+    AoeUiTextRor *path_label;                   /* +0x4c8 */
+    AoeUiDropdownRor *path;                     /* +0x4cc */
+    AoeUiTextRor *population_label;             /* +0x4d0 */
+    AoeUiDropdownRor *population;               /* +0x4d4 */
+    AoeUiTextRor *list_label, *players_label;   /* +0x4d8, +0x4dc */
+    int32_t list_x, list_y, list_w, list_h;     /* +0x4e0..+0x4ec */
+    AoeUiListRor *list;                         /* +0x4f0 */
+    AoeUiScrollbarRor *list_bar;                /* +0x4f4 */
+    int32_t count;                              /* +0x4f8 */
+    char **descriptions;                        /* +0x4fc */
+    int32_t *flags;                             /* +0x500 */
+    int32_t filled;                             /* +0x504 */
+    AoeUiTextRor *description_label;            /* +0x508 */
+    int32_t desc_x, desc_y, desc_w, desc_h;     /* +0x50c..+0x518 */
+    AoeUiTextRor *description;                  /* +0x51c */
+    AoeUiScrollbarRor *description_bar;         /* +0x520 */
+    AoeUiButtonRor *checks[4];                  /* +0x524..+0x530 */
+    AoeUiTextRor *check_texts[4];               /* +0x534..+0x540 */
+    AoeUiButtonRor *ok, *cancel, *help;         /* +0x544..+0x54c */
+    AoeUiPanelRor *setup;                       /* +0x550: the MP setup screen */
+    int32_t last_line;                          /* +0x554 (-1) */
+    int32_t offset;                             /* +0x558: minus the entries on top */
+    uint32_t last_ms;                           /* +0x55c */
+    AoeGameUiRor *ui;
+} AoeGameSettingsScreenRor;
+
+extern const AoeUiEzVtblRor aoe_game_settings_screen_vtable_ror;
+int aoe_game_settings_screen_init_ror(AoeGameSettingsScreenRor *g, AoeGameUiRor *ui,
+                                      AoeUiAreaRor *area);
+void aoe_game_settings_screen_fill_ror(AoeGameSettingsScreenRor *g);
+void aoe_game_settings_screen_read_ror(AoeGameSettingsScreenRor *g);
+void aoe_game_settings_screen_store_ror(AoeGameSettingsScreenRor *g);
 
 #endif

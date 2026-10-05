@@ -438,4 +438,16 @@ void aoe_ai_con_plan_note_ror(AoeAiConPlanRor *plan, int32_t type, float x, floa
                                            uint8_t state),
                               void *context);
 
+/* 0x004b9700(item), the RoR plan's placement check: with the origin
+   inside the map (0 < x < width, 0 < y < height): a town centre (0x2d)
+   always fits; unless placement is free (global 0x00580dd4 == 1) or the
+   plan is empty, the item fits when some planned entry of its type, or
+   of its size with no type (-1), is unused (+0x78 and +0x74 both 0), and
+   otherwise not. Without an origin, or when placement is free or the plan
+   empty, the owner's information AI decides (`fallback`). */
+int aoe_ai_con_plan_fits_ror(const AoeAiConPlanRor *plan, const AoeAiPlanItemRor *item,
+                             int free_placement,
+                             int (*fallback)(void *context, const AoeAiPlanItemRor *item),
+                             void *context);
+
 #endif

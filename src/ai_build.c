@@ -1226,3 +1226,23 @@ void aoe_ai_con_plan_note_ror(AoeAiConPlanRor *plan, int32_t type, float x, floa
     }
     if (mark) mark(context, type, (int32_t)x, (int32_t)y, 1);
 }
+
+int aoe_ai_con_plan_fits_ror(const AoeAiConPlanRor *plan, const AoeAiPlanItemRor *item,
+                             int free_placement,
+                             int (*fallback)(void *context, const AoeAiPlanItemRor *item),
+                             void *context) {
+    if (plan->origin_x > 0.0f && plan->origin_y > 0.0f && plan->origin_x < (float)plan->map_width &&
+        plan->origin_y < (float)plan->map_height) {
+        if (item->type == 0x2d) return 1;
+        if (!free_placement && plan->count) {
+            for (const AoeAiConItemRor *e = plan->plan.next; e && e != &plan->plan; e = e->next) {
+                int match = e->plan.type == item->type ||
+                            (item->size_x == e->plan.size_x && item->size_y == e->plan.size_y &&
+                             e->plan.type == -1);
+                if (match && !e->field_78 && !e->field_74) return 1;
+            }
+            return 0;
+        }
+    }
+    return fallback ? fallback(context, item) : 0;
+}

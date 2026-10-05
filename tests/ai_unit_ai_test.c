@@ -94,6 +94,43 @@ static double spd1(void *c) { (void)c; return 1.0; }
 static float mx = -1.0f;
 static void mv(void *c, float x, float y, float z) { (void)c; (void)y; (void)z; mx = x; }
 
+static int cc_cleared, cc_added = -1, cc_ec;
+static void cc_clear(void *c) { (void)c; ++cc_cleared; }
+static void cc_add(void *c, int32_t id) { (void)c; cc_added = id; }
+static void cc_ec_f(void *c, int32_t v) { (void)c; cc_ec = v; }
+static uint8_t cc_vis(void *c, int32_t x, int32_t y) { (void)c; (void)y; return (uint8_t)(x == 3 ? 0xf : 0); }
+
+static void cc_5644_tests(void) {
+    AoeAiUnitAiOpsRor o;
+    AoeAiUnitAiOrderRor ord = {-1, 7, 5};
+    AoeAiUnitAiMessageRor m = {44, 500, 0};
+    memset(&o, 0, sizeof o);
+    o.clear_target = cc_clear;
+    o.group_add = cc_add;
+    o.unit_ec = cc_ec_f;
+    o.object = obj_any;
+    o.vision = cc_vis;
+    assert(aoe_ai_unit_ai_5644_cc_ror(&ord, &m, &o) == 2 && cc_cleared == 0);
+    m.type = 0x1fa; m.value = 5;
+    aoe_ai_unit_ai_5644_cc_ror(&ord, &m, &o);
+    assert(cc_cleared == 1);
+    m.value = 6;
+    aoe_ai_unit_ai_5644_cc_ror(&ord, &m, &o);
+    assert(cc_cleared == 1);
+    ord.action = 105;
+    aoe_ai_unit_ai_5644_cc_ror(&ord, &m, &o);
+    assert(cc_cleared == 2);
+    m.type = 0x1fc;   /* target at x 3, visible: ignored */
+    aoe_ai_unit_ai_5644_cc_ror(&ord, &m, &o);
+    assert(cc_cleared == 2);
+    m.type = 600;
+    aoe_ai_unit_ai_5644_cc_ror(&ord, &m, &o);
+    assert(cc_added == 44 && cc_ec == 1 && cc_cleared == 2);
+    m.type = 0x300;
+    aoe_ai_unit_ai_5644_cc_ror(&ord, &m, &o);
+    assert(cc_cleared == 3);
+}
+
 static void d4_5564_tests(void) {
     AoeAiUnitAiOpsRor o;
     AoeAiUnitAiOrderRor ord = {-1, -1};
@@ -157,6 +194,7 @@ static void priest_search_tests(void) {
 int main(void) {
     priest_search_tests();
     d4_5564_tests();
+    cc_5644_tests();
     AoeAiUnitAiRor ai;
     AoeAiUnitAiOpsRor ops;
     memset(&ops, 0, sizeof ops);

@@ -3,6 +3,8 @@
 #include <math.h>
 #include <string.h>
 
+#include "aoe_ftol.h"
+
 static const int32_t table_class9[] = {0, 4, 0x1a, 0x18, 6, 0x19, 0x11, 10,
                                        0xc, 0x23, 0x17, 0x24, 0x1c, 0x12, 0xd,
                                        0x27};
@@ -378,4 +380,41 @@ int32_t aoe_ai_unit_ai_5564_d4_ror(const AoeAiUnitAiOrderRor *order, int32_t fir
         }
     }
     return 5;
+}
+
+int32_t aoe_ai_unit_ai_5644_cc_ror(const AoeAiUnitAiOrderRor *order,
+                                   const AoeAiUnitAiMessageRor *msg,
+                                   const AoeAiUnitAiOpsRor *ops) {
+    if (!order || !msg || !ops) return 2;
+    switch (msg->type) {
+    case 500: case 0x1f6: case 0x1f7: case 0x1f8: case 0x1fd: case 0x1fe: case 0x1ff:
+    case 0x200: case 0x202: case 0x203: case 0x20b: case 0x20f: case 0x259: case 0x25a:
+    case 0x25b: case 0x25c: case 0x25d: case 0x25e: case 0x25f: case 0x260: case 0x261:
+    case 0x262: case 0x265: case 0x266: case 0x267: case 0x268: case 0x269: case 699:
+        return 2;
+    case 0x1f9: case 0x1fa: case 0x1fb:
+        if (order->action != -1) {
+            if (order->task + 100 != order->action) return 2;
+        } else if (order->task != msg->value) {
+            return 2;
+        }
+        break;
+    case 0x1fc: {
+        AoeAiUnitViewRor t;
+        if (ops->object && ops->object(ops->context, order->target, &t) && ops->vision &&
+            ops->vision(ops->context, aoe_ftol32(t.x), aoe_ftol32(t.y)) == 0xf)
+            return 2;
+        break;
+    }
+    case 600:
+        if (ops->group_add) ops->group_add(ops->context, msg->sender);
+        if (ops->unit_ec) ops->unit_ec(ops->context, 1);
+        return 2;
+    default:
+        break;
+    }
+    if (ops->clear_target) ops->clear_target(ops->context);
+    if (ops->call_58) ops->call_58(ops->context, 1);
+    if (ops->call_1c) ops->call_1c(ops->context, (void *)msg);
+    return 2;
 }

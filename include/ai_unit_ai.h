@@ -114,13 +114,24 @@ typedef struct {
     int16_t (*unit_type)(void *context);
     int (*unit_check)(void *context);
     int (*owner_3c_8f)(void *context);
+    /* The owner's view of a tile (0xf visible); adding an ID to the unit
+       AI's +0x60 list (once, grown as needed); the unit's vtable +0xec. */
+    uint8_t (*vision)(void *context, int32_t x, int32_t y);
+    void (*group_add)(void *context, int32_t id);
+    void (*unit_ec)(void *context, int32_t value);
 } AoeAiUnitAiOpsRor;
 
 /* The unit AI's own order fields the overrides read: action (+0x28),
    target (+0x34). */
 typedef struct {
     int32_t action, target;
+    int32_t task;   /* +0x30 */
 } AoeAiUnitAiOrderRor;
+
+/* A message to a unit AI: sender (+0), type (+8), value (+0xc). */
+typedef struct {
+    int32_t sender, type, value;
+} AoeAiUnitAiMessageRor;
 
 /* The constructors: the base, then the target-class table (and, for
    class 9 and type 0x7e, a 4000 / 6000 ms timer that is restarted).
@@ -225,6 +236,17 @@ int32_t aoe_ai_unit_ai_priest_d8_ror(const AoeAiUnitAiOrderRor *order,
    in action 0x2bd or 0x2d5 and with a target (+0x40) that exists, the
    unit backs off by speed x 3 and 6. Else 5. */
 int32_t aoe_ai_unit_ai_5564_d4_ror(const AoeAiUnitAiOrderRor *order, int32_t first,
+                                   const AoeAiUnitAiOpsRor *ops);
+/* 0x004e6a80 (0x00549644, +0xcc): messages 500, 0x1f6..0x1f8, 0x1fd..
+   0x200, 0x202, 0x203, 0x20b, 0x20f, 0x259..0x262, 0x265..0x269 and 699
+   are ignored. 0x1f9..0x1fb are ignored unless the action is the task +
+   100 (or, with no action, the message value is the task). 0x1fc is
+   ignored while the target is on a visible tile. 600 adds the sender to
+   the +0x60 list and calls the unit's +0xec(1). Others (and the cases
+   not ignored) clear the target, stop (+0x58(1)) and pass the message on
+   (+0x1c). Always 2. */
+int32_t aoe_ai_unit_ai_5644_cc_ror(const AoeAiUnitAiOrderRor *order,
+                                   const AoeAiUnitAiMessageRor *msg,
                                    const AoeAiUnitAiOpsRor *ops);
 
 #endif

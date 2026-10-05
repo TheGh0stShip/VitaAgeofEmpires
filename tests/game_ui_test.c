@@ -615,6 +615,29 @@ int main(void) {
         assert(aoe_settings_map_size_ror(&settings) == 3);
         aoe_ui_system_close_ror(&sys, "Game Settings Screen");
     }
+    /* The editor screen's small methods. */
+    {
+        AoeScenarioEditorRor *edp = calloc(1, sizeof *edp);
+        AoeScenarioMenuDialogRor *md = calloc(1, sizeof *md);
+#define ed (*edp)
+        ed.ui = &ui;
+        aoe_ui_ez_init_named_ror(&ed.ez, &sys, &ez_ops, "Scenario Editor Screen");
+        assert(aoe_ui_ez_setup_ror(&ed.ez, &area, NULL, NULL, -1, 1, 0, 0, 0, 0, 0));
+        loaded[0] = 'x';
+        aoe_scenario_editor_new_ror(&ed);
+        assert(loaded[0] == 0);
+        ed.modified = 1;
+        assert(aoe_scenario_editor_modified_ror(&ed) == 1);
+        aoe_scenario_editor_new_ror(&ed);
+        assert(aoe_ui_system_find_ror(&sys, "NewSaveDialog"));
+        aoe_ui_system_close_ror(&sys, "NewSaveDialog");
+        assert(aoe_scenario_editor_menu_ror(&ed, md));
+        assert(aoe_ui_system_find_ror(&sys, "Scenario Menu Dialog"));
+        aoe_ui_system_close_ror(&sys, "Scenario Menu Dialog");
+        aoe_scenario_editor_idle_ror(&ed);
+        aoe_ui_system_close_ror(&sys, "Scenario Editor Screen");
+#undef ed
+    }
     aoe_ui_system_close_ror(&sys, "Game Screen");
     free(sys.panels);
     return 0;

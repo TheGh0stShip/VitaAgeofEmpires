@@ -120,6 +120,12 @@ typedef struct {
     /* The host shares its player data (0x00420640(0)); the time. */
     void (*share_player_data)(void *context);
     uint32_t (*now_ms)(void *context);
+    /* The game's state (+0x1b0); the viewed player's selection and block
+       cleared (0x0045dcb0, 0x0045e250); the scenario's player i active
+       (0x00475ad0). */
+    int32_t (*game_state)(void *context);
+    void (*clear_selection)(void *context);
+    void (*set_scenario_player)(void *context, int32_t player, int32_t active);
 } AoeGameUiOpsRor;
 
 typedef struct {
@@ -588,5 +594,33 @@ int aoe_game_settings_screen_init_ror(AoeGameSettingsScreenRor *g, AoeGameUiRor 
 void aoe_game_settings_screen_fill_ror(AoeGameSettingsScreenRor *g);
 void aoe_game_settings_screen_read_ror(AoeGameSettingsScreenRor *g);
 void aoe_game_settings_screen_store_ror(AoeGameSettingsScreenRor *g);
+
+/* The scenario editor screen's own small methods (vtable 0x00547360);
+   the screen's pages are not translated. */
+typedef struct {
+    AoeUiEzRor ez;
+    uint8_t modified;                 /* +0x4c0 */
+    AoeUiPanelRor *view, *minimap;    /* +0x4c8, +0x4cc */
+    AoeUiPanelRor *bar;               /* +0x4d4 */
+    AoeUiPanelRor *panel_774;         /* +0x774 */
+    uint32_t view_interval, view_time;/* +0x92c, +0x930 */
+    uint32_t map_interval, map_time;  /* +0x934, +0x938 */
+    AoeGameUiRor *ui;
+} AoeScenarioEditorRor;
+
+/* 0x004953e0 modified; 0x00494b20 a new scenario (with a modified one
+   first the yes/no/cancel "NewSaveDialog", string 9287, 450 x 100);
+   0x00494a90 the scenario menu dialog over the editor (0 when it could
+   not be made); 0x00494a60 the selection cleared; 0x00492c10 a scenario
+   player on or off; 0x00493030 the +0x774 panel shown or hidden and the
+   bar redrawn. +0x4c 0x00493090 the idle: while editing (state 7) the
+   view and minimap redraw on their intervals unless a panel is modal. */
+uint8_t aoe_scenario_editor_modified_ror(const AoeScenarioEditorRor *e);
+void aoe_scenario_editor_new_ror(AoeScenarioEditorRor *e);
+int aoe_scenario_editor_menu_ror(AoeScenarioEditorRor *e, AoeScenarioMenuDialogRor *dialog);
+void aoe_scenario_editor_clear_selection_ror(AoeScenarioEditorRor *e);
+void aoe_scenario_editor_set_player_ror(AoeScenarioEditorRor *e, int16_t player, int32_t on);
+void aoe_scenario_editor_show_774_ror(AoeScenarioEditorRor *e, int32_t on);
+int32_t aoe_scenario_editor_idle_ror(AoeScenarioEditorRor *e);
 
 #endif

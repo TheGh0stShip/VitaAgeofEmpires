@@ -340,27 +340,69 @@ float aoe_combat_plain_hit_ror(AoeLiveUnit *target, double damage,
     return target->core.hit_points;
 }
 
-void aoe_combat_melee_readout_ror(const DatUnit *t, int16_t *attack, int16_t *armor) {
+void aoe_combat_melee_armor_readout_ror(const DatUnit *t, int16_t *armor, int16_t *displayed) {
     uint16_t i;
-    *attack = t->base_armor;
-    for (i = 0; i < t->attack_count; ++i)
-        if (t->attacks[i].class_id == 4 && *attack < t->attacks[i].amount) *attack = t->attacks[i].amount;
-    *armor = t->displayed_melee_armor;
+    *armor = t->base_armor;
+    for (i = 0; i < t->armor_count; ++i)
+        if (t->armors[i].class_id == 4 && *armor < t->armors[i].amount) *armor = t->armors[i].amount;
+    *displayed = t->displayed_melee_armor;
 }
 
-void aoe_combat_pierce_readout_ror(const DatUnit *t, int16_t *attack, int16_t *armor) {
+void aoe_combat_pierce_armor_readout_ror(const DatUnit *t, int16_t *armor, int16_t *displayed) {
     uint16_t i;
-    *attack = 0;
-    for (i = 0; i < t->attack_count; ++i)
-        if (t->attacks[i].class_id == 3 && *attack < t->attacks[i].amount) *attack = t->attacks[i].amount;
-    *armor = t->displayed_pierce_armor;
+    *armor = 0;
+    for (i = 0; i < t->armor_count; ++i)
+        if (t->armors[i].class_id == 3 && *armor < t->armors[i].amount) *armor = t->armors[i].amount;
+    *displayed = t->displayed_pierce_armor;
 }
 
-int16_t aoe_combat_panel_pierce_ror(const DatUnit *t) {
+int16_t aoe_combat_panel_pierce_armor_ror(const DatUnit *t) {
     int16_t amount = 0;
     uint16_t i;
     if (!t || t->type != 70) return 0;
-    for (i = 0; i < t->attack_count; ++i)
-        if (t->attacks[i].class_id == 3) amount = t->attacks[i].amount;
+    for (i = 0; i < t->armor_count; ++i)
+        if (t->armors[i].class_id == 3) amount = t->armors[i].amount;
     return amount;
+}
+
+void aoe_combat_attacked_by_ror(AoeLiveUnit *target, AoeLiveUnit *attacker,
+                                const AoeCombatSlotOpsRor *ops) {
+    const DatUnit *t = attacker->core.unit_template;
+    float m = ops->multiplier(ops->context, attacker, target);
+    ops->take_damage(ops->context, target, (int16_t)t->attack_count, t->attacks, m, attacker);
+}
+
+void aoe_combat_scaled_ror(AoeLiveUnit *unit, int32_t a, int32_t b, const AoeCombatSlotOpsRor *ops) {
+    ops->scaled(ops->context, unit, a, 1.0f, b);
+}
+
+int aoe_combat_stand_ror(AoeLiveUnit *unit, int clear, const AoeCombatSlotOpsRor *ops) {
+    if (clear) ops->clear_actions(ops->context, unit);
+    ops->set_graphic(ops->context, unit, unit->core.unit_template->standing_graphic);
+    return 1;
+}
+
+void aoe_combat_notice_ror(AoeLiveUnit *unit, int32_t a, int32_t b, int32_t code, int32_t c,
+                           int32_t d, int32_t e, const AoeCombatSlotOpsRor *ops) {
+    if (unit->core.state != 2) return;
+    if (ops->has_ai(ops->context, unit) &&
+        ops->ai_notice(ops->context, unit, a, b, code, c, d, e))
+        return;
+    if (code == 699) return;
+    ops->owner_notice(ops->context, unit, a, b, code, c, d, e);
+}
+
+void aoe_combat_memory_moved_ror(uint8_t *entries[9], int32_t id, float old_x, float old_y,
+                                 float new_x, float new_y) {
+    int32_t ox = (int32_t)old_x, oy = (int32_t)old_y, nx, ny;
+    int i;
+    if (id < 0) return;
+    nx = (int32_t)new_x;
+    ny = (int32_t)new_y;
+    if (nx == ox && ny == oy) return;
+    for (i = 0; i < 9; ++i)
+        if (entries[i]) {
+            entries[i][6] = (uint8_t)nx;
+            entries[i][7] = (uint8_t)ny;
+        }
 }

@@ -90,6 +90,23 @@ static int same(void *c, AoeLiveUnit *a, AoeLiveUnit *b) {
 }
 static void killed(void *c, AoeLiveUnit *v) { (void)c; (void)v; ++killed_count; }
 
+static int s_damage_count, s_cleared, s_graphic, s_owner_notices, s_ai, s_ai_handles;
+static float s_mult, s_scale;
+static void s_take(void *c, AoeLiveUnit *t, int16_t n, const DatUnitAttackArmor *a, float m, AoeLiveUnit *at) {
+    (void)c; (void)t; (void)a; (void)at; s_damage_count = n; s_mult = m;
+}
+static float s_multiplier(void *c, AoeLiveUnit *a, AoeLiveUnit *t) { (void)c; (void)a; (void)t; return 1.5f; }
+static void s_scaled(void *c, AoeLiveUnit *u, int32_t a, float sc, int32_t b) { (void)c; (void)u; (void)a; (void)b; s_scale = sc; }
+static void s_clear(void *c, AoeLiveUnit *u) { (void)c; (void)u; ++s_cleared; }
+static void s_setg(void *c, AoeLiveUnit *u, int16_t g) { (void)c; (void)u; s_graphic = g; }
+static int s_hasai(void *c, AoeLiveUnit *u) { (void)c; (void)u; return s_ai; }
+static int s_ainotice(void *c, AoeLiveUnit *u, int32_t a, int32_t b, int32_t code, int32_t cc, int32_t d, int32_t e) {
+    (void)c; (void)u; (void)a; (void)b; (void)code; (void)cc; (void)d; (void)e; return s_ai_handles;
+}
+static void s_owner(void *c, AoeLiveUnit *u, int32_t a, int32_t b, int32_t code, int32_t cc, int32_t d, int32_t e) {
+    (void)c; (void)u; (void)a; (void)b; (void)code; (void)cc; (void)d; (void)e; ++s_owner_notices;
+}
+
 static void count_death(void *c, AoeLiveUnit *u) {
     (void)u;
     ++*(int *)c;
@@ -361,21 +378,62 @@ int main(void) {
         u.core.hit_points = 10.0f;
         assert(aoe_combat_plain_hit_ror(&u, 8.5, count_death, &deaths) == 1.5f && deaths == 0);
         assert(aoe_combat_plain_hit_ror(&u, 0.75, count_death, &deaths) == 0.0f && deaths == 1);
-        t.attacks = at;
-        t.attack_count = 3;
+        t.armors = at;
+        t.armor_count = 3;
         t.base_armor = 7;
         t.displayed_melee_armor = 2;
         t.displayed_pierce_armor = 5;
-        aoe_combat_melee_readout_ror(&t, &a, &b);
+        aoe_combat_melee_armor_readout_ror(&t, &a, &b);
         assert(a == 9 && b == 2);
         t.base_armor = 12;
-        aoe_combat_melee_readout_ror(&t, &a, &b);
+        aoe_combat_melee_armor_readout_ror(&t, &a, &b);
         assert(a == 12);
-        aoe_combat_pierce_readout_ror(&t, &a, &b);
+        aoe_combat_pierce_armor_readout_ror(&t, &a, &b);
         assert(a == 2 && b == 5);
-        assert(aoe_combat_panel_pierce_ror(&t) == 0);
+        assert(aoe_combat_panel_pierce_armor_ror(&t) == 0);
         t.type = 70;
-        assert(aoe_combat_panel_pierce_ror(&t) == 2 && aoe_combat_panel_pierce_ror(NULL) == 0);
+        assert(aoe_combat_panel_pierce_armor_ror(&t) == 2 && aoe_combat_panel_pierce_armor_ror(NULL) == 0);
+    }
+    {
+        AoeCombatSlotOpsRor so = {NULL, s_take, s_multiplier, s_scaled, s_clear, s_setg, s_hasai,
+                                  s_ainotice, s_owner};
+        static DatUnit tt;
+        static AoeLiveUnit a, t;
+        DatUnitAttackArmor at2[2] = {{4, 1}, {3, 2}};
+        uint8_t e1[8] = {0}, e2[8] = {0};
+        uint8_t *entries[9] = {e1, NULL, e2};
+        tt.attacks = at2;
+        tt.attack_count = 2;
+        tt.standing_graphic = 77;
+        a.core.unit_template = &tt;
+        t.core.unit_template = &tt;
+        aoe_combat_attacked_by_ror(&t, &a, &so);
+        assert(s_damage_count == 2 && s_mult == 1.5f);
+        aoe_combat_scaled_ror(&t, 1, 2, &so);
+        assert(s_scale == 1.0f);
+        assert(aoe_combat_stand_ror(&t, 1, &so) && s_cleared == 1 && s_graphic == 77);
+        assert(aoe_combat_stand_ror(&t, 0, &so) && s_cleared == 1);
+        t.core.state = 2;
+        aoe_combat_notice_ror(&t, 0, 0, 5, 0, 0, 0, &so);
+        assert(s_owner_notices == 1);
+        aoe_combat_notice_ror(&t, 0, 0, 699, 0, 0, 0, &so);
+        assert(s_owner_notices == 1);
+        s_ai = 1;
+        s_ai_handles = 1;
+        aoe_combat_notice_ror(&t, 0, 0, 5, 0, 0, 0, &so);
+        assert(s_owner_notices == 1);
+        s_ai_handles = 0;
+        aoe_combat_notice_ror(&t, 0, 0, 5, 0, 0, 0, &so);
+        assert(s_owner_notices == 2);
+        t.core.state = 3;
+        aoe_combat_notice_ror(&t, 0, 0, 5, 0, 0, 0, &so);
+        assert(s_owner_notices == 2);
+        aoe_combat_memory_moved_ror(entries, 4, 1.5f, 2.5f, 1.9f, 2.1f);
+        assert(e1[6] == 0);
+        aoe_combat_memory_moved_ror(entries, -1, 1.5f, 2.5f, 3.0f, 2.1f);
+        assert(e1[6] == 0);
+        aoe_combat_memory_moved_ror(entries, 4, 1.5f, 2.5f, 3.0f, 4.2f);
+        assert(e1[6] == 3 && e1[7] == 4 && e2[6] == 3);
     }
     return 0;
 }

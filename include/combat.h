@@ -207,14 +207,58 @@ double aoe_combat_plain_damage_ror(const DatUnitAttackArmor *attacks, int32_t at
 float aoe_combat_plain_hit_ror(AoeLiveUnit *target, double damage,
                                void (*die)(void *context, AoeLiveUnit *unit), void *context);
 
-/* The tribe readouts (types 80 / 70, vtables 0x00547fa0 / 0x0054820c):
-   +0x230 0x004aee00 the melee attack (the base armor byte raised to the
-   largest class 4 attack) and the displayed melee armor (+0x13c); +0x248
-   0x004aee70 the largest class 3 attack (0 base) and the displayed
-   pierce armor (+0x160). 0x004a4b90 (the object panel): a type 70
-   template's last class 3 attack amount, else 0. */
-void aoe_combat_melee_readout_ror(const DatUnit *t, int16_t *attack, int16_t *armor);
-void aoe_combat_pierce_readout_ror(const DatUnit *t, int16_t *attack, int16_t *armor);
-int16_t aoe_combat_panel_pierce_ror(const DatUnit *t);
+/* The tribe armor readouts (types 80 / 70, vtables 0x00547fa0 /
+   0x0054820c), from the armor list (+0x102 / +0x104): +0x230 0x004aee00
+   the melee armor (the base armor byte raised to the largest class 4
+   armor) and the displayed melee armor (+0x13c); +0x248 0x004aee70 the
+   largest class 3 armor (0 base) and the displayed pierce armor (+0x160).
+   0x004a4b90 (the object panel): a type 70 template's last class 3
+   armor, else 0. */
+void aoe_combat_melee_armor_readout_ror(const DatUnit *t, int16_t *armor, int16_t *displayed);
+void aoe_combat_pierce_armor_readout_ror(const DatUnit *t, int16_t *armor, int16_t *displayed);
+int16_t aoe_combat_panel_pierce_armor_ror(const DatUnit *t);
+
+/* More type-50 slots (vtable 0x0054324c, kept by 0x005445e8, 0x00547fa0
+   and 0x0054820c). */
+typedef struct {
+    void *context;
+    /* The target's +0x74 damage (attack count and list, multiplier,
+       attacker's owner, attacker). */
+    void (*take_damage)(void *context, AoeLiveUnit *target, int16_t attack_count,
+                        const DatUnitAttackArmor *attacks, float multiplier, AoeLiveUnit *attacker);
+    /* The attacker's +0xf0 multiplier against a target. */
+    float (*multiplier)(void *context, AoeLiveUnit *attacker, AoeLiveUnit *target);
+    /* The unit's +0x158(a, scale, b). */
+    void (*scaled)(void *context, AoeLiveUnit *unit, int32_t a, float scale, int32_t b);
+    /* 0x00403e50 clear the action list; +0x38 set the graphic. */
+    void (*clear_actions)(void *context, AoeLiveUnit *unit);
+    void (*set_graphic)(void *context, AoeLiveUnit *unit, int16_t graphic);
+    /* The unit AI (+0x74) notice handler +0x14 (nonzero: handled) and
+       the owner's +0xe8 notice. */
+    int (*has_ai)(void *context, AoeLiveUnit *unit);
+    int (*ai_notice)(void *context, AoeLiveUnit *unit, int32_t a, int32_t b, int32_t code,
+                     int32_t c, int32_t d, int32_t e);
+    void (*owner_notice)(void *context, AoeLiveUnit *unit, int32_t a, int32_t b, int32_t code,
+                         int32_t c, int32_t d, int32_t e);
+} AoeCombatSlotOpsRor;
+
+/* +0x104 0x00427ac0: the target takes the attacker's attacks (template
+   +0x108 / +0x10c) at the attacker's multiplier. +0x15c 0x00427170: +0x158
+   with scale 1.0. +0x18c 0x00427a10: the action list cleared, then the
+   standing graphic (template +0x18); +0x190 0x00427a40 the graphic alone;
+   both 1. +0x148 0x00426db0: in state 2 a notice the unit AI (if any)
+   does not handle, other than code 699, goes to the owner. */
+void aoe_combat_attacked_by_ror(AoeLiveUnit *target, AoeLiveUnit *attacker,
+                                const AoeCombatSlotOpsRor *ops);
+void aoe_combat_scaled_ror(AoeLiveUnit *unit, int32_t a, int32_t b, const AoeCombatSlotOpsRor *ops);
+int aoe_combat_stand_ror(AoeLiveUnit *unit, int clear, const AoeCombatSlotOpsRor *ops);
+void aoe_combat_notice_ror(AoeLiveUnit *unit, int32_t a, int32_t b, int32_t code, int32_t c,
+                           int32_t d, int32_t e, const AoeCombatSlotOpsRor *ops);
+
+/* +0x34 0x00427c60: after the move (0x0044bc40), a unit with an ID that
+   changed tiles writes the new tile into the nine object memory entries
+   it holds (+0x18c..+0x1ac; entry bytes +6 / +7). */
+void aoe_combat_memory_moved_ror(uint8_t *entries[9], int32_t id, float old_x, float old_y,
+                                 float new_x, float new_y);
 
 #endif

@@ -86,6 +86,11 @@ typedef struct AoeTemplateRor {
     /* 50 */
     void *sprite_fc;
     uint8_t field_100;
+    /* Naming caution: by its use in the damage (0x00426910 reads the
+       target's +0x102 list as armor; 0x00427ac0 passes the attacker's
+       +0x108 list as attacks), +0x102/+0x104 hold the armors and
+       +0x108/+0x10c the attacks; the loader and saver here keep the
+       original offsets, so only these names are swapped. */
     int16_t attack_count;               /* +0x102 */
     AoeTemplatePairRor *attacks;        /* +0x104 */
     int16_t armor_count;                /* +0x108 */

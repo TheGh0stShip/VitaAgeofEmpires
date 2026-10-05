@@ -152,6 +152,17 @@ typedef struct {
     void (*add_waypoint)(void *context, int32_t x, int32_t y);
     int32_t (*call_80)(void *context, int32_t x, int32_t y);
     void (*group_remove)(void *context, int32_t id);
+    /* Vtable +0x10 re-sending an order of the AI's own fields with
+       `action` (last flags 0 and `flag`), +0xa0 (x, y, z, a, b), the
+       unit's class and a world object's type, and the global flag at
+       0x00561458 being set to 1. */
+    void (*reissue)(void *context, int32_t action, int32_t flag);
+    int32_t (*call_a0)(void *context, float x, float y, float z, int32_t a, int32_t b);
+    int16_t (*unit_class)(void *context);
+    int (*world_type)(void *context, int32_t id, int16_t *type_id);
+    void (*set_dodged)(void *context);
+    /* The +0x60 list's entry `i` (grown to hold it). */
+    int32_t (*group_at)(void *context, int32_t i);
 } AoeAiUnitAiOpsRor;
 
 /* The unit AI's own order fields the overrides read: action (+0x28),
@@ -346,6 +357,20 @@ int32_t aoe_ai_unit_ai_class2_cc_ror(const AoeAiUnitAiOrderRor *order,
    lists the sender and calls the unit's +0xec(1); 699 drops the sender
    from the list when it is on it; all others give 2. */
 int32_t aoe_ai_unit_ai_5804_cc_ror(const AoeAiUnitAiOrderRor *order,
+                                   const AoeAiUnitAiMessageRor *msg, int32_t arg,
+                                   const AoeAiUnitAiOpsRor *ops);
+/* 0x004e62d0 (0x00549564, +0xcc): message 0x200 for a computer owner's
+   unit (range at least 1.0, not class 0x1a): unless attacking (task 600)
+   it gives 2; with the target in range by at least 1.0 to spare it
+   re-sends the attack (0x2bc, flag 1) and steps back by that spare along
+   the summed direction to the target and the other listed attackers
+   (+0xa0 with 0, 1): 3 when that worked, else 2; a smaller spare goes to
+   the base. Message 0x20f from a siege unit (type 0x23, 0x24, 0x118) to
+   a computer owner's tasked unit re-sends its action (flag 0) and sidesteps
+   to x - 4 + rand() % 8, y - 4 + rand() % 8 (a zero move becomes 2 tiles
+   toward the middle of 10), +0xa0 with 1, 1: at 1 the global dodge flag
+   is set and 3. Everything else goes to the base. */
+int32_t aoe_ai_unit_ai_5564_cc_ror(const AoeAiUnitAiOrderRor *order,
                                    const AoeAiUnitAiMessageRor *msg, int32_t arg,
                                    const AoeAiUnitAiOpsRor *ops);
 

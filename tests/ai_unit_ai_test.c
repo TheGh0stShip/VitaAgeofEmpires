@@ -279,6 +279,43 @@ static void attacked_tests(void) {
     assert(aoe_ai_unit_ai_5804_cc_ror(&ord, &m, 12, &o) == 2);
 }
 
+static float a0x = 0, a0y = 0;
+static int32_t t_a0(void *c, float x, float y, float z, int32_t a, int32_t b) {
+    (void)c; (void)z; (void)a; (void)b; a0x = x; a0y = y; return 1;
+}
+static int32_t reiss = -1;
+static void t_reiss(void *c, int32_t a, int32_t f) { (void)c; (void)f; reiss = a; }
+static int dodged;
+static void t_dodge(void *c) { (void)c; dodged = 1; }
+static int t_wtype(void *c, int32_t id, int16_t *t) { (void)c; (void)id; *t = 0x23; return 1; }
+static double t_dist1(void *c, int32_t id) { (void)c; (void)id; return 1.0; }
+
+static void cc_5564_tests(void) {
+    AoeAiUnitAiOpsRor o;
+    AoeAiUnitAiOrderRor ord = {5, 9, 600};
+    AoeAiUnitAiMessageRor m = {45, 0x200, 0, 1};
+    memset(&o, 0, sizeof o);
+    o.self = me0;
+    o.owner_field_4 = pd_owner4;
+    o.range_10c = t_rng;
+    o.object = obj_any;
+    o.distance_to = t_dist1;
+    o.reissue = t_reiss;
+    o.call_a0 = t_a0;
+    o.rand = t_rand7;
+    o.world_type = t_wtype;
+    o.set_dodged = t_dodge;
+    o.base_cc = t_bcc;
+    /* Target at x 3, range 5, distance 1: spare 4, step to x -4. */
+    assert(aoe_ai_unit_ai_5564_cc_ror(&ord, &m, 1, &o) == 3 && reiss == 0x2bc && a0x == -4.0f);
+    ord.task = 7;
+    assert(aoe_ai_unit_ai_5564_cc_ror(&ord, &m, 1, &o) == 2);
+    /* 0x20f from siege: x = 0 - 4 + 7. */
+    m.type = 0x20f;
+    assert(aoe_ai_unit_ai_5564_cc_ror(&ord, &m, 1, &o) == 3 && a0x == 3.0f && dodged == 1 &&
+           reiss == 5);
+}
+
 static void d4_5564_tests(void) {
     AoeAiUnitAiOpsRor o;
     AoeAiUnitAiOrderRor ord = {-1, -1};
@@ -346,6 +383,7 @@ int main(void) {
     cc_more_tests();
     priest_more_tests();
     attacked_tests();
+    cc_5564_tests();
     AoeAiUnitAiRor ai;
     AoeAiUnitAiOpsRor ops;
     memset(&ops, 0, sizeof ops);

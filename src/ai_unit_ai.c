@@ -668,3 +668,69 @@ int32_t aoe_ai_unit_ai_class14_cc_ror(const AoeAiUnitAiOrderRor *order,
     if (ops->call_a4) ops->call_a4(ops->context, 1);
     return 3;
 }
+
+static float sidestep(float at, const AoeAiUnitAiOpsRor *ops) {
+    int32_t r = (ops->rand ? ops->rand(ops->context) : 0) % 8;
+    float v = (float)((double)at - (double)4.0f + (double)r);
+    if (v == at) v = v <= 10.0f ? v + 2.0f : v - 2.0f;
+    return v;
+}
+
+int32_t aoe_ai_unit_ai_5564_cc_ror(const AoeAiUnitAiOrderRor *order,
+                                   const AoeAiUnitAiMessageRor *msg, int32_t arg,
+                                   const AoeAiUnitAiOpsRor *ops) {
+    AoeAiUnitViewRor me, t;
+    if (!order || !msg || !ops || !ops->self) return 0;
+    ops->self(ops->context, &me);
+    if (msg->type == 0x200) {
+        double range, gap, dist;
+        float dx, dy, step;
+        int32_t i, n;
+        if (!(ops->owner_field_4 && ops->owner_field_4(ops->context))) return base_cc(msg, arg, ops);
+        range = ops->range_10c ? ops->range_10c(ops->context) : 0.0;
+        if (range < 1.0 || (ops->unit_class && ops->unit_class(ops->context) == 0x1a))
+            return base_cc(msg, arg, ops);
+        if (order->task != 600) return 2;
+        if (!ops->object || !ops->object(ops->context, order->target, &t))
+            return base_cc(msg, arg, ops);
+        gap = (double)(float)range - (ops->distance_to ? ops->distance_to(ops->context, order->target)
+                                                       : 0.0);
+        step = (float)gap;
+        if (step < 1.0f) return base_cc(msg, arg, ops);
+        dx = t.x - me.x;
+        dy = t.y - me.y;
+        if (ops->reissue) ops->reissue(ops->context, 0x2bc, 1);
+        n = ops->group_count ? ops->group_count(ops->context) : 0;
+        for (i = 0; i < n; ++i) {
+            AoeAiUnitViewRor m;
+            int32_t id = ops->group_at ? ops->group_at(ops->context, i) : -1;
+            if (id == order->target || !ops->object(ops->context, id, &m)) continue;
+            dx = (float)((double)(m.x - me.x) + (double)dx);
+            dy = (float)((double)(m.y - me.y) + (double)dy);
+        }
+        dist = sqrt((double)dy * dy + (double)dx * dx);
+        return ops->call_a0 &&
+                       ops->call_a0(ops->context,
+                                    (float)(-((double)dx / dist * (double)step) + (double)me.x),
+                                    (float)(-((double)dy / dist * (double)step) + (double)me.y),
+                                    me.z, 0, 1) == 1
+                   ? 3
+                   : 2;
+    }
+    if (msg->type == 0x20f) {
+        int16_t type = 0;
+        float x, y;
+        if (!(ops->owner_field_4 && ops->owner_field_4(ops->context)) || !ops->world_type ||
+            !ops->world_type(ops->context, msg->sender, &type) ||
+            !(type == 0x23 || type == 0x24 || type == 0x118) || order->task == -1)
+            return base_cc(msg, arg, ops);
+        if (order->action != -1 && ops->reissue) ops->reissue(ops->context, order->action, 0);
+        x = sidestep(me.x, ops);
+        y = sidestep(me.y, ops);
+        if (ops->call_a0 && ops->call_a0(ops->context, x, y, me.z, 1, 1) == 1) {
+            if (ops->set_dodged) ops->set_dodged(ops->context);
+            return 3;
+        }
+    }
+    return base_cc(msg, arg, ops);
+}

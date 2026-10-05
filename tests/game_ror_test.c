@@ -109,6 +109,17 @@ int main(void) {
     aoe_settings_set_starting_age_ror(g2, 0);
     aoe_game_ror_receive_settings_ror(g2, &comm);
     assert(aoe_settings_starting_age_ror(g2) == 0);
+    /* The base record alone. */
+    aoe_settings_set_speed_ror(g, 2.5f);
+    aoe_game_send_settings_ror(g, &comm);
+    assert(sent_n == 0xa8);
+    aoe_settings_set_speed_ror(g2, 1.0f);
+    aoe_game_receive_settings_ror(g2, &comm);
+    assert(aoe_settings_speed_ror(g2) == 2.5f);
+    sent_n = 0x114;
+    aoe_settings_set_speed_ror(g2, 1.0f);
+    aoe_game_receive_settings_ror(g2, &comm);
+    assert(aoe_settings_speed_ror(g2) == 1.0f);
 
     /* Input. */
     memset(&in, 0, sizeof in);

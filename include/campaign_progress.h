@@ -160,12 +160,13 @@ typedef struct {
 
 /* 0x0043c6b0: the campaigns, then the file ("1.00", chosen player,
    players; none when missing or of another version). 0x0043c810: save
-   (when a path is set) and free. 0x0043c8c0: save to `path`. 0x0043c970:
+   (when a path is set) and free. 0x0043c8c0: save to `path`. 0x0043c970 (the game's 0x0041b9f0):
    load every "*.cpn" then "*.cpx" campaign and rebind the players.
    0x0043cc00 add a player (chosen), 0x0043cc80 choose one, 0x0043cef0
    remove one. Passed to the chosen player: 0x0043cca0 campaign,
    0x0043ccd0 scenario, 0x0043ce40 / 0x0043ce60 current scenario /
-   campaign, 0x0043ced0 stream, 0x0043cea0 finish (then save).
+   campaign, 0x0043ced0 stream, 0x0043cea0 finish (then save; the game's
+   0x00417ab0).
    0x0043cd00 player names, 0x0043cd70 campaign titles (and the chosen
    one), 0x0043cdf0 scenario names, 0x0043ce80 the chosen player's name. */
 int aoe_pif_load_ror(AoePifRor *f, const char *path,

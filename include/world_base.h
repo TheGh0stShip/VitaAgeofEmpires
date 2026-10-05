@@ -31,7 +31,7 @@ typedef struct {
    0x0041cf00: binary (name 30, palette 2, ID 2, +0x25, +0x24), then the
    map read as 256 "%hd" values from "data\<name>" (when it opens).
    0x0041d250: binary save (the same five fields). 0x0041d240: the
-   destructor (nothing to free). */
+   destructor (nothing to free; deleting 0x0041cfc0). */
 void aoe_world_color_from_text_ror(AoeWorldColorRor *c, FILE *f, int16_t palette);
 void aoe_world_color_read_ror(AoeWorldColorRor *c, AoeOutcomeStream *s,
                               FILE *(*open)(void *context, const char *path), void *context);
@@ -228,7 +228,8 @@ extern const AoeWorldVtblRor aoe_world_base_vtable_ror;
 extern void **aoe_world_object_table_ror;
 extern int32_t aoe_world_counter_ror;
 
-/* 0x0051b140: the constructor: the two object tables (10000 and 1000
+/* 0x0051b140 (the game makes one with 0x004198d0, 0x104 bytes): the
+   constructor: the two object tables (10000 and 1000
    entries, zeroed; the first published at 0x007d2054), the counts and
    tables empty, seed 14, +0x7c 1, state 2 then 0, the seven lists
    created. 0x0051b440 the destructor (0x0051b420 deleting): +0x58, the

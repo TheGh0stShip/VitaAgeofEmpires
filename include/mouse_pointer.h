@@ -140,7 +140,7 @@ void aoe_mouse_free_areas_ror(AoeMousePtrRor *m, const AoeMouseOpsRor *ops);
    reattaches to a new one and reloads. */
 int aoe_mouse_detach_ror(AoeMousePtrRor *m);
 int aoe_mouse_attach_ror(AoeMousePtrRor *m, AoeMouseHostRor *host, const AoeMouseOpsRor *ops);
-/* 0x0044a660 / 0x0044a6c0: the normal / game frame (ignored when out of
+/* 0x0044a660 (the game's 0x00419da0) / 0x0044a6c0: the normal / game frame (ignored when out of
    range) and its size and hotspot. */
 void aoe_mouse_set_frame_ror(AoeMousePtrRor *m, int game, int32_t frame, const AoeMouseOpsRor *ops);
 /* 0x00449b40 the game region; 0x00449b00 / 0x00449b10 its switch;

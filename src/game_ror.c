@@ -175,6 +175,21 @@ void aoe_game_ror_settings_unpack_ror(const uint8_t in[0x6c], AoeTribeSettingsRo
     o->population = in[0x6a];
 }
 
+void aoe_game_send_settings_ror(const AoeGameSettingsRor *g, const AoeGameRorCommOpsRor *ops) {
+    uint8_t record[AOE_SETTINGS_RECORD_SIZE];
+    if (!ops->has_comm) return;
+    aoe_settings_pack_ror(g, record);
+    ops->send(ops->context, record, (int32_t)sizeof record);
+}
+
+void aoe_game_receive_settings_ror(AoeGameSettingsRor *g, const AoeGameRorCommOpsRor *ops) {
+    const uint8_t *data;
+    int32_t n = 0;
+    if (!ops->has_comm) return;
+    data = ops->receive(ops->context, &n);
+    if (data && n == AOE_SETTINGS_RECORD_SIZE) aoe_settings_apply_ror(g, data);
+}
+
 void aoe_game_ror_send_settings_ror(const AoeGameSettingsRor *g,
                                     const AoeGameRorCommOpsRor *ops) {
     uint8_t record[0x114];

@@ -107,7 +107,8 @@ const char *aoe_scenario_player_file_ror(AoeScenarioObjectRor *s, int kind, int3
 
 /* The scenario info record (vtable 0x00545e34, 0x00474a40..0x00474c90):
    a version, a time stamp and a copy of the scenario's +0x1014 text.
-   0x00474a40 builds one (version 2, the time, the text copied); 0x00474ae0
+   0x00474a40 builds one (version 2, the time, the text copied; the game's
+   0x00417950 allocates and builds); 0x00474ae0 (the game's 0x004178f0)
    reads one (size, version, the stamp when the version is above 1, the
    text length and text; a failed allocation sets +0x04); 0x00474ba0
    frees it; 0x00474bd0 its size (12, plus the text and its NUL);

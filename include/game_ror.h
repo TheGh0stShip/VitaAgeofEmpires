@@ -62,6 +62,11 @@ typedef struct {
     void (*send)(void *context, const uint8_t *data, int32_t n);
     const uint8_t *(*receive)(void *context, int32_t *n);
 } AoeGameRorCommOpsRor;
+/* The base game's +0x48 0x0041b430 / +0x4c 0x0041b450: the 0xa8-byte
+   record alone (+0x8f8) sent / received (exactly 0xa8 bytes) and applied
+   (0x0041b490). */
+void aoe_game_send_settings_ror(const AoeGameSettingsRor *g, const AoeGameRorCommOpsRor *ops);
+void aoe_game_receive_settings_ror(AoeGameSettingsRor *g, const AoeGameRorCommOpsRor *ops);
 void aoe_game_ror_send_settings_ror(const AoeGameSettingsRor *g, const AoeGameRorCommOpsRor *ops);
 void aoe_game_ror_receive_settings_ror(AoeGameSettingsRor *g, const AoeGameRorCommOpsRor *ops);
 

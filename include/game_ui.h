@@ -36,6 +36,14 @@ typedef struct {
     /* The game's new-scenario start (0, 0). */
     void (*new_scenario)(void *context);
     void (*open_editor_open)(void *context);
+    /* Chat: the game's command check on a typed line (vtable +0x54, 0
+       for ordinary text), the game sound table's sound `n` (played
+       unless already playing), the game screen showing a line, and
+       sending one to the other players. */
+    int (*chat_command)(void *context, int16_t player, const char *text);
+    void (*play_sound)(void *context, int32_t index);
+    void (*show_chat)(void *context, const char *text);
+    void (*send_chat)(void *context, const char *text);
     /* The viewed player's game state byte (+0x80: 0 playing). */
     uint8_t (*player_state)(void *context, void *player);
 } AoeGameUiOpsRor;
@@ -102,5 +110,32 @@ extern const AoeUiEzVtblRor aoe_scenario_menu_dialog_vtable_ror;
    0x00434c60: the commands. */
 int aoe_scenario_menu_dialog_init_ror(AoeScenarioMenuDialogRor *m,
                                       AoeGameUiRor *ui, AoeUiPanelRor *editor);
+
+/* A typed chat line (the tail shared by 0x00435750 and 0x00435e60): a
+   game command is handled by the game; otherwise single player plays
+   sound 2 and shows the line, and multiplayer sends it unless the game
+   is in mode 5. */
+void aoe_game_ui_chat_ror(AoeGameUiRor *ui, const char *text);
+
+/* The quick chat line "Send Quick Message Dialog" (vtable 0x00544088,
+   0x00435cd0..0x00435fd0): 540 x 35, a label ("Chat", or "Comment" for a
+   comment line) and a 65-character edit box with the IME on. Enter sends
+   a non-empty line; Escape, an empty Enter or a press outside closes it
+   and shows the game screen. */
+typedef struct {
+    AoeUiDialogRor dialog;
+    AoeUiEditRor *edit;              /* +0x490 */
+    AoeUiTextRor *label;             /* +0x494 */
+    int32_t comment;                 /* +0x498 */
+    AoeGameUiRor *ui;
+} AoeQuickChatDialogRor;
+
+extern const AoeUiEzVtblRor aoe_quick_chat_dialog_vtable_ror;
+
+/* 0x00435cd0 constructor (with its setup); 0x00435df0 destructor
+   (deleting 0x00435dd0); +0xb8 0x00435e60; +0x70 0x00435fd0. */
+int aoe_quick_chat_dialog_init_ror(AoeQuickChatDialogRor *d,
+                                   AoeGameUiRor *ui, AoeUiPanelRor *parent,
+                                   int32_t comment);
 
 #endif

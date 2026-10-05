@@ -5,6 +5,7 @@
 
 #include "ui_button.h"
 #include "ui_dropdown.h"
+#include "ui_edit.h"
 #include "ui_input.h"
 #include "ui_list.h"
 #include "ui_scrollbar.h"
@@ -15,8 +16,7 @@
    reads a screen info file (backgrounds per resolution, palette, mouse
    pointer, shadow, button pictures, popup info, colours and bevel), and
    creates child panels laid out on a 640x480 reference grid scaled to its
-   own size. Background drawing and the shadow area are not translated,
-   nor is the slider creator (the slider class is a native edit window). A zero reference size leaves positions
+   own size. Background drawing and the shadow area are not translated. A zero reference size leaves positions
    unscaled (the original divides by zero). Semantic storage; offsets
    are noted. */
 
@@ -74,6 +74,7 @@ typedef struct {
     const AoeUiInputOpsRor *input_ops;
     uint32_t caret_blink_ms;
     const AoeUiDropdownOpsRor *dropdown_ops;
+    const AoeUiEditOpsRor *edit_ops;
     /* The game's idle work, skipped while its +0x1d8 flag is set (the
        message dialog's idle). */
     void (*game_idle)(void *context);
@@ -259,6 +260,14 @@ int aoe_ui_ez_create_value_scrollbar_ror(AoeUiEzRor *ez,
                                          int32_t position, int32_t step,
                                          int32_t x, int32_t y, int32_t w,
                                          int32_t h);
+/* +0x10c 0x00456a30: an edit panel (ui_edit.h) with the text, limit and
+   format; the height is in pixels; selecting all on focus unless
+   multi-line; bevel 3 and the text colours; the IME settings. */
+int aoe_ui_ez_create_edit_ror(AoeUiEzRor *ez, AoeUiPanelRor *parent,
+                              AoeUiEditRor **out, const char *text,
+                              int16_t max, int32_t format, int32_t x,
+                              int32_t y, int32_t w, int32_t h, int32_t font,
+                              int32_t ime_enabled, int32_t ime_open);
 void aoe_ui_ez_place_ror(AoeUiEzRor *ez, AoeUiPanelRor *child, int32_t x,
                          int32_t y, int32_t w, int32_t h);
 

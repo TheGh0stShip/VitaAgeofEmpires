@@ -735,6 +735,29 @@ int aoe_ui_ez_create_value_scrollbar_ror(AoeUiEzRor *ez,
     return 1;
 }
 
+int aoe_ui_ez_create_edit_ror(AoeUiEzRor *ez, AoeUiPanelRor *parent,
+                              AoeUiEditRor **out, const char *text,
+                              int16_t max, int32_t format, int32_t x,
+                              int32_t y, int32_t w, int32_t h, int32_t font,
+                              int32_t ime_enabled, int32_t ime_open) {
+    AoeUiEditRor *e;
+    uintptr_t f;
+    int32_t fw, fh, px = sx(ez, x), py = sy(ez, y), pw = sx(ez, w);
+    if (!ez || !out) return 0;
+    e = calloc(1, sizeof(*e));
+    if (e) aoe_ui_edit_init_ror(e, ez->panel.system, ez->ops ? ez->ops->edit_ops : NULL);
+    *out = e;
+    if (!e || e->panel.field_d8) return fail(ez);
+    font_of(ez, font < 0 ? 10 : font, &f, &fw, &fh);
+    if (!aoe_ui_edit_setup_ror(e, ez->panel.area, parent, px, py, pw, h, f, max,
+                               text, format, format != 7))
+        return fail(ez);
+    if (ez->bevel_on) aoe_ui_edit_set_bevel_ror(e, 3, ez->bevel);
+    aoe_ui_edit_set_colors_ror(e, ez->text_color, ez->text_shadow);
+    aoe_ui_edit_set_ime_ror(e, ime_enabled, ime_open);
+    return 1;
+}
+
 void aoe_ui_ez_place_ror(AoeUiEzRor *ez, AoeUiPanelRor *child, int32_t x,
                          int32_t y, int32_t w, int32_t h) {
     if (!ez || !child) return;

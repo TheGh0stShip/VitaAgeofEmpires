@@ -510,6 +510,8 @@ int main(void) {
                                           77));
         assert(aoe_ui_ez_info_id_ror(&st->ez) == 77 && st->text);
         assert(st->text->panel.width == 0x230 * 800 / 640);
+        aoe_status_screen_set_text_ror(st, "Done");
+        assert(!strcmp(st->text->lines->text, "Done"));
         aoe_ui_system_close_ror(&sys, "Wait Screen");
         st = calloc(1, sizeof *st);
         sys.screen = NULL;

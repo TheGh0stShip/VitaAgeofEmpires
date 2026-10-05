@@ -61,3 +61,7 @@ const AoeUiEzVtblRor aoe_status_screen_vtable_ror = {
     aoe_ui_ez_draw_background_slot_ror,
     aoe_ui_ez_set_reference_slot_ror,
 };
+
+void aoe_status_screen_set_text_ror(AoeStatusScreenRor *st, const char *text) {
+    if (st->text) ((const AoeUiTextVtblRor *)st->text->panel.vt)->set_text(st->text, text);
+}

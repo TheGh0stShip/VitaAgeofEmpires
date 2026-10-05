@@ -45,6 +45,7 @@ typedef struct {
     int32_t map_tool;     /* editor +0x4a8 */
     int32_t unit_tool;    /* editor +0x4ac */
     int32_t brush_size;   /* editor +0x4b0 */
+    int32_t terrain_tool; /* editor +0x4b4 */
 } AoeScenarioEditorToolsRor;
 
 typedef struct {
@@ -53,7 +54,8 @@ typedef struct {
        (+0x5a8), 2 units (+0x63c). */
     void (*list_select)(void *context, int list, int32_t index);
     /* 0x0045f280 on a radio button: 0 a map tool (+0x504[i]), 1 a brush
-       size (+0x554[i]), 2 a unit tool (+0x6dc[i]). */
+       size (+0x554[i]), 2 a unit tool (+0x6dc[i]), 3 a terrain tool
+       (+0x580[i]). */
     void (*radio_select)(void *context, int group, int32_t index);
     /* The page's controls of a tool shown (1) or hidden (0) through
        +0x14; the last one shown gets the focus (0x00453eb0). */
@@ -67,6 +69,9 @@ typedef struct {
        present, of type 80 ('P') with its +0x16c flag. */
     int (*placeable_building)(void *context, int16_t id);
     int32_t game_6e; /* game +0x1b8, the default action's argument */
+    /* A list's selected line (0x0046a0d0): 0 terrain (+0x5a0), 1
+       elevation (+0x5a8). */
+    int32_t (*list_line)(void *context, int list);
 } AoeScenarioEditorToolOpsRor;
 
 /* 0x004923f0: a brush size 1..5 (selected; 0 ignored) sets the brush
@@ -93,5 +98,23 @@ void aoe_scenario_editor_map_tool_ror(AoeScenarioEditorToolsRor *t, int32_t tool
                                       const AoeScenarioEditorToolOpsRor *ops);
 void aoe_scenario_editor_unit_tool_ror(AoeScenarioEditorToolsRor *t, int32_t tool, int32_t show,
                                        const AoeScenarioEditorToolOpsRor *ops);
+
+/* 0x004924c0: the terrain page's tool (1 terrain, 2 elevation, 3
+   cliffs): the old one's controls hidden (with the game back to action
+   0), then (when `show`) the new one's shown, its list line picked again
+   and the game in action 9 / 10 / 0x13; the brush controls only for
+   tools 1 and 2. Then as the other pages. */
+void aoe_scenario_editor_terrain_tool_ror(AoeScenarioEditorToolsRor *t, int32_t tool,
+                                          int32_t show, const AoeScenarioEditorToolOpsRor *ops);
+/* 0x00490cb0: the terrain list's nine names (strings 10621..10629);
+   8. 0x00490d50: a hidden list (font 10) with its scrollbar: the
+   elevation list ("%s %d" of string 10631 for 1..7) or the terrain list.
+   0x00490230: a button labelled from a string ID. */
+int32_t aoe_scenario_editor_terrain_lines_ror(AoeUiTextRor *list);
+int aoe_scenario_editor_make_list_ror(AoeScenarioEditorUiRor *e, AoeUiPanelRor *parent,
+                                      AoeUiListRor **out, AoeUiScrollbarRor **bar, int elevation,
+                                      int terrain);
+int aoe_scenario_editor_button_id_ror(AoeScenarioEditorUiRor *e, AoeUiPanelRor *parent,
+                                      AoeUiButtonRor **out, int32_t text_id);
 
 #endif

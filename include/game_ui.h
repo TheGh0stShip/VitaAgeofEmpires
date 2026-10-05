@@ -422,6 +422,8 @@ extern const AoeUiEzVtblRor aoe_status_screen_vtable_ror;
 int aoe_status_screen_init_ror(AoeStatusScreenRor *st, AoeGameUiRor *ui, AoeUiAreaRor *area,
                                const char *name, const char *text, int32_t text_id,
                                const char *info_name, int32_t info_id);
+/* 0x0049ebe0: a new message. */
+void aoe_status_screen_set_text_ror(AoeStatusScreenRor *st, const char *text);
 
 /* The single player menu "Single Player Menu" (vtable 0x0054793c,
    0x0049e040..0x0049e330): title 9220 and six 300 x 40 buttons at x 170
@@ -482,7 +484,8 @@ int aoe_mission_dialog_init_ror(AoeMissionDialogRor *d, AoeGameUiRor *ui, AoeUiA
    flagged with more than two players), the chosen one's description,
    OK, Cancel (Escape) and the hidden close button. 0x0049b360
    constructor ("scr2" / 50052, "scr3" / 50053 networked); 0x0049b860
-   destructor (deleting 0x0049b7d0); 0x0049bbc0 fills the list;
+   destructor (deleting 0x0049b7d0; 0x0049b7f0 clears the fields first);
+   0x0049bbc0 fills the list;
    0x0049be30 picks the settings' scenario; 0x0049bde0 shows the chosen
    one's description; 0x0049bed0 shows the labels and orders Tab;
    0x0049be90 puts the choice in the settings. +0x4c 0x0049b950 the idle
@@ -525,7 +528,7 @@ void aoe_select_scenario_fill_ror(AoeSelectScenarioRor *s);
    path finding (0..2), the population limit (networked: 25..200), and
    the check boxes (+0xad8 inverted, +0xad9, +0x985 and, networked,
    +0x982); OK, Cancel (Escape) and help. 0x0049bf40 constructor (via
-   0x0049ced0's clearing); 0x0049cfe0 destructor (deleting 0x0049d250).
+   0x0049ced0's clearing); 0x0049cfe0 destructor (deleting 0x0049ceb0).
    0x0049d4b0 fills the list, 0x0049d8c0 reads the settings, 0x0049dba0
    stores them, 0x0049d7f0 shows the description, 0x0049dde0 /
    0x0049df10 show what applies. +0x4c 0x0049d270 the idle (filled once;

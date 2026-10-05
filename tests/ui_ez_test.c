@@ -212,6 +212,7 @@ static void t_radio(void *c, int g, int32_t i) { (void)c; last_radio = g * 100 +
 static void t_show(void *c, int p, int32_t t, int32_t s) { (void)c; (void)p; (void)t; if (s) ++shows; else ++hides; }
 static void t_redraw(void *c) { (void)c; ++redraws_ed; }
 static void t_action(void *c, int32_t a, int32_t b) { (void)c; last_action = a; last_arg = b; }
+static int32_t t_line(void *c, int l) { (void)c; return l + 1; }
 static int16_t t_entry(void *c, int32_t i) { (void)c; return (int16_t)(50 + i); }
 static int t_building(void *c, int16_t id) { (void)c; return id == 52; }
 
@@ -702,7 +703,7 @@ int main(void) {
     }
     {
         AoeScenarioEditorToolOpsRor to = {NULL, t_list, t_radio, t_show, t_redraw, t_action,
-                                          t_entry, t_building, 77};
+                                          t_entry, t_building, 77, t_line};
         AoeScenarioEditorToolsRor tl;
         memset(&tl, 0, sizeof tl);
         aoe_scenario_editor_brush_ror(&tl, 3, &to);
@@ -733,6 +734,20 @@ int main(void) {
         assert(tl.map_tool == 3 && hides == 2 && redraws_ed == 2);
         aoe_scenario_editor_unit_tool_ror(&tl, 4, 1, &to);
         assert(tl.unit_tool == 4 && last_radio == 204);
+        aoe_scenario_editor_terrain_tool_ror(&tl, 1, 1, &to);
+        assert(tl.terrain_tool == 1 && last_action == 9 && tl.terrain == 6 && last_radio == 301);
+        aoe_scenario_editor_terrain_tool_ror(&tl, 3, 1, &to);
+        assert(tl.terrain_tool == 3 && last_action == 0x13 && tl.elevation == 2);
+        {
+            AoeScenarioEditorUiRor ed2 = {&ez, 0, {0}};
+            AoeUiListRor *l = NULL;
+            AoeUiScrollbarRor *bar = NULL;
+            if (aoe_scenario_editor_make_list_ror(&ed2, &ez.panel, &l, &bar, 1, 0)) {
+                assert(aoe_ui_text_count_ror(&l->text) == 7 && !l->text.panel.active);
+            }
+            if (l) assert(aoe_scenario_editor_terrain_lines_ror(&l->text) == 8 &&
+                          aoe_ui_text_count_ror(&l->text) == 9);
+        }
     }
     aoe_ui_ez_release_ror(&ez);
     return 0;

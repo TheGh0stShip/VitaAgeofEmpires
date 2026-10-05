@@ -1,5 +1,7 @@
 #include "scenario_editor_ui.h"
 
+#include <stdio.h>
+
 static void front_hidden(AoeUiPanelRor *p) {
     aoe_ui_panel_set_z_ror(p, 1, 0);
     aoe_ui_panel_set_active_ror(p, 0);
@@ -99,4 +101,72 @@ void aoe_scenario_editor_map_tool_ror(AoeScenarioEditorToolsRor *t, int32_t tool
 void aoe_scenario_editor_unit_tool_ror(AoeScenarioEditorToolsRor *t, int32_t tool, int32_t show,
                                        const AoeScenarioEditorToolOpsRor *ops) {
     switch_tool(&t->unit_tool, 1, tool, show, ops);
+}
+
+void aoe_scenario_editor_terrain_tool_ror(AoeScenarioEditorToolsRor *t, int32_t tool,
+                                          int32_t show, const AoeScenarioEditorToolOpsRor *ops) {
+    static const int32_t actions[4] = {0, 9, 10, 0x13};
+    int pass;
+    for (pass = 0; pass < 2; ++pass) {
+        int32_t which, on;
+        if (pass == 0) {
+            which = t->terrain_tool;
+            on = 0;
+        } else {
+            if (tool == 0) return;
+            if (!show) break;
+            which = tool;
+            on = 1;
+        }
+        if (which < 1 || which > 3) continue;
+        ops->show_tool(ops->context, 2, which, on);
+        if (!on) {
+            ops->action(ops->context, 0, 0);
+            continue;
+        }
+        if (which == 1)
+            aoe_scenario_editor_terrain_ror(t, (int16_t)ops->list_line(ops->context, 0), ops);
+        else
+            aoe_scenario_editor_elevation_ror(t, (int16_t)ops->list_line(ops->context, 1), ops);
+        ops->action(ops->context, actions[which], 0);
+    }
+    t->terrain_tool = tool;
+    ops->radio_select(ops->context, 3, tool);
+    ops->redraw(ops->context);
+}
+
+int32_t aoe_scenario_editor_terrain_lines_ror(AoeUiTextRor *list) {
+    int32_t i;
+    aoe_ui_text_clear_ror(list);
+    for (i = 0; i < 9; ++i) aoe_ui_text_append_id_ror(list, 0x297d + i, 0);
+    return 8;
+}
+
+int aoe_scenario_editor_make_list_ror(AoeScenarioEditorUiRor *e, AoeUiPanelRor *parent,
+                                      AoeUiListRor **out, AoeUiScrollbarRor **bar, int elevation,
+                                      int terrain) {
+    if (!aoe_ui_ez_create_list_ror(e->ez, parent, out, 0, 0, 0, 0, 10)) return 0;
+    if (!*out) return 0; /* host guard: the maker reports success either way */
+    (*out)->text.panel.vt->set_active(&(*out)->text.panel, 0);
+    aoe_ui_text_clear_ror(&(*out)->text);
+    if (!aoe_ui_ez_create_text_scrollbar_ror(e->ez, bar, &(*out)->text, 0x14)) return 0;
+    if (elevation) {
+        char base[0x32], line[0x40];
+        int32_t i;
+        aoe_scenario_editor_string_ror(e, base, 0x2987, sizeof base);
+        for (i = 1; i <= 7; ++i) {
+            snprintf(line, sizeof line, "%s %d", base, (int)i);
+            aoe_ui_text_append_ror(&(*out)->text, line, 0);
+        }
+        return 1;
+    }
+    if (terrain) aoe_scenario_editor_terrain_lines_ror(&(*out)->text);
+    return 1;
+}
+
+int aoe_scenario_editor_button_id_ror(AoeScenarioEditorUiRor *e, AoeUiPanelRor *parent,
+                                      AoeUiButtonRor **out, int32_t text_id) {
+    char text[0x78];
+    aoe_scenario_editor_string_ror(e, text, text_id, sizeof text);
+    return aoe_scenario_editor_button_ror(e, parent, out, text, NULL, NULL, NULL);
 }

@@ -3,6 +3,7 @@
 
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "aoe_stream.h"
@@ -40,6 +41,121 @@ static int32_t sn_125 = 60, sn_126 = 20;
 static int32_t sn(void *c, int32_t i) { (void)c; return i == 0x7d ? sn_125 : i == 0x7e ? sn_126 : 0; }
 static int32_t rnd(void *c) { (void)c; return 37; }
 
+/* Handler tests (0x004c8210..0x004c86a0): a trace of the calls. */
+static char ht[1024];
+static void hn(const char *f, int32_t a, int32_t b, int32_t c) {
+    char x[48];
+    snprintf(x, sizeof x, "%s(%d,%d,%d) ", f, a, b, c);
+    strncat(ht, x, sizeof ht - strlen(ht) - 1);
+}
+static int h_object(void *c, int32_t id, int16_t *t, float pos[3]) {
+    (void)c;
+    if (id == 3) return 0;
+    *t = (int16_t)(id == 2 ? 0x6d : 0x53);
+    pos[0] = 1.0f; pos[1] = 2.0f; pos[2] = 3.0f;
+    return 1;
+}
+static void h_build(void *c, int32_t id) { (void)c; hn("build", id, 0, 0); }
+static void h_place(void *c, float x, float y, float z) { (void)c; hn("place", (int)x, (int)y, (int)z); }
+static void h_add(void *c, int32_t p, int k, int32_t d) { (void)c; hn("add", p, k, d); }
+static void h_set(void *c, int32_t p, int k, int32_t v) { (void)c; hn("set", p, k, v); }
+static void h_chg(void *c, int32_t p, int f) { (void)c; hn("chg", p, f, 0); }
+static void h_req(void *c, int32_t p, int32_t s) { (void)c; hn("req", p, s, 0); }
+static int h_stance(void *c, int32_t from, int slot, int32_t to) {
+    (void)c;
+    if (slot == 0x20) return from == 1 && to == 2;
+    if (slot == 0x1c) return from == 2 && to == 3;
+    if (slot == 0x18) return (from == 2 && to == 4) || (from == 1 && to == 5);
+    return 0;
+}
+static void h_cmd(void *c, int32_t t, int32_t s) { (void)c; hn("cmd", t, s, 0); }
+static void h_chat(void *c, int32_t to, int32_t id) { (void)c; hn("chat", to, id, 0); }
+static void h_t28(void *c, int32_t p, int32_t v) { (void)c; hn("t28", p, v, 0); }
+static void h_tribute(void *c, int32_t to, int32_t r, float a) { (void)c; hn("tribute", to, r, (int)a); }
+static int h_market(void *c) { (void)c; return 1; }
+static void h_scan(void *c) { (void)c; hn("scan", 0, 0, 0); }
+static void h_tac(void *c, int32_t p, int32_t a, int32_t b, int32_t d) { (void)c; hn("tac", p, a, b + d); }
+static void h_setsn(void *c, int32_t i, int32_t v) { (void)c; hn("sn", i, v, 0); }
+static int32_t h_sn(void *c, int32_t i) { (void)c; return i == 0x80 ? 6 : i == 0xd9 ? 1 : 0; }
+static int32_t h_kind(void *c) { (void)c; return 4; }
+static int32_t h_f4(void *c, int32_t p) { (void)c; return p == 3; }
+static void h_sub5(void *c, int32_t f) { (void)c; hn("sub5", f, 0, 0); }
+
+static void handler_tests(void) {
+    static AoeAiPlayerAiRor ai;
+    AoeAiPlayerOpsRor ops;
+    int32_t *ids = (int32_t *)malloc(2 * sizeof *ids);
+    memset(&ops, 0, sizeof ops);
+    ops.object_at = h_object; ops.build_object = h_build; ops.con_place = h_place;
+    ops.dip_add = h_add; ops.dip_set = h_set; ops.dip_changeable = h_chg;
+    ops.dip_request = h_req; ops.stance_test = h_stance;
+    ops.diplomacy_command = h_cmd; ops.chat = h_chat; ops.tribe_28 = h_t28;
+    ops.tribute = h_tribute; ops.has_market = h_market; ops.info_scan = h_scan;
+    ops.tactical_tribute = h_tac; ops.set_sn = h_setsn; ops.sn = h_sn;
+    ops.game_kind = h_kind; ops.player_field_4 = h_f4; ops.command_sub5 = h_sub5;
+    ops.self = 1;
+    ops.player_count = 6;
+
+    /* 0x004c8210: three listed, capacity two (grown); 3 is missing. */
+    ids[0] = 2; ids[1] = 3;
+    ai.decision.ids = ids;
+    ai.decision.capacity = 2;
+    ai.decision.count = 3;
+    aoe_ai_player_refresh_objects_ror(&ai, &ops);
+    assert(ai.decision.capacity == 3 && ai.decision.ids[2] == 0);
+    assert(strcmp(ht, "build(2,0,0) place(1,2,3) build(0,0,0) ") == 0);
+    free(ai.decision.ids);
+
+    /* 0x004c8300 */
+    ht[0] = 0;
+    ai.field_1258c = 1;
+    aoe_ai_player_tribute_received_ror(&ai, 6, 3, 250, &ops);
+    assert(ai.field_12598 == 250 && ht[0] == 0);
+    aoe_ai_player_tribute_received_ror(&ai, 6, 1, 250, &ops);
+    assert(ht[0] == 0);
+    ai.field_125a0 = 300;
+    aoe_ai_player_tribute_received_ror(&ai, 2, 0, 250, &ops);
+    assert(strcmp(ht, "add(2,2,2) add(2,0,-2) ") == 0 && ai.field_125a4[2] == 250);
+    ht[0] = 0;
+    aoe_ai_player_tribute_received_ror(&ai, 2, 0, 50, &ops);
+    assert(strcmp(ht, "add(2,2,0) add(2,0,0) cmd(2,2,0) chat(2,2311,0) "
+                      "cmd(3,2,0) cmd(4,0,0) sn(217,0,0) ") == 0);
+    ht[0] = 0;
+    aoe_ai_player_tribute_received_ror(&ai, 5, 0, 100, &ops);
+    assert(strcmp(ht, "add(5,2,1) add(5,0,-1) chat(5,2310,0) ") == 0);
+
+    /* 0x004c8540 */
+    ht[0] = 0;
+    aoe_ai_player_befriend_ror(&ai, &ops);
+    assert(strcmp(ht, "set(6,0,0) set(6,2,100) t28(6,3,0) chat(6,2301,0) ") == 0 &&
+           ai.field_1258c == 0 && ai.field_12594 == 1);
+
+    /* 0x004c86a0 */
+    ht[0] = 0;
+    assert(aoe_ai_player_message_ror(&ai, 2, 0, 0, 0, 0, &ops) == 1);
+    assert(aoe_ai_player_message_ror(&ai, 2, 1, 3, 40, 0, &ops) == 1);
+    assert(aoe_ai_player_message_ror(&ai, 1, 1, 3, 40, 0, &ops) == 1);
+    assert(aoe_ai_player_message_ror(&ai, 2, 3, 7, 8, 9, &ops) == 1);
+    assert(aoe_ai_player_message_ror(&ai, 2, 4, 0, 0, 0, &ops) == 0);
+    assert(strcmp(ht, "scan(0,0,0) tribute(2,3,40) tac(2,7,17) ") == 0);
+    ht[0] = 0;
+    assert(aoe_ai_player_message_ror(&ai, 2, 6, 4, 0, 0, &ops) == 1);
+    assert(strcmp(ht, "chg(4,1,0) set(4,0,100) req(4,3,0) chg(4,0,0) ") == 0);
+    ht[0] = 0;
+    aoe_ai_player_message_ror(&ai, 2, 6, 4, 1, 0, &ops);
+    assert(strcmp(ht, "chg(4,1,0) set(4,0,49) set(4,2,49) req(4,1,0) chg(4,0,0) ") == 0);
+    ht[0] = 0;
+    aoe_ai_player_message_ror(&ai, 2, 6, 3, 2, 0, &ops);
+    aoe_ai_player_message_ror(&ai, 2, 6, 4, 2, 0, &ops);
+    assert(strcmp(ht, "chg(3,1,0) set(3,2,100) req(3,0,0) sub5(0,0,0) chg(3,0,0) "
+                      "chg(4,1,0) set(4,2,100) req(4,0,0) sub5(1,0,0) chg(4,0,0) ") == 0);
+    ht[0] = 0;
+    aoe_ai_player_message_ror(&ai, 2, 6, 4, 5, 0, &ops);
+    assert(strcmp(ht, "chg(4,1,0) chg(4,0,0) ") == 0);
+    assert(aoe_ai_player_message_ror(&ai, 2, 7, 900, 0, 0, &ops) == 1 &&
+           ai.field_125a0 == 900);
+}
+
 int main(void) {
     static AoeAiPlayerAiRor ai, back;
     static uint8_t buf[512];
@@ -47,6 +163,7 @@ int main(void) {
     AoeAiPlayerOpsRor ops;
     size_t n;
 
+    handler_tests();
     memset(&ops, 0, sizeof ops);
     ops.module_init = m_init;
     ops.module_owner = m_owner;

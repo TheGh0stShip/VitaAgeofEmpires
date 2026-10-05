@@ -75,6 +75,47 @@ typedef struct {
     int32_t (*sn)(void *context, int32_t index);
     int32_t (*rand)(void *context); /* 0x0052605d */
     int logging_on;                 /* global 0x00580dd0 */
+    /* Our object (0x0040bab0): its type ID and position; 0 for none. */
+    int (*object_at)(void *context, int32_t id, int16_t *type_id,
+                     float pos[3]);
+    /* The Build AI's object event (0x004b8a70 with 0) and the ConAI's
+       placement at a point with the map's size (0x0040a290). */
+    void (*build_object)(void *context, int32_t id);
+    void (*con_place)(void *context, float x, float y, float z);
+    /* The Diplomacy AI (+0x9dc): add (0x0040aa20) or set (0x0040ab40)
+       dislike (kind 0) or like (kind 2), its changeable flag (0x0040ac80)
+       and a stance request (0x0040af80). */
+    void (*dip_add)(void *context, int32_t player, int kind, int32_t delta);
+    void (*dip_set)(void *context, int32_t player, int kind, int32_t value);
+    void (*dip_changeable)(void *context, int32_t player, int flag);
+    void (*dip_request)(void *context, int32_t player, int32_t stance);
+    /* Player `from`'s vtable +`slot` (0x18 enemy, 0x1c ally, 0x20 the
+       third test) toward `to`. */
+    int (*stance_test)(void *context, int32_t from, int slot, int32_t to);
+    /* Our vtable +0x54 (our index, 6, target, stance, 0): the diplomacy
+       command. */
+    void (*diplomacy_command)(void *context, int32_t target, int32_t stance);
+    /* String `id` (the game's string table, 256 bytes) sent as chat to a
+       player (0x0045c1d0 with 0). */
+    void (*chat)(void *context, int32_t to, int32_t string_id);
+    /* The tribe player's (+0x1256c) vtable +0x28 (player, value) and
+       +0xf8 (tribute: to, resource, amount, the fee in resource 46); its
+       object list's nearest type 0x54 (0x00451370: -1, -1, 0, 2, 0). */
+    void (*tribe_28)(void *context, int32_t player, int32_t value);
+    void (*tribute)(void *context, int32_t to, int32_t resource, float amount);
+    int (*has_market)(void *context);
+    /* The information AI's map scan (0x004c6170), the tactical AI's
+       tribute handler (0x004e2ea0) and number setter (0x004d77f0). */
+    void (*info_scan)(void *context);
+    void (*tactical_tribute)(void *context, int32_t player, int32_t a,
+                             int32_t b, int32_t c);
+    void (*set_sn)(void *context, int32_t index, int32_t value);
+    /* The settings' game kind (0x0041b990), a player's +4 (0x00454150)
+       and the world command sub 5 (0x004e9840) with our index. */
+    int32_t (*game_kind)(void *context);
+    int32_t (*player_field_4)(void *context, int32_t player);
+    void (*command_sub5)(void *context, int32_t flag);
+    int16_t self, player_count;
 } AoeAiPlayerOpsRor;
 
 /* 0x004c6960: the Main Decision AI, the nine modules (each constructed,
@@ -138,5 +179,39 @@ void aoe_ai_player_roll_delay_ror(AoeAiPlayerAiRor *ai,
    and prints it. */
 void aoe_ai_player_kick_ror(AoeAiPlayerAiRor *ai, int32_t kind,
                             const AoeAiPlayerOpsRor *ops);
+/* 0x004c8210: each listed object (the list grown as 0x004cc5c0 would when
+   its capacity is short; the port zero-fills the new slot, the original
+   leaves it unset) that exists goes to the Build AI; a town centre
+   (type 0x6d) also places the ConAI plan at its position. */
+void aoe_ai_player_refresh_objects_ror(AoeAiPlayerAiRor *ai,
+                                       const AoeAiPlayerOpsRor *ops);
+/* 0x004c8300: tribute of `amount` in resource `kind` from `player`.
+   While +0x1258c is set, gold (3) from number 128's player adds to
+   +0x12598. From number 128's player nothing else happens. Otherwise
+   like rises and dislike falls by amount / 100 and +0x125a4[player] adds
+   the amount. When our vtable +0x20 test passes, number 217 is 1 and
+   that sum reaches +0x125a0, we ally with the player (command 6, stance
+   2), send it string 2311, ally with each other player it names ally
+   (or turn neutral, stance 0, toward its enemies) and clear number 217.
+   Else an enemy of ours gets string 2310. */
+void aoe_ai_player_tribute_received_ror(AoeAiPlayerAiRor *ai, int32_t player,
+                                        int32_t kind, int32_t amount,
+                                        const AoeAiPlayerOpsRor *ops);
+/* 0x004c8540: unless we are the enemy of number 128's player: dislike 0
+   and like 100 toward it, the tribe player's +0x28 with 3, string 2301
+   sent to it, +0x1258c 0 and +0x12594 1. */
+void aoe_ai_player_befriend_ror(AoeAiPlayerAiRor *ai,
+                                const AoeAiPlayerOpsRor *ops);
+/* 0x004c86a0: a message from `player`: 0 rescans the map; 1 (not from
+   us, with a market) pays tribute `b` of resource `a` to it; 2 and 3
+   (not from us) go to the tactical AI; 6 asks for stance `b` toward
+   player `a` (0 enemy: dislike 100, request 3; 1: dislike and like 49,
+   request 1; 2: like 100, request 0, then command sub 5 with 0 only in a
+   game of kind 4 when that player's +4 is nonzero, else 1), with `a`
+   changeable meanwhile; 7 stores `a` in +0x125a0 and sets number 217.
+   0 for other kinds, else 1. */
+int aoe_ai_player_message_ror(AoeAiPlayerAiRor *ai, int32_t player,
+                              int32_t kind, int32_t a, int32_t b, int32_t c,
+                              const AoeAiPlayerOpsRor *ops);
 
 #endif

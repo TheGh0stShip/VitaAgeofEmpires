@@ -1,5 +1,6 @@
 #include "ai_player.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 #include "aoe_stream.h"
@@ -212,4 +213,137 @@ void aoe_ai_player_kick_ror(AoeAiPlayerAiRor *ai, int32_t kind,
     if (kind == 3) aoe_ai_log_ror(&ai->decision.module, "Current Build list is:");
     if ((kind == 1 || kind == 2 || kind == 3) && ops && ops->kick)
         ops->kick(ops->context, kind);
+}
+
+void aoe_ai_player_refresh_objects_ror(AoeAiPlayerAiRor *ai,
+                                       const AoeAiPlayerOpsRor *ops) {
+    AoeAiDecisionRor *d;
+    int32_t i;
+    if (!ai || !ops || !ops->object_at) return;
+    d = &ai->decision;
+    for (i = 0; i < d->count; ++i) {
+        int16_t type_id;
+        float pos[3];
+        if (d->capacity - 1 < i) {
+            int32_t *grown = (int32_t *)calloc((size_t)i + 1, sizeof *grown);
+            if (grown) {
+                if (d->capacity > 0)
+                    memcpy(grown, d->ids, (size_t)d->capacity * sizeof *grown);
+                free(d->ids);
+                d->ids = grown;
+                d->capacity = i + 1;
+            }
+        }
+        if (!ops->object_at(ops->context, d->ids[i], &type_id, pos)) continue;
+        if (ops->build_object) ops->build_object(ops->context, d->ids[i]);
+        if (type_id == 0x6d && ops->con_place)
+            ops->con_place(ops->context, pos[0], pos[1], pos[2]);
+    }
+}
+
+static int32_t player_sn(const AoeAiPlayerOpsRor *ops, int32_t i) {
+    return ops->sn ? ops->sn(ops->context, i) : -1;
+}
+
+static int stance(const AoeAiPlayerOpsRor *ops, int32_t from, int slot,
+                  int32_t to) {
+    return ops->stance_test ? ops->stance_test(ops->context, from, slot, to) : 0;
+}
+
+void aoe_ai_player_tribute_received_ror(AoeAiPlayerAiRor *ai, int32_t player,
+                                        int32_t kind, int32_t amount,
+                                        const AoeAiPlayerOpsRor *ops) {
+    int32_t i;
+    if (!ai || !ops || player < 0 || player >= 9) return;
+    if (ai->field_1258c == 1 && player == player_sn(ops, 0x80) && kind == 3) {
+        ai->field_12598 += amount;
+        return;
+    }
+    if (player == player_sn(ops, 0x80)) return;
+    if (ops->dip_add) {
+        ops->dip_add(ops->context, player, 2, amount / 100);
+        ops->dip_add(ops->context, player, 0, -(amount / 100));
+    }
+    ai->field_125a4[player] += amount;
+    if (stance(ops, ops->self, 0x20, player) == 1 && player_sn(ops, 0xd9) == 1 &&
+        ai->field_125a4[player] >= ai->field_125a0) {
+        if (ops->diplomacy_command) ops->diplomacy_command(ops->context, player, 2);
+        if (ops->chat) ops->chat(ops->context, player, 0x907);
+        for (i = 1; i < ops->player_count; ++i) {
+            if (i == ops->self || i == player) continue;
+            if (stance(ops, player, 0x1c, i) == 1) {
+                if (ops->diplomacy_command) ops->diplomacy_command(ops->context, i, 2);
+            } else if (stance(ops, player, 0x18, i) == 1) {
+                if (ops->diplomacy_command) ops->diplomacy_command(ops->context, i, 0);
+            }
+        }
+        if (ops->set_sn) ops->set_sn(ops->context, 0xd9, 0);
+        return;
+    }
+    if (stance(ops, ops->self, 0x18, player) == 1 && ops->chat)
+        ops->chat(ops->context, player, 0x906);
+}
+
+void aoe_ai_player_befriend_ror(AoeAiPlayerAiRor *ai,
+                                const AoeAiPlayerOpsRor *ops) {
+    if (!ai || !ops) return;
+    if (stance(ops, ops->self, 0x18, player_sn(ops, 0x80))) return;
+    if (ops->dip_set) {
+        ops->dip_set(ops->context, player_sn(ops, 0x80), 0, 0);
+        ops->dip_set(ops->context, player_sn(ops, 0x80), 2, 100);
+    }
+    if (ops->tribe_28) ops->tribe_28(ops->context, player_sn(ops, 0x80), 3);
+    if (ops->chat) ops->chat(ops->context, player_sn(ops, 0x80), 0x8fd);
+    ai->field_1258c = 0;
+    ai->field_12594 = 1;
+}
+
+int aoe_ai_player_message_ror(AoeAiPlayerAiRor *ai, int32_t player,
+                              int32_t kind, int32_t a, int32_t b, int32_t c,
+                              const AoeAiPlayerOpsRor *ops) {
+    if (!ai || !ops) return 0;
+    switch (kind) {
+    case 0:
+        if (ops->info_scan) ops->info_scan(ops->context);
+        return 1;
+    case 1:
+        if (player != ops->self && ops->has_market &&
+            ops->has_market(ops->context) && ops->tribute)
+            ops->tribute(ops->context, player, a, (float)b);
+        return 1;
+    case 2:
+    case 3:
+        if (player != ops->self && ops->tactical_tribute)
+            ops->tactical_tribute(ops->context, player, a, b, c);
+        return 1;
+    case 6:
+        break;
+    case 7:
+        ai->field_125a0 = a;
+        if (ops->set_sn) ops->set_sn(ops->context, 0xd9, 1);
+        return 1;
+    default:
+        return 0;
+    }
+    if (ops->dip_changeable) ops->dip_changeable(ops->context, a, 1);
+    if (b == 0) {
+        if (ops->dip_set) ops->dip_set(ops->context, a, 0, 100);
+        if (ops->dip_request) ops->dip_request(ops->context, a, 3);
+    } else if (b == 1) {
+        if (ops->dip_set) {
+            ops->dip_set(ops->context, a, 0, 0x31);
+            ops->dip_set(ops->context, a, 2, 0x31);
+        }
+        if (ops->dip_request) ops->dip_request(ops->context, a, 1);
+    } else if (b == 2) {
+        int flag = 1;
+        if (ops->dip_set) ops->dip_set(ops->context, a, 2, 100);
+        if (ops->dip_request) ops->dip_request(ops->context, a, 0);
+        if (ops->game_kind && ops->game_kind(ops->context) == 4 &&
+            ops->player_field_4 && ops->player_field_4(ops->context, a) != 0)
+            flag = 0;
+        if (ops->command_sub5) ops->command_sub5(ops->context, flag);
+    }
+    if (ops->dip_changeable) ops->dip_changeable(ops->context, a, 0);
+    return 1;
 }

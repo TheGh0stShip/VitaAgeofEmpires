@@ -50,6 +50,8 @@ typedef struct {
     /* GetTextExtentPoint32A width of `count` bytes in a font. */
     int32_t (*text_width)(void *context, uintptr_t font, const char *text,
                           int32_t count);
+    /* UpdateWindow of the main window (optional). */
+    void (*update_window)(void *context);
 } AoeUiPlatformRor;
 
 typedef struct AoeUiNodeRor {
@@ -63,7 +65,9 @@ struct AoeUiSystemRor {
     AoeUiPanelRor *capture;  /* +0x00 (0x00451ac0) */
     AoeUiPanelRor *keyboard; /* +0x04 */
     AoeUiPanelRor *modal;    /* +0x08 (0x00451ad0) */
-    AoeUiPanelRor **panels;  /* +0x10 list, in order */
+    AoeUiPanelRor *screen;   /* +0x0c: the current screen */
+    AoeUiPanelRor *saved_focus; /* +0x18: the modal panel's parent focus */
+    AoeUiPanelRor **panels;  /* +0x10 named panels, in order */
     int32_t panel_count, panel_capacity;
     char palette_names[AOE_UI_PALETTES][0x104]; /* +0x44 */
     uintptr_t palettes[AOE_UI_PALETTES];        /* +0x1c */
@@ -157,7 +161,8 @@ enum {
 struct AoeUiPanelRor {
     const AoeUiPanelVtblRor *vt;
     AoeUiSystemRor *system;
-    int32_t field_4, field_8;              /* +0x04, +0x08 */
+    AoeUiPanelRor *previous;               /* +0x04: the previous screen */
+    AoeUiPanelRor *chained_modal;          /* +0x08: the modal panel behind */
     int32_t x, y, width, height;           /* +0x0c..+0x18 */
     char *name;                            /* +0x1c */
     AoeUiAreaRor *area;                    /* +0x20 */
@@ -221,6 +226,40 @@ int32_t aoe_ui_restart_sounds_ror(AoeUiSystemRor *system);
 void aoe_ui_mark_restore_ror(AoeUiSystemRor *system);
 AoeUiPanelRor *aoe_ui_capture_panel_ror(const AoeUiSystemRor *system);
 AoeUiPanelRor *aoe_ui_modal_panel_ror(const AoeUiSystemRor *system);
+
+/* Named panels and screens. 0x00451f20 / 0x00451ae0 a registered panel
+   by exact name (NULL when absent); 0x00451e90 whether a panel is
+   registered; 0x00451b00 register (once per name, with no previous
+   screen) and optionally show it as the screen; 0x00451b90 unregister
+   by name (the panel is kept); 0x00451df0 close by name: it stops being
+   the screen, capture, keyboard or modal panel and is destroyed (named
+   panels are heap objects, freed here). 0x00451fd0 show a screen: the old
+   screen becomes its previous screen and loses focus, the new one gains
+   focus and redraws fully; `restore` then makes it the modal base
+   (0x00451d70: a different modal panel is chained behind it through the
+   screen's +0x08). 0x00451c30 go back to the screen's previous screen
+   (+0x04), closing the current one when `close` (else the current one
+   becomes the previous screen's previous). 0x00451cd0 sets the +0x04
+   link: a panel's previous screen, or the system's keyboard panel. */
+AoeUiPanelRor *aoe_ui_system_find_ror(const AoeUiSystemRor *s,
+                                      const char *name);
+int aoe_ui_system_has_ror(const AoeUiSystemRor *s, const AoeUiPanelRor *p);
+int aoe_ui_system_add_ror(AoeUiSystemRor *s, AoeUiPanelRor *p, int show,
+                          int restore);
+int aoe_ui_system_remove_ror(AoeUiSystemRor *s, const char *name);
+int aoe_ui_system_close_ror(AoeUiSystemRor *s, const char *name);
+void aoe_ui_system_show_ror(AoeUiSystemRor *s, AoeUiPanelRor *p, int restore);
+void aoe_ui_system_restore_modal_ror(AoeUiSystemRor *s);
+int aoe_ui_system_back_ror(AoeUiSystemRor *s, int close);
+void aoe_ui_system_set_keyboard_ror(AoeUiSystemRor *s, AoeUiPanelRor *p);
+void aoe_ui_panel_set_previous_ror(AoeUiPanelRor *p, AoeUiPanelRor *previous);
+/* Modal panels: 0x00451ce0 makes `p` (or none) modal, chaining the old
+   one behind it (+0x08) and giving it its parent's focus; the panel that
+   had that focus gets it back when the modal panel goes. 0x00451da0
+   returns to the chained modal panel (0 when there is none): it gains
+   focus and becomes capture and keyboard panel too. */
+void aoe_ui_system_set_modal_ror(AoeUiSystemRor *s, AoeUiPanelRor *p);
+int aoe_ui_system_pop_modal_ror(AoeUiSystemRor *s);
 
 /* ---- base panel ---- */
 /* Default constructor 0x00452580 and named 0x004523f0 (registers a named
@@ -356,8 +395,8 @@ void aoe_ui_panels_tab_cycle_ror(AoeUiPanelRor **panels, int16_t count);
    0x00454240 width, 0x00454250 height, 0x00454260 area; 0x004542c0 help
    ids. 0x00454270 / 0x004542a0: a string from the table (nonzero when not
    empty; the latter into a 0x200 static buffer). */
-int32_t aoe_ui_panel_field4_ror(const AoeUiPanelRor *p);
-void aoe_ui_panel_set_field8_ror(AoeUiPanelRor *p, int32_t v);
+AoeUiPanelRor *aoe_ui_panel_field4_ror(const AoeUiPanelRor *p);
+void aoe_ui_panel_set_field8_ror(AoeUiPanelRor *p, AoeUiPanelRor *v);
 const char *aoe_ui_panel_name_ror(const AoeUiPanelRor *p);
 int32_t aoe_ui_panel_y_ror(const AoeUiPanelRor *p);
 int32_t aoe_ui_panel_width_ror(const AoeUiPanelRor *p);

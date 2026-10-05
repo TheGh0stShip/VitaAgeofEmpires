@@ -103,6 +103,138 @@ static void unregister_panel(AoeUiSystemRor *s, AoeUiPanelRor *p) {
         }
 }
 
+/* ---- named panels, screens and modal panels ---- */
+
+AoeUiPanelRor *aoe_ui_system_find_ror(const AoeUiSystemRor *s,
+                                      const char *name) {
+    if (!s || !name) return NULL;
+    for (int32_t i = 0; i < s->panel_count; ++i)
+        if (s->panels[i]->name && strcmp(s->panels[i]->name, name) == 0)
+            return s->panels[i];
+    return NULL;
+}
+
+int aoe_ui_system_has_ror(const AoeUiSystemRor *s, const AoeUiPanelRor *p) {
+    return p && aoe_ui_system_find_ror(s, p->name) != NULL;
+}
+
+void aoe_ui_system_set_keyboard_ror(AoeUiSystemRor *s, AoeUiPanelRor *p) {
+    if (s) s->keyboard = p;
+}
+
+void aoe_ui_panel_set_previous_ror(AoeUiPanelRor *p, AoeUiPanelRor *previous) {
+    if (p) p->previous = previous;
+}
+
+static void update_window(AoeUiSystemRor *s) {
+    if (s->platform && s->platform->update_window)
+        s->platform->update_window(s->platform->context);
+}
+
+void aoe_ui_system_restore_modal_ror(AoeUiSystemRor *s) {
+    if (!s) return;
+    if (s->modal && s->modal != s->screen && s->screen)
+        s->screen->chained_modal = s->modal;
+    s->modal = s->screen;
+}
+
+void aoe_ui_system_show_ror(AoeUiSystemRor *s, AoeUiPanelRor *p, int restore) {
+    if (!s || !p) return;
+    p->previous = s->screen;
+    if (s->screen) s->screen->vt->set_focus(s->screen, 0);
+    s->screen = p;
+    p->vt->set_focus(p, 1);
+    s->screen->vt->set_redraw(s->screen, 2);
+    update_window(s);
+    if (restore) aoe_ui_system_restore_modal_ror(s);
+}
+
+int aoe_ui_system_add_ror(AoeUiSystemRor *s, AoeUiPanelRor *p, int show,
+                          int restore) {
+    if (!s || !p) return 0;
+    if (!aoe_ui_system_find_ror(s, p->name)) {
+        p->previous = NULL;
+        register_panel(s, p);
+    }
+    if (show) aoe_ui_system_show_ror(s, p, restore);
+    return 1;
+}
+
+int aoe_ui_system_remove_ror(AoeUiSystemRor *s, const char *name) {
+    AoeUiPanelRor *p = aoe_ui_system_find_ror(s, name);
+    if (!p) return 0;
+    unregister_panel(s, p);
+    return 1;
+}
+
+int aoe_ui_system_close_ror(AoeUiSystemRor *s, const char *name) {
+    AoeUiPanelRor *p = aoe_ui_system_find_ror(s, name);
+    if (!p) return 0;
+    unregister_panel(s, p);
+    if (s->screen == p) s->screen = NULL;
+    if (s->capture == p) s->capture = NULL;
+    if (s->keyboard == p) s->keyboard = NULL;
+    if (s->modal == p) s->modal = NULL;
+    p->vt->destroy(p);
+    free(p);
+    return 1;
+}
+
+int aoe_ui_system_back_ror(AoeUiSystemRor *s, int close) {
+    AoeUiPanelRor *cur, *prev;
+    if (!s || !s->screen) return 0;
+    cur = s->screen;
+    prev = cur->previous;
+    if (!prev) return 0;
+    if (!close) {
+        prev->previous = cur;
+    } else {
+        if (prev->previous == cur) prev->previous = NULL;
+        aoe_ui_system_close_ror(s, cur->name);
+    }
+    s->screen = prev;
+    prev->vt->set_focus(prev, 1);
+    s->screen->vt->set_redraw(s->screen, 2);
+    update_window(s);
+    return 1;
+}
+
+void aoe_ui_system_set_modal_ror(AoeUiSystemRor *s, AoeUiPanelRor *p) {
+    AoeUiPanelRor *m;
+    if (!s) return;
+    if (s->modal && p) p->chained_modal = s->modal;
+    m = s->modal;
+    if (!m) {
+        if (s->saved_focus && s->saved_focus->parent)
+            aoe_ui_panel_set_current_ror(s->saved_focus->parent, s->saved_focus);
+    } else if (!m->tab_stop && m->parent) {
+        aoe_ui_panel_set_current_ror(m->parent, s->saved_focus);
+    }
+    s->saved_focus = NULL;
+    s->modal = p;
+    if (p && p != s->screen) {
+        if (p->parent) {
+            s->saved_focus = p->parent->current;
+            aoe_ui_panel_set_current_ror(p->parent, p);
+        } else {
+            s->saved_focus = NULL;
+            p->vt->set_focus(p, 1);
+        }
+    }
+}
+
+int aoe_ui_system_pop_modal_ror(AoeUiSystemRor *s) {
+    AoeUiPanelRor *prev;
+    if (!s || !s->modal) return 0;
+    prev = s->modal->chained_modal;
+    if (!prev) return 0;
+    prev->vt->set_focus(prev, 1);
+    s->capture = prev;
+    s->keyboard = prev;
+    s->modal = prev;
+    return 1;
+}
+
 /* ---- base panel ---- */
 
 void aoe_ui_panel_init_ror(AoeUiPanelRor *p, AoeUiSystemRor *system) {
@@ -922,8 +1054,8 @@ void aoe_ui_panels_tab_cycle_ror(AoeUiPanelRor **panels, int16_t count) {
     }
 }
 
-int32_t aoe_ui_panel_field4_ror(const AoeUiPanelRor *p) { return p ? p->field_4 : 0; }
-void aoe_ui_panel_set_field8_ror(AoeUiPanelRor *p, int32_t v) { if (p) p->field_8 = v; }
+AoeUiPanelRor *aoe_ui_panel_field4_ror(const AoeUiPanelRor *p) { return p ? p->previous : NULL; }
+void aoe_ui_panel_set_field8_ror(AoeUiPanelRor *p, AoeUiPanelRor *v) { if (p) p->chained_modal = v; }
 const char *aoe_ui_panel_name_ror(const AoeUiPanelRor *p) { return p ? p->name : NULL; }
 int32_t aoe_ui_panel_y_ror(const AoeUiPanelRor *p) { return p ? p->y : 0; }
 int32_t aoe_ui_panel_width_ror(const AoeUiPanelRor *p) { return p ? p->width : 0; }

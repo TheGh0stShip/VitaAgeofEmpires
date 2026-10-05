@@ -47,4 +47,12 @@ typedef struct {
    requirement as the original). Return 0 for invalid API dependencies. */
 int aoe_action_list_update_ror(AoeActionList *list, const AoeActionTickOps *ops,
                                 uint8_t *result);
+/* 0x00404360 (list vtable +0x08, the update while attached) is the same
+   walk with the head's +0x20 in place of +0x28: pass that slot as
+   update_head. 0x004045b0: the head action (NULL when empty); 0x00404580
+   asks it +0x34 (0 when empty). 0x00403df0 (+0x10) and 0x00404600
+   (+0x44 with three values) hand every action, in order, to `fn`. */
+void *aoe_action_list_head_ror(const AoeActionList *list);
+void aoe_action_list_each_ror(const AoeActionList *list, void (*fn)(void *context, void *action),
+                              void *context);
 #endif

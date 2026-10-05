@@ -70,3 +70,13 @@ int aoe_action_list_update_ror(AoeActionList *list, const AoeActionTickOps *ops,
     *result=saved;
     return 1;
 }
+
+void *aoe_action_list_head_ror(const AoeActionList *list) {
+    return list->head ? list->head->action : NULL;
+}
+
+void aoe_action_list_each_ror(const AoeActionList *list, void (*fn)(void *context, void *action),
+                              void *context) {
+    const AoeActionNode *n;
+    for (n = list->head; n; n = n->next) fn(context, n->action);
+}

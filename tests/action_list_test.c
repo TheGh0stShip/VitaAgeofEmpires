@@ -50,6 +50,8 @@ static uint8_t tick_head(void *context,void *action) {
 static void tick_waiting(void *context,void *action) {
     Trace *t=context;t->events[t->used++]=*(int *)action*10+8;
 }
+static void add_id(void *c, void *a) { *(int *)c = *(int *)c * 10 + *(int *)a; }
+
 int main(void) {
     uint8_t state=2;
     int a=1,b=2,c=3;
@@ -60,10 +62,17 @@ int main(void) {
     assert(aoe_action_list_append(&list,&b));
     assert(aoe_action_list_push(&list,&c));
     assert(list.head->action==&c && list.head->next->action==&a);
+    {
+        int sum=0;
+        assert(aoe_action_list_head_ror(&list)==&c);
+        aoe_action_list_each_ror(&list,add_id,&sum);
+        assert(sum==312);
+    }
     assert(aoe_action_list_clear(&list));
     const int normal[]={11,21,31,39,10,19,20,29};
     expect(&t,normal,sizeof(normal)/sizeof(*normal));
     assert(!list.head && aoe_action_list_pop(&list));
+    assert(aoe_action_list_head_ror(&list)==NULL);
     assert(!aoe_action_list_push(&list,NULL));
     state=3;
     assert(aoe_action_list_push(&list,&a));

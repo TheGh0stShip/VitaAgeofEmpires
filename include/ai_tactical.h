@@ -293,6 +293,13 @@ typedef struct {
                            int32_t unique_id);
     /* The information AI's zone test on an object (0x004bc690). */
     int (*info_zone_open)(void *context, int32_t id);
+    /* The tactical AI's gathering order (0x004d99f0), run by
+       0x004e1a80. */
+    void (*rebalance)(void *context);
+    /* The world's (player +0xf0, +0x1256c) release of a listed object
+       (the 0x0040bab0 result): nonzero when it held the object, its +0xc
+       is that holder and its type's +4 byte is 'P' or 'F'. */
+    int (*release_object)(void *context, int32_t id);
 } AoeAiTacticalOpsRor;
 
 /* 0x004e0630: in list order, the group with task `task` and +0x180
@@ -494,6 +501,18 @@ enum { AOE_AI_TAC_MAP_D98, AOE_AI_TAC_MAP_D68, AOE_AI_TAC_MAP_D78 };
    +0xd78[i]. */
 int32_t aoe_ai_tactical_counter_share_ror(const AoeAiTacticalRor *ai,
                                           int32_t i);
+/* 0x004e1a80: when +0xd98[kind] is negative and the resource stock
+   (0x004c8c60) plus it is positive, the rebalance hook runs; then the
+   gatherer entry for `unit` (0x004e1870) gains `amount` in its +0xc when
+   its +4 is `kind`. The original indexes +0xd98 with any kind; the port
+   skips the first test outside 0..3. */
+void aoe_ai_tactical_gatherer_gain_ror(AoeAiTacticalRor *ai, int32_t unit,
+                                       int32_t kind, int32_t amount,
+                                       const AoeAiTacticalOpsRor *ops);
+/* 0x004e1ae0: 1 when the listed object (0x0040bab0) exists and the
+   world's release hook returns exactly 1, else 0. */
+int aoe_ai_tactical_release_object_ror(const AoeAiTacticalOpsRor *ops,
+                                       int32_t id);
 /* 0x004e15f0: +0xe18 becomes 1 when it is not already and number 134 is
    0 or equal to `value`. */
 void aoe_ai_tactical_arm_e18_ror(AoeAiTacticalRor *ai, int32_t value);

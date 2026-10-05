@@ -36,6 +36,9 @@ static int ttask(void *c, int32_t id, int32_t *t) {
 static float tres[8] = {100.0f, 5.0f, 0, 0, 0, 0, 2.6f, 0};
 static float tresource(void *c, int32_t i) { (void)c; return tres[i]; }
 static double tratio(void *c) { (void)c; return 0.249; }
+static int rebalanced, release_result;
+static void trebalance(void *c) { (void)c; ++rebalanced; }
+static int trelease(void *c, int32_t id) { (void)c; (void)id; return release_result; }
 static int32_t titems(void *c, int32_t t, int32_t k) { (void)c; (void)k; return t == 0x67 ? 3 : 1; }
 static int32_t tunbuilt_n;
 static int32_t tunbuilt(void *c, int32_t t, int32_t k) { (void)c; (void)t; (void)k; return tunbuilt_n; }
@@ -91,6 +94,31 @@ static void member_tests(void) {
     aoe_ai_tactical_arm_e18_ror(&ai, 5);
     assert(ai.field_e18 == 1);
     assert(aoe_ai_tactical_age_is_ror(&ops, 2) && !aoe_ai_tactical_age_is_ror(&ops, 3));
+
+    /* 0x004e1a80 / 0x004e1ae0. */
+    {
+        AoeAiTacticalRor g;
+        AoeAiTacticalOpsRor o = ops;
+        int32_t *ge;
+        aoe_ai_tactical_init_ror(&g, 2, NULL);
+        o.rebalance = trebalance;
+        o.release_object = trelease;
+        rebalanced = 0;
+        ge = aoe_ai_tactical_add_gatherer_ror(&g, 40);
+        ge[1] = 1; ge[3] = 5;
+        g.field_d98[1] = -1000;
+        aoe_ai_tactical_gatherer_gain_ror(&g, 40, 1, 7, &o);
+        assert(ge[3] == 12 && rebalanced == 0);
+        g.field_d98[1] = -1;
+        aoe_ai_tactical_gatherer_gain_ror(&g, 40, 2, 7, &o);
+        assert(ge[3] == 12);
+        aoe_ai_tactical_gatherer_gain_ror(&g, 40, 1, 3, &o);
+        assert(ge[3] == 15 && rebalanced == 1);
+        release_result = 1;
+        assert(aoe_ai_tactical_release_object_ror(&o, 1));
+        release_result = 2;
+        assert(!aoe_ai_tactical_release_object_ror(&o, 1));
+    }
 
     /* Gatherers. */
     assert(!aoe_ai_tactical_add_gatherer_ror(&ai, -1));

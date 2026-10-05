@@ -482,6 +482,31 @@ int aoe_ai_tactical_age_is_ror(const AoeAiTacticalOpsRor *ops, int32_t age) {
                                            : 0.0f) == age;
 }
 
+/* 0x004e1a80: see the header. */
+void aoe_ai_tactical_gatherer_gain_ror(AoeAiTacticalRor *ai, int32_t unit,
+                                       int32_t kind, int32_t amount,
+                                       const AoeAiTacticalOpsRor *ops) {
+    int32_t *g;
+    if (kind >= 0 && kind < 4 && ai->field_d98[kind] < 0 && ops) {
+        int32_t stock = aoe_ftol32(ops->resource
+                                       ? ops->resource(ops->context, kind)
+                                       : 0.0f);
+        if (stock + ai->field_d98[kind] > 0 && ops->rebalance)
+            ops->rebalance(ops->context);
+    }
+    g = aoe_ai_tactical_gatherer_ror(ai, unit);
+    if (g && g[1] == kind) g[3] += amount;
+}
+
+/* 0x004e1ae0: see the header. */
+int aoe_ai_tactical_release_object_ror(const AoeAiTacticalOpsRor *ops,
+                                       int32_t id) {
+    AoeAiWorldObjectRor obj;
+    if (!ops || !ops->object || !ops->object(ops->context, id, &obj))
+        return 0;
+    return ops->release_object && ops->release_object(ops->context, id) == 1;
+}
+
 int32_t *aoe_ai_tactical_gatherer_ror(AoeAiTacticalRor *ai, int32_t unit) {
     int i;
     for (i = 0; i < AOE_AI_TAC_GATHERERS; ++i)

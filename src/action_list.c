@@ -102,3 +102,11 @@ AoeActionList *aoe_action_list_new_ror(const uint8_t *owner_state, const AoeActi
     l->ops = *ops;
     return l;
 }
+
+int32_t aoe_unit_action_target_id_ror(const AoeActionList *list,
+                                      int32_t (*target_id)(void *context, void *action),
+                                      void *context) {
+    void *head = aoe_action_list_head_ror(list);
+    if (!head || !target_id) return -1;
+    return target_id(context, head);
+}

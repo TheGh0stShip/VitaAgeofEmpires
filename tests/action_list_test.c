@@ -55,6 +55,8 @@ static void add_id(void *c, void *a) { *(int *)c = *(int *)c * 10 + *(int *)a; }
 
 static void count_clean(void *c) { ++*(int *)c; }
 
+static int32_t head_target(void *c, void *a) { (void)c; return *(int *)a * 10; }
+
 int main(void) {
     uint8_t state=2;
     int a=1,b=2,c=3;
@@ -68,6 +70,7 @@ int main(void) {
     {
         int sum=0;
         assert(aoe_action_list_head_ror(&list)==&c);
+        assert(aoe_unit_action_target_id_ror(&list,head_target,NULL)==30);
         aoe_action_list_each_ror(&list,add_id,&sum);
         assert(sum==312);
     }
@@ -76,6 +79,7 @@ int main(void) {
     expect(&t,normal,sizeof(normal)/sizeof(*normal));
     assert(!list.head && aoe_action_list_pop(&list));
     assert(aoe_action_list_head_ror(&list)==NULL);
+    assert(aoe_unit_action_target_id_ror(&list,head_target,NULL)==-1);
     assert(!aoe_action_list_push(&list,NULL));
     state=3;
     assert(aoe_action_list_push(&list,&a));

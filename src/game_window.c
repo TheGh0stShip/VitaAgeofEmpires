@@ -177,3 +177,21 @@ void aoe_game_arrow_cursor_ror(const AoeGameCursorOpsRor *ops, int32_t *flag_1d8
 int aoe_game_relay_ror(int32_t (*target)(void *context), void *context) {
     return target(context) != 0;
 }
+
+int aoe_game_paint_ror(const AoeGamePaintOpsRor *ops) {
+    if (!ops || !ops->on_12c || !ops->on_12c(ops->context)) return 0;
+    if (ops->has_draw_system && ops->draw_ready) {
+        if (ops->clear) ops->clear(ops->context);
+        if (ops->show) ops->show(ops->context);
+    }
+    return 1;
+}
+
+void aoe_game_set_title_ror(const char *line1, char out[256]) {
+    if (!out) return;
+    snprintf(out, 256, "%s", line1 ? line1 : "");
+}
+
+void aoe_game_stop_world_sounds_ror(void (*stop_sounds)(void *context), void *context) {
+    if (stop_sounds) stop_sounds(context);
+}

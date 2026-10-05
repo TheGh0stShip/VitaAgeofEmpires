@@ -138,3 +138,10 @@ const uint32_t *aoe_net_session_instance_ror(const AoeNetSessionsRor *l,
                                              int32_t i) {
     return session_ok(l, i) ? l->items[i].instance : NULL;
 }
+
+int aoe_net_provider_guid_ror(const AoeNetProvidersRor *list, int32_t index, uint8_t out[16]) {
+    if (!list || !out || index < 0 || index > AOE_NET_PROVIDERS || !list->items[index].guid)
+        return 0;
+    memcpy(out, list->items[index].guid, 16);
+    return 1;
+}

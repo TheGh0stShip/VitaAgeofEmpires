@@ -361,6 +361,20 @@ int32_t aoe_lobby_send_ror(AoeLobbyRor *l, const AoeLobbyOpsRor *ops, const uint
                            const void *data, uint32_t size, int32_t a, int32_t b, int32_t c,
                            int32_t d);
 int aoe_lobby_enum_player_ror(int32_t dpid, const char *name, uint8_t flags);
+/* 0x004258d0(iface, enable): a NULL interface gives E_INVALIDARG
+   (0x80070057); else its IDirectPlay ({5454e9a0-db65-11ce-921c-
+   00aa006c4972}, a failed QueryInterface returned as is) takes
+   EnableNewPlayers (+0x28) with `enable`, is released, and "Released to
+   links=%d" logs the references left. The EnableNewPlayers result. */
+typedef struct {
+    void *context;
+    int32_t (*query_dplay)(void *context, void *iface, void **dplay);
+    int32_t (*enable_new_players)(void *context, void *dplay, int32_t enable);
+    int32_t (*release)(void *context, void *dplay);
+    void (*log)(void *context, const char *line);
+} AoeCommEnableOpsRor;
+int32_t aoe_comm_enable_new_players_ror(void *iface, int32_t enable,
+                                        const AoeCommEnableOpsRor *ops);
 /* 0x00425930: the game options to the lobby zone: unless launched it
    logs "NOT LOBBY LAUNCHED.  EXITING" and gives 0; else it logs "Sending
    zone message.", sends (the game's +0x8f8..+0x904 values) and on a

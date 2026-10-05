@@ -53,6 +53,9 @@ void aoe_net_provider_set_guid_ror(AoeNetProvidersRor *list, int32_t index,
                                    const void *guid);
 int32_t aoe_net_provider_usable_ror(const AoeNetProvidersRor *list,
                                     int32_t index);
+/* 0x00428480: entry `index`'s GUID copied out (16 bytes through its
+   pointer; the original reads it unchecked, the port gives 0 for none). */
+int aoe_net_provider_guid_ror(const AoeNetProvidersRor *list, int32_t index, uint8_t out[16]);
 void aoe_net_provider_set_usable_ror(AoeNetProvidersRor *list, int32_t index,
                                      int32_t usable);
 

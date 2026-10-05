@@ -52,5 +52,14 @@ int main(void) {
     assert(aoe_net_session_ror(&s, 1) && !aoe_net_session_ror(&s, 2));
     aoe_net_sessions_clear_ror(&s);
     assert(s.count == 0 && s.items[0].name[0] == '\0');
+    {
+        /* 0x00428480 */
+        static AoeNetProvidersRor pl;
+        static const uint8_t g[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+        uint8_t out[16];
+        pl.items[2].guid = g;
+        assert(aoe_net_provider_guid_ror(&pl, 2, out) == 1 && memcmp(out, g, 16) == 0);
+        assert(aoe_net_provider_guid_ror(&pl, 3, out) == 0);
+    }
     return 0;
 }

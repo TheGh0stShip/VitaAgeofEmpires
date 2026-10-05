@@ -959,3 +959,19 @@ void aoe_comm_gtd_rx_log_ror(const AoeCommRor *c, const AoeCommOpsRor *ops, int3
 }
 
 void aoe_comm_post_ror(const AoeCommOpsRor *ops, uint32_t w) { ops->post(ops->context, w, 0); }
+
+int32_t aoe_comm_enable_new_players_ror(void *iface, int32_t enable,
+                                        const AoeCommEnableOpsRor *ops) {
+    void *dplay = NULL;
+    int32_t hr, refs;
+    char line[64];
+    if (!iface) return (int32_t)0x80070057u;
+    if (!ops || !ops->query_dplay) return (int32_t)0x80004005u;
+    hr = ops->query_dplay(ops->context, iface, &dplay);
+    if (hr < 0) return hr;
+    hr = ops->enable_new_players ? ops->enable_new_players(ops->context, dplay, enable) : 0;
+    refs = ops->release ? ops->release(ops->context, dplay) : 0;
+    snprintf(line, sizeof line, "Released to links=%d", (int)refs);
+    if (ops->log) ops->log(ops->context, line);
+    return hr;
+}

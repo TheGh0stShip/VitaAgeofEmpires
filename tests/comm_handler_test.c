@@ -65,7 +65,25 @@ static const AoeCommOpsRor ops = {
     NULL, dp_present, self_dpid, dp_send, set_data, message, chat, post, log_, report, drop,
     refresh, run, queue_local, NULL, NULL, NULL, string, now, srand_, rand_, block};
 
+static int32_t en_q_hr, en_arg;
+static char en_log[64];
+static int32_t en_query(void *c, void *i, void **o) { (void)c; *o = i; return en_q_hr; }
+static int32_t en_enable(void *c, void *d, int32_t e) { (void)c; (void)d; en_arg = e; return 7; }
+static int32_t en_release(void *c, void *d) { (void)c; (void)d; return 2; }
+static void en_logf(void *c, const char *l) { (void)c; snprintf(en_log, sizeof en_log, "%s", l); }
+
+static void enable_new_players_tests(void) {
+    AoeCommEnableOpsRor o = {NULL, en_query, en_enable, en_release, en_logf};
+    int iface;
+    assert(aoe_comm_enable_new_players_ror(NULL, 1, &o) == (int32_t)0x80070057u);
+    assert(aoe_comm_enable_new_players_ror(&iface, 1, &o) == 7 && en_arg == 1 &&
+           strcmp(en_log, "Released to links=2") == 0);
+    en_q_hr = (int32_t)0x80004002u;
+    assert(aoe_comm_enable_new_players_ror(&iface, 0, &o) == (int32_t)0x80004002u && en_arg == 1);
+}
+
 int main(void) {
+    enable_new_players_tests();
     static AoeCommRor c;
     static AoeCommTxRor tx[AOE_COMM_TX_SLOTS];
     static AoeCommRxRor rx[AOE_COMM_RX_SLOTS];

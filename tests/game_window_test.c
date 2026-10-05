@@ -62,7 +62,28 @@ static void k2c0(void *c) { (void)c; ++c2c0; }
 static void recap(void *c, void *w, int s) { (void)c; (void)w; recap_set = s; }
 static int32_t yes(void *c) { (void)c; return 5; }
 
+static int gp_12c = 1, gp_clears, gp_shows, gp_stops;
+static int32_t gp_on(void *c) { (void)c; return gp_12c; }
+static void gp_clear(void *c) { (void)c; ++gp_clears; }
+static void gp_show(void *c) { (void)c; ++gp_shows; }
+static void gp_stop(void *c) { (void)c; ++gp_stops; }
+
+static void paint_tests(void) {
+    AoeGamePaintOpsRor p = {NULL, gp_on, 1, 1, gp_clear, gp_show};
+    char title[256];
+    assert(aoe_game_paint_ror(&p) == 1 && gp_clears == 1 && gp_shows == 1);
+    p.draw_ready = 0;
+    assert(aoe_game_paint_ror(&p) == 1 && gp_clears == 1);
+    gp_12c = 0;
+    assert(aoe_game_paint_ror(&p) == 0);
+    aoe_game_set_title_ror("Age of Empires", title);
+    assert(strcmp(title, "Age of Empires") == 0);
+    aoe_game_stop_world_sounds_ror(gp_stop, NULL);
+    assert(gp_stops == 1);
+}
+
 int main(void) {
+    paint_tests();
     AoeGameWindowOpsRor w = {0};
     w.pre_dispatch = pre_;
     w.handler = handler;

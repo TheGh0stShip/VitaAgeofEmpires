@@ -179,4 +179,25 @@ void aoe_game_arrow_cursor_ror(const AoeGameCursorOpsRor *ops, int32_t *flag_1d8
    +0x120), 0x0041acb0 (+0xe8 -> +0x124): each "nonzero" of the target. */
 int aoe_game_relay_ror(int32_t (*target)(void *context), void *context);
 
+/* 0x0041aef0 (+0xf4): paint. The +0x12c handler answering 0 stops (0);
+   with a draw system (+0x4c) whose +0x48 is set the screen is cleared
+   (0x00438b50 with 0, 0) and shown (0x00437ac0 with 0); 1. */
+typedef struct {
+    void *context;
+    int32_t (*on_12c)(void *context);
+    int has_draw_system;                      /* +0x4c */
+    int draw_ready;                           /* +0x48 */
+    void (*clear)(void *context);
+    void (*show)(void *context);
+} AoeGamePaintOpsRor;
+int aoe_game_paint_ror(const AoeGamePaintOpsRor *ops);
+
+/* 0x0041b3b0 (+0x138): the window title becomes status line 1
+   (0x00423e20 with 1) through "%s" into a 256-byte buffer (the port
+   truncates where the original would overrun). */
+void aoe_game_set_title_ror(const char *line1, char out[256]);
+
+/* 0x0041bc50: the world's (+0x3f4) +0xb4, stopping its sounds. */
+void aoe_game_stop_world_sounds_ror(void (*stop_sounds)(void *context), void *context);
+
 #endif

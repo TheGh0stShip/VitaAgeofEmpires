@@ -1230,6 +1230,66 @@ static void approach_tests(void) {
     assert(!aoe_ai_info_approach_tile_ror(&info, 0, 0, out, 0, 1, 50, 3, 8, &ops));
 }
 
+static int at_object(void *c, int32_t id, AoeAiWorldObjectRor *o) {
+    (void)c;
+    memset(o, 0, sizeof *o);
+    o->id = id;
+    o->state = 2;
+    o->hp = 10.0f;
+    switch (id) {
+    case 7: case 8: o->x = o->y = 5.5f; return 1;
+    case 60: o->x = 7.2f; o->y = 5.0f; return 1;
+    case 61: o->hp = 0.0f; return 1;
+    case 62: o->x = 15.0f; o->y = 5.0f; return 1;
+    case 63: o->x = 6.0f; o->y = 5.0f; o->type_id = 0x114; return 1;
+    default: return 0;
+    }
+}
+static int32_t at_sn(void *c, int32_t i) { (void)c; return i == 0x4d ? 100 : 0; }
+static int at_ai(void *c, int32_t id, int32_t *t) { (void)c; *t = -1; return id == 7 || id == 8; }
+static double at_v104(void *c, int32_t a, int32_t b) { (void)c; (void)a; (void)b; return 2.0; }
+static double at_v100(void *c, int32_t id) { (void)c; (void)id; return 1.0; }
+static uint8_t at_zone(void *c, int32_t id) { (void)c; (void)id; return 1; }
+static uint8_t at_tile_zone(void *c, int32_t id, int32_t x, int32_t y) { (void)c; (void)id; (void)x; (void)y; return 1; }
+static int at_enemy(void *c, int32_t p) { (void)c; return p == 2; }
+static int at_head(void *c, int32_t id, int16_t *t, uint8_t *st, float *tm) {
+    (void)c; (void)id; *t = 0x78; *st = 2; *tm = 0.0f; return 1;
+}
+
+static void attack_target_tests(void) {
+    static AoeAiInfoRor info;
+    static AoeAiInfoObjectRor objs[4];
+    AoeAiInfoOpsRor ops;
+    int32_t ids[2] = {7, 8}, lone[1] = {9};
+    memset(&ops, 0, sizeof ops);
+    ops.object = at_object;
+    ops.sn = at_sn;
+    ops.unit_ai_target = at_ai;
+    ops.value_104 = at_v104;
+    ops.value_100 = at_v100;
+    ops.zone = at_zone;
+    ops.tile_zone = at_tile_zone;
+    ops.head_action = at_head;
+    /* 60 at tile 7 (distance 2 from the leader's 5): 100 / 2; 62 at 15:
+       100 / 10; 61 has no hit points. */
+    objs[0].id = 60; objs[0].owner = 2; objs[0].x = 7; objs[0].y = 5;
+    objs[1].id = 61; objs[1].owner = 2;
+    objs[2].id = 62; objs[2].owner = 2; objs[2].x = 15; objs[2].y = 5;
+    objs[3].id = 63; objs[3].owner = 2; objs[3].x = 6; objs[3].y = 5; objs[3].type_id = 0x114;
+    info.objects = objs;
+    info.object_count = 3;
+    assert(aoe_ai_info_attack_target_ror(&info, 2, ids, 2, &ops) == &objs[0]);
+    assert(aoe_ai_info_attack_target_ror(&info, 3, ids, 2, &ops) == NULL);
+    assert(aoe_ai_info_attack_target_ror(&info, 2, lone, 1, &ops) == NULL);
+    /* 60 moved out of sight: only 62 remains. */
+    objs[0].x = 0;
+    assert(aoe_ai_info_attack_target_ror(&info, 2, ids, 2, &ops) == &objs[2]);
+    /* A wonder of an enemy comes first. */
+    info.object_count = 4;
+    ops.is_enemy = at_enemy;
+    assert(aoe_ai_info_attack_target_ror(&info, 2, lone, 1, &ops) == &objs[3]);
+}
+
 static void lifecycle_tests(void) {
     static AoeAiInfoRor a, b;
     static uint8_t buf[200000];
@@ -1377,6 +1437,7 @@ int main(void) {
     dock_and_ring_tests();
     force_and_wonder_tests();
     approach_tests();
+    attack_target_tests();
     memset(&ops, 0, sizeof ops);
     ops.self = 1;
     ops.object = object;

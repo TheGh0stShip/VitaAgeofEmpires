@@ -271,6 +271,10 @@ typedef struct {
        and 4 (its own map search): the tile goes to `out`. */
     void (*near_tile)(void *context, int32_t id, int32_t x, int32_t y,
                       int32_t out[2], int32_t mode, int32_t terrain);
+    /* A unit's AI (+0x74, 0x00407a60): its target (0x0040f6e0) and its
+       vtable +0xc4 test on a target; 0 without an AI. */
+    int (*unit_ai_target)(void *context, int32_t id, int32_t *target);
+    int (*unit_ai_c4)(void *context, int32_t id, int32_t target);
 } AoeAiInfoOpsRor;
 
 /* The 36-byte summary 0x004c2de0 fills: the farthest distance, two words
@@ -604,6 +608,23 @@ int aoe_ai_info_approach_tile_ror(AoeAiInfoRor *info, int32_t x, int32_t y,
                                   int32_t land, int32_t target,
                                   int32_t radius, int32_t unit,
                                   const AoeAiInfoOpsRor *ops);
+/* 0x004c0e60: the target for units `ids` (the first leads; it needs a
+   unit AI) among `player`'s remembered objects: any wonder found first
+   (0x004c5980 with -1) is returned outright. Otherwise each object that
+   exists below state 3 with hit points, still within 5 tiles of where it
+   was seen or on a visible tile (and, for a leader of class 0x12, passing
+   its AI's vtable +0xc4) and against which the units' damage (0x004c6380)
+   and endurance (0x004c64b0) are both nonzero scores, in floats:
+   number 77 / max(1, tile distance from the leader) + number 80 x +0x14
+   + number 184 x endurance / (hit points / damage) + number 185 x the
+   units whose AI targets it (when number 185 is positive) + number 122
+   when it lies in the leader's zone + number 89 x +0x10 + rand() %
+   number 83 (when positive); the first best wins. NULL for none. */
+AoeAiInfoObjectRor *aoe_ai_info_attack_target_ror(AoeAiInfoRor *info,
+                                                  uint32_t player,
+                                                  const int32_t *ids,
+                                                  int32_t count,
+                                                  const AoeAiInfoOpsRor *ops);
 int32_t aoe_ai_info_pick_target_ror(AoeAiInfoRor *info, int32_t k,
                                     int32_t id, float pos[2], int32_t *drop,
                                     const int32_t *exclude,

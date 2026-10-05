@@ -3057,3 +3057,88 @@ int aoe_ai_info_approach_tile_ror(AoeAiInfoRor *info, int32_t x, int32_t y,
     }
     return best != -1;
 }
+
+static int32_t info_sn(const AoeAiInfoOpsRor *ops, int32_t i) {
+    return ops->sn ? ops->sn(ops->context, i) : 0;
+}
+
+AoeAiInfoObjectRor *aoe_ai_info_attack_target_ror(AoeAiInfoRor *info,
+                                                  uint32_t player,
+                                                  const int32_t *ids,
+                                                  int32_t count,
+                                                  const AoeAiInfoOpsRor *ops) {
+    AoeAiInfoObjectRor *best, *wonder;
+    AoeAiWorldObjectRor unit, obj;
+    float best_score = -1.0f;
+    int32_t i, j, dummy;
+    uint8_t zone;
+    if (!info || !ops) return NULL;
+    wonder = aoe_ai_info_wonder_ror(info, -1, ops);
+    if (wonder) return wonder;
+    if (count == 0 || !ops->object || !ops->object(ops->context, ids[0], &unit) ||
+        !ops->unit_ai_target || !ops->unit_ai_target(ops->context, ids[0], &dummy))
+        return NULL;
+    zone = ops->zone ? ops->zone(ops->context, ids[0]) : 0;
+    best = NULL;
+    for (i = 0; i < info->object_count; ++i) {
+        AoeAiInfoObjectRor *e = &info->objects[i];
+        int32_t ox, oy, dx, dy;
+        float damage, ttk, endurance, ratio, dist, f14, rnd, f10, near_zone, chasers;
+        double score;
+        if (e->owner != player || !ops->object(ops->context, e->id, &obj)) continue;
+        if (obj.state >= 3 || obj.hp == 0.0f) continue;
+        ox = aoe_ftol32(obj.x);
+        oy = aoe_ftol32(obj.y);
+        dx = e->x - ox;
+        if (dx < 0) dx = -dx;
+        dy = e->y - oy;
+        if (dy < 0) dy = -dy;
+        if (!((dx < 6 && dy < 6) ||
+              (ops->vision && ops->vision(ops->context, ox, oy) == 0xf)))
+            continue;
+        if (unit.type_class == 0x12 &&
+            (!ops->unit_ai_c4 || !ops->unit_ai_c4(ops->context, ids[0], e->id)))
+            continue;
+        damage = aoe_ai_info_ids_damage_ror(info, ids, count, e->id, ops);
+        endurance = aoe_ai_info_ids_endurance_ror(info, ids, count, &obj, ops);
+        if (damage == 0.0f || endurance == 0.0f) continue;
+        ttk = obj.hp / damage;
+        ratio = endurance / ttk;
+        dx = e->x - aoe_ftol32(unit.x);
+        dy = e->y - aoe_ftol32(unit.y);
+        dist = (float)sqrt((double)(dy * dy + dx * dx));
+        if (dist < 1.0f) dist = 1.0f;
+        f14 = (float)e->field_14;
+        rnd = info_sn(ops, 0x53) > 0
+                  ? (float)((ops->rand ? ops->rand(ops->context) : 0) % info_sn(ops, 0x53))
+                  : 0.0f;
+        f10 = (float)((double)info_sn(ops, 0x59) * (double)e->field_10);
+        near_zone = ops->tile_zone && ops->tile_zone(ops->context, ids[0], ox, oy) == zone
+                        ? (float)info_sn(ops, 0x7a)
+                        : 0.0f;
+        chasers = 0.0f;
+        if (info_sn(ops, 0xb9) > 0) {
+            int32_t n = 0, t;
+            AoeAiWorldObjectRor member;
+            for (j = 0; j < count; ++j)
+                if (ops->object(ops->context, ids[j], &member) &&
+                    ops->unit_ai_target(ops->context, ids[j], &t) && t == e->id)
+                    ++n;
+            chasers = (float)((double)info_sn(ops, 0xb9) * (double)n);
+        }
+        {
+            float a = (float)((double)info_sn(ops, 0xb8) * (double)ratio);
+            float b = (float)((double)info_sn(ops, 0x50) * (double)f14 + (double)a);
+            score = (double)info_sn(ops, 0x4d) / (double)dist + (double)b;
+            score += chasers;
+            score += near_zone;
+            score += f10;
+            score += rnd;
+        }
+        if (!best || score > (double)best_score) {
+            best = e;
+            best_score = (float)score;
+        }
+    }
+    return best;
+}

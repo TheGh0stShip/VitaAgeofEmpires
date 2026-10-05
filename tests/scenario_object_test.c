@@ -66,6 +66,22 @@ int main(void) {
         strcpy(ai[1], "Random");
         assert(strcmp(aoe_scenario_player_file_ror(&s, AOE_SCENARIO_FILE_CITY, 1, 1, &o), "Plan") == 0);
     }
+    /* The info record round trip. */
+    {
+        AoeScenarioRecordRor r, back;
+        uint8_t buf[64];
+        AoeOutcomeStream out = {buf, sizeof buf, 0, 0}, in = {buf, sizeof buf, 0, 0};
+        aoe_scenario_record_init_ror(&r, "abc", 1234);
+        assert(r.version == 2 && r.stamp == 1234 && aoe_scenario_record_size_ror(&r) == 16);
+        aoe_scenario_record_write_ror(&r, &out);
+        assert(out.pos == 20 && buf[0] == 16 && buf[4] == 2 && buf[12] == 4 && buf[16] == 'a');
+        aoe_scenario_record_read_ror(&back, &in);
+        assert(back.version == 2 && back.stamp == 1234 && strcmp(back.text, "abc") == 0 && !back.error);
+        aoe_scenario_record_free_ror(&r);
+        aoe_scenario_record_free_ror(&back);
+        aoe_scenario_record_init_ror(&r, NULL, 0);
+        assert(aoe_scenario_record_size_ror(&r) == 12 && !r.text);
+    }
     puts("scenario object ok");
     return 0;
 }

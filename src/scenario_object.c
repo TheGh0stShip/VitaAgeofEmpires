@@ -1,6 +1,7 @@
 #include "scenario_object.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static char *text_buffer(AoeScenarioObjectRor *s, int which) {
@@ -104,4 +105,59 @@ const char *aoe_scenario_player_file_ror(AoeScenarioObjectRor *s, int kind, int3
     }
     snprintf(out, 0xe0, "%s", names[player]);
     return out;
+}
+
+void aoe_scenario_record_init_ror(AoeScenarioRecordRor *r, const char *text, int32_t now) {
+    r->error = 0;
+    r->version = 2;
+    r->stamp = now;
+    r->text = NULL;
+    if (text) {
+        size_t n = strlen(text) + 1;
+        r->text = malloc(n);
+        if (r->text) {
+            memcpy(r->text, text, n);
+            r->text[n - 1] = '\0';
+        }
+    }
+}
+
+void aoe_scenario_record_read_ror(AoeScenarioRecordRor *r, AoeOutcomeStream *in) {
+    int32_t n;
+    r->error = 0;
+    r->version = 0;
+    r->stamp = 0;
+    r->text = NULL;
+    (void)aoe_stream_i32(in); /* the record size */
+    r->version = aoe_stream_i32(in);
+    if (r->version > 1) r->stamp = aoe_stream_i32(in);
+    n = aoe_stream_i32(in);
+    if (n > 0) {
+        const uint8_t *p;
+        r->text = malloc((size_t)n);
+        if (!r->text) {
+            r->error = 1;
+            return;
+        }
+        p = aoe_stream_take(in, (size_t)n);
+        if (p) memcpy(r->text, p, (size_t)n);
+    }
+}
+
+void aoe_scenario_record_free_ror(AoeScenarioRecordRor *r) {
+    free(r->text);
+    r->text = NULL;
+}
+
+int32_t aoe_scenario_record_size_ror(const AoeScenarioRecordRor *r) {
+    return r->text ? (int32_t)strlen(r->text) + 1 + 0xc : 0xc;
+}
+
+void aoe_scenario_record_write_ror(const AoeScenarioRecordRor *r, AoeOutcomeStream *out) {
+    int32_t n = r->text ? (int32_t)strlen(r->text) + 1 : 0;
+    aoe_stream_put_i32(out, aoe_scenario_record_size_ror(r));
+    aoe_stream_put_i32(out, r->version);
+    if (r->version > 1) aoe_stream_put_i32(out, r->stamp);
+    aoe_stream_put_i32(out, n);
+    if (r->text) aoe_stream_put(out, r->text, (size_t)n);
 }

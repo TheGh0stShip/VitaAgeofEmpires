@@ -81,4 +81,24 @@ enum { AOE_SCENARIO_FILE_AI, AOE_SCENARIO_FILE_CITY, AOE_SCENARIO_FILE_PER };
 const char *aoe_scenario_player_file_ror(AoeScenarioObjectRor *s, int kind, int32_t player,
                                          int use_files, const AoeScenarioFileOpsRor *ops);
 
+/* The scenario info record (vtable 0x00545e34, 0x00474a40..0x00474c90):
+   a version, a time stamp and a copy of the scenario's +0x1014 text.
+   0x00474a40 builds one (version 2, the time, the text copied); 0x00474ae0
+   reads one (size, version, the stamp when the version is above 1, the
+   text length and text; a failed allocation sets +0x04); 0x00474ba0
+   frees it; 0x00474bd0 its size (12, plus the text and its NUL);
+   0x00474bf0 writes it. */
+#include "aoe_stream.h"
+typedef struct {
+    int32_t error;      /* +0x04 */
+    int32_t version;    /* +0x08 */
+    int32_t stamp;      /* +0x0c */
+    char *text;         /* +0x10 */
+} AoeScenarioRecordRor;
+void aoe_scenario_record_init_ror(AoeScenarioRecordRor *r, const char *text, int32_t now);
+void aoe_scenario_record_read_ror(AoeScenarioRecordRor *r, AoeOutcomeStream *in);
+void aoe_scenario_record_free_ror(AoeScenarioRecordRor *r);
+int32_t aoe_scenario_record_size_ror(const AoeScenarioRecordRor *r);
+void aoe_scenario_record_write_ror(const AoeScenarioRecordRor *r, AoeOutcomeStream *out);
+
 #endif

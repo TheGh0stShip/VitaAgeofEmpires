@@ -4,6 +4,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+static uint8_t obj_flags[8];
+static uint8_t *flags_of(void *c, int32_t i) { (void)c; return i == 5 ? &obj_flags[5] : (i == 6 ? &obj_flags[6] : NULL); }
+
 int main(void) {
     AoeViewMarkRor *marks = NULL;
     AoeDrawRowsRor d;
@@ -61,6 +64,38 @@ int main(void) {
         assert(t[0].time == 70 && t[1].time == 100);
         aoe_view_timers_rewind_ror(t, 2, 3);
         assert(t[0].time == 70);
+    }
+    {
+        AoeViewTimerRor t[3];
+        int32_t active = 0;
+        AoeViewGeometryRor g;
+        memset(t, 0, sizeof t);
+        aoe_view_timer_add_ror(t, 3, &active, 5, 1000, 4, 0, 100);
+        assert(active == 1 && t[2].active && t[2].field_4 == 5 && t[2].time == 100);
+        aoe_view_timer_add_ror(t, 3, &active, 6, 500, 2, 4, 200);
+        assert(active == 2 && t[1].field_4 == 6 && t[2].time == 100 - 1000);
+        t[2].time = 100;
+        obj_flags[5] = 0;
+        aoe_view_timers_tick_ror(t, 3, &active, flags_of, NULL, 250);
+        assert(obj_flags[5] == 4 && obj_flags[6] == 2 && active == 2);
+        aoe_view_timers_tick_ror(t, 3, &active, flags_of, NULL, 100 + 0x100);
+        assert(obj_flags[5] == 0);
+        aoe_view_timers_tick_ror(t, 3, &active, flags_of, NULL, 100 + 1001);
+        assert(!t[2].active && !t[1].active && active == 0 && obj_flags[6] == 0);
+        memset(&g, 0, sizeof g);
+        g.has_map = 1;
+        g.width = 640;
+        g.height = 480;
+        g.tile_w = 64;
+        g.tile_h = 32;
+        g.half_tile_w = 32;
+        g.half_tile_h = 16;
+        g.origin_x = 3;
+        aoe_view_geometry_ror(&g);
+        assert(g.across == 10 && g.down == 15 && g.centre_x == 320 - 32 + 3 && g.centre_y == 224);
+        g.tile_h = 0;
+        aoe_view_geometry_ror(&g);
+        assert(g.across == 0 && g.centre_x == 0);
     }
     return 0;
 }

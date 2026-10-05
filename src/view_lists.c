@@ -118,3 +118,66 @@ void aoe_view_timers_rewind_ror(AoeViewTimerRor *timers, int32_t count, int32_t 
     for (i = 0; i < count; ++i)
         if (timers[i].active == 1 && timers[i].kind == kind) timers[i].time -= timers[i].period;
 }
+
+void aoe_view_timer_add_ror(AoeViewTimerRor *timers, int32_t count, int32_t *active,
+                            int32_t index, int32_t duration, int32_t flag, int32_t match,
+                            uint32_t now) {
+    AoeViewTimerRor *slot = NULL;
+    int32_t i;
+    for (i = 0; i < count; ++i) {
+        if (timers[i].active == 0)
+            slot = &timers[i];
+        else if (match != 0 && timers[i].kind == match)
+            timers[i].time -= timers[i].period;
+    }
+    if (!slot) return;
+    slot->active = 1;
+    slot->field_4 = index;
+    slot->time = (int32_t)now;
+    slot->period = duration;
+    slot->kind = flag;
+    ++*active;
+}
+
+void aoe_view_timers_tick_ror(AoeViewTimerRor *timers, int32_t count, int32_t *active,
+                              uint8_t *(*object_flags)(void *context, int32_t index),
+                              void *context, uint32_t now) {
+    int32_t i;
+    for (i = 0; i < count; ++i) {
+        AoeViewTimerRor *t = &timers[i];
+        uint8_t *flags;
+        uint32_t elapsed;
+        if (!t->active) continue;
+        flags = object_flags(context, t->field_4);
+        if (!flags) {
+            t->active = 0;
+            --*active;
+            continue;
+        }
+        elapsed = now - (uint32_t)t->time;
+        if ((uint32_t)t->period < elapsed) {
+            t->active = 0;
+            --*active;
+        } else if ((elapsed & 0x100) == 0) {
+            *flags |= (uint8_t)t->kind;
+            continue;
+        }
+        *flags &= (uint8_t)~(uint8_t)t->kind;
+    }
+}
+
+void aoe_view_geometry_ror(AoeViewGeometryRor *g) {
+    if (g->has_map && g->tile_w != 0 && g->tile_h != 0) {
+        g->field_11e = 0;
+        g->field_120 = 0;
+        g->across = (int16_t)(g->width / g->tile_w);
+        g->down = (int16_t)(g->height / g->tile_h);
+        g->centre_x = (int16_t)((int16_t)(g->width / 2) - g->half_tile_w + g->origin_x);
+        g->centre_y = (int16_t)((int16_t)(g->height / 2) - g->half_tile_h + g->origin_y);
+        return;
+    }
+    g->down = g->across = 0;
+    g->centre_x = g->centre_y = 0;
+    g->field_122 = g->field_124 = 0;
+    g->field_11e = g->field_120 = 0;
+}

@@ -85,4 +85,35 @@ typedef struct {
    time. */
 void aoe_view_timers_rewind_ror(AoeViewTimerRor *timers, int32_t count, int32_t kind);
 
+/* 0x0050f970: a flashing timer for object `index` (`duration` ms,
+   `flag` bits) in the last free slot (nothing when none is free; the
+   active count +0x358 grows); on the way every timer whose flag equals
+   `match` (when nonzero) has its period taken off its start time.
+   0x0050f8d0: each active timer whose object is gone or whose time is up
+   is freed (the bits cleared on time-up); otherwise the object's +0x36
+   gets the bits for the first 256 ms of every 512 and loses them for the
+   rest. Here `time` is the start, `period` the duration and `kind` the
+   flag. */
+void aoe_view_timer_add_ror(AoeViewTimerRor *timers, int32_t count, int32_t *active,
+                            int32_t index, int32_t duration, int32_t flag, int32_t match,
+                            uint32_t now);
+void aoe_view_timers_tick_ror(AoeViewTimerRor *timers, int32_t count, int32_t *active,
+                              uint8_t *(*object_flags)(void *context, int32_t index),
+                              void *context, uint32_t now);
+
+/* The game view's tile geometry (0x0050fde0): with a map and a tile size,
+   the tiles across and down the view and the centre offsets; else all 0. */
+typedef struct {
+    int has_map;                      /* +0x70 */
+    int32_t width, height;            /* +0x14, +0x18 */
+    int16_t tile_w, tile_h;           /* +0x108, +0x10a */
+    int16_t half_tile_w, half_tile_h; /* +0x10c, +0x10e */
+    int16_t origin_x, origin_y;       /* +0x8c, +0x90 */
+    int16_t across, down;             /* +0x116, +0x118 */
+    int16_t centre_x, centre_y;       /* +0x11a, +0x11c */
+    int16_t field_11e, field_120;     /* +0x11e, +0x120 */
+    int16_t field_122, field_124;     /* +0x122, +0x124 */
+} AoeViewGeometryRor;
+void aoe_view_geometry_ror(AoeViewGeometryRor *g);
+
 #endif

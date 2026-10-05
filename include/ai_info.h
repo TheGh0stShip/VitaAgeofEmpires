@@ -250,6 +250,12 @@ typedef struct {
        unit's own zone-map search). */
     int (*zone_reaches)(void *context, int32_t id, uint8_t zone, float range,
                         const int32_t pt[2]);
+    /* A player's resource `i` (player +0x50). */
+    float (*player_resource)(void *context, int32_t player, int32_t i);
+    /* Unit `id`'s vtable +0x1b0 (from tile, to tile, range, a scratch
+       pair, 1): nonzero when it passes. */
+    int (*reach_test)(void *context, int32_t id, const int32_t from[2],
+                      const int32_t to[2], float range);
 } AoeAiInfoOpsRor;
 
 /* 0x004ba1c0: the constructor's state (the base part, 0x0040b470, is the
@@ -503,6 +509,26 @@ AoeAiInfoObjectRor *aoe_ai_info_free_resource_ror(const AoeAiInfoRor *info,
 AoeAiInfoObjectRor *aoe_ai_info_better_resource_ror(
     const AoeAiInfoRor *info, int32_t id, int32_t type_id, int32_t type_class,
     const AoeAiInfoOpsRor *ops);
+/* 0x004c1ac0: for our unit `id`, the nearest (squared tile distance from
+   its truncated position) remembered dock (type 0x2d) seen as another
+   player's that still exists and whose owner has resource 9 above 0.0;
+   NULL without one. */
+AoeAiInfoObjectRor *aoe_ai_info_nearest_trade_dock_ror(
+    const AoeAiInfoRor *info, int32_t id, const AoeAiInfoOpsRor *ops);
+/* 0x004c1bf0: a site for a building of footprint side `size` (squared
+   when above 1, else 2: 0x004c2dc0) on the ring between `inner` and
+   `outer` (inner < outer, else 0) around `centre`: the site grid is
+   prepared in mode 0 for type -1 over the outer box (centre +- outer +
+   inner, clamped); each tile outside the inner box (centre +- outer -
+   inner) whose footprint box (+- side / 2) needs no clamping, on which
+   our unit could stand (vtable +0x114) over [lo, hi) of that box and
+   whose grid cells over the closed box are all below 0xff scores 0x80
+   (0x40 when its reach test toward the centre within `outer` fails) plus
+   those cells; the first best goes to `out`. 1 with a site. */
+int aoe_ai_info_ring_site_ror(AoeAiInfoRor *info, struct AoeValueGridRor *grid,
+                              const int32_t centre[2], int32_t size,
+                              int32_t outer, int32_t inner, int32_t unit,
+                              int32_t out[2], const AoeAiInfoOpsRor *ops);
 int32_t aoe_ai_info_pick_target_ror(AoeAiInfoRor *info, int32_t k,
                                     int32_t id, float pos[2], int32_t *drop,
                                     const int32_t *exclude,

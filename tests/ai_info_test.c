@@ -1020,6 +1020,71 @@ static void resource_tests(void) {
     assert(aoe_ai_info_better_resource_ror(&info, 7, 1, 8, &ops) == NULL);
 }
 
+static int ring_free(void *c, int32_t id, float x, float y) { (void)c; (void)id; (void)y; return x >= 15.0f; }
+static int ring_block_all(void *c, int32_t id, float x, float y) { (void)c; (void)id; (void)x; (void)y; return 0; }
+static int ring_reach(void *c, int32_t id, const int32_t from[2], const int32_t to[2], float r) {
+    (void)c; (void)id;
+    assert(to[0] == 15 && to[1] == 15 && r == 6.0f);
+    return from[1] >= 15;
+}
+static int32_t ring_w(void *c) { (void)c; return 30; }
+static uint8_t ring_zero(void *c, int32_t x, int32_t y) { (void)c; (void)x; (void)y; return 0; }
+static float dock_res(void *c, int32_t p, int32_t i) { (void)c; assert(i == 9); return p == 2 ? 5.0f : 0.0f; }
+static int dock_object(void *c, int32_t id, AoeAiWorldObjectRor *o) {
+    (void)c;
+    if (id == 23) return 0;
+    memset(o, 0, sizeof *o);
+    o->id = id;
+    o->owner = (int16_t)(id == 22 ? 3 : 2);
+    o->x = o->y = 1.5f;
+    return 1;
+}
+
+static void dock_and_ring_tests(void) {
+    static AoeAiInfoRor info;
+    static AoeAiInfoObjectRor objs[5];
+    static AoeValueGridRor g;
+    AoeAiInfoOpsRor ops;
+    int32_t centre[2] = {15, 15}, out[2] = {-1, -1};
+    memset(&ops, 0, sizeof ops);
+    ops.self = 1;
+    ops.object = dock_object;
+    ops.player_resource = dock_res;
+    /* 0x004c1ac0: 20 ours, 21 far (2's), 22 (3 has no goods), 23 gone,
+       24 near (2's). */
+    objs[0].id = 20; objs[0].type_id = 0x2d; objs[0].owner = 1;
+    objs[1].id = 21; objs[1].type_id = 0x2d; objs[1].owner = 2; objs[1].x = 9; objs[1].y = 9;
+    objs[2].id = 22; objs[2].type_id = 0x2d; objs[2].owner = 3;
+    objs[3].id = 23; objs[3].type_id = 0x2d; objs[3].owner = 2;
+    objs[4].id = 24; objs[4].type_id = 0x2d; objs[4].owner = 2; objs[4].x = 3; objs[4].y = 2;
+    info.objects = objs;
+    info.object_count = 5;
+    assert(aoe_ai_info_nearest_trade_dock_ror(&info, 7, &ops) == &objs[4]);
+    objs[4].type_id = 0x2e;
+    assert(aoe_ai_info_nearest_trade_dock_ror(&info, 7, &ops) == &objs[1]);
+    assert(aoe_ai_info_nearest_trade_dock_ror(&info, 23, &ops) == NULL);
+
+    /* 0x004c1bf0 on a 30 x 30 map. */
+    memset(&info, 0, sizeof info);
+    info.map_width = info.map_height = 30;
+    ops.map_width = ring_w;
+    ops.map_height = ring_w;
+    ops.terrain = ring_zero;
+    ops.tile_byte5 = ring_zero;
+    ops.free_tile = ring_free;
+    ops.reach_test = ring_reach;
+    assert(aoe_value_grid_init_ror(&g, 254, 254, 0));
+    assert(!aoe_ai_info_ring_site_ror(&info, &g, centre, 1, 3, 3, 9, out, &ops));
+    assert(aoe_ai_info_ring_site_ror(&info, &g, centre, 1, 6, 2, 9, out, &ops) == 1);
+    /* Standable only from x 15 (footprint 2: [x - 1, x + 1)), the bonus
+       only from y 15; outside the inner box 11..19. */
+    assert(out[0] >= 16 && out[1] >= 15 && out[0] <= 23 && out[1] <= 23 &&
+           (out[0] > 19 || out[1] > 19));
+    ops.free_tile = ring_block_all;
+    assert(!aoe_ai_info_ring_site_ror(&info, &g, centre, 1, 6, 2, 9, out, &ops));
+    aoe_value_grid_free_ror(&g);
+}
+
 static void lifecycle_tests(void) {
     static AoeAiInfoRor a, b;
     static uint8_t buf[200000];
@@ -1145,6 +1210,7 @@ int main(void) {
     explore_step_tests();
     pick_target_tests();
     resource_tests();
+    dock_and_ring_tests();
     memset(&ops, 0, sizeof ops);
     ops.self = 1;
     ops.object = object;

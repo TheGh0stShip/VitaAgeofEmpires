@@ -2723,3 +2723,92 @@ AoeAiInfoObjectRor *aoe_ai_info_better_resource_ror(
     }
     return best;
 }
+
+AoeAiInfoObjectRor *aoe_ai_info_nearest_trade_dock_ror(
+    const AoeAiInfoRor *info, int32_t id, const AoeAiInfoOpsRor *ops) {
+    AoeAiWorldObjectRor unit, obj;
+    AoeAiInfoObjectRor *best = NULL;
+    int32_t best_d = 0, i, dx, dy, d;
+    if (!info || !ops || !ops->object || !ops->object(ops->context, id, &unit))
+        return NULL;
+    for (i = 0; i < info->object_count; ++i) {
+        AoeAiInfoObjectRor *e = &info->objects[i];
+        if (e->id == -1 || e->owner == (uint8_t)ops->self || e->type_id != 0x2d)
+            continue;
+        if (!ops->object(ops->context, e->id, &obj)) continue;
+        if (!ops->player_resource ||
+            !(ops->player_resource(ops->context, obj.owner, 9) > 0.0f))
+            continue;
+        dy = e->y - aoe_ftol32(unit.y);
+        dx = e->x - aoe_ftol32(unit.x);
+        d = dy * dy + dx * dx;
+        if (!best || d < best_d) {
+            best = e;
+            best_d = d;
+        }
+    }
+    return best;
+}
+
+int aoe_ai_info_ring_site_ror(AoeAiInfoRor *info, struct AoeValueGridRor *grid,
+                              const int32_t centre[2], int32_t size,
+                              int32_t outer, int32_t inner, int32_t unit,
+                              int32_t out[2], const AoeAiInfoOpsRor *ops) {
+    int32_t lo[2], hi[2], in_lo[2], in_hi[2], side, half, x, y, i, j, best = -1;
+    if (!info || !grid || outer <= inner) return 0;
+    lo[0] = centre[0] - outer - inner;
+    lo[1] = centre[1] - outer - inner;
+    aoe_ai_info_clamp_ror(info, lo);
+    hi[0] = outer + inner + centre[0];
+    hi[1] = centre[1] + outer + inner;
+    aoe_ai_info_clamp_ror(info, hi);
+    in_lo[0] = inner - outer + centre[0];
+    in_lo[1] = centre[1] - outer + inner;
+    aoe_ai_info_clamp_ror(info, in_lo);
+    in_hi[0] = outer - inner + centre[0];
+    in_hi[1] = centre[1] - inner + outer;
+    aoe_ai_info_clamp_ror(info, in_hi);
+    aoe_ai_info_prepare_sites_ror(info, grid, 0, -1, lo, hi, ops);
+    side = aoe_square_min2_ror(size);
+    for (x = lo[0]; x <= hi[0]; ++x) {
+        for (y = lo[1]; y <= hi[1]; ++y) {
+            int32_t a[2], b[2], value, blocked = 0;
+            if (x >= in_lo[0] && x <= in_hi[0] && y >= in_lo[1] && y <= in_hi[1])
+                continue;
+            half = side / 2;
+            a[0] = x - half;
+            a[1] = y - half;
+            if (aoe_ai_info_clamp_ror(info, a) == 1) continue;
+            b[0] = half + x;
+            b[1] = half + y;
+            if (aoe_ai_info_clamp_ror(info, b) == 1) continue;
+            for (i = a[0]; i < b[0] && !blocked; ++i)
+                for (j = a[1]; j < b[1] && !blocked; ++j)
+                    if (!ops || !ops->free_tile ||
+                        !ops->free_tile(ops->context, unit, (float)i, (float)j))
+                        blocked = 1;
+            if (blocked) continue;
+            value = 0x80;
+            {
+                int32_t at[2];
+                at[0] = x;
+                at[1] = y;
+                if (!ops->reach_test ||
+                    !ops->reach_test(ops->context, unit, at, centre, (float)outer))
+                    value = 0x40;
+            }
+            for (i = a[0]; i <= b[0] && !blocked; ++i)
+                for (j = a[1]; j <= b[1] && !blocked; ++j) {
+                    uint8_t v = aoe_value_grid_get_ror(grid, i, j);
+                    if (v == 0xff) blocked = 1;
+                    else value += v;
+                }
+            if (!blocked && (best == -1 || best < value)) {
+                out[0] = x;
+                out[1] = y;
+                best = value;
+            }
+        }
+    }
+    return best != -1;
+}

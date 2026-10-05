@@ -195,7 +195,6 @@ int main(void) {
         assert(!strcmp(outs[1], "45,14,Go,11"));
         assert(bits[10 * 640 + 11] == 6 && bits[29 * 640 + 10] == 1);
         btn.pressed = 0;
-        btn.panel.parent = NULL;
         area.surface = NULL;
         btn.text1[0] = NULL;
         aoe_ui_button_release_ror(&btn);

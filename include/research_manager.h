@@ -32,7 +32,10 @@ void aoe_research_manager_save_ror(const AoeResearchCompletionManagerRor *manage
                                    AoeOutcomeStream *out);
 
 /* 0x004ea9ac: a tech's state (-1 outside; a player asks its manager
-   +0x224 through 0x004f2140). 0x004eb61f: percent done
+   +0x224 through 0x004f2140).
+   0x004b94b0(value, mode): with mode 1, age `value` 2, 3 or 4 is open
+   when its age tech 0x65, 0x66 or 0x67 is available (state 1) and age 1
+   always, others never; otherwise whether tech `value` is available. 0x004eb61f: percent done
    (researching: progress * 100 / research time, truncated; done 100;
    else 0). */
 int16_t aoe_research_state_ror(const AoeResearchCompletionManagerRor *manager,

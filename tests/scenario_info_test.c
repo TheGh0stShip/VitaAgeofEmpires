@@ -315,5 +315,17 @@ int main(void) {
         ho.value_194c[5] = 1;
         assert(aoe_scenario_has_conditions_ror(&hi, &ho) && hi.selected == 5);
     }
+    {
+        /* 0x00506dc0 slot defaults. */
+        static AoeScenarioInfoRor di;
+        static AoeScenarioObjectRor dob;
+        di.allied_victory[3] = 1;
+        aoe_scenario_player_defaults_ror(&di, &dob);
+        assert(di.start_resources[7][0] == 0 && di.start_resources[7][1] == 200 &&
+               di.start_resources[7][2] == 200 && di.start_resources[7][3] == 150);
+        assert(dob.player_kind[15] == 4 && dob.value_190c[15] == 16 &&
+               dob.value_18cc[0] == 1 && dob.value_18cc[1] == 0);
+        assert(di.allied_victory[3] == 0);
+    }
     return 0;
 }

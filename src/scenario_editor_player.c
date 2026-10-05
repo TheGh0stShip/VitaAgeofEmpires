@@ -88,3 +88,18 @@ int aoe_scenario_has_conditions_ror(AoeScenarioInfoRor *info,
     }
     return 0;
 }
+
+void aoe_scenario_player_defaults_ror(AoeScenarioInfoRor *info,
+                                      AoeScenarioObjectRor *obj) {
+    static const int32_t start[4] = {0, 200, 200, 150};
+    for (int32_t s = 0; s < AOE_SCENARIO_PLAYERS_ROR; s++) {
+        for (int f = 0; f < 4; f++) info->start_resources[s][f] = start[f];
+        obj->value_194c[s] = 0;
+        obj->value_18cc[s] = 0;
+        obj->value_190c[s] = s + 1;
+        obj->player_kind[s] = 4;
+        info->allied_victory[s] = 0;
+        info->starting_age[s] = 0;
+    }
+    obj->value_18cc[0] = 1;
+}

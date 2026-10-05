@@ -63,6 +63,13 @@ int32_t aoe_editor_set_player_count_ror(AoeScenarioObjectRor *obj,
                                         int16_t *current_player,
                                         int *switched);
 
+/* 0x00506dc0 (from the RoR scenario constructor 0x00506830): every
+   slot's defaults: kind 4, value_18cc 0 (slot 0 then 1), value_190c the
+   slot + 1, value_194c 0; start resources gold 0, wood 200, food 200,
+   stone 150 (fields 0..3); allied victory and starting age 0. */
+void aoe_scenario_player_defaults_ror(AoeScenarioInfoRor *info,
+                                      AoeScenarioObjectRor *obj);
+
 /* 0x00507e00: whether any active slot (value_194c, 0x00476250) has a
    condition record with a type (0x005075f0); each active slot is
    selected (0x00506f10) on the way, the last one examined staying

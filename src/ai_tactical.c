@@ -1097,3 +1097,53 @@ void aoe_ai_tactical_unit_added_ror(AoeAiTacticalRor *ai,
         return;
     }
 }
+
+void aoe_ai_tactical_unit_removed_ror(AoeAiTacticalRor *ai, int32_t unit,
+                                      const AoeAiTacticalOpsRor *ops,
+                                      const AoeAiUnitGroupOpsRor *group_ops) {
+    if (!ai) return;
+    aoe_ai_tactical_drop_unit_ror(ai, unit, ops);
+    if (aoe_ai_int_list_contains_ror(&ai->lists[0], unit)) {
+        aoe_ai_int_list_remove_ror(&ai->lists[0], unit);
+    } else if (aoe_ai_int_list_contains_ror(&ai->lists[2], unit)) {
+        aoe_ai_int_list_remove_ror(&ai->lists[2], unit);
+    } else if (aoe_ai_int_list_contains_ror(&ai->lists[4], unit)) {
+        int k;
+        aoe_ai_int_list_remove_ror(&ai->lists[4], unit);
+        for (k = 5; k <= 8; ++k)
+            if (aoe_ai_int_list_contains_ror(&ai->lists[k], unit)) {
+                aoe_ai_int_list_remove_ror(&ai->lists[k], unit);
+                break;
+            }
+    } else if (aoe_ai_int_list_contains_ror(&ai->lists[9], unit)) {
+        aoe_ai_int_list_remove_ror(&ai->lists[9], unit);
+    }
+    aoe_ai_tactical_ungroup_ror(ai, unit, group_ops);
+}
+
+int32_t aoe_ai_tactical_collect_by_path_ror(AoeAiTacticalRor *ai, int32_t n,
+                                            int32_t mode, int32_t reset,
+                                            const AoeAiTacticalOpsRor *ops) {
+    int32_t i, taken = 0;
+    if (!ai) return 0;
+    if (reset == 1) ai->list_d48.count = 0;
+    for (i = 0; i < ai->lists[2].count; ++i) {
+        int32_t *v = aoe_ai_int_list_at_ror(&ai->lists[2], i), id, task, count;
+        AoeAiWorldObjectRor o;
+        int has_path, take;
+        if (!v) continue;
+        id = *v;
+        if (!ops || !ops->world_object || !ops->world_object(ops->context, id, &o) ||
+            !ops->unit_task || !ops->unit_task(ops->context, id, &task))
+            continue;
+        if (aoe_ai_int_list_contains_ror(&ai->list_d58, id)) continue;
+        has_path = ops->path_count && ops->path_count(ops->context, id, &count);
+        if (mode < 0) take = !has_path || count < n;
+        else if (mode < 1) take = has_path && count == n;
+        else take = has_path && n < count;
+        if (!take) continue;
+        aoe_ai_int_list_add_unique_ror(&ai->list_d48, id);
+        ++taken;
+    }
+    return taken;
+}

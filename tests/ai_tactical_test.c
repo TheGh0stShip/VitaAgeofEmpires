@@ -424,6 +424,51 @@ static void step_and_added_tests(void) {
     orders = 0;
 }
 
+static int path_n(void *c, int32_t id, int32_t *n) {
+    (void)c;
+    if (id == 40) return 0;
+    *n = id - 40;
+    return 1;
+}
+
+static void removed_and_path_tests(void) {
+    static AoeAiTacticalRor ai;
+    AoeAiTacticalOpsRor ops;
+    AoeAiUnitGroupRor *g;
+    int32_t i;
+    memset(&ops, 0, sizeof ops);
+    ops.object = tobject;
+    ops.world_object = tobject;
+    ops.unit_task = ttask;
+    ops.path_count = path_n;
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[4], 50);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[6], 50);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[9], 51);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[9], 50);
+    g = aoe_ai_tactical_new_group_ror(&ai, 1);
+    aoe_ai_unit_group_add_ror(g, 50, NULL);
+    aoe_ai_unit_group_add_ror(g, 52, NULL);
+    aoe_ai_tactical_unit_removed_ror(&ai, 50, &ops, NULL);
+    assert(ai.lists[4].count == 0 && ai.lists[6].count == 0 && ai.lists[9].count == 2 &&
+           aoe_ai_unit_group_count_ror(g) == 1);
+    aoe_ai_tactical_unit_removed_ror(&ai, 51, &ops, NULL);
+    assert(ai.lists[9].count == 1 && ai.lists[9].data[0] == 50);
+
+    /* 0x004d8960 over list 2: 40 (no path), 41..44 (1..4 waypoints), 43 on
+       +0xd58, 803 without a unit AI. */
+    for (i = 40; i <= 44; ++i) aoe_ai_int_list_add_unique_ror(&ai.lists[2], i);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[2], 803);
+    aoe_ai_int_list_add_unique_ror(&ai.list_d58, 43);
+    assert(aoe_ai_tactical_collect_by_path_ror(&ai, 2, -1, 1, &ops) == 2);
+    assert(ai.list_d48.count == 2 && ai.list_d48.data[0] == 40 && ai.list_d48.data[1] == 41);
+    assert(aoe_ai_tactical_collect_by_path_ror(&ai, 2, 0, 0, &ops) == 1 && ai.list_d48.count == 3);
+    assert(aoe_ai_tactical_collect_by_path_ror(&ai, 2, 1, 1, &ops) == 1 &&
+           ai.list_d48.count == 1 && ai.list_d48.data[0] == 44);
+    assert(aoe_ai_tactical_collect_by_path_ror(&ai, 2, 1, 0, &ops) == 1 && ai.list_d48.count == 1);
+    aoe_ai_tactical_release_ror(&ai);
+}
+
 static void nearest_group_tests(void) {
     static AoeAiTacticalRor ai;
     AoeAiTacticalOpsRor ops;
@@ -469,6 +514,7 @@ int main(void) {
 
     nearest_group_tests();
     step_and_added_tests();
+    removed_and_path_tests();
 
     aoe_ai_tactical_init_ror(&ai, 3, NULL);
     assert(ai.module.id == 0x3f1 && !strcmp(ai.module.name, "TacAI"));

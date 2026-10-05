@@ -239,6 +239,9 @@ typedef struct {
        (0x00520660). */
     int (*free_tile)(void *context, int32_t id, float x, float y);
     int32_t (*world_100)(void *context);
+    /* A unit AI's path (0x00458400 cursor, 0x00458340 count): the
+       waypoint count, 0 when the cursor is -1. */
+    int (*path_count)(void *context, int32_t id, int32_t *count);
 } AoeAiTacticalOpsRor;
 
 /* 0x004e0630: in list order, the group with task `task` and +0x180
@@ -266,6 +269,21 @@ int aoe_ai_tactical_step_around_ror(const AoeAiTacticalOpsRor *ops, int32_t unit
 void aoe_ai_tactical_unit_added_ror(AoeAiTacticalRor *ai,
                                     const AoeAiWorldObjectRor *unit,
                                     const AoeAiTacticalOpsRor *ops);
+/* 0x004d2a30: a lost unit is dropped (0x004dc570), then taken off list 0,
+   else list 2, else list 4 and then the first of lists 5, 6, 7 and 8
+   holding it, else list 9 (presence searched over the count, removal
+   over the capacity), and out of its group (0x004e0930). */
+void aoe_ai_tactical_unit_removed_ror(AoeAiTacticalRor *ai, int32_t unit,
+                                      const AoeAiTacticalOpsRor *ops,
+                                      const AoeAiUnitGroupOpsRor *group_ops);
+/* 0x004d8960: list 2's units that exist with a unit AI and are not on
+   +0xd58, by their path's waypoint count against `n`: `mode` below 0
+   takes those without a path or with fewer, 0 those with exactly `n`,
+   above 0 those with more. Taken units go on +0xd48 once (emptied first
+   when `reset` is 1); returns how many were taken (repeats counted). */
+int32_t aoe_ai_tactical_collect_by_path_ror(AoeAiTacticalRor *ai, int32_t n,
+                                            int32_t mode, int32_t reset,
+                                            const AoeAiTacticalOpsRor *ops);
 /* 0x004dc650: ftol(number 34 / f), at most 99. */
 int32_t aoe_ai_tactical_effort_ror(const AoeAiTacticalRor *ai, float f);
 /* 0x004e2f90: +0xd68[i] (0..3, else -1). 0x004e2f30 / 0x004e2f60 /

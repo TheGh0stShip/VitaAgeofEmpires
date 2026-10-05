@@ -30,6 +30,16 @@ static int32_t bpal(void *c) { (void)c; return 7; }
 static void bact(void *c, int32_t a) { (void)c; (void)a; }
 static int help(void *c) { (void)c; return ++helped; }
 
+static int menu_ends, menu_mode, menu_track;
+static char menu_file[16], menu_shown[40];
+static int menu_make_ok(void *c) { (void)c; return 1; }
+static int menu_make_fail(void *c) { (void)c; return 0; }
+static void menu_end(void *c) { (void)c; ++menu_ends; }
+static void menu_show(void *c, const char *n) { (void)c; snprintf(menu_shown, sizeof menu_shown, "%s", n); }
+static void menu_set_mode(void *c, int32_t m) { (void)c; menu_mode = m; }
+static void menu_play_track(void *c, int32_t t) { (void)c; menu_track = t; }
+static void menu_play_file(void *c, const char *f) { (void)c; snprintf(menu_file, sizeof menu_file, "%s", f); }
+
 int main(void) {
     char coded[64];
     AoeGameRorCommandOpsRor cops = {NULL, ns, sp, bc};
@@ -156,5 +166,21 @@ int main(void) {
     free(g);
     free(g2);
     puts("game_ror_test: ok");
+    {
+        /* 0x00500c60 / 0x00500b40 to a menu screen. */
+        AoeGameRorMenuOpsRor m = {0, 1, menu_end, menu_make_fail, menu_show, menu_set_mode,
+                                  2, 0, menu_play_track, menu_play_file};
+        assert(!aoe_game_ror_to_menu_ror("Main Menu", &m) && menu_ends == 1 && !menu_mode);
+        m.make_screen = menu_make_ok;
+        m.video_playing = 0;
+        assert(aoe_game_ror_to_menu_ror("Main Menu", &m));
+        assert(menu_mode == 2 && !strcmp(menu_shown, "Main Menu") && !strcmp(menu_file, "xopen.mid"));
+        m.music_source = 1;
+        assert(aoe_game_ror_to_menu_ror("Campaign Selection Screen", &m) && menu_track == 2);
+        m.music_source = 3;
+        m.music_held = 1;
+        menu_file[0] = 0;
+        assert(aoe_game_ror_to_menu_ror("Main Menu", &m) && !menu_file[0]);
+    }
     return 0;
 }

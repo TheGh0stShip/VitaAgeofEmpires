@@ -199,4 +199,27 @@ void aoe_game_ror_delete_screens_ror(void (*remove)(void *context, const char *n
    (+0x80 == 1), else 0x47f. */
 int32_t aoe_game_ror_end_text_id_ror(uint8_t won);
 
+/* The tribe game going to a menu screen: 0x00500c60 the main menu
+   (0x00486600, "Main Menu") and 0x00500b40 the campaign selection
+   (0x0047a7c0, "Campaign Selection Screen"). A playing video is ended
+   first (0x00506300); a screen that cannot be made, or whose setup
+   failed, gives 0 (the failed one deleted); else it is shown, the game
+   mode becomes 2 (+0x0c) and, with a music manager and the menu music not
+   held (+0xc1c), the menu music starts by the manager's source: 1 CD track
+   2, 2 "xopen.mid", 3 "open.wav". */
+typedef struct {
+    void *context;
+    int video_playing;                          /* +0xc00 */
+    void (*end_video)(void *context);           /* 0x00506300 */
+    /* Makes and registers the screen: 1 made, 0 failed (deleted). */
+    int (*make_screen)(void *context);
+    void (*show_named)(void *context, const char *name);
+    void (*set_mode)(void *context, int32_t mode);
+    int music_source;                           /* manager +0x104; 0 none */
+    int music_held;                             /* +0xc1c */
+    void (*play_track)(void *context, int32_t track);       /* 0x00450180 */
+    void (*play_file)(void *context, const char *file);     /* 0x00450200 */
+} AoeGameRorMenuOpsRor;
+int aoe_game_ror_to_menu_ror(const char *screen, const AoeGameRorMenuOpsRor *ops);
+
 #endif

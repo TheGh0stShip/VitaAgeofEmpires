@@ -431,3 +431,26 @@ void aoe_game_ror_delete_screens_ror(void (*remove)(void *context, const char *n
 }
 
 int32_t aoe_game_ror_end_text_id_ror(uint8_t won) { return won == 1 ? 0x47e : 0x47f; }
+
+int aoe_game_ror_to_menu_ror(const char *screen, const AoeGameRorMenuOpsRor *ops) {
+    if (!ops) return 0;
+    if (ops->video_playing && ops->end_video) ops->end_video(ops->context);
+    if (!ops->make_screen || !ops->make_screen(ops->context)) return 0;
+    if (ops->show_named) ops->show_named(ops->context, screen);
+    if (ops->set_mode) ops->set_mode(ops->context, 2);
+    if (!ops->music_source || ops->music_held) return 1;
+    switch (ops->music_source) {
+    case 1:
+        if (ops->play_track) ops->play_track(ops->context, 2);
+        break;
+    case 2:
+        if (ops->play_file) ops->play_file(ops->context, "xopen.mid");
+        break;
+    case 3:
+        if (ops->play_file) ops->play_file(ops->context, "open.wav");
+        break;
+    default:
+        break;
+    }
+    return 1;
+}

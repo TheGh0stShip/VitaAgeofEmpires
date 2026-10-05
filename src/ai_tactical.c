@@ -2692,3 +2692,127 @@ void aoe_ai_tactical_run_groups_ror(AoeAiTacticalRor *ai, uint32_t start, uint32
     }
     ai->field_f80 = -1;
 }
+
+/* 0x004daec0: the building planning after a target is found. */
+static void gather_plan(AoeAiTacticalRor *ai, int32_t unit, int32_t kind,
+                        const AoeAiWorldObjectRor *t, const AoeAiTacticalOpsRor *ops,
+                        const AoeAiInfoRor *info, const AoeAiInfoOpsRor *info_ops) {
+    int32_t total = 0, unbuilt = 0, dist, limit, type;
+    if (ai->sn[205] != 1) return;
+    dist = aoe_ftol32(ops->object_distance ? ops->object_distance(ops->context, unit, t->id)
+                                           : 0.0);
+    if (kind == 0 && ai->field_f8c == 1) {
+        if (ai->field_f88 != 1) return;
+        if (t->type_id == 0x3b) {
+            if (aoe_ai_tactical_need_pit_ror(ai, &total, &unbuilt, ops) < 1 || unbuilt != 0)
+                return;
+            if (dist <= ai->sn[163] || !ops->info_best_distance ||
+                ops->info_best_distance(ops->context, 0) == -1 ||
+                aoe_ai_info_clear_of_enemy_ror(info, aoe_ftol32(t->x), aoe_ftol32(t->y),
+                                               info_ops) != 1)
+                return;
+            type = 0x44;
+        } else {
+            if (t->type_class == 0x1f || t->type_class == 5 || t->type_class == 0x21) return;
+            if (aoe_ai_tactical_need_granary_ror(ai, &total, &unbuilt, 0, ops) < 1 ||
+                unbuilt != 0)
+                return;
+            if (dist <= 15 && total != 0) return;
+            type = 0x67;
+        }
+    } else {
+        if (ai->field_f88 != 1 || ai->field_f8c != 1) return;
+        if (aoe_ai_tactical_need_granary_ror(ai, &total, &unbuilt, kind, ops) < 1 ||
+            unbuilt != 0)
+            return;
+        limit = 163 + t->field_4c;
+        limit = limit >= 0 && limit < AOE_AI_SN_COUNT ? ai->sn[limit] : 0;
+        if (dist <= limit && total != 0) return;
+        type = 0x67;
+    }
+    if (ops->build_add) ops->build_add(ops->context, type, 1, -1);
+}
+
+/* 0x004daec0: see the header. */
+int aoe_ai_tactical_gather_ror(AoeAiTacticalRor *ai, int32_t unit, int32_t kind,
+                               int32_t fixed, const int32_t exclude[4],
+                               const AoeAiTacticalOpsRor *ops, AoeAiInfoRor *info,
+                               const AoeAiInfoOpsRor *info_ops) {
+    AoeAiWorldObjectRor u, t;
+    int32_t *entry, target = -1, drop, amount;
+    float pos[2] = {0.0f, 0.0f};
+    if (!ai || !ops || !ops->object || !ops->object(ops->context, unit, &u)) return 0;
+    entry = aoe_ai_tactical_gatherer_ror(ai, unit);
+    if (entry && entry[2] > entry[3]) kind = entry[1];
+    if (kind == -1) {
+        int32_t k;
+        for (k = 0; k < 4; ++k) {
+            int32_t want = ai->field_d88[k];
+            if (exclude && want >= 0 && want < 4 && exclude[want] == 1) continue;
+            drop = -1;
+            target = info ? aoe_ai_info_pick_target_ror(info, want, unit, pos, &drop, NULL, 0,
+                                                        info_ops)
+                          : -1;
+            if (target == -1) continue;
+            kind = want;
+            if (drop == -1) {
+                if (ops->can_engage) ops->can_engage(ops->context, unit, target, 1.0f);
+            } else if (ops->can_gather) {
+                ops->can_gather(ops->context, unit, target, drop);
+            }
+            break;
+        }
+        if (target == -1) return 0;
+    } else {
+        int32_t tried[3], n = 0;
+        for (;;) {
+            int ok;
+            drop = -1;
+            target = info ? aoe_ai_info_pick_target_ror(info, kind, unit, pos, &drop, tried, n,
+                                                        info_ops)
+                          : -1;
+            if (target == -1) return 0;
+            if (drop == -1)
+                ok = ops->can_engage && ops->can_engage(ops->context, unit, target, 1.0f);
+            else
+                ok = ops->can_gather && ops->can_gather(ops->context, unit, target, drop);
+            if (ok) break;
+            aoe_ai_info_set_target_wait_ror(info, kind, target, kind == 0 ? 2 : 0xf);
+            tried[n++] = target;
+            if (n > 2) return 0;
+        }
+        if (target < 0) return 0;
+    }
+    if (!ops->object(ops->context, target, &t)) return 0;
+    gather_plan(ai, unit, kind, &t, ops, info, info_ops);
+    aoe_ai_int_list_remove_ror(&ai->lists[1], unit);
+    entry = aoe_ai_tactical_add_gatherer_ror(ai, unit);
+    if (!entry) return 0;
+    if (kind >= 0 && kind < 4) ++ai->field_d68[kind];
+    aoe_ai_int_list_add_unique_ror(&ai->list_d58, unit);
+    entry[1] = kind;
+    amount = kind >= 0 && kind < 4 ? aoe_ai_tactical_counter_share_ror(ai, kind) : ai->sn[148];
+    if (fixed == 1) {
+        amount = 10;
+    } else {
+        if (ai->sn[203] == 1) {
+            if (t.type_id == 0x3b)
+                amount = aoe_ftol32(t.field_44);
+            else if (kind == 1)
+                amount = 0x4b;
+            else if (kind == 3 || kind == 2)
+                amount = 0x32;
+        } else if (amount < ai->sn[148]) {
+            amount = ai->sn[148];
+        } else if (amount > ai->sn[149]) {
+            amount = ai->sn[149];
+        }
+        if (ai->field_fa4 == 1) amount = 0x14;
+    }
+    entry[2] = amount;
+    entry[3] = 0;
+    if (ops->player_124) ops->player_124(ops->context, unit, target, t.owner, pos[0], pos[1]);
+    if (t.type_id == 0x30) aoe_ai_tactical_send_gatherers_ror(ai, unit, ai->sn[204] - 1, target, ops);
+    if (t.type_id == 0x32 && ops->player_ddc_add) ops->player_ddc_add(ops->context, t.id);
+    return 1;
+}

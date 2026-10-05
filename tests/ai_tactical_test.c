@@ -1063,6 +1063,64 @@ static void upgrades_tests(void) {
     aoe_ai_tactical_release_ror(&ai);
 }
 
+static int ga_engage(void *c, int32_t id, int32_t t, float r) { (void)c; (void)id; (void)r; return t != 600; }
+static uint8_t ga_zone(void *c, int32_t id) { (void)c; (void)id; return 0; }
+static uint8_t ga_tile_zone(void *c, int32_t id, int32_t x, int32_t y) {
+    (void)c; (void)id; (void)x; (void)y; return 0;
+}
+static int32_t ga_unit, ga_target, ga_sent;
+static void ga_124(void *c, int32_t u, int32_t t, int32_t o, float x, float y) {
+    (void)c; (void)o; (void)x; (void)y; ga_unit = u; ga_target = t; ++ga_sent;
+}
+
+static void gather_tests(void) {
+    static AoeAiTacticalRor ai;
+    static AoeAiInfoRor info;
+    static AoeAiInfoTargetRor list[2];
+    AoeAiTacticalOpsRor ops;
+    AoeAiInfoOpsRor iops;
+    int32_t *e, exclude[4] = {0, 1, 0, 0};
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    memset(&ops, 0, sizeof ops);
+    memset(&iops, 0, sizeof iops);
+    memset(list, 0, sizeof list);
+    ops.object = tobject;
+    ops.can_engage = ga_engage;
+    ops.player_124 = ga_124;
+    iops.object = tobject;
+    iops.world_object = tobject;
+    iops.zone = ga_zone;
+    iops.tile_zone = ga_tile_zone;
+    list[0].id = 600;
+    list[1].id = 601;
+    list[0].field_10 = list[1].field_10 = -1;
+    info.targets[1] = list;
+    info.target_count[1] = 2;
+    info.current_target[1] = -1;
+    aoe_ai_int_list_add_unique_ror(&ai.lists[1], 40);
+    ai.sn[203] = 1;
+    /* Kind 1: 600 fails its test (wait 0xf, counted down once by the next
+       pick), 601 is taken. */
+    ga_sent = 0;
+    assert(aoe_ai_tactical_gather_ror(&ai, 40, 1, 0, NULL, &ops, &info, &iops) == 1);
+    assert(list[0].wait == 0xe && ga_sent == 1 && ga_unit == 40 && ga_target == 601);
+    e = aoe_ai_tactical_gatherer_ror(&ai, 40);
+    assert(e && e[1] == 1 && e[2] == 0x4b && e[3] == 0 && ai.field_d68[1] == 1);
+    assert(ai.lists[1].count == 0 && aoe_ai_int_list_contains_ror(&ai.list_d58, 40));
+    /* Its entry still short, unit 40 keeps kind 1 even when asked for -1;
+       `fixed` gives 10. */
+    assert(aoe_ai_tactical_gather_ror(&ai, 40, -1, 1, NULL, &ops, &info, &iops) == 1);
+    assert(e[1] == 1 && e[2] == 10 && ai.field_d68[1] == 2);
+    /* A new unit with kind -1: +0xd88 maps kind 1 only, and it is
+       excluded, so nothing is found. */
+    ai.field_d88[0] = 1;
+    assert(aoe_ai_tactical_gather_ror(&ai, 41, -1, 0, exclude, &ops, &info, &iops) == 0);
+    /* Without the exclusion 601 is taken (the test result unused). */
+    assert(aoe_ai_tactical_gather_ror(&ai, 41, -1, 0, NULL, &ops, &info, &iops) == 1);
+    assert(ga_unit == 41 && ga_target == 601);
+    aoe_ai_tactical_release_ror(&ai);
+}
+
 static uint32_t rg_ms;
 static uint32_t rg_real(void *c) { (void)c; return rg_ms += 4; }
 static int32_t rg_centre(void *c) { (void)c; return 60; }
@@ -1586,6 +1644,7 @@ int main(void) {
     defend_tests();
     upgrades_tests();
     run_groups_tests();
+    gather_tests();
 
     aoe_ai_tactical_init_ror(&ai, 3, NULL);
     assert(ai.module.id == 0x3f1 && !strcmp(ai.module.name, "TacAI"));

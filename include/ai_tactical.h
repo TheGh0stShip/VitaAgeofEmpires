@@ -357,6 +357,10 @@ typedef struct {
                            int32_t *cast_count, int32_t *leader);
     /* timeGetTime(). */
     uint32_t (*real_ms)(void *context);
+    /* A unit's vtable +0x19c gather test (target, drop site, 1.0, 0, 1,
+       -1, -1); the computer player's +0xddc list gains an ID (once). */
+    int (*can_gather)(void *context, int32_t id, int32_t target, int32_t drop);
+    void (*player_ddc_add)(void *context, int32_t id);
 } AoeAiTacticalOpsRor;
 
 /* 0x004e0630: in list order, the group with task `task` and +0x180
@@ -893,6 +897,38 @@ int aoe_ai_tactical_defend_object_ror(AoeAiTacticalRor *ai, int32_t enemy, int32
    without a pending 0x65 item skips the age-2 test. */
 void aoe_ai_tactical_research_ages_ror(AoeAiTacticalRor *ai,
                                        const AoeAiTacticalOpsRor *ops);
+/* 0x004daec0: sends `unit` (our listed object) to gather. An entry still
+   short of its amount (+8 above +0xc) keeps its own kind. Kind -1 tries
+   +0xd88's four kinds in order (those `exclude` marks 1 skipped): the
+   first with a target (0x004bc7b0) is taken, the unit's engage (+0x194,
+   range 1.0) or, with a drop site, gather test (+0x19c) run with their
+   results unused. A given kind gets three tries: a target whose test
+   fails gets wait 2 (food) or 0xf (0x004c5560) and is excluded next time.
+   With the target found (else 0):
+   - With number 205 at 1, a building may be planned (0x004b9050, cap 1,
+     position -1). Food with +0xf8c and +0xf88 at 1: a type-0x3b target
+     farther than number 163 (truncated distance), with the best distance
+     (0) set and the target's tile clear of enemies (0x004c6780), when
+     0x004e1c00 asks for one and nothing is unbuilt: 0x44; another food
+     target (not class 0x1f, 5 or 0x21), when 0x004e1b20 (kind 0) asks for
+     one and nothing is unbuilt, farther than 15 tiles or with none built:
+     0x67. Other kinds with +0xf88 and +0xf8c at 1 the same, the distance
+     limit being number 163 plus the target's +0x4c.
+   - The unit leaves list 1 (searched to its capacity), takes a gatherer
+     entry (0x004e18a0; 0 when none), +0xd68[kind] rises and +0xd58 holds
+     it once. The entry gets the kind, a 0 tally and an amount: 10 when
+     `fixed` is 1; else with number 203 at 1 the target's truncated +0x44
+     for type 0x3b, 0x4b for kind 1 and 0x32 for kinds 2 and 3; without
+     it 0x004e1a40 kept between numbers 148 and 149; +0xfa4 at 1 makes it
+     0x14.
+   - The tribe player's +0x124 sends it (target, owner index, position);
+     type 0x30 also sends number 204 less one more food gatherers
+     (0x004e2fe0) and type 0x32 joins the player's +0xddc list. 1.
+   The original's fifth argument is unused. */
+int aoe_ai_tactical_gather_ror(AoeAiTacticalRor *ai, int32_t unit, int32_t kind,
+                               int32_t fixed, const int32_t exclude[4],
+                               const AoeAiTacticalOpsRor *ops, AoeAiInfoRor *info,
+                               const AoeAiInfoOpsRor *info_ops);
 /* 0x004d3700: runs the groups' tasks, resuming after the group whose ID
    is +0xf80 (from the first when none matches). Groups of task 0x6a,
    0x6b and 0x6c, and those with +0x180 other than 0 or 1, are passed

@@ -29,6 +29,22 @@ static void run_test(void *c, void *s) { (void)c; assert(s == test_target); ++te
 static void ed_save_current(void *c, AoeUiPanelRor *e) { (void)c; (void)e; ++saves_ed; }
 static void new_scenario(void *c) { (void)c; ++news; }
 static void open_open(void *c) { (void)c; ++opens; }
+static char shown[64], sent[64];
+static int sounds, commands;
+static int chat_cmd(void *c, int16_t pl, const char *t) { (void)c; (void)pl; ++commands; return strcmp(t, "cheat") == 0; }
+static void play(void *c, int32_t i) { (void)c; if (i == 2) ++sounds; }
+static void show_chat(void *c, const char *t) { (void)c; snprintf(shown, sizeof(shown), "%s", t); }
+static void send_chat(void *c, const char *t) { (void)c; snprintf(sent, sizeof(sent), "%s", t); }
+
+/* A fake native edit window for the chat line. */
+static char edit_text[128];
+static int edit_window;
+static void *ed_create(void *c, AoeUiAreaRor *a, int32_t x, int32_t y, int32_t w, int32_t h, int m) {
+    (void)c; (void)a; (void)x; (void)y; (void)w; (void)h; (void)m; edit_text[0] = 0; return &edit_window;
+}
+static void ed_destroy(void *c, void *w) { (void)c; (void)w; }
+static void ed_set(void *c, void *w, const char *t) { (void)c; (void)w; snprintf(edit_text, sizeof(edit_text), "%s", t); }
+static void ed_get(void *c, void *w, char *o, int32_t n) { (void)c; (void)w; snprintf(o, (size_t)n, "%s", edit_text); }
 static uint8_t state;
 static uint8_t player_state(void *c, void *p) { (void)c; (void)p; return state; }
 
@@ -195,6 +211,44 @@ int main(void) {
         sp->vt->action(sp, aoe_ui_system_find_ror(&sys, "Open Dialog"), 1, 0, 0);
         assert(saves_ed == 2 && opens == 1);
         aoe_ui_system_close_ror(&sys, "Scenario Editor Screen");
+    }
+    /* The quick chat line: Enter sends; single player shows it locally. */
+    {
+        AoeUiEditOpsRor eops = {0};
+        AoeQuickChatDialogRor *q = calloc(1, sizeof(*q));
+        AoeUiPanelRor *qp;
+        eops.create = ed_create; eops.destroy = ed_destroy;
+        eops.set_text = ed_set; eops.get_text = ed_get;
+        ez_ops.edit_ops = &eops;
+        ops.chat_command = chat_cmd; ops.play_sound = play;
+        ops.show_chat = show_chat; ops.send_chat = send_chat;
+        settings.flag_97e = 0;
+        assert(aoe_quick_chat_dialog_init_ror(q, &ui, &screen->panel, 0));
+        qp = &q->dialog.ez.panel;
+        assert(qp->width == 540 && qp->height == 35 &&
+               strcmp(q->label->lines->text, "S9832") == 0 &&
+               q->edit->max == 0x42 && q->edit->panel.width == 0x195 &&
+               qp->current == &q->edit->panel);
+        snprintf(edit_text, sizeof(edit_text), "hello");
+        qp->vt->action(qp, &q->edit->panel, 0, 0, 0);
+        assert(strcmp(shown, "hello") == 0 && sounds == 1 && !sent[0] &&
+               !aoe_ui_system_find_ror(&sys, "Send Quick Message Dialog"));
+        /* Multiplayer sends; a game command does neither; mode 5 holds. */
+        settings.flag_97e = 1;
+        aoe_game_ui_chat_ror(&ui, "hi all");
+        assert(strcmp(sent, "hi all") == 0);
+        aoe_game_ui_chat_ror(&ui, "cheat");
+        assert(strcmp(sent, "hi all") == 0 && commands == 3);
+        game.mode = 5;
+        aoe_game_ui_chat_ror(&ui, "late");
+        assert(strcmp(sent, "hi all") == 0);
+        /* An empty Enter, or a press outside, just closes. */
+        q = calloc(1, sizeof(*q));
+        assert(aoe_quick_chat_dialog_init_ror(q, &ui, &screen->panel, 1));
+        assert(strcmp(q->label->lines->text, "S9837") == 0);
+        qp = &q->dialog.ez.panel;
+        qp->vt->mouse_down(qp, 1, 0, 0, 0, 0);
+        assert(!aoe_ui_system_find_ror(&sys, "Send Quick Message Dialog"));
     }
     aoe_ui_system_close_ror(&sys, "Game Screen");
     free(sys.panels);

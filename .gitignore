@@ -38,3 +38,4 @@ __pycache__/
 *.py[cod]
 # Locally supplied Windows Mobile / Pocket PC research material (never commit)
 Windows Mobile AoE/
+.claude/worktrees/

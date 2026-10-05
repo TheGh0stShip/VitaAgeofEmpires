@@ -68,7 +68,8 @@ void aoe_ui_dropdown_release_ror(AoeUiDropdownRor *d);
    wide) showing lines[selected]; the button (draw type 6, notify); the
    list (hover-select, hidden) with `count` lines; the scrollbar beside the
    list (range `count`), then closed. The original also takes an unused
-   argument between the button height and the list width. */
+   argument between the button height and the list width, and four
+   scrollbar picture names it never uses. */
 int aoe_ui_dropdown_setup_ror(
     AoeUiDropdownRor *d, AoeUiAreaRor *area, AoeUiPanelRor *parent,
     uintptr_t font, int32_t font_width, int32_t line_height, int32_t fill,
@@ -82,7 +83,7 @@ void aoe_ui_dropdown_set_state_ror(AoeUiDropdownRor *d, int32_t state);
 /* 0x00461130 text colours; 0x00461150 button side (re-lays out the
    current state); 0x00461180 border; 0x004611c0 bevel (the text maps
    types 2/3/4 to 5/6/7); 0x00461370 the button picture (none: frame -1)
-   and the scrollbar pictures. */
+   and the scrollbar's shape (the same picture) and frames. */
 void aoe_ui_dropdown_set_colors_ror(AoeUiDropdownRor *d, uint32_t color,
                                     uint32_t shadow);
 void aoe_ui_dropdown_set_button_left_ror(AoeUiDropdownRor *d, int32_t left);
@@ -90,9 +91,9 @@ void aoe_ui_dropdown_set_border_ror(AoeUiDropdownRor *d, int32_t border);
 void aoe_ui_dropdown_set_bevel_ror(AoeUiDropdownRor *d, int32_t type,
                                    const uint8_t colors[6]);
 void aoe_ui_dropdown_set_pictures_ror(AoeUiDropdownRor *d, void *picture,
-                                      int16_t frame, void *scroll1,
-                                      void *scroll2, void *scroll3,
-                                      void *scroll4);
+                                      int16_t frame, int32_t scroll1,
+                                      int32_t scroll2, int32_t scroll3,
+                                      int32_t scroll4);
 /* List access (0 / nothing without a list): 0x00461c50 selected line,
    0x00461c70 / 0x00461d50 select (the text follows), 0x00461c80 select by
    ID, 0x00461ce0 / 0x00461eb0 selected text, 0x00461d30 sorted,

@@ -132,13 +132,13 @@ int main(void) {
     assert(d.border == 0 && d.text->border == 0 && d.text->bevel_type == 0);
     /* Pictures: none gives the button frame -1; the scrollbar shares it. */
     {
-        int pic, s1;
-        aoe_ui_dropdown_set_pictures_ror(&d, &pic, 3, &s1, NULL, NULL, NULL);
+        int pic;
+        aoe_ui_dropdown_set_pictures_ror(&d, &pic, 3, -1, 8, 10, 12);
         assert(d.button->button.pictures[0] == &pic &&
                d.button->button.frames[0] == 3 &&
-               d.scrollbar->pictures[0] == &pic &&
-               d.scrollbar->pictures[1] == &s1);
-        aoe_ui_dropdown_set_pictures_ror(&d, NULL, 3, NULL, NULL, NULL, NULL);
+               d.scrollbar->picture == &pic &&
+               d.scrollbar->frames[0] == -1 && d.scrollbar->frames[3] == 12);
+        aoe_ui_dropdown_set_pictures_ror(&d, NULL, 3, 0, 0, 0, 0);
         assert(d.button->button.frames[0] == -1);
     }
     /* The button on the left re-lays out the closed row. */

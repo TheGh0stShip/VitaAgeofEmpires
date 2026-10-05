@@ -18,7 +18,8 @@ typedef struct {
     int32_t range;                /* +0xf8 */
     int32_t line_step, page_step; /* +0xfc, +0x100 */
     int32_t position;             /* +0x104 */
-    void *pictures[5];            /* +0x108..+0x118 */
+    void *picture;                /* +0x108: the parts' shape */
+    int32_t frames[4];            /* +0x10c..+0x118 */
     int32_t field_11c;            /* +0x11c */
     int32_t thumb_size;           /* +0x120 */
     int32_t thumb_y, thumb_min_y, thumb_max_y, grab_y; /* +0x124..+0x130 */
@@ -52,12 +53,13 @@ int aoe_ui_scrollbar_setup_ror(AoeUiScrollbarRor *s, AoeUiAreaRor *area,
 void aoe_ui_scrollbar_place_parts_ror(AoeUiScrollbarRor *s);
 /* 0x00467220 position (the thumb follows; the last position pins the
    vertical thumb to the end), 0x00467310 range and position, 0x00467330
-   pictures, 0x00467370 bevel. */
+   the shape and four frames, 0x00467370 bevel. */
 void aoe_ui_scrollbar_set_position_ror(AoeUiScrollbarRor *s, int32_t position);
 void aoe_ui_scrollbar_set_range_ror(AoeUiScrollbarRor *s, int32_t range,
                                     int32_t position);
-void aoe_ui_scrollbar_set_pictures_ror(AoeUiScrollbarRor *s,
-                                       void *const pictures[5]);
+void aoe_ui_scrollbar_set_pictures_ror(AoeUiScrollbarRor *s, void *picture,
+                                       int32_t frame1, int32_t frame2,
+                                       int32_t frame3, int32_t frame4);
 void aoe_ui_scrollbar_set_bevel_ror(AoeUiScrollbarRor *s, int32_t type,
                                     const uint8_t colors[6]);
 /* 0x00467af0: a scroll request (to the target, or clamp and move). */

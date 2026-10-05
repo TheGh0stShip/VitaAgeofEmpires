@@ -148,13 +148,11 @@ int main(void) {
     assert(h.thumb_x == 52 && h.page_back.right == 51);
     {
         const uint8_t colors[6] = {1, 2, 3, 4, 5, 6};
-        int marks[5];
-        void *const pics[5] = {&marks[0], &marks[1], &marks[2], &marks[3],
-                               &marks[4]};
+        int shape;
         aoe_ui_scrollbar_set_bevel_ror(&h, 3, colors);
-        aoe_ui_scrollbar_set_pictures_ror(&h, pics);
+        aoe_ui_scrollbar_set_pictures_ror(&h, &shape, 9, 8, 7, 5);
         assert(h.bevel_type == 3 && h.bevel[5] == 6 &&
-               h.pictures[4] == &marks[4]);
+               h.picture == &shape && h.frames[3] == 5);
     }
 
     aoe_ui_scrollbar_release_ror(&h);

@@ -474,9 +474,9 @@ void aoe_ui_dropdown_set_bevel_ror(AoeUiDropdownRor *d, int32_t type,
 }
 
 void aoe_ui_dropdown_set_pictures_ror(AoeUiDropdownRor *d, void *picture,
-                                      int16_t frame, void *scroll1,
-                                      void *scroll2, void *scroll3,
-                                      void *scroll4) {
+                                      int16_t frame, int32_t scroll1,
+                                      int32_t scroll2, int32_t scroll3,
+                                      int32_t scroll4) {
     if (!d) return;
     if (d->button) {
         if (picture)
@@ -484,10 +484,9 @@ void aoe_ui_dropdown_set_pictures_ror(AoeUiDropdownRor *d, void *picture,
         else
             aoe_ui_button_set_picture_ror(&d->button->button, 0, NULL, -1);
     }
-    if (d->scrollbar) {
-        void *const pictures[5] = {picture, scroll1, scroll2, scroll3, scroll4};
-        aoe_ui_scrollbar_set_pictures_ror(d->scrollbar, pictures);
-    }
+    if (d->scrollbar)
+        aoe_ui_scrollbar_set_pictures_ror(d->scrollbar, picture, scroll1,
+                                          scroll2, scroll3, scroll4);
 }
 
 /* ---- list access ---- */

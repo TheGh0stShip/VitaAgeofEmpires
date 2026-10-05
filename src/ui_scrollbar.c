@@ -130,9 +130,15 @@ void aoe_ui_scrollbar_set_range_ror(AoeUiScrollbarRor *s, int32_t range,
     aoe_ui_scrollbar_set_position_ror(s, position);
 }
 
-void aoe_ui_scrollbar_set_pictures_ror(AoeUiScrollbarRor *s,
-                                       void *const pictures[5]) {
-    if (s && pictures) memcpy(s->pictures, pictures, sizeof(s->pictures));
+void aoe_ui_scrollbar_set_pictures_ror(AoeUiScrollbarRor *s, void *picture,
+                                       int32_t frame1, int32_t frame2,
+                                       int32_t frame3, int32_t frame4) {
+    if (!s) return;
+    s->picture = picture;
+    s->frames[0] = frame1;
+    s->frames[1] = frame2;
+    s->frames[2] = frame3;
+    s->frames[3] = frame4;
 }
 
 void aoe_ui_scrollbar_set_bevel_ror(AoeUiScrollbarRor *s, int32_t type,

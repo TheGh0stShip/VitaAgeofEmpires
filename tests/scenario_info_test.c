@@ -292,5 +292,17 @@ int main(void) {
         assert(shown.kind_line == 1 && shown.value_line == 2);
         assert(!strcmp(shown.city, "City") && !strcmp(shown.name, "Caesar"));
     }
+    {
+        /* 0x0049a350 player count. */
+        static AoeScenarioObjectRor co;
+        int16_t cur = 6;
+        int sw;
+        assert(aoe_editor_set_player_count_ror(&co, 9, 3, &cur, &sw) == 4);
+        assert(sw && cur == 4);
+        assert(co.value_194c[3] == 1 && co.value_194c[4] == 0 &&
+               co.value_194c[7] == 0);
+        assert(aoe_editor_set_player_count_ror(&co, 9, 7, &cur, &sw) == 8);
+        assert(!sw && cur == 4 && co.value_194c[7] == 1);
+    }
     return 0;
 }

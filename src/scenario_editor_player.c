@@ -59,3 +59,20 @@ int aoe_editor_show_player_ror(const AoeScenarioInfoRor *info,
                                              slot, 0, file_ops);
     return 1;
 }
+
+int32_t aoe_editor_set_player_count_ror(AoeScenarioObjectRor *obj,
+                                        int32_t world_players,
+                                        int32_t count_line,
+                                        int16_t *current_player,
+                                        int *switched) {
+    int32_t n = count_line + 1;
+    if (switched) *switched = 0;
+    if (obj)
+        for (int32_t i = 0; i < world_players - 1; i++)
+            aoe_scenario_set_value_ror(obj->value_194c, i, i < n);
+    if (current_player && n <= *current_player) {
+        *current_player = (int16_t)n;
+        if (switched) *switched = 1;
+    }
+    return n;
+}

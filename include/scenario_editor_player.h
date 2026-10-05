@@ -49,4 +49,18 @@ int aoe_editor_show_player_ror(const AoeScenarioInfoRor *info,
                                const AoeScenarioFileOpsRor *file_ops,
                                AoeEditorPlayerShownRor *out);
 
+/* 0x0049a350: the scenario's player count changed to n = list +0x5b8
+   line + 1. Each slot below the world's player count - 1 gets value_194c
+   (0x00475ad0) slot < n. The player lists +0x73c, +0x740, +0x7cc,
+   +0x894 and +0x5b4 are refilled with strings 0x2865.. (n of them) and
+   +0x618 with 0x2776 then those. When n <= the editor's player the page
+   switches to player n unstored (0x00492780(n, 0, 0)); then +0x73c,
+   +0x7cc, +0x894 and +0x5b4 select line player - 1 and +0x618 line
+   player. Returns n; `switched` reports the 0x00492780 call. */
+int32_t aoe_editor_set_player_count_ror(AoeScenarioObjectRor *obj,
+                                        int32_t world_players,
+                                        int32_t count_line,
+                                        int16_t *current_player,
+                                        int *switched);
+
 #endif

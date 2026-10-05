@@ -887,3 +887,80 @@ int32_t aoe_ai_tactical_collect_surplus_ror(AoeAiTacticalRor *ai,
     }
     return n;
 }
+
+/* ---- Picking units and spots ---- */
+
+int32_t aoe_ai_tactical_pick_unit_ror(const AoeAiTacticalRor *ai,
+                                      const int32_t tile[2], int32_t nearest,
+                                      int32_t skip0, int32_t skip1,
+                                      int32_t skip2, int32_t allow_103,
+                                      const AoeAiTacticalOpsRor *ops) {
+    int32_t i, best = -1;
+    float best_d = 0.0f;
+    if (!ai || !ops || !ops->world_object || !ops->unit_action) return -1;
+    for (i = 0; i < ai->lists[0].count; ++i) {
+        int32_t id = ai->lists[0].data[i], action;
+        AoeAiWorldObjectRor o;
+        double d;
+        if (aoe_ai_int_list_contains_ror(&ai->list_d58, id)) continue;
+        if (!ops->world_object(ops->context, id, &o)) continue;
+        if (!ops->unit_action(ops->context, id, &action)) continue;
+        if (!allow_103 && o.type_id == 0x103) continue;
+        if (action == skip0 || action == skip1 || action == skip2) continue;
+        d = ops->distance ? ops->distance(ops->context, id, (float)tile[0],
+                                          (float)tile[1], o.z)
+                          : 0.0;
+        if (best == -1 || (nearest == 1 && d < (double)best_d) ||
+            (nearest == 0 && (double)best_d < d)) {
+            best = o.id;
+            best_d = (float)d;
+        }
+    }
+    return best;
+}
+
+int aoe_ai_tactical_explore_spot_ror(AoeAiTacticalRor *ai, int32_t unit,
+                                     int32_t out[2],
+                                     const AoeAiTacticalOpsRor *ops,
+                                     AoeAiInfoRor *info,
+                                     const AoeAiInfoOpsRor *info_ops) {
+    static const int8_t dx[8] = {-10, 0, 10, 10, 10, 0, -10, -10};
+    static const int8_t dy[8] = {-10, -10, -10, 0, 10, 10, 10, 0};
+    AoeAiWorldObjectRor u, center;
+    int32_t k, best_x = -1, best_y = -1, center_id;
+    float best = -1.0f;
+    uint8_t zone;
+    (void)ai;
+    if (!ops || !ops->object || !ops->object(ops->context, unit, &u) ||
+        !info || !info_ops || !info_ops->zone || !info_ops->tile_zone)
+        return 0;
+    zone = info_ops->zone(info_ops->context, unit);
+    center_id = ops->first_center ? ops->first_center(ops->context) : -1;
+    if (center_id != -1 && ops->object(ops->context, center_id, &center)) {
+        for (k = 0; k < 8; ++k) {
+            int32_t x = aoe_ftol32(center.x) + dx[k];
+            int32_t y = aoe_ftol32(center.y) + dy[k];
+            double d;
+            if (x < 0 || y < 0) continue;
+            if (x >= aoe_ai_info_map_width_ror(info, info_ops)) continue;
+            if (y >= aoe_ai_info_map_height_ror(info, info_ops)) continue;
+            if (aoe_ai_info_explored_ror(info, x, y, info_ops) == 1) continue;
+            if (info_ops->tile_zone(info_ops->context, unit, x, y) != zone) continue;
+            d = ops->distance ? ops->distance(ops->context, unit, (float)x,
+                                              (float)y, u.z)
+                              : 0.0;
+            if (!(best != -1.0f) || !(d >= (double)best)) {
+                best_x = x;
+                best_y = y;
+                best = (float)d;
+            }
+        }
+        if (best != -1.0f) {
+            out[0] = best_x;
+            out[1] = best_y;
+            aoe_ai_info_forget_tile_ror(info, best_x, best_y, info_ops);
+            return 1;
+        }
+    }
+    return aoe_ai_info_explore_toward_ror(info, unit, out, info_ops) != 0;
+}

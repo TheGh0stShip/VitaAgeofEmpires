@@ -226,6 +226,12 @@ typedef struct {
     void (*player_54)(void *context, int32_t player, int32_t from,
                       int32_t kind, int32_t a, int32_t b, int32_t c);
     int32_t (*rand)(void *context); /* 0x0052605d */
+    /* A unit AI's current action (+0x28); 0 without a unit AI. */
+    int (*unit_action)(void *context, int32_t id, int32_t *action);
+    /* An object's distance to a point (0x004aaf50). */
+    double (*distance)(void *context, int32_t id, float x, float y, float z);
+    /* Our first town centre (0x0040bad0 with type 0x6d), -1 for none. */
+    int32_t (*first_center)(void *context);
 } AoeAiTacticalOpsRor;
 
 /* 0x004dc650: ftol(number 34 / f), at most 99. */
@@ -365,5 +371,26 @@ int32_t aoe_ai_tactical_collect_ungrouped_ror(AoeAiTacticalRor *ai,
                                               int32_t list);
 int32_t aoe_ai_tactical_collect_surplus_ror(AoeAiTacticalRor *ai,
                                             int boats);
+
+/* 0x004d9760: among list 0 units not tasked this round (+0xd58), world
+   objects with a unit AI whose action is none of `skip0..2` (type 0x103
+   only with `allow_103`), the nearest (`nearest` 1) or farthest (0) from
+   tile (x, y) by the unit's distance (kept as a float); -1 for none. */
+int32_t aoe_ai_tactical_pick_unit_ror(const AoeAiTacticalRor *ai,
+                                      const int32_t tile[2], int32_t nearest,
+                                      int32_t skip0, int32_t skip1,
+                                      int32_t skip2, int32_t allow_103,
+                                      const AoeAiTacticalOpsRor *ops);
+/* 0x004e1620: an exploring spot for `unit`: of the eight tiles 10 away
+   from our town centre's truncated tile (clockwise from x-10, y-10), the
+   one inside the information AI's map, unexplored, in the unit's zone and
+   nearest to it; it is cleared in the explored grid and written to
+   `out` (1). Without a centre or such a tile, the information AI's own
+   choice (0x004c3d00). */
+int aoe_ai_tactical_explore_spot_ror(AoeAiTacticalRor *ai, int32_t unit,
+                                     int32_t out[2],
+                                     const AoeAiTacticalOpsRor *ops,
+                                     AoeAiInfoRor *info,
+                                     const AoeAiInfoOpsRor *info_ops);
 
 #endif

@@ -2,6 +2,7 @@
 #include "ai_tactical.h"
 
 #include <assert.h>
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -297,6 +298,74 @@ static void collect_tests(void) {
     aoe_ai_tactical_release_ror(&ai);
 }
 
+static int pobject(void *c, int32_t id, AoeAiWorldObjectRor *o) {
+    (void)c;
+    memset(o, 0, sizeof *o);
+    o->id = id;
+    o->type_id = id == 13 ? 0x103 : 1;
+    o->x = (float)id;
+    o->y = 0.0f;
+    if (id == 50) { o->x = 20.7f; o->y = 20.2f; }
+    return id > 0 && id != 14;
+}
+static int paction(void *c, int32_t id, int32_t *a) { (void)c; *a = id == 12 ? 77 : 0; return id != 15; }
+static double pdist(void *c, int32_t id, float x, float y, float z) {
+    AoeAiWorldObjectRor o; (void)z; pobject(c, id, &o);
+    return sqrt((double)(o.x - x) * (o.x - x) + (double)(o.y - y) * (o.y - y));
+}
+static int32_t pcenter_id = 50;
+static int32_t pcenter(void *c) { (void)c; return pcenter_id; }
+static uint8_t igrid[64][64];
+static int igrid_get(void *c, int32_t x, int32_t y) { (void)c; return igrid[x][y]; }
+static void igrid_set(void *c, int32_t x, int32_t y, int32_t v) { (void)c; igrid[x][y] = (uint8_t)v; }
+static uint8_t izone(void *c, int32_t id) { (void)c; (void)id; return 1; }
+static uint8_t itile_zone(void *c, int32_t id, int32_t x, int32_t y) { (void)c; (void)id; (void)y; return (uint8_t)(x == 30 ? 2 : 1); }
+
+static void pick_tests(void) {
+    static AoeAiTacticalRor ai;
+    static AoeAiInfoRor info;
+    AoeAiTacticalOpsRor ops;
+    AoeAiInfoOpsRor iops;
+    int32_t tile[2] = {0, 0}, out[2] = {-1, -1};
+    memset(&ops, 0, sizeof ops);
+    ops.object = pobject;
+    ops.world_object = pobject;
+    ops.unit_action = paction;
+    ops.distance = pdist;
+    ops.first_center = pcenter;
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[0], 11);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[0], 12);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[0], 13);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[0], 14);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[0], 15);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[0], 16);
+    assert(aoe_ai_tactical_pick_unit_ror(&ai, tile, 1, 77, -9, -9, 0, &ops) == 11);
+    assert(aoe_ai_tactical_pick_unit_ror(&ai, tile, 0, 77, -9, -9, 0, &ops) == 16);
+    assert(aoe_ai_tactical_pick_unit_ror(&ai, tile, 0, 77, -9, -9, 1, &ops) == 16);
+    aoe_ai_int_list_add_unique_ror(&ai.list_d58, 11);
+    assert(aoe_ai_tactical_pick_unit_ror(&ai, tile, 1, -9, -9, -9, 0, &ops) == 12);
+    assert(aoe_ai_tactical_pick_unit_ror(&ai, tile, 1, 0, 77, -9, 1, &ops) == -1);
+
+    /* Exploring from the centre at (20,20): tiles at 10. Unit 25 sits at
+       (25,0): (20,10) is nearest (dist sqrt(125)) but explored; (30,10)
+       is another zone; next is (10,10) vs (30,20)... */
+    memset(&iops, 0, sizeof iops);
+    iops.zone = izone;
+    iops.tile_zone = itile_zone;
+    iops.grid_get = igrid_get;
+    iops.grid_set = igrid_set;
+    info.map_width = info.map_height = 64;
+    memset(igrid, 0xff, sizeof igrid);
+    igrid[20][10] = 1;
+    assert(aoe_ai_tactical_explore_spot_ror(&ai, 25, out, &ops, &info, &iops) == 1);
+    assert(out[0] == 10 && out[1] == 10 && igrid[10][10] == 0);
+    /* No centre: the information AI's choice (nothing remembered: 0). */
+    pcenter_id = -1;
+    assert(aoe_ai_tactical_explore_spot_ror(&ai, 25, out, &ops, &info, &iops) == 0);
+    aoe_ai_tactical_release_ror(&ai);
+}
+
 int main(void) {
     static AoeAiTacticalRor ai, back;
     static uint8_t buf[1 << 16];
@@ -476,6 +545,7 @@ int main(void) {
     member_tests();
     share_tests();
     collect_tests();
+    pick_tests();
     puts("ai tactical ok");
     return 0;
 }

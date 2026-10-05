@@ -376,4 +376,46 @@ void aoe_ai_build_list_retry_ror(AoeAiBuildListRor *list,
                                  int32_t (*count)(void *context, int32_t type, int32_t category),
                                  void *context);
 
+/* RoR build list events (vtable 0x00548acc). 0x004b76f0: types 0x46,
+   0x67 and 0x44 are added to the excluded list when absent (the array
+   grows by one when full), then the text load 0x004088b0. Each event
+   below ends with the hooks given ("then"): 0x004b8f40(object, player
+   arg, unique ID, game ID): the item with the unique ID is no longer in
+   progress, built, with that game ID and one more built; then the
+   player's hook (0x004c8180) and the update (0x004d99f0). 0x004b8fd0:
+   the same without the game ID. 0x004b8c40(game ID): the first built
+   item with that game ID becomes unbuilt (not in progress, game ID -1,
+   no attempts; a 0x114 type clears the owner's +0x122b4); then the
+   update. 0x004b8b40(object, unique ID): the first unbuilt item of the
+   object's type with that unique ID (none for -1) is built with the
+   object's ID, one more built (a 0x114 type sets +0x122b4), its name
+   copied to +0x2a5 and its unique ID to +0x5a8; then the update; always
+   1. 0x004b8a70(object, quiet): a key building (0x004be220) is reported
+   (0x004ba000); unless quiet the first unbuilt item of its type is built
+   the same way (1), else 0. 0x004b8030: the first unbuilt item not in
+   progress and not skipped is skipped when it is not the strategy's
+   value 0xb1 type or not a building: its attempts become value 0x72,
+   skip 1, one more skip cycle, and at value 0x92 cycles a permanent
+   skip. */
+typedef struct {
+    void *context;
+    void (*player_hook)(void *context, int32_t arg);      /* 0x004c8180 */
+    void (*update)(void *context);                        /* 0x004d99f0 */
+    int32_t (*value)(void *context, int32_t id);          /* 0x004d77d0 */
+    int (*key_building)(void *context, int16_t type);     /* 0x004be220 */
+    void (*report_key)(void *context, int32_t object_id); /* 0x004ba000 */
+    int32_t *owner_flag_122b4;
+} AoeAiRorBuildOpsRor;
+int aoe_ai_ror_build_list_load_ror2(AoeAiRorBuildListRor *list, const char *file,
+                                    const char *text, AoeAiObjectFn objects, void *context);
+int aoe_ai_ror_build_done_ror(AoeAiRorBuildListRor *list, const AoeAiRorBuildOpsRor *ops,
+                              int32_t arg, int32_t unique_id, int set_game_id, int32_t game_id);
+int aoe_ai_ror_build_lost_ror(AoeAiRorBuildListRor *list, const AoeAiRorBuildOpsRor *ops,
+                              int32_t game_id);
+int aoe_ai_ror_build_placed_ror(AoeAiRorBuildListRor *list, const AoeAiRorBuildOpsRor *ops,
+                                int32_t object_type, int32_t object_id, int32_t unique_id);
+int aoe_ai_ror_build_object_ror(AoeAiRorBuildListRor *list, const AoeAiRorBuildOpsRor *ops,
+                                int32_t object_type, int32_t object_id, int quiet);
+void aoe_ai_ror_build_skip_ror(AoeAiRorBuildListRor *list, const AoeAiRorBuildOpsRor *ops);
+
 #endif

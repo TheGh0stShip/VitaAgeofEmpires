@@ -1062,3 +1062,121 @@ int aoe_ai_build_list_stop_ror(AoeAiBuildListRor *list, int32_t unique_id) {
     if (item) item->in_progress = 0;
     return 1;
 }
+
+static void exclude(AoeAiBuildListRor *l, int32_t type) {
+    int32_t i;
+    for (i = 0; i < l->excluded_count && i < l->excluded_capacity; ++i)
+        if (l->excluded[i] == type) return;
+    if (l->excluded_capacity - 1 < l->excluded_count) {
+        int32_t n = l->excluded_count + 1;
+        int32_t *grown = malloc((size_t)n * sizeof *grown);
+        if (grown) {
+            for (i = 0; i < l->excluded_capacity && i < n; ++i) grown[i] = l->excluded[i];
+            free(l->excluded);
+            l->excluded = grown;
+            l->excluded_capacity = n;
+        }
+    }
+    /* Host guard: the original writes past a failed growth. */
+    if (l->excluded_count < l->excluded_capacity) l->excluded[l->excluded_count++] = type;
+}
+
+int aoe_ai_ror_build_list_load_ror2(AoeAiRorBuildListRor *list, const char *file,
+                                    const char *text, AoeAiObjectFn objects, void *context) {
+    exclude(&list->base, 0x46);
+    exclude(&list->base, 0x67);
+    exclude(&list->base, 0x44);
+    return aoe_ai_build_list_load_text_ror(&list->base, file, text, objects, context);
+}
+
+#define EACH_ITEM(l, it)                                                                   \
+    for (AoeAiBuildItemRor *it = (l)->base.sentinel.next; it && it != &(l)->base.sentinel; \
+         it = it->next)
+
+static void finish(const AoeAiRorBuildOpsRor *ops) {
+    if (ops && ops->update) ops->update(ops->context);
+}
+
+static void mark_built(AoeAiBuildItemRor *it, int32_t game_id, const AoeAiRorBuildOpsRor *ops) {
+    it->plan.game_id = game_id;
+    it->in_progress = 0;
+    it->built = 1;
+    it->built_count++;
+    if (it->plan.type == 0x114 && ops && ops->owner_flag_122b4) *ops->owner_flag_122b4 = 1;
+}
+
+int aoe_ai_ror_build_done_ror(AoeAiRorBuildListRor *list, const AoeAiRorBuildOpsRor *ops,
+                              int32_t arg, int32_t unique_id, int set_game_id, int32_t game_id) {
+    AoeAiBuildItemRor *it = aoe_ai_build_list_find_ror(&list->base, unique_id);
+    if (it) {
+        it->in_progress = 0;
+        it->built = 1;
+        if (set_game_id) it->plan.game_id = game_id;
+        it->built_count++;
+    }
+    if (ops && ops->player_hook) ops->player_hook(ops->context, arg);
+    finish(ops);
+    return 1;
+}
+
+int aoe_ai_ror_build_lost_ror(AoeAiRorBuildListRor *list, const AoeAiRorBuildOpsRor *ops,
+                              int32_t game_id) {
+    EACH_ITEM(list, it) {
+        if (it->plan.game_id == game_id && it->built == 1) {
+            it->in_progress = 0;
+            it->built = 0;
+            it->plan.game_id = -1;
+            it->build_attempts = 0;
+            if (it->plan.type == 0x114 && ops && ops->owner_flag_122b4) *ops->owner_flag_122b4 = 0;
+            break;
+        }
+    }
+    finish(ops);
+    return 1;
+}
+
+int aoe_ai_ror_build_placed_ror(AoeAiRorBuildListRor *list, const AoeAiRorBuildOpsRor *ops,
+                                int32_t object_type, int32_t object_id, int32_t unique_id) {
+    EACH_ITEM(list, it) {
+        if (it->plan.type == object_type && !it->built && unique_id != -1 &&
+            it->plan.unique_id == unique_id) {
+            mark_built(it, object_id, ops);
+            snprintf(list->base.name_2a5, 64, "%s", it->plan.name);
+            list->base.field_5a8 = it->plan.unique_id;
+            break;
+        }
+    }
+    finish(ops);
+    return 1;
+}
+
+int aoe_ai_ror_build_object_ror(AoeAiRorBuildListRor *list, const AoeAiRorBuildOpsRor *ops,
+                                int32_t object_type, int32_t object_id, int quiet) {
+    if (ops && ops->key_building && ops->key_building(ops->context, (int16_t)object_type) &&
+        ops->report_key)
+        ops->report_key(ops->context, object_id);
+    if (quiet) return 0;
+    EACH_ITEM(list, it) {
+        if (it->plan.type == object_type && !it->built) {
+            mark_built(it, object_id, ops);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+void aoe_ai_ror_build_skip_ror(AoeAiRorBuildListRor *list, const AoeAiRorBuildOpsRor *ops) {
+    EACH_ITEM(list, it) {
+        if (!it->built && !it->in_progress && it->plan.skip != 1) {
+            int32_t want = ops && ops->value ? ops->value(ops->context, 0xb1) : 0;
+            if (it->plan.type != want || it->category != 0) {
+                it->build_attempts = ops && ops->value ? ops->value(ops->context, 0x72) : 0;
+                it->plan.skip = 1;
+                it->skip_cycles++;
+                if (ops && ops->value && it->skip_cycles == ops->value(ops->context, 0x92))
+                    it->permanent_skip = 1;
+                return;
+            }
+        }
+    }
+}

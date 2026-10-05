@@ -33,6 +33,11 @@ static int objects(void *c, int32_t type, const char **name, float *rx,
     return 1;
 }
 
+static int ror_updates, ror_hooks;
+static int32_t ror_flag;
+static void ror_hook(void *c, int32_t a) { (void)c; (void)a; ++ror_hooks; }
+static void ror_update(void *c) { (void)c; ++ror_updates; }
+static int32_t ror_value(void *c, int32_t id) { (void)c; return id == 0xb1 ? 109 : id == 0x72 ? 4 : 2; }
 static int32_t extra_count(void *c, int32_t type) { (void)c; return type == 0x67 ? 10 : 0; }
 static int32_t retry_count(void *c, int32_t type, int32_t category) {
     (void)c; (void)type; (void)category; return 0;
@@ -214,6 +219,32 @@ int main(void) {
         assert(rl.owner == NULL && rl.base.count == 0);
         aoe_ai_ror_build_list_set_owner_ror(&rl, &owner);
         assert(rl.owner == &owner);
+        {
+            /* 0x004b76f0 and the build events. */
+            AoeAiRorBuildOpsRor ro = {NULL, ror_hook, ror_update, ror_value, NULL, NULL, &ror_flag};
+            AoeAiBuildItemRor *a, *b;
+            assert(aoe_ai_ror_build_list_load_ror2(&rl, "ror.ai",
+                                                   "B70 Excluded 1 -1\nB109 House 1 -1\nB12 Barracks 1 -1\n",
+                                                   objects, NULL));
+            assert(rl.base.excluded_count == 3 && rl.base.excluded[0] == 0x46 &&
+                   rl.base.excluded[2] == 0x44);
+            assert(rl.base.count == 2);
+            a = rl.base.sentinel.next;
+            b = a->next;
+            assert(a->plan.type == 109 && b->plan.type == 12);
+            assert(aoe_ai_ror_build_object_ror(&rl, &ro, 12, 500, 0) && b->built && b->plan.game_id == 500);
+            assert(!aoe_ai_ror_build_object_ror(&rl, &ro, 12, 501, 0));
+            assert(aoe_ai_ror_build_lost_ror(&rl, &ro, 500) && !b->built && b->plan.game_id == -1);
+            assert(aoe_ai_ror_build_placed_ror(&rl, &ro, 109, 77, a->plan.unique_id) && a->built);
+            assert(!strcmp(rl.base.name_2a5, "House") && rl.base.field_5a8 == a->plan.unique_id);
+            a->built = 0;
+            assert(aoe_ai_ror_build_done_ror(&rl, &ro, 1, a->plan.unique_id, 1, 88));
+            assert(a->built && a->plan.game_id == 88 && a->built_count == 2 && ror_hooks == 1);
+            /* The first unbuilt item (the barracks) is not the wanted type. */
+            aoe_ai_ror_build_skip_ror(&rl, &ro);
+            assert(b->plan.skip == 1 && b->build_attempts == 4 && b->skip_cycles == 1);
+            assert(ror_updates == 3);
+        }
         aoe_ai_ror_build_list_release_ror(&rl);
     }
 

@@ -99,7 +99,9 @@ static void press(AoeMenuDialogRor *m, int i) {
 }
 
 static char loaded[64], deleted[64];
-static int mp_setups;
+static int mp_setups, scen_saves;
+static char saved_file[64];
+static int save_scen(void *c, const char *f) { (void)c; ++scen_saves; snprintf(saved_file, sizeof saved_file, "%s", f); return 1; }
 static void mp_setup(void *c) { (void)c; ++mp_setups; }
 static const char *idx_name(void *c, int32_t i) { (void)c; return i == 0 ? "Gaul.scn" : i == 1 ? "Egypt.scx" : NULL; }
 static int idx_info(void *c, int32_t id, const char **d, int32_t *f, int32_t *pl) {
@@ -123,7 +125,7 @@ static void list_files(void *c, const char *pat, void (*found)(void *, const cha
         found(u, "beta.scx");
     }
 }
-static int file_exists(void *c, const char *path) { (void)c; return strstr(path, "beta.scn") == NULL; }
+static int file_exists(void *c, const char *path) { (void)c; return strstr(path, "alpha") != NULL || strstr(path, "beta.scx") != NULL; }
 static void delete_file(void *c, const char *path) { (void)c; ++deletes; snprintf(deleted, sizeof deleted, "%s", path); }
 static const char *scen_dir(void *c) { (void)c; return "scen/"; }
 static void editor_load(void *c, const char *f, int32_t flag) { (void)c; (void)flag; snprintf(loaded, sizeof loaded, "%s", f ? f : ""); }
@@ -637,6 +639,28 @@ int main(void) {
         aoe_scenario_editor_idle_ror(&ed);
         aoe_ui_system_close_ror(&sys, "Scenario Editor Screen");
 #undef ed
+    }
+    /* The save screen (scenario mode). */
+    {
+        AoeSaveGameScreenRor *sv = calloc(1, sizeof *sv);
+        AoeUiPanelRor *vp = &sv->ez.panel;
+        ops.save_scenario = save_scen;
+        assert(aoe_save_game_screen_init_ror(sv, &ui, &area, 1, "mine", 0, NULL, -1));
+        assert(aoe_ui_system_find_ror(&sys, "Save Game Screen") == vp);
+        assert(aoe_ui_text_count_ror(&sv->list->text) == 3 && sv->del->hotkey == 0x2e);
+        assert(sv->name);
+        {
+            vp->vt->action(vp, &sv->save->panel, 1, 0, 0);
+            assert(scen_saves == 1 && !strcmp(saved_file, "mine.scx"));
+            aoe_ui_edit_set_text_ror(sv->name, "alpha");
+            vp->vt->action(vp, &sv->save->panel, 1, 0, 0);
+            assert(aoe_ui_system_find_ror(&sys, "YesNoDialog") && scen_saves == 1);
+            deletes = 0;
+            vp->vt->action(vp, aoe_ui_system_find_ror(&sys, "YesNoDialog"), 0, 0, 0);
+            assert(scen_saves == 2 && deletes == 1 && !strcmp(deleted, "scen/alpha.scn"));
+        }
+        vp->vt->action(vp, &sv->cancel->panel, 1, 0, 0);
+        assert(!aoe_ui_system_find_ror(&sys, "Save Game Screen"));
     }
     aoe_ui_system_close_ror(&sys, "Game Screen");
     free(sys.panels);

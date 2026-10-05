@@ -126,6 +126,21 @@ typedef struct {
     int32_t (*game_state)(void *context);
     void (*clear_selection)(void *context);
     void (*set_scenario_player)(void *context, int32_t player, int32_t active);
+    /* Saving: the saved-game directory (game info +0xb12), the first
+       saved-game name (0x005001a0), the status screen with a string
+       (0x00500390), a game save (0x00501250) and a scenario save
+       (0x00501380), nonzero on success; the editor's scenario saved
+       under a file name (0x00475800 then the world's +0xe4; nonzero on
+       success) and its modified flag cleared; the main menu instead of
+       the game (0x00500c60; 0 when it could not be shown). */
+    const char *(*game_dir)(void *context);
+    const char *(*default_save_name)(void *context);
+    void (*show_status)(void *context, int32_t string_id);
+    int (*save_game)(void *context, const char *file);
+    int (*save_scenario)(void *context, const char *file);
+    int (*editor_save_file)(void *context, const char *file);
+    void (*editor_saved)(void *context);
+    int (*to_main_menu)(void *context);
 } AoeGameUiOpsRor;
 
 typedef struct {
@@ -622,5 +637,43 @@ void aoe_scenario_editor_clear_selection_ror(AoeScenarioEditorRor *e);
 void aoe_scenario_editor_set_player_ror(AoeScenarioEditorRor *e, int16_t player, int32_t on);
 void aoe_scenario_editor_show_774_ror(AoeScenarioEditorRor *e, int32_t on);
 int32_t aoe_scenario_editor_idle_ror(AoeScenarioEditorRor *e);
+
+/* The "Save Game Screen" (vtable 0x00547234, 0x0048eca0..0x0048fac0):
+   a name field over the existing saved games (.gam / .gmx in the game
+   directory; mode 0) or scenarios (.scn / .scx in the scenario directory;
+   modes 1 and 2, the second from the editor), Save, Delete (the Delete
+   key, with a yes/no "Cancel Dialog") and Cancel (Escape). Saving an
+   existing name asks first ("YesNoDialog", 9416), which also removes
+   the old .gam / .scn; the file written is the .gmx / .scx. 0x0048eca0
+   constructor (the current screen's popup background; the name given,
+   else the first saved-game name in mode 0; the field holds 80
+   characters, fewer for a long directory); 0x0048f070 destructor
+   (deleting 0x0048f050); 0x0048f120 fills the list; +0x48 0x0048ec80 the
+   base message handler; +0xb8 0x0048f2f0. 0x0048fac0: the editor's save
+   (the status, the scenario saved or 2403, the flag cleared, then by
+   `after`: 1 the main menu, 2 the open screen, 3 a new scenario, else
+   back to the editor). */
+typedef struct {
+    AoeUiEzRor ez;
+    AoeUiTextRor *title;              /* +0x478 */
+    AoeUiEditRor *name;               /* +0x47c */
+    AoeUiListRor *list;               /* +0x480 */
+    AoeUiScrollbarRor *list_bar;      /* +0x484 */
+    AoeUiButtonRor *save;             /* +0x488 */
+    AoeUiButtonRor *cancel;           /* +0x48c */
+    AoeUiButtonRor *del;              /* +0x490 */
+    char file[0x104];                 /* +0x494 */
+    char typed[0x104];                /* +0x598 */
+    int32_t mode;                     /* +0x69c */
+    int32_t after;                    /* +0x6a0 */
+    AoeGameUiRor *ui;
+} AoeSaveGameScreenRor;
+
+extern const AoeUiEzVtblRor aoe_save_game_screen_vtable_ror;
+int aoe_save_game_screen_init_ror(AoeSaveGameScreenRor *s, AoeGameUiRor *ui, AoeUiAreaRor *area,
+                                  int32_t mode, const char *name, int32_t after,
+                                  const char *popup_name, int32_t popup_id);
+void aoe_save_game_screen_fill_ror(AoeSaveGameScreenRor *s);
+void aoe_save_game_screen_editor_save_ror(AoeSaveGameScreenRor *s);
 
 #endif

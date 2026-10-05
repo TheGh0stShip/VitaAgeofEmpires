@@ -418,4 +418,14 @@ int aoe_ai_ror_build_object_ror(AoeAiRorBuildListRor *list, const AoeAiRorBuildO
                                 int32_t object_type, int32_t object_id, int quiet);
 void aoe_ai_ror_build_skip_ror(AoeAiRorBuildListRor *list, const AoeAiRorBuildOpsRor *ops);
 
+/* 0x004b9050(type, cap, position): an item for `type` with its category
+   and producer: buildings (0x2d, 0x31, 0x32, 0x44..0x46, 0x4f, 0x67, 199,
+   0x114, 0x116) as category 0 from -1; units as category 2 from 0x57 (4,
+   5, 0x19, 0x27, 0x29), 0x31 (0xb, 0x23, 0x24, 0x118), 0x2d (0xd, 0xf,
+   0x11..0x13, 0xfa, 0x115), 0x65 (0x25, 0x28, 0x2e, 299), 0xc (0x49,
+   0x4b), 0x6d (0x53), 0 (0x5d) or 0x68 (0x7d); other types 0. Position
+   -1 is after the leading built items; one copy (0x00408d90). */
+int aoe_ai_build_list_add_item_ror(AoeAiBuildListRor *list, AoeAiObjectFn objects,
+                                   void *context, int32_t type, int32_t cap, int32_t position);
+
 #endif

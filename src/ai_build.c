@@ -1180,3 +1180,35 @@ void aoe_ai_ror_build_skip_ror(AoeAiRorBuildListRor *list, const AoeAiRorBuildOp
         }
     }
 }
+
+int aoe_ai_build_list_add_item_ror(AoeAiBuildListRor *list, AoeAiObjectFn objects,
+                                   void *context, int32_t type, int32_t cap, int32_t position) {
+    int32_t category = 2, from;
+    switch (type) {
+    case 4: case 5: case 0x19: case 0x27: case 0x29: from = 0x57; break;
+    case 0xb: case 0x23: case 0x24: case 0x118: from = 0x31; break;
+    case 0xd: case 0xf: case 0x11: case 0x12: case 0x13: case 0xfa: case 0x115: from = 0x2d; break;
+    case 0x25: case 0x28: case 0x2e: case 299: from = 0x65; break;
+    case 0x49: case 0x4b: from = 0xc; break;
+    case 0x53: from = 0x6d; break;
+    case 0x5d: from = 0; break;
+    case 0x7d: from = 0x68; break;
+    case 0x2d: case 0x31: case 0x32: case 0x44: case 0x45: case 0x46: case 0x4f: case 0x67:
+    case 199: case 0x114: case 0x116:
+        category = 0;
+        from = -1;
+        break;
+    default:
+        return 0;
+    }
+    if (position == -1) {
+        const AoeAiBuildItemRor *i = list->sentinel.next;
+        position = 0;
+        while (i != &list->sentinel && i && i->built == 1) {
+            i = i->next;
+            ++position;
+        }
+    }
+    return aoe_ai_build_list_insert_ror(list, objects, context, type, 1, category, from, cap,
+                                        position);
+}

@@ -210,6 +210,20 @@ int main(void) {
         assert(aoe_ai_build_list_stop_ror(&list, r->plan.unique_id) && r->in_progress == 0);
         assert(aoe_ai_build_list_stop_ror(&list, 999));
     }
+    {
+        /* 0x004b9050: categories and producers by type. */
+        AoeAiBuildItemRor *it;
+        int32_t before = list.count;
+        assert(!aoe_ai_build_list_add_item_ror(&list, objects, NULL, 2, 1, 0));
+        assert(aoe_ai_build_list_add_item_ror(&list, objects, NULL, 0x53, 3, 0));
+        for (it = list.sentinel.next; it != &list.sentinel && it->plan.type != 0x53; it = it->next) {
+        }
+        assert(list.count == before + 1 && it->category == 2 && it->build_from == 0x6d && it->cap == 3);
+        assert(aoe_ai_build_list_add_item_ror(&list, objects, NULL, 0x45, 1, 0));
+        for (it = list.sentinel.next; it != &list.sentinel && it->plan.type != 0x45; it = it->next) {
+        }
+        assert(it->category == 0 && it->build_from == -1);
+    }
     aoe_ai_build_list_release_ror(&list);
     assert(log.closes == 1 && !list.excluded);
     {

@@ -2325,3 +2325,79 @@ void aoe_ai_tactical_retarget_trade_ror(AoeAiTacticalRor *ai,
             }
     }
 }
+
+void aoe_ai_tactical_send_gatherers_ror(AoeAiTacticalRor *ai, int32_t first, int32_t count,
+                                        int32_t target, const AoeAiTacticalOpsRor *ops) {
+    AoeAiIntListRor sent;
+    AoeAiWorldObjectRor t;
+    int32_t n, i;
+    if (!ai || !ops || !ops->object || !ops->object(ops->context, target, &t)) return;
+    memset(&sent, 0, sizeof sent);
+    aoe_ai_int_list_add_unique_ror(&sent, first);
+    for (n = 0; n < count; ++n) {
+        int32_t best = -1;
+        float best_d = -1.0f;
+        for (i = 0; i < ai->field_9cc && i < AOE_AI_TAC_GATHERERS; ++i) {
+            int32_t *e = ai->gatherers[i], task, j;
+            AoeAiWorldObjectRor u;
+            double d;
+            for (j = 0; j < sent.count; ++j)
+                if (sent.data[j] == e[0]) break;
+            if (j < sent.count) continue;
+            if (!ops->object(ops->context, e[0], &u) || !ops->unit_task ||
+                !ops->unit_task(ops->context, e[0], &task) || e[1] != 0)
+                continue;
+            d = ops->object_distance ? ops->object_distance(ops->context, e[0], target) : 0.0;
+            if (best_d == -1.0f || d < (double)best_d) {
+                best = e[0];
+                best_d = (float)d;
+            }
+        }
+        if (ops->player_124) ops->player_124(ops->context, best, target, 0, t.x, t.y);
+        aoe_ai_int_list_add_unique_ror(&sent, best);
+    }
+    free(sent.data);
+}
+
+void aoe_ai_tactical_tribute_surplus_ror(AoeAiTacticalRor *ai,
+                                         const AoeAiTacticalOpsRor *ops) {
+    int32_t now, k, p;
+    if (!ai || !ops || ai->sn[186] == -1) return;
+    if (!ops->has_market || !ops->has_market(ops->context)) return;
+    now = ops->game_time ? (int32_t)ops->game_time(ops->context) : 0;
+    if ((now - ai->field_f9c) / 1000 < ai->sn[186]) return;
+    ai->field_f9c = now;
+    if (ops->stats_player && ops->stats_player(ops->context) == 0xff && ops->set_stats_player) {
+        int32_t computers = 0, r;
+        for (p = 1; p < ops->player_count; ++p)
+            if (ops->player_field_4 && ops->player_field_4(ops->context, p) == 1) ++computers;
+        if (ops->player_count > 1 && computers == 1) {
+            ops->set_stats_player(ops->context, (uint8_t)ops->self);
+        } else if (computers > 0) {
+            r = (ops->rand ? ops->rand(ops->context) : 0) % computers + 1;
+            for (p = 1; p < ops->player_count; ++p)
+                if (ops->player_field_4 && ops->player_field_4(ops->context, p) == 1 && --r == 0)
+                    ops->set_stats_player(ops->context, (uint8_t)p);
+        }
+    }
+    for (k = 0; k < 4; ++k) {
+        int32_t have = ops->resource_amount ? ops->resource_amount(ops->context, k) : 0, best = -1;
+        float best_v = 0.0f;
+        if (!(ai->sn[190 + k] < have)) continue;
+        for (p = 1; p < ops->player_count; ++p) {
+            float v;
+            if (p == ops->self || !ops->player_field_4 || !ops->player_field_4(ops->context, p) ||
+                !ops->is_ally || !ops->is_ally(ops->context, p) || !ops->names_us_ally ||
+                !ops->names_us_ally(ops->context, p))
+                continue;
+            v = ops->player_resource ? ops->player_resource(ops->context, p, k) : 0.0f;
+            if (v < (float)(ops->player_3c ? ops->player_3c(ops->context, p, 0xbe + k) : 0) &&
+                (best == -1 || v < best_v)) {
+                best = p;
+                best_v = v;
+            }
+        }
+        if (best != -1 && ops->tribute)
+            ops->tribute(ops->context, best, k, (float)(have - ai->sn[190 + k]));
+    }
+}

@@ -339,6 +339,13 @@ typedef struct {
     int (*build_file_set)(void *context);
     int32_t (*info_field_560)(void *context);
     void (*set_trade)(void *context, int32_t id, int32_t kind);
+    /* The tribe player's market (0x00451370 with 0x54, -1, -1, 0, 2, 0),
+       a player's resource `i` (+0x50) and vtable +0x3c, and our tribute
+       (tribe player +0xf8: to, resource, amount, the fee in resource 46). */
+    int (*has_market)(void *context);
+    float (*player_resource)(void *context, int32_t player, int32_t i);
+    int32_t (*player_3c)(void *context, int32_t player, int32_t value);
+    void (*tribute)(void *context, int32_t to, int32_t resource, float amount);
 } AoeAiTacticalOpsRor;
 
 /* 0x004e0630: in list order, the group with task `task` and +0x180
@@ -631,6 +638,19 @@ void aoe_ai_tactical_insert_builds_ror(AoeAiTacticalRor *ai,
    and has at least that much (0x004f1330). */
 void aoe_ai_tactical_retarget_trade_ror(AoeAiTacticalRor *ai,
                                         const AoeAiTacticalOpsRor *ops);
+/* 0x004e2fe0: `count` times, the food gatherer (entry kind 0) nearest our
+   object `target` that is not `first` nor already sent, with a unit AI,
+   is sent there (tribe player +0x124 with 0 and its x, y), even when none
+   was found (-1). */
+void aoe_ai_tactical_send_gatherers_ror(AoeAiTacticalRor *ai, int32_t first, int32_t count,
+                                        int32_t target, const AoeAiTacticalOpsRor *ops);
+/* 0x004e28b0: tribute of surplus: with number 186 set, a market, and that
+   many seconds since +0xf9c (then reset), the statistics player is chosen
+   when unset (as the computer player's update does); for each resource
+   above our number 190..193, the computer ally that names us ally and is
+   furthest below its own +0x3c(0xbe + resource) gets the surplus. */
+void aoe_ai_tactical_tribute_surplus_ror(AoeAiTacticalRor *ai,
+                                         const AoeAiTacticalOpsRor *ops);
 /* 0x004dc650: ftol(number 34 / f), at most 99. */
 int32_t aoe_ai_tactical_effort_ror(const AoeAiTacticalRor *ai, float f);
 /* 0x004e2f90: +0xd68[i] (0..3, else -1). 0x004e2f30 / 0x004e2f60 /

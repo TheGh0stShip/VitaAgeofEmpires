@@ -904,6 +904,57 @@ static void insert_and_trade_tests(void) {
     aoe_ai_tactical_release_ror(&ai);
 }
 
+static int ts_market(void *c) { (void)c; return 1; }
+static int32_t ts_f4(void *c, int32_t p) { (void)c; return p != 3; }
+static int ts_ally(void *c, int32_t p) { (void)c; return p != 4; }
+static float ts_res(void *c, int32_t p, int32_t i) { (void)c; (void)i; return p == 2 ? 50.0f : 10.0f; }
+static int32_t ts_3c(void *c, int32_t p, int32_t v) { (void)c; (void)p; assert(v >= 0xbe); return 100; }
+static int32_t ts_to = -1, ts_k = -1;
+static float ts_amt;
+static void ts_tribute(void *c, int32_t to, int32_t k, float a) { (void)c; if (ts_to == -1) { ts_to = to; ts_k = k; ts_amt = a; } }
+static uint8_t ts_stats = 1;
+static uint8_t ts_get(void *c) { (void)c; return ts_stats; }
+
+static void surplus_tests(void) {
+    static AoeAiTacticalRor ai;
+    AoeAiTacticalOpsRor ops;
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    memset(&ops, 0, sizeof ops);
+    ops.has_market = ts_market;
+    ops.game_time = ttime;
+    ops.player_count = 5;
+    ops.self = 1;
+    ops.player_field_4 = ts_f4;
+    ops.is_ally = ts_ally;
+    ops.names_us_ally = ts_ally;
+    ops.player_resource = ts_res;
+    ops.player_3c = ts_3c;
+    ops.tribute = ts_tribute;
+    ops.resource_amount = tr_amount;
+    ops.stats_player = ts_get;
+    ai.sn[186] = 10;
+    ai.sn[190] = 40; ai.sn[191] = 1000; ai.sn[192] = 1000; ai.sn[193] = 1000;
+    /* Food 50 > 40: players 2 (50 below 100) and... 3 is not a computer,
+       4 is no ally; 2 gets 10. */
+    aoe_ai_tactical_tribute_surplus_ror(&ai, &ops);
+    assert(ts_to == 2 && ts_k == 0 && ts_amt == 10.0f && ai.field_f9c == 300000);
+    ts_to = -1;
+    aoe_ai_tactical_tribute_surplus_ror(&ai, &ops);
+    assert(ts_to == -1);
+    /* 0x004e2fe0: food gatherers 5, 6 (7 gathers wood); first excluded 5. */
+    ops.object = tobject;
+    ops.unit_task = ttask;
+    ops.object_distance = t_odist;
+    ops.player_124 = t_p124;
+    ai.gatherers[0][0] = 5; ai.gatherers[0][1] = 0;
+    ai.gatherers[1][0] = 6; ai.gatherers[1][1] = 0;
+    ai.gatherers[2][0] = 7; ai.gatherers[2][1] = 1;
+    ai.field_9cc = 3;
+    aoe_ai_tactical_send_gatherers_ror(&ai, 5, 2, 50, &ops);
+    assert(p124_unit == -1 && p124_target == 50);
+    aoe_ai_tactical_release_ror(&ai);
+}
+
 static void scout_tests(void) {
     static AoeAiTacticalRor ai;
     AoeAiTacticalOpsRor ops;
@@ -1347,6 +1398,7 @@ int main(void) {
     upkeep_tests();
     boat_group_tests();
     insert_and_trade_tests();
+    surplus_tests();
 
     aoe_ai_tactical_init_ror(&ai, 3, NULL);
     assert(ai.module.id == 0x3f1 && !strcmp(ai.module.name, "TacAI"));

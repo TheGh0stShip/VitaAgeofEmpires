@@ -100,3 +100,32 @@ int aoe_sprite_instance_reached_ror(const AoeSpriteInstance *instance,
 int aoe_sprite_instance_looped_ror(const AoeSpriteInstance *instance) {
     return instance && instance->kind == 2 && instance->animation.looped;
 }
+
+void aoe_sprite_instance_set_offset_ror(AoeSpriteInstance *instance,
+                                        int32_t x, int32_t y) {
+    if (!instance) return;
+    instance->offset_x = x;
+    instance->offset_y = y;
+}
+
+int16_t aoe_sprite_instance_current_frame_ror(const AoeSpriteInstance *instance) {
+    return instance && instance->kind == 2 ? instance->animation.frame : 0;
+}
+
+int aoe_sprite_instance_playing_ror(const AoeSpriteInstance *instance) {
+    return instance && instance->kind == 2 && instance->graphic &&
+           instance->animation.run_state &&
+           (instance->graphic->sequence_type & 1);
+}
+
+void aoe_sprite_instance_set_frame_ror(AoeSpriteInstance *instance,
+                                       int16_t frame) {
+    if (instance && instance->kind == 2) instance->animation.frame = frame;
+}
+
+void aoe_sprite_instance_restart_ror(AoeSpriteInstance *instance) {
+    if (!instance || instance->kind != 2) return;
+    instance->animation.frame_changed = 1;
+    instance->animation.previous_frame = instance->animation.frame;
+    instance->animation.frame = 0;
+}

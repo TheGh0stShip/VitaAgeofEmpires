@@ -39,6 +39,21 @@ int aoe_sprite_instance_reached_ror(const AoeSpriteInstance *instance,
                                     int16_t frame);
 int aoe_sprite_instance_looped_ror(const AoeSpriteInstance *instance);
 
+/* Patched RoR 1.0a accessors. Static vtable 0x00543030 / animated
+   0x00543078: +0x04 0x00415ac0 sets the draw offset (both kinds); +0x1c
+   frame (animated 0x00416140, static 0x00415c00: 0); +0x20 0x00416150
+   playing (run state set and the sequence animates; static 0x004aa8b0:
+   0); +0x24 0x00416170 sets the frame; +0x38 0x00416220 restarts (marks
+   the frame changed from the current one and goes to frame 0). The
+   animated update +0x0c is 0x00415eb0 (aoe_sprite_animation_tick). */
+void aoe_sprite_instance_set_offset_ror(AoeSpriteInstance *instance,
+                                        int32_t x, int32_t y);
+int16_t aoe_sprite_instance_current_frame_ror(const AoeSpriteInstance *instance);
+int aoe_sprite_instance_playing_ror(const AoeSpriteInstance *instance);
+void aoe_sprite_instance_set_frame_ror(AoeSpriteInstance *instance,
+                                       int16_t frame);
+void aoe_sprite_instance_restart_ror(AoeSpriteInstance *instance);
+
 /* Frame selected for drawing at the supplied graphic angle. */
 int aoe_sprite_instance_frame(const AoeSpriteInstance *instance,
                               uint16_t angle, AoeGraphicFrame *out);

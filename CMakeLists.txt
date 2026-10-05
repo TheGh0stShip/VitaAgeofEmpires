@@ -564,7 +564,7 @@ add_library(aoe_comm_speed STATIC src/frame_timer.c src/comm_speed.c)
 target_include_directories(aoe_comm_speed PUBLIC include)
 target_compile_options(aoe_comm_speed PRIVATE -Wall -Wextra)
 
-add_library(aoe_player_outcome STATIC src/player_outcome.c)
+add_library(aoe_player_outcome STATIC src/player_outcome.c src/achievements_page.c)
 target_include_directories(aoe_player_outcome PUBLIC include)
 target_compile_options(aoe_player_outcome PRIVATE -Wall -Wextra)
 target_link_libraries(aoe_player_update PUBLIC aoe_player_outcome_dispatch)

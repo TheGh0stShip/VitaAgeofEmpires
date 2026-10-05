@@ -1,4 +1,5 @@
 #include "player_outcome.h"
+#include "achievements_page.h"
 
 #include <assert.h>
 #include <string.h>
@@ -92,5 +93,35 @@ int main(void) {
     assert(manager.outcome == 2);
     cumulative[1].next = &cumulative[1];
     assert(!aoe_outcome_recompute(&manager));
+    {
+        /* 0x00478200 achievements pages over an outcome manager. */
+        AoeOutcomeManager am;
+        AoeAchievementsPageRor page;
+        AoeAchievementsCellRor cells[7];
+        AoeOutcomeEvent *e;
+        float attrs[20] = {0};
+        char text[16];
+        memset(&am, 0, sizeof am);
+        e = aoe_outcome_event_add_ror(&am, 0, 0, 0x16, 0, 1, 1);
+        e->contribution_10 = 25;
+        e = aoe_outcome_event_add_ror(&am, 0, 1, 7, 0, 1, 1);
+        e->contribution_10 = 4;
+        e->sample_14 = 62.9f;
+        am.score_sum_1c = 77;
+        attrs[19] = 9.0f;
+        attrs[11] = 2.5f;
+        assert(aoe_achievements_page_ror(0, &page) && page.columns == 7 && page.title_id == 0x26d9);
+        assert(aoe_achievements_page_ror(4, &page) && page.columns == 5 && page.heading[4] == 0x26b5);
+        assert(!aoe_achievements_page_ror(7, &page));
+        assert(aoe_achievements_row_ror(0, &am, attrs, cells));
+        assert(cells[0].value == 25 && cells[1].value == 4 && cells[4].kind == AOE_ACH_CELL_YES);
+        assert(cells[5].kind == AOE_ACH_CELL_EMPTY && cells[6].value == 77);
+        assert(aoe_achievements_row_ror(1, &am, attrs, cells) && cells[2].value == 6);
+        assert(aoe_achievements_row_ror(2, &am, attrs, cells) && cells[3].kind == AOE_ACH_CELL_PERCENT);
+        aoe_achievements_cell_text_ror(&cells[3], "Yes", text, sizeof text);
+        assert(!strcmp(text, "62%") && !strcmp((aoe_achievements_cell_text_ror(&cells[0], "Yes", text, sizeof text), text), "0"));
+        assert(!aoe_achievements_row_ror(5, &am, attrs, cells));
+        aoe_outcome_events_free_ror(&am);
+    }
     return 0;
 }

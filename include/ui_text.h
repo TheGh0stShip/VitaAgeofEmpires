@@ -158,6 +158,22 @@ int aoe_ui_text_set_text_id_ror(AoeUiTextRor *t, int32_t string_id);
    the column-2 offset; 0x0046a760 for row 0. */
 void aoe_ui_text_line_rect_ror(AoeUiTextRor *t, int16_t row, int16_t line,
                                AoeUiRectRor *out, int32_t *column_offset);
+/* Text vtable slots shared with subclasses: +0x0c 0x00468910, +0x14
+   0x004692c0, +0xac 0x004695c0 keys, +0xb8 0x00469690 action, +0xe4
+   0x00468fc0 lines, +0xf0 0x004691e0 bevel. */
+void aoe_ui_text_set_rect_slot_ror(AoeUiPanelRor *p, int32_t x, int32_t y,
+                                   int32_t w, int32_t h);
+void aoe_ui_text_set_active_slot_ror(AoeUiPanelRor *p, int32_t active);
+int32_t aoe_ui_text_key_action_ror(AoeUiPanelRor *p, int32_t key,
+                                   int32_t count, int32_t a, int32_t b,
+                                   int32_t c);
+int32_t aoe_ui_text_action_ror(AoeUiPanelRor *p, AoeUiPanelRor *from,
+                               int32_t code, int32_t value, int32_t extra);
+int aoe_ui_text_lines_slot_ror(AoeUiTextRor *t, const char *const *lines,
+                               int16_t count);
+void aoe_ui_text_bevel_slot_ror(AoeUiTextRor *t, int32_t type,
+                                const uint8_t colors[6]);
+
 /* 0x00468a80: 2 for a double-byte lead byte (callback), 1 for half-width
    katakana 0xa1..0xdf, else 0. */
 int aoe_ui_text_char_kind_ror(const uint8_t *text,

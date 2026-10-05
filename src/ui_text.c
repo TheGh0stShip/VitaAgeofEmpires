@@ -295,7 +295,7 @@ void aoe_ui_text_scroll_ror(AoeUiTextRor *t, uint8_t how, int16_t value,
     redraw(t, 1);
 }
 
-static int32_t key_action(AoeUiPanelRor *p, int32_t key, int32_t count,
+int32_t aoe_ui_text_key_action_ror(AoeUiPanelRor *p, int32_t key, int32_t count,
                           int32_t alt, int32_t ctrl, int32_t shift) {
     AoeUiTextRor *t = T(p);
     uint8_t how;
@@ -314,7 +314,7 @@ static int32_t key_action(AoeUiPanelRor *p, int32_t key, int32_t count,
     return 1;
 }
 
-static int32_t action(AoeUiPanelRor *p, AoeUiPanelRor *from, int32_t code,
+int32_t aoe_ui_text_action_ror(AoeUiPanelRor *p, AoeUiPanelRor *from, int32_t code,
                       int32_t a, int32_t b) {
     AoeUiTextRor *t = T(p);
     if (t->scrollbar && from == t->scrollbar) {
@@ -393,7 +393,7 @@ void aoe_ui_text_set_bevel_ror(AoeUiTextRor *t, int32_t type,
     aoe_ui_text_layout_ror(t, 1);
 }
 
-static void set_bevel_slot(AoeUiTextRor *t, int32_t type, const uint8_t c[6]) {
+void aoe_ui_text_bevel_slot_ror(AoeUiTextRor *t, int32_t type, const uint8_t c[6]) {
     aoe_ui_text_set_bevel_ror(t, type, c);
 }
 
@@ -421,7 +421,7 @@ void aoe_ui_text_set_scrollbar_ror(AoeUiTextRor *t, AoeUiPanelRor *scrollbar,
     }
 }
 
-static void set_rect(AoeUiPanelRor *p, int32_t x, int32_t y, int32_t w, int32_t h) {
+void aoe_ui_text_set_rect_slot_ror(AoeUiPanelRor *p, int32_t x, int32_t y, int32_t w, int32_t h) {
     AoeUiTextRor *t = T(p);
     aoe_ui_panel_set_rect_ror(p, x, y, w, h);
     t->full_width = p->width;
@@ -440,7 +440,7 @@ static void set_rect(AoeUiPanelRor *p, int32_t x, int32_t y, int32_t w, int32_t 
     aoe_ui_text_layout_ror(t, 1);
 }
 
-static void set_active(AoeUiPanelRor *p, int32_t active) {
+void aoe_ui_text_set_active_slot_ror(AoeUiPanelRor *p, int32_t active) {
     AoeUiTextRor *t = T(p);
     aoe_ui_panel_set_active_ror(p, active);
     if (t->has_scrollbar && t->scrollbar)
@@ -615,7 +615,7 @@ int aoe_ui_text_char_kind_ror(const uint8_t *text, int (*dbcs_lead)(uint8_t)) {
     return 0;
 }
 
-static int set_lines_slot(AoeUiTextRor *t, const char *const *l, int16_t n) {
+int aoe_ui_text_lines_slot_ror(AoeUiTextRor *t, const char *const *l, int16_t n) {
     return aoe_ui_text_set_lines_ror(t, l, n);
 }
 
@@ -623,9 +623,9 @@ const AoeUiTextVtblRor aoe_ui_text_vtable_ror = {
     {text_destroy,
      aoe_ui_panel_setup_ror,
      aoe_ui_panel_set_rect_ltrb_ror,
-     set_rect,
+     aoe_ui_text_set_rect_slot_ror,
      aoe_ui_panel_set_color_ror,
-     set_active,
+     aoe_ui_text_set_active_slot_ror,
      aoe_ui_panel_set_position_mode_ror,
      aoe_ui_panel_set_fixed_position_ror,
      aoe_ui_panel_set_redraw_ror,
@@ -657,10 +657,10 @@ const AoeUiTextVtblRor aoe_ui_text_vtable_ror = {
       aoe_ui_panel_no_action_ror, aoe_ui_panel_no_action_ror,
       aoe_ui_panel_no_action_ror, aoe_ui_panel_no_action_ror,
       aoe_ui_panel_no_action_ror, aoe_ui_panel_no_action_ror},
-     key_action,
+     aoe_ui_text_key_action_ror,
      aoe_ui_panel_zero_ror,
      aoe_ui_panel_no_char_action_ror,
-     action,
+     aoe_ui_text_action_ror,
      aoe_ui_panel_get_true_rect_ror,
      aoe_ui_panel_is_inside_ror,
      aoe_ui_panel_set_focus_ror,
@@ -669,8 +669,8 @@ const AoeUiTextVtblRor aoe_ui_text_vtable_ror = {
      aoe_ui_panel_stop_sound_ror,
      aoe_ui_panel_restart_sound_ror,
      aoe_ui_panel_slot_e0_ror},
-    set_lines_slot,
+    aoe_ui_text_lines_slot_ror,
     aoe_ui_text_set_text_id_ror,
     aoe_ui_text_set_text_ror,
-    set_bevel_slot,
+    aoe_ui_text_bevel_slot_ror,
 };

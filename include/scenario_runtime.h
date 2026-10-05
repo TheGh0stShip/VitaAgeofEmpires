@@ -80,7 +80,7 @@ typedef struct {
     int32_t scenario_options[3]; /* scenario-info +0x50f4 (0x005076a0) */
     AoeOutcomeWorldRef outcome_world;
     AoeOutcomePlayerRef *outcome_players[AOE_SCENARIO_RUNTIME_PLAYERS];
-    uint32_t tracker_updates;  /* player +0x840 0x004b0c00 (not modelled) */
+    uint32_t tracker_updates;  /* player +0x840 tracker updates (counted) */
     const DatTechs *techs;     /* tech tree (world +0x104 object) */
     const DatEffects *effects; /* world +0x4c effects */
     /* Optional world hook for upgrades: the +0x184 list's +0x14 retask. */
@@ -121,7 +121,7 @@ int aoe_scenario_runtime_build_ror(
    40 food deduction, the deathmatch stocks, the starting age (3/4/5 ->
    0x004f18a0 steps 25/23/24); then per player resources 32 (population
    limit), 33 (0), 30 (500) and 45 (1), the 23 outcome events of player
-   +0x34 and the +0x840 tracker refresh (0x004f1aa0, counted only). */
+   +0x34 and the +0x840 tracker refresh (counted only). */
 int aoe_scenario_runtime_start_game_ror(AoeScenarioRuntimeRor *runtime);
 
 /* World 0x00520c60 over the runtime's players: flags from player +0x104

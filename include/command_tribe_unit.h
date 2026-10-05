@@ -24,11 +24,11 @@ typedef struct {
     void (*unit_244)(void *context, AoeLiveUnit *unit);
     void (*unit_14c)(void *context, AoeLiveUnit *unit, uint32_t a,
                      uint32_t b);                  /* +0x14c(a, b, 0, 1) */
-    /* 0x004b0870: pick the actor's action-0x6a task for `source` and
-       build the action. */
+    /* The repair order: pick the actor's action-0x6a task for `source`
+       and build the action. */
     void (*repair)(void *context, AoeLiveUnit *unit, AoeLiveUnit *source);
     /* 0x68: world +0x40 player slot is non-null, and unit +0x17c(x, y, 1)
-       (0x004275b0 in action classes, 0x004059f0 = return 0 in others). */
+       (the action classes' point order; the other classes return 0). */
     int (*player_present)(void *context, uint8_t player);
     void (*unit_17c)(void *context, AoeLiveUnit *unit, int32_t x,
                      int32_t y);
@@ -48,8 +48,8 @@ size_t aoe_command_encode_unit_list_ror(uint8_t *out, size_t out_size,
    0x6b: each unit runs +0x14c(+0x04, +0x08, 0, 1).
    0x6d: each unit's word +0x4c (carried resource type) becomes the int16
          at +0x04.
-   0x6e: the source at +0x04 is resolved once; each unit runs 0x004b0870
-         with it.
+   0x6e: the source at +0x04 is resolved once; each unit gets the repair
+         order with it.
    0x6f: each unit runs 0x004ac320, then its own owner's +0x34 receives
          (owner, unit, 0x2d1, unit, owner, x = +0x04, y = +0x08, 0,
          1.0f, 1, 0, 100).

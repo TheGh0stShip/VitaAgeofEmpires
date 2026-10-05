@@ -432,6 +432,39 @@ static int path_n(void *c, int32_t id, int32_t *n) {
 }
 
 static int idle_action(void *c, int32_t id, int32_t *a) { (void)c; (void)id; *a = -1; return 1; }
+static double id_dist(void *c, int32_t id, float x, float y, float z) {
+    (void)c; (void)y; (void)z; return fabs((double)x - (double)id);
+}
+static int32_t amounts[4] = {50, 400, 10, 300};
+static int32_t amount(void *c, int32_t i) { (void)c; return amounts[i]; }
+static void costs4(void *c, AoeAiCountersRor *k, int32_t limit) {
+    (void)c;
+    assert(limit == 7);
+    aoe_ai_counters_set_ror(k, 0, 100);
+    aoe_ai_counters_set_ror(k, 1, 0);
+    aoe_ai_counters_set_ror(k, 2, 20);
+    aoe_ai_counters_set_ror(k, 3, 100);
+}
+
+static void gather_order_tests(void) {
+    static AoeAiTacticalRor ai;
+    AoeAiTacticalOpsRor ops;
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    memset(&ops, 0, sizeof ops);
+    ops.build_costs = costs4;
+    ops.resource_amount = amount;
+    ai.sn[147] = 7;
+    ai.sn[190] = ai.sn[191] = ai.sn[192] = 1000;
+    ai.sn[193] = 200;
+    /* Surpluses: food -50, wood 400, stone -10, gold 200. Wanted (cost and
+       below the cap): food, stone; then the rest by surplus. */
+    aoe_ai_tactical_gather_order_ror(&ai, &ops);
+    assert(ai.field_d98[0] == -50 && ai.field_d98[1] == 400 && ai.field_d98[2] == -10 &&
+           ai.field_d98[3] == 200);
+    assert(ai.field_d88[0] == 0 && ai.field_d88[1] == 2 && ai.field_d88[2] == 3 &&
+           ai.field_d88[3] == 1);
+    aoe_ai_tactical_release_ror(&ai);
+}
 
 static void removed_and_path_tests(void) {
     static AoeAiTacticalRor ai;
@@ -489,6 +522,18 @@ static void removed_and_path_tests(void) {
     assert(aoe_ai_tactical_idle_villager_ror(&ai, 1, &ops) == 901);
     aoe_ai_int_list_add_unique_ror(&ai.lists[0], 902);
     assert(aoe_ai_tactical_idle_villager_ror(&ai, 2, &ops) == 902);
+    {
+        /* 0x004d93a0: 902 is free outright; without it, mode 0 picks the
+           nearest / farthest of 900..902 from x = 902. */
+        int32_t pt[2] = {902, 0};
+        ops.distance = id_dist;
+        assert(aoe_ai_tactical_villager_near_ror(&ai, 2, pt, 1, &ops) == 902);
+        aoe_ai_int_list_remove_ror(&ai.lists[0], 902);
+        assert(aoe_ai_tactical_villager_near_ror(&ai, 2, pt, 1, &ops) == -1);
+        assert(aoe_ai_tactical_villager_near_ror(&ai, 0, pt, 1, &ops) == 901);
+        assert(aoe_ai_tactical_villager_near_ror(&ai, 0, pt, 0, &ops) == 900);
+        assert(aoe_ai_tactical_villager_near_ror(&ai, 1, pt, 0, &ops) == 901);
+    }
     aoe_ai_tactical_release_ror(&ai);
 }
 
@@ -538,6 +583,7 @@ int main(void) {
     nearest_group_tests();
     step_and_added_tests();
     removed_and_path_tests();
+    gather_order_tests();
 
     aoe_ai_tactical_init_ror(&ai, 3, NULL);
     assert(ai.module.id == 0x3f1 && !strcmp(ai.module.name, "TacAI"));

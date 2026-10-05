@@ -1203,3 +1203,81 @@ int32_t aoe_ai_tactical_idle_villager_ror(AoeAiTacticalRor *ai, int32_t mode,
     }
     return -1;
 }
+
+/* The villager filter of 0x004d90b0 / 0x004d93a0 for one entry; the
+   object goes to `o`. */
+static int villager_ok(AoeAiTacticalRor *ai, int32_t id, int pass, int32_t mode,
+                       const AoeAiTacticalOpsRor *ops, AoeAiWorldObjectRor *o) {
+    int32_t task;
+    if (aoe_ai_int_list_contains_ror(&ai->list_d58, id)) return 0;
+    if (!ops->world_object(ops->context, id, o) || !ops->unit_task(ops->context, id, &task))
+        return 0;
+    if (pass == 0 || mode != 0) {
+        if ((pass == 0 || mode != 3) && aoe_ai_tactical_has_gatherer_ror(ai, id)) return 0;
+        if ((pass == 0 || mode != 1) && aoe_ai_int_list_contains_ror(&ai->lists[1], id))
+            return 0;
+    }
+    return villager_idle(ops, id);
+}
+
+int32_t aoe_ai_tactical_villager_near_ror(AoeAiTacticalRor *ai, int32_t mode,
+                                          const int32_t pt[2], int32_t nearest,
+                                          const AoeAiTacticalOpsRor *ops) {
+    int32_t i, *v, best = -1;
+    float best_d = 0.0f;
+    AoeAiWorldObjectRor o;
+    if (!ai || !ops || !ops->world_object || !ops->unit_task) return -1;
+    for (i = 0; i < ai->lists[0].count; ++i)
+        if ((v = aoe_ai_int_list_at_ror(&ai->lists[0], i)) &&
+            villager_ok(ai, *v, 0, mode, ops, &o))
+            return o.id;
+    for (i = 0; i < ai->lists[0].count; ++i) {
+        double d;
+        if (!(v = aoe_ai_int_list_at_ror(&ai->lists[0], i)) ||
+            !villager_ok(ai, *v, 1, mode, ops, &o))
+            continue;
+        d = ops->distance ? ops->distance(ops->context, o.id, (float)pt[0], (float)pt[1], o.z)
+                          : 0.0;
+        if (best == -1 || (nearest == 1 && d < (double)best_d) ||
+            (nearest == 0 && (double)best_d < d)) {
+            best = o.id;
+            best_d = (float)d;
+        }
+    }
+    return best;
+}
+
+void aoe_ai_tactical_gather_order_ror(AoeAiTacticalRor *ai,
+                                      const AoeAiTacticalOpsRor *ops) {
+    int32_t picked[4] = {0}, order[4], value[4], round, i;
+    if (!ai || !ops) return;
+    if (ops->build_costs) ops->build_costs(ops->context, &ai->counters, ai->sn[147]);
+    for (i = 0; i < 4; ++i)
+        ai->field_d98[i] = (ops->resource_amount ? ops->resource_amount(ops->context, i) : 0) -
+                           aoe_ai_counters_get_ror(&ai->counters, i);
+    for (round = 0; round < 4; ++round) {
+        int32_t best = -1, best_v = 0x7fffffff;
+        for (i = 0; i < 4; ++i) {
+            int32_t have = ops->resource_amount ? ops->resource_amount(ops->context, i) : 0;
+            if (!(have < ai->sn[190 + i])) continue;
+            if (aoe_ai_counters_get_ror(&ai->counters, i) > 0 &&
+                (best == -1 || ai->field_d98[i] < best_v) && !picked[i]) {
+                best_v = ai->field_d98[i];
+                best = i;
+            }
+        }
+        if (best == -1)
+            for (i = 0; i < 4; ++i)
+                if ((best == -1 || ai->field_d98[i] < best_v) && !picked[i]) {
+                    best_v = ai->field_d98[i];
+                    best = i;
+                }
+        picked[best] = 1;
+        order[round] = best;
+        value[round] = best_v;
+    }
+    for (i = 0; i < 4; ++i) {
+        ai->field_d88[i] = order[i];
+        ai->field_d98[order[i]] = value[i];
+    }
+}

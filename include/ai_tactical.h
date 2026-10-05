@@ -242,6 +242,10 @@ typedef struct {
     /* A unit AI's path (0x00458400 cursor, 0x00458340 count): the
        waypoint count, 0 when the cursor is -1. */
     int (*path_count)(void *context, int32_t id, int32_t *count);
+    /* The Build AI's pending costs (0x004b8960 into `costs`, at most
+       `limit` items) and the Resource AI's amount `i` (0x004c8c60). */
+    void (*build_costs)(void *context, AoeAiCountersRor *costs, int32_t limit);
+    int32_t (*resource_amount)(void *context, int32_t i);
 } AoeAiTacticalOpsRor;
 
 /* 0x004e0630: in list order, the group with task `task` and +0x180
@@ -295,6 +299,21 @@ int32_t aoe_ai_tactical_collect_support_ror(AoeAiTacticalRor *ai, int32_t n,
    a gatherer, others neither. Its ID, else -1. */
 int32_t aoe_ai_tactical_idle_villager_ror(AoeAiTacticalRor *ai, int32_t mode,
                                           const AoeAiTacticalOpsRor *ops);
+/* 0x004d93a0: like 0x004d90b0's first pass; failing it, among the idle
+   villagers allowed by `mode`, the nearest to `pt` (`nearest` 1) or the
+   farthest (0) by distance from its height (the first on ties). -1 for
+   none. */
+int32_t aoe_ai_tactical_villager_near_ror(AoeAiTacticalRor *ai, int32_t mode,
+                                          const int32_t pt[2], int32_t nearest,
+                                          const AoeAiTacticalOpsRor *ops);
+/* 0x004d99f0: the gathering order. The pending build costs (up to number
+   147 items) fill the counters (+0xda8); each resource's surplus
+   (+0xd98) is its amount less that cost. Four times the resource with
+   the smallest surplus is picked among those not yet picked, with a cost
+   and an amount below its number 190..193; failing that among all left.
+   +0xd88 lists them in order. */
+void aoe_ai_tactical_gather_order_ror(AoeAiTacticalRor *ai,
+                                      const AoeAiTacticalOpsRor *ops);
 /* 0x004dc650: ftol(number 34 / f), at most 99. */
 int32_t aoe_ai_tactical_effort_ror(const AoeAiTacticalRor *ai, float f);
 /* 0x004e2f90: +0xd68[i] (0..3, else -1). 0x004e2f30 / 0x004e2f60 /

@@ -715,6 +715,86 @@ int32_t aoe_ai_tactical_pick_leader_ror(const AoeAiTacticalRor *ai,
     return leader;
 }
 
+int32_t aoe_ai_tactical_pick_leader_ids_ror(const AoeAiTacticalRor *ai,
+                                            const AoeAiIntListRor *ids,
+                                            const AoeAiTacticalOpsRor *ops) {
+    int32_t i, best = -1, leader = -1, mode = ai->sn[75];
+    if (!ids || !ops || !ops->object) return -1;
+    for (i = 0; i < ids->count; ++i) {
+        int32_t id = ids->data[i], v;
+        AoeAiWorldObjectRor o;
+        if (!ops->object(ops->context, id, &o) || o.type_id == 0x7d) continue;
+        v = aoe_ftol32(mode == 2 ? (ops->range ? ops->range(ops->context, id) : 0.0)
+                                 : (double)o.hp);
+        if (mode == 1 || mode == 3) {
+            if (best != -1 && !(v < best)) continue;
+        } else if (best != -1 && !(best < v)) {
+            continue;
+        }
+        leader = id;
+        best = v;
+    }
+    return leader;
+}
+
+int aoe_ai_tactical_order_2bd_ror(AoeAiTacticalRor *ai, int32_t unit,
+                                  int32_t target, float d, int32_t value,
+                                  const AoeAiTacticalOpsRor *ops) {
+    aoe_ai_int_list_add_unique_ror(&ai->list_d58, unit);
+    return send_order(ops, unit, 0x2bd, target, -1, -1.0f, -1.0f, -1.0f, d,
+                      value);
+}
+
+int aoe_ai_tactical_order_2cd_ror(AoeAiTacticalRor *ai, int32_t unit,
+                                  int32_t target,
+                                  const AoeAiTacticalOpsRor *ops) {
+    if (unit == -1) return 0;
+    aoe_ai_int_list_add_unique_ror(&ai->list_d58, unit);
+    return send_order(ops, unit, 0x2cd, target, ops ? ops->self : 0, -1.0f,
+                      -1.0f, -1.0f, 1.0f, 100);
+}
+
+void aoe_ai_tactical_share_with_allies_ror(AoeAiTacticalRor *ai, int32_t a,
+                                           int32_t b, int32_t c,
+                                           const AoeAiTacticalOpsRor *ops) {
+    int32_t now, p, count = 0;
+    uint8_t stats;
+    if (ai->sn[196] != 1 || !ops || !ops->game_time || !ops->player_field_4 ||
+        !ops->stats_player)
+        return;
+    now = (int32_t)ops->game_time(ops->context);
+    if ((now - ai->field_fa0) / 1000 < ai->sn[197]) return;
+    ai->field_fa0 = now;
+    stats = ops->stats_player(ops->context);
+    if (stats == 0xff) {
+        for (p = 1; p < ops->player_count; ++p)
+            if (ops->player_field_4(ops->context, p) == 1) ++count;
+        if (count == 1) {
+            stats = (uint8_t)ops->self;
+            if (ops->set_stats_player) ops->set_stats_player(ops->context, stats);
+        } else if (count > 0) {
+            /* The original divides by the count unchecked. */
+            int32_t pick = (ops->rand ? ops->rand(ops->context) : 0) % count + 1;
+            for (p = 1; p < ops->player_count; ++p) {
+                if (ops->player_field_4(ops->context, p) == 1 && --pick == 0) {
+                    stats = (uint8_t)p;
+                    if (ops->set_stats_player)
+                        ops->set_stats_player(ops->context, stats);
+                }
+            }
+        }
+    }
+    for (p = 1; p < ops->player_count; ++p) {
+        if (p == ops->self || !ops->player_field_4(ops->context, p)) continue;
+        if (!ops->is_ally || !ops->is_ally(ops->context, p)) continue;
+        if (!ops->names_us_ally || !ops->names_us_ally(ops->context, p)) continue;
+        if ((ops->self < p && p != stats) || ops->self == stats) {
+            if (ops->player_54)
+                ops->player_54(ops->context, p, ops->self, 2, a, b, c);
+        }
+    }
+}
+
 int aoe_ai_tactical_explored_enough_ror(const AoeAiTacticalRor *ai,
                                         const AoeAiTacticalOpsRor *ops) {
     double share;

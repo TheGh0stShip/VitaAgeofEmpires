@@ -202,6 +202,69 @@ static void member_tests(void) {
     aoe_ai_tactical_release_ror(&ai);
 }
 
+static int32_t pf4(void *c, int32_t p) { (void)c; return p == 2 || p == 4 || p == 5 ? 1 : 0; }
+static int s_ally(void *c, int32_t p) { (void)c; return p != 5; }
+static int s_names(void *c, int32_t p) { (void)c; return p != 5; }
+static uint8_t stats_p = 0xff;
+static uint8_t s_stats(void *c) { (void)c; return stats_p; }
+static void s_set_stats(void *c, uint8_t p) { (void)c; stats_p = p; }
+static int32_t sent_to[8], sent_n;
+static void s54(void *c, int32_t p, int32_t from, int32_t k, int32_t a, int32_t b, int32_t cc) {
+    (void)c; assert(from == 2 && k == 2 && a == 7 && b == 8 && cc == 9); sent_to[sent_n++] = p;
+}
+static int32_t s_rand(void *c) { (void)c; return 4; }
+
+static void share_tests(void) {
+    static AoeAiTacticalRor ai;
+    AoeAiTacticalOpsRor ops;
+    AoeAiIntListRor ids = {0};
+
+    memset(&ops, 0, sizeof ops);
+    ops.self = 2;
+    ops.object = tobject;
+    ops.order = order;
+    ops.game_time = ttime;
+    ops.player_count = 6;
+    ops.player_field_4 = pf4;
+    ops.is_ally = s_ally;
+    ops.names_us_ally = s_names;
+    ops.stats_player = s_stats;
+    ops.set_stats_player = s_set_stats;
+    ops.player_54 = s54;
+    ops.rand = s_rand;
+    ops.range = trange;
+    aoe_ai_tactical_init_ror(&ai, 2, NULL);
+
+    aoe_ai_int_list_add_unique_ror(&ids, 950);
+    aoe_ai_int_list_add_unique_ror(&ids, 977);
+    assert(aoe_ai_tactical_pick_leader_ids_ror(&ai, &ids, &ops) == 977);
+    aoe_ai_int_list_release_ror(&ids);
+
+    assert(aoe_ai_tactical_order_2bd_ror(&ai, 5, 6, 2.5f, 3, &ops) && ai.list_d58.count == 1 &&
+           last_order.action == 0x2bd && last_order.d == 2.5f && last_order.a == -1.0f &&
+           last_order.value == 3);
+    assert(!aoe_ai_tactical_order_2cd_ror(&ai, -1, 6, &ops));
+    assert(aoe_ai_tactical_order_2cd_ror(&ai, 5, 6, &ops) && ai.list_d58.count == 1 &&
+           last_order.action == 0x2cd && last_order.target2 == 2 && last_order.d == 1.0f &&
+           last_order.value == 100);
+
+    /* Three computer players (2, 4, 5): rand 4 % 3 + 1 = 2nd, player 4. Player
+       5 is no ally; 4 is above us but the statistics player: nothing sent. */
+    ai.sn[196] = 1;
+    ai.sn[197] = 10;
+    tnow = 20000;
+    aoe_ai_tactical_share_with_allies_ror(&ai, 7, 8, 9, &ops);
+    assert(stats_p == 4 && sent_n == 0 && ai.field_fa0 == 20000);
+    tnow = 25000;
+    stats_p = 2;
+    aoe_ai_tactical_share_with_allies_ror(&ai, 7, 8, 9, &ops);
+    assert(sent_n == 0 && ai.field_fa0 == 20000);
+    tnow = 30000;
+    aoe_ai_tactical_share_with_allies_ror(&ai, 7, 8, 9, &ops);
+    assert(sent_n == 1 && sent_to[0] == 4);
+    aoe_ai_tactical_release_ror(&ai);
+}
+
 int main(void) {
     static AoeAiTacticalRor ai, back;
     static uint8_t buf[1 << 16];
@@ -379,6 +442,7 @@ int main(void) {
     assert(aoe_ai_tactical_delete_groups_ror(&ai, 0x6d) && ai.groups_len == 1);
     aoe_ai_tactical_release_ror(&ai);
     member_tests();
+    share_tests();
     puts("ai tactical ok");
     return 0;
 }

@@ -213,6 +213,19 @@ typedef struct {
     uint32_t (*game_time)(void *context);
     /* Unit vtable +0x10c (range). */
     double (*range)(void *context, int32_t id);
+    /* World players (+0x3c +0x3c), a player's +4 (0x00454150), our
+       vtable +0x1c (ally) toward it, its vtable +0x1c toward us, the
+       world's statistics player byte (+0x11d, 0xff unset), and that
+       player's vtable +0x54 with our index, 2 and three values. */
+    int16_t player_count;
+    int32_t (*player_field_4)(void *context, int32_t player);
+    int (*is_ally)(void *context, int32_t player);
+    int (*names_us_ally)(void *context, int32_t player);
+    uint8_t (*stats_player)(void *context);
+    void (*set_stats_player)(void *context, uint8_t player);
+    void (*player_54)(void *context, int32_t player, int32_t from,
+                      int32_t kind, int32_t a, int32_t b, int32_t c);
+    int32_t (*rand)(void *context); /* 0x0052605d */
 } AoeAiTacticalOpsRor;
 
 /* 0x004dc650: ftol(number 34 / f), at most 99. */
@@ -300,6 +313,30 @@ void aoe_ai_tactical_settle_groups_ror(AoeAiTacticalRor *ai,
 int32_t aoe_ai_tactical_pick_leader_ror(const AoeAiTacticalRor *ai,
                                         const AoeAiUnitGroupRor *group,
                                         const AoeAiTacticalOpsRor *ops);
+/* 0x004e1200: the same choice over an ID list. */
+int32_t aoe_ai_tactical_pick_leader_ids_ror(const AoeAiTacticalRor *ai,
+                                            const AoeAiIntListRor *ids,
+                                            const AoeAiTacticalOpsRor *ops);
+/* 0x004db9f0: the unit joins the tasked list (+0xd58, once) and is
+   ordered to action 0x2bd on `target` (-1 x3 then `d`, value).
+   0x004dc310: the same with action 0x2cd, our index as second target,
+   -1 x3 then 1.0 and value 100; -1 refused (0). Both return 1. */
+int aoe_ai_tactical_order_2bd_ror(AoeAiTacticalRor *ai, int32_t unit,
+                                  int32_t target, float d, int32_t value,
+                                  const AoeAiTacticalOpsRor *ops);
+int aoe_ai_tactical_order_2cd_ror(AoeAiTacticalRor *ai, int32_t unit,
+                                  int32_t target,
+                                  const AoeAiTacticalOpsRor *ops);
+/* 0x004e2cd0: with number 196 at 1 and number 197 seconds since +0xfa0
+   (then reset to now): an unset statistics player becomes us when we are
+   the only player with +4 equal to 1, else the (rand() % that count +
+   1)-th such player; then every other player with +4 set, that we and
+   that name each other allies, receives its vtable +0x54 call (ours, 2,
+   a, b, c) when its index is above ours and not the statistics player,
+   or when we are the statistics player. */
+void aoe_ai_tactical_share_with_allies_ror(AoeAiTacticalRor *ai, int32_t a,
+                                           int32_t b, int32_t c,
+                                           const AoeAiTacticalOpsRor *ops);
 /* 0x004e1cb0: number 167 is not positive, or the explored share * 100
    (truncated) reaches it. */
 int aoe_ai_tactical_explored_enough_ror(const AoeAiTacticalRor *ai,

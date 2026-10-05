@@ -94,6 +94,21 @@ def load_matches():
     return maps
 
 
+MARKER = re.compile(
+    r"(base|empires\.exe|1\.0c|disc|ror|rise of rome|empiresx\.exe|1\.0a)",
+    re.I)
+BASE_MARKERS = ("base", "empires.exe", "1.0c", "disc")
+
+
+def cites_base(text, pos):
+    """Is the citation at `pos` marked as a base-game address? The nearest
+    revision word earlier on the same line (within 48 characters) decides."""
+    line_start = text.rfind("\n", 0, pos) + 1
+    window = text[max(line_start, pos - 48):pos]
+    found = MARKER.findall(window)
+    return bool(found) and found[-1].lower() in BASE_MARKERS
+
+
 def load_citations(starts):
     known = set(starts)
     maps = load_matches()
@@ -111,6 +126,12 @@ def load_citations(starts):
                     a = int(m.group(1), 16)
                     if a in known:
                         cited[a].add(rel)
+                    # Only an address marked as a base-game one ("base",
+                    # "EMPIRES.EXE", "1.0c", "disc") goes through the
+                    # cross-revision maps; a RoR address that happens to
+                    # be a valid base address must not cite its match.
+                    if not cites_base(text, m.start()):
+                        continue
                     for name, mp in maps.items():
                         b = mp.get(a)
                         if b in known:

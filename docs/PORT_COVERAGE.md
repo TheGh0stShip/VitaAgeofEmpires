@@ -12,7 +12,10 @@ mapping, `tools/revision_match.py`.
   to the next function start, padding included.
 - **Cited.** A function's start address appears in `src/` or `include/`.
   Disc-RoR and patched-base-1.0c addresses count through
-  `tools/revision_match.py`:
+  `tools/revision_match.py` only when marked as such: the nearest revision
+  word earlier on the line ("base", "EMPIRES.EXE", "1.0c", "disc" against
+  "RoR", "EMPIRESX.EXE", "1.0a") must be a base one. Unmarked addresses
+  are patched RoR 1.0a. The maps use:
   - exact matches of normalized instructions, kept in link order as
     anchors;
   - between anchors, mutual best instruction-multiset matches (similarity
@@ -23,36 +26,40 @@ mapping, `tools/revision_match.py`.
   estimate, not proof of translation. Original-behaviour claims still need
   evidence and tests.
 
-## Snapshot (2026-10-04, UI panels, random-map generator, panel system, net lists)
+## Snapshot (2026-10-04, after the mapped-citation fix)
 
-Comments that only named an untranslated callee were removed on this date,
-so earlier snapshots overstate coverage slightly.
+Until this date every cited RoR address was also looked up as a base-game
+address, so a RoR address that happened to start a base function counted
+that function's RoR match as well. About 190 functions were counted only
+that way; earlier snapshots (41.6% on 2026-10-04 and before) overstate
+coverage. Comments that only named an untranslated callee were also
+removed on this date.
 
-Patched RoR 1.0a game code: 1876/4510 functions cited (41.6%), 356349/1195664 bytes (29.8%)
+Patched RoR 1.0a game code: 1978/4510 functions cited (43.9%), 365289/1195664 bytes (30.6%)
 Excluded: assembly module 32 functions, C runtime 1308 functions
-Ready now (all callees cited): 1187
+Ready now (all callees cited): 1132
 
 | Region | Functions | Cited | Bytes | Cited bytes |
 | --- | ---: | ---: | ---: | ---: |
-| 0x00400000 | 405 | 331 (82%) | 62192 | 47792 (77%) |
-| 0x00410000 | 392 | 165 (42%) | 64992 | 11520 (18%) |
-| 0x00420000 | 330 | 120 (36%) | 65520 | 19168 (29%) |
-| 0x00430000 | 258 | 21 (8%) | 65392 | 5728 (9%) |
-| 0x00440000 | 219 | 70 (32%) | 65568 | 30576 (47%) |
-| 0x00450000 | 388 | 274 (71%) | 65525 | 45237 (69%) |
-| 0x00460000 | 322 | 261 (81%) | 66699 | 54704 (82%) |
+| 0x00400000 | 405 | 318 (79%) | 62192 | 46480 (75%) |
+| 0x00410000 | 392 | 160 (41%) | 64992 | 10544 (16%) |
+| 0x00420000 | 330 | 117 (35%) | 65520 | 19856 (30%) |
+| 0x00430000 | 258 | 117 (45%) | 65392 | 23408 (36%) |
+| 0x00440000 | 219 | 56 (26%) | 65568 | 21680 (33%) |
+| 0x00450000 | 388 | 334 (86%) | 65525 | 55397 (85%) |
+| 0x00460000 | 322 | 270 (84%) | 66699 | 56624 (85%) |
 | 0x00470000 | 163 | 34 (21%) | 65392 | 14496 (22%) |
-| 0x00480000 | 137 | 1 (1%) | 64848 | 208 (0%) |
-| 0x00490000 | 117 | 1 (1%) | 65536 | 864 (1%) |
-| 0x004a0000 | 269 | 121 (45%) | 65152 | 25888 (40%) |
-| 0x004b0000 | 205 | 87 (42%) | 69200 | 25376 (37%) |
-| 0x004c0000 | 178 | 46 (26%) | 63280 | 4688 (7%) |
+| 0x00480000 | 137 | 2 (1%) | 64848 | 256 (0%) |
+| 0x00490000 | 117 | 10 (9%) | 65536 | 3840 (6%) |
+| 0x004a0000 | 269 | 155 (58%) | 65152 | 35344 (54%) |
+| 0x004b0000 | 205 | 73 (36%) | 69200 | 22224 (32%) |
+| 0x004c0000 | 178 | 45 (25%) | 63280 | 3264 (5%) |
 | 0x004d0000 | 71 | 0 (0%) | 64112 | 0 (0%) |
-| 0x004e0000 | 300 | 91 (30%) | 65584 | 20648 (31%) |
-| 0x004f0000 | 174 | 18 (10%) | 65744 | 3824 (6%) |
-| 0x00500000 | 302 | 174 (58%) | 65392 | 24672 (38%) |
-| 0x00510000 | 191 | 38 (20%) | 65792 | 15648 (24%) |
-| 0x00520000 | 89 | 23 (26%) | 19744 | 5312 (27%) |
+| 0x004e0000 | 300 | 89 (30%) | 65584 | 19460 (30%) |
+| 0x004f0000 | 174 | 15 (9%) | 65744 | 3408 (5%) |
+| 0x00500000 | 302 | 150 (50%) | 65392 | 18528 (28%) |
+| 0x00510000 | 191 | 17 (9%) | 65792 | 7104 (11%) |
+| 0x00520000 | 89 | 16 (18%) | 19744 | 3376 (17%) |
 
 ## Commands
 

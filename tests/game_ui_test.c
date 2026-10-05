@@ -210,6 +210,29 @@ static void pif_choose(void *c, int32_t id) { (void)c; pif_chosen = id; }
 static void pif_add(void *c, const char *name) { (void)c; snprintf(pif_added, sizeof pif_added, "%s", name); }
 static void pif_remove(void *c, int32_t id) { (void)c; pif_removed = id; --pif_count; }
 static void open_camp(void *c) { (void)c; ++camp_opens; }
+static int32_t cfg_music = 40, cfg_sound = 99, cfg_scroll = 30, cfg_buttons = 2, cfg_a08, cfg_budget;
+static int32_t cfg_res_w, cfg_music_on, cfg_music_enabled_at = -1;
+static float cfg_speed_set;
+static float cfg_speed(void *c) { (void)c; return 1.5f; }
+static void cfg_change_speed(void *c, float s) { (void)c; cfg_speed_set = s; }
+static int cfg_orders(void *c) { (void)c; return 1; }
+static int32_t cfg_music_level(void *c) { (void)c; return cfg_music; }
+static int32_t cfg_sound_level(void *c) { (void)c; return cfg_sound; }
+static int cfg_set_music(void *c, int32_t v) { (void)c; cfg_music = v; return 1; }
+static int cfg_set_sound(void *c, int32_t v) { (void)c; cfg_sound = v; return 1; }
+static int cfg_is_music_on(void *c) { (void)c; return cfg_music_on; }
+static void cfg_enable(void *c, int32_t v) { (void)c; cfg_music_on = 1; cfg_music_enabled_at = v; }
+static void cfg_disable(void *c) { (void)c; cfg_music_on = 0; }
+static int32_t cfg_scroll_get(void *c) { (void)c; return cfg_scroll; }
+static void cfg_scroll_set(void *c, int32_t v) { (void)c; cfg_scroll = v; }
+static int32_t cfg_width(void *c) { (void)c; return 800; }
+static int cfg_mode_ok(void *c, int32_t w) { (void)c; return w != 0x400; }
+static void cfg_res(void *c, int32_t w, int32_t h) { (void)c; (void)h; cfg_res_w = w; }
+static int32_t cfg_buttons_get(void *c) { (void)c; return cfg_buttons; }
+static void cfg_buttons_set(void *c, int32_t v) { (void)c; cfg_buttons = v; }
+static int32_t cfg_a08_get(void *c) { (void)c; return cfg_a08; }
+static void cfg_a08_set(void *c, int32_t v) { (void)c; cfg_a08 = v; }
+static void cfg_budget_set(void *c, int32_t v) { (void)c; cfg_budget = v; }
 static const char *idx_name(void *c, int32_t i) { (void)c; return i == 0 ? "Gaul.scn" : i == 1 ? "Egypt.scx" : NULL; }
 static int idx_info(void *c, int32_t id, const char **d, int32_t *f, int32_t *pl) {
     (void)c; *d = id == 0 ? "About Gaul" : "About Egypt"; *f = id == 0; *pl = id == 0 ? 3 : 4; return 1;
@@ -817,6 +840,65 @@ int main(void) {
         assert(!strcmp(pif_added, "Dee") && camp_opens == 1);
         assert(!aoe_ui_system_find_ror(&sys, "New Name Dialog"));
         assert(!aoe_ui_system_find_ror(&sys, "Name Selection Screen"));
+    }
+    /* The config dialog over the editor screen. */
+    {
+        AoeConfigDialogRor *cd = calloc(1, sizeof *cd);
+        AoeUiPanelRor *dp = &cd->dialog.ez.panel;
+        AoeUiEzRor *host = calloc(1, sizeof *host);
+        aoe_ui_ez_init_named_ror(host, &sys, &ez_ops, "Config Host");
+        assert(aoe_ui_ez_setup_ror(host, &area, NULL, NULL, -1, 1, 0, 0, 0, 0, 0));
+        ops.game_speed = cfg_speed;
+        ops.change_game_speed = cfg_change_speed;
+        ops.orders_enabled = cfg_orders;
+        ops.music_level = cfg_music_level;
+        ops.sound_level = cfg_sound_level;
+        ops.set_music_level = cfg_set_music;
+        ops.set_sound_level = cfg_set_sound;
+        ops.music_on = cfg_is_music_on;
+        ops.music_enable = cfg_enable;
+        ops.music_disable = cfg_disable;
+        ops.scroll_speed = cfg_scroll_get;
+        ops.set_scroll_speed = cfg_scroll_set;
+        ops.screen_width = cfg_width;
+        ops.screen_mode_available = cfg_mode_ok;
+        ops.set_resolution = cfg_res;
+        ops.mouse_buttons = cfg_buttons_get;
+        ops.set_mouse_buttons = cfg_buttons_set;
+        ops.game_flag_a08 = cfg_a08_get;
+        ops.set_game_flag_a08 = cfg_a08_set;
+        ops.set_path_budget = cfg_budget_set;
+        aoe_settings_set_flag_97d_ror(&settings, 1);
+        aoe_settings_set_byte_a14_ror(&settings, 1);
+        assert(aoe_config_dialog_init_ror(cd, &ui, 0, &host->panel));
+        assert(aoe_ui_button_state_ror(cd->speed[1]) && aoe_ui_button_state_ror(cd->screen[1]));
+        assert(cd->screen[2]->disabled && !cd->screen[0]->disabled);
+        assert(aoe_ui_button_state_ror(cd->mouse[0]) && aoe_ui_button_state_ror(cd->flag[1]));
+        assert(aoe_ui_button_state_ror(cd->path[1]) && cd->scroll_old == 30);
+        /* Moving the music bar applies it at once; the scroll bar too. */
+        dp->vt->action(dp, &cd->music->bar.panel, 4, 10, 0);
+        assert(cfg_music == 10 && cd->music_now == 10);
+        dp->vt->action(dp, &cd->scroll->bar.panel, 4, 5, 0);
+        assert(cfg_scroll == 15);
+        /* OK: two speeds, music on at 10, mouse, path and resolution. */
+        aoe_ui_button_select_ror(cd->speed[2]);
+        aoe_ui_button_select_ror(cd->mouse[1]);
+        aoe_ui_button_select_ror(cd->path[2]);
+        aoe_ui_button_select_ror(cd->screen[0]);
+        dp->vt->action(dp, &cd->ok->panel, 1, 0, 0);
+        assert(cfg_speed_set == 2.0f && aoe_settings_float_a0c_ror(&settings) == 2.0f);
+        assert(cfg_music_enabled_at == 10 && cfg_buttons == 1 && cfg_a08 == 0);
+        assert(aoe_settings_byte_a14_ror(&settings) == 2 && cfg_budget == 0x1d4c);
+        assert(cfg_res_w == 0x280 && !aoe_ui_system_find_ror(&sys, "Config Dialog"));
+        /* Cancel restores the volumes and the scroll speed. */
+        cd = calloc(1, sizeof *cd);
+        dp = &cd->dialog.ez.panel;
+        cfg_music = 50;
+        assert(aoe_config_dialog_init_ror(cd, &ui, 1, &host->panel));
+        dp->vt->action(dp, &cd->music->bar.panel, 4, 70, 0);
+        dp->vt->action(dp, &cd->cancel->panel, 1, 0, 0);
+        assert(cfg_music == 50 && cfg_scroll == 15 && !aoe_ui_system_find_ror(&sys, "Config Dialog"));
+        aoe_ui_system_close_ror(&sys, "Config Host");
     }
     /* The game settings screen (single player, random map). */
     {

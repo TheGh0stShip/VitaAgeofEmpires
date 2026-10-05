@@ -190,6 +190,40 @@ typedef struct {
     void (*add_campaign_player)(void *context, const char *name);
     void (*remove_campaign_player)(void *context, int32_t id);
     void (*open_campaign_selection)(void *context);
+    /* The options dialog: the world's game speed (+0x18); the speed
+       changed (a networked game first tells the others, string 3059
+       with the player's name, then 0x004e98f0); map orders on
+       (0x0055873c); the music and sound levels (0..99: 99 when there is
+       no music manager / sound system, else -volume / 100) and setting
+       them (0x004500d0 / 0x004a2810 at -100 x level; 0 when there is
+       none); whether the music is on (game info +0x8a4), turning it on
+       (the registry's "Music Volume" = level x 100, game +0x58, the
+       current track replayed) or off (+0x5c); the scroll speed (game
+       info +0x8c8, stored with +0x8d0); the screen width (the draw
+       surface +0x2c) and whether a mode is available (0x00436f70(w, 0,
+       8)); a resolution change (0x0041be20 unless already changing); the
+       mouse button count (game info +0x8dc; setting it also runs game
+       +0x148); game +0xa08; the path budget (0x00554738). */
+    float (*game_speed)(void *context);
+    void (*change_game_speed)(void *context, float speed);
+    int (*orders_enabled)(void *context);
+    int32_t (*music_level)(void *context);
+    int32_t (*sound_level)(void *context);
+    int (*set_music_level)(void *context, int32_t level);
+    int (*set_sound_level)(void *context, int32_t level);
+    int (*music_on)(void *context);
+    void (*music_enable)(void *context, int32_t level);
+    void (*music_disable)(void *context);
+    int32_t (*scroll_speed)(void *context);
+    void (*set_scroll_speed)(void *context, int32_t speed);
+    int32_t (*screen_width)(void *context);
+    int (*screen_mode_available)(void *context, int32_t width);
+    void (*set_resolution)(void *context, int32_t width, int32_t height);
+    int32_t (*mouse_buttons)(void *context);
+    void (*set_mouse_buttons)(void *context, int32_t buttons);
+    int32_t (*game_flag_a08)(void *context);
+    void (*set_game_flag_a08)(void *context, int32_t value);
+    void (*set_path_budget)(void *context, int32_t budget);
 } AoeGameUiOpsRor;
 
 typedef struct {
@@ -901,5 +935,58 @@ int aoe_name_selection_init_ror(AoeNameSelectionRor *n, AoeGameUiRor *ui, AoeUiA
 void aoe_name_selection_fill_ror(AoeNameSelectionRor *n);
 void aoe_name_selection_update_ror(AoeNameSelectionRor *n);
 int aoe_new_name_dialog_init_ror(AoeNewNameDialogRor *d, AoeGameUiRor *ui, AoeUiPanelRor *parent);
+
+/* The "Config Dialog" (vtable 0x005436e0, 0x004300d0..0x00430e30; 600 x
+   390 over its parent): the title (9431); game speed (9439: 9432..9434 as
+   1.0, 1.5, 2.0; disabled in state 5); music and sound volume (9435 and
+   9438 with 9436 / 9437 at the ends; value bars of 100 by 10 / 20); scroll
+   speed (9456, 9457 / 9458; the bar is the speed less 10); screen size
+   (9440: 9447..9449 as 640 x 480, 800 x 600, 1024 x 768, unavailable
+   modes disabled); mouse buttons (9450: 9451 two, 9452 one); game +0xa08
+   (9453: 9454 on, 9455 off); path finding (9741: 9742..9744 low, medium,
+   high, disabled when networked; the settings' 0xa14, or 0x983 when
+   networked); OK and Cancel (Escape) with the focus on OK. 0x004300d0
+   constructor (`mode` 0 in the game); 0x00430c40 destructor (deleting
+   0x00430c20). +0xb8 0x00430e30: the volume and scroll bars apply as they
+   move (the music bar also re-applies the sound level); Cancel restores
+   the volumes and scroll speed; OK in the game resumes it, stores the
+   mouse buttons, game +0xa08, (in a single player game) the path finding
+   and its budget 2500 / 5000 / 7500, the game speed (outside state 5,
+   when orders are on and it changed; also kept in the settings in a
+   single player game), the music (on at a level below 99, else off; then
+   the sound level) and the resolution. Both return to the game screen in
+   the game (the dialog hidden) or to the main menu otherwise (OK then
+   applies nothing), closing the dialog. Picking a speed or screen size
+   only consumes the click. */
+typedef struct {
+    AoeUiDialogRor dialog;
+    int32_t mode;                                        /* +0x490 */
+    AoeUiTextRor *title, *speed_label, *speed_text[3];   /* +0x494..+0x4a4 */
+    AoeUiButtonRor *speed[3];                            /* +0x4a8 */
+    AoeUiTextRor *music_label, *music_high, *music_low;  /* +0x4b4 */
+    AoeUiValueScrollbarRor *music;                       /* +0x4c0 */
+    AoeUiTextRor *sound_label, *sound_high, *sound_low;  /* +0x4c4 */
+    AoeUiValueScrollbarRor *sound;                       /* +0x4d0 */
+    AoeUiTextRor *scroll_label, *scroll_fast, *scroll_slow; /* +0x4d4 */
+    AoeUiValueScrollbarRor *scroll;                      /* +0x4e0 */
+    AoeUiTextRor *screen_label, *screen_text[3];         /* +0x4e4 */
+    AoeUiButtonRor *screen[3];                           /* +0x4f4 */
+    AoeUiTextRor *mouse_label, *mouse_text[2];           /* +0x500 */
+    AoeUiButtonRor *mouse[2];                            /* +0x50c */
+    AoeUiTextRor *flag_label, *flag_text[2];             /* +0x514 */
+    AoeUiButtonRor *flag[2];                             /* +0x520 */
+    AoeUiTextRor *path_label, *path_text[3];             /* +0x528 */
+    AoeUiButtonRor *path[3];                             /* +0x538 */
+    AoeUiButtonRor *ok, *cancel;                         /* +0x544, +0x548 */
+    int32_t music_old, sound_old;                        /* +0x54c, +0x550 */
+    float speed_old;                                     /* +0x554 */
+    int32_t scroll_old;                                  /* +0x558 */
+    int32_t music_now, sound_now;                        /* +0x55c, +0x560 */
+    AoeGameUiRor *ui;
+} AoeConfigDialogRor;
+
+extern const AoeUiEzVtblRor aoe_config_dialog_vtable_ror;
+int aoe_config_dialog_init_ror(AoeConfigDialogRor *d, AoeGameUiRor *ui, int32_t mode,
+                               AoeUiPanelRor *parent);
 
 #endif

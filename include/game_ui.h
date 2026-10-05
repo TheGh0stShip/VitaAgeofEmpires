@@ -51,6 +51,17 @@ typedef struct {
     void (*open_credits)(void *context);
     /* The viewed player's game state byte (+0x80: 0 playing). */
     uint8_t (*player_state)(void *context, void *player);
+    /* The game object: the CD check (nonzero when the game CD is in),
+       resetting the pointer and mouse capture, closing the main window,
+       and playing the recorded demo (nonzero when it started). */
+    int (*cd_check)(void *context);
+    void (*reset_input)(void *context);
+    void (*quit_program)(void *context);
+    int (*play_demo)(void *context);
+    /* The menu screens each opens (made and registered). */
+    void (*open_single_player_menu)(void *context);
+    void (*open_mp_startup)(void *context);
+    void (*open_editor_menu)(void *context);
 } AoeGameUiOpsRor;
 
 typedef struct {
@@ -62,6 +73,7 @@ typedef struct {
     const AoeGameUiOpsRor *ops;
     const AoeUiPictureOpsRor *picture_ops;
     int32_t quit_requested;          /* global 0x007c0338 */
+    int32_t cd_ok;                   /* game +0x9ac */
 } AoeGameUiRor;
 
 /* The in-game menu "Menu Dialog" (vtable 0x00543bb8,
@@ -171,5 +183,55 @@ extern const AoeUiEzVtblRor aoe_about_dialog_vtable_ror;
    (deleting 0x0042fe40); +0xb8 0x0042ff80. */
 int aoe_about_dialog_init_ror(AoeAboutDialogRor *d, AoeGameUiRor *ui,
                               AoeUiPanelRor *parent);
+
+/* The main menu "Main Menu" (vtable 0x005469f8, 0x00486600..0x00486d00):
+   a screen ("scr1", 50051) with five 300 x 40 buttons at x 170 from y 178
+   every 50: Single Player, Multiplayer, Help, Scenario Builder, Exit
+   (strings 9202, 9203, 9205, 9206, 9207), then at the bottom the title
+   line (9241), the copyright line (9243, a "©" picture "circlep2" 50406
+   after it, then 9244, centred together; or one line of 9243 + 9252 + " "
+   + 9244 when string 9252 is not empty) and the warning (9253). */
+typedef struct {
+    AoeUiEzRor ez;
+    AoeUiPanelRor *field_478, *field_47c;  /* +0x478, +0x47c */
+    AoeUiButtonRor *buttons[7];            /* +0x480 */
+    AoeUiTextRor *title;                   /* +0x49c */
+    AoeUiTextRor *copyright;               /* +0x4a0 */
+    AoeUiTextRor *year;                    /* +0x4a4 */
+    AoeUiTextRor *warning;                 /* +0x4a8 */
+    AoeUiPictureRor *circle;               /* +0x4ac */
+    AoeUiPanelRor *field_4b0, *field_4b4;  /* +0x4b0, +0x4b4 */
+    AoeGameUiRor *ui;
+} AoeMainMenuRor;
+
+extern const AoeUiEzVtblRor aoe_main_menu_vtable_ror;
+
+/* 0x00486600 constructor; 0x00486b20 destructor (deleting 0x00486b00).
+   +0xac 0x00486c10 keys: C the credits, L the recorded demo (an OK
+   "Could not load game data." 2007 when it cannot start). +0xb8
+   0x00486d00: Single Player and Scenario Builder need the CD once (else
+   strings 2008 / 2010), reset the input and open their menus; Multiplayer
+   resets the input and opens the multiplayer start screen; Help shows
+   help string 120055; Exit closes the program. */
+int aoe_main_menu_init_ror(AoeMainMenuRor *m, AoeGameUiRor *ui,
+                           AoeUiAreaRor *area, const AoeUiPictureOpsRor *picture_ops);
+
+/* "Main Error Screen" (vtable 0x00546b24, 0x00486fd0..0x004871d0): the
+   message (font 4, centred, wrapped) in 560 x 400 at (40, 40), OK (4001)
+   240 x 30 at (200, 440) and a top-right X (1002); either closes the
+   program. 0x00487140 destructor (deleting 0x00487120), 0x004871b0 sets
+   the message from a string ID, +0xb8 0x004871d0 the buttons. */
+typedef struct {
+    AoeUiEzRor ez;
+    AoeUiTextRor *message;                 /* +0x478 */
+    AoeUiButtonRor *ok, *close;            /* +0x47c, +0x480 */
+    AoeGameUiRor *ui;
+} AoeErrorScreenRor;
+
+extern const AoeUiEzVtblRor aoe_error_screen_vtable_ror;
+
+int aoe_error_screen_init_ror(AoeErrorScreenRor *e, AoeGameUiRor *ui,
+                              AoeUiAreaRor *area);
+void aoe_error_screen_set_message_ror(AoeErrorScreenRor *e, int32_t string_id);
 
 #endif

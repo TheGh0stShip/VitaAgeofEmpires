@@ -72,8 +72,10 @@ int aoe_ui_message_dialog_setup_ror(AoeUiMessageDialogRor *m,
                                     int32_t w, int32_t h, uint8_t type,
                                     const char *text, int32_t button_w,
                                     int32_t button_h);
-/* Slots: +0x4c 0x00487220 (the game's idle hook unless paused, then the
-   base idle), +0xac 0x00434990 (no key action), +0xb8 0x004348d0 (a
+/* +0x4c 0x00487220, shared by the game's screens: the game's idle hook
+   unless paused, then the base idle. */
+int32_t aoe_ui_game_idle_slot_ror(AoeUiPanelRor *p);
+/* Slots: +0x4c 0x00487220, +0xac 0x00434990 (no key action), +0xb8 0x004348d0 (a
    button's click answers the parent). */
 
 /* The list dialog (vtable 0x00543a7c, 0x00433890..0x00433c20): an

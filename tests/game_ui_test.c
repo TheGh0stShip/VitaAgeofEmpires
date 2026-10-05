@@ -48,6 +48,20 @@ static void ed_get(void *c, void *w, char *o, int32_t n) { (void)c; (void)w; snp
 static int credits;
 static const char *pid(void *c) { (void)c; return NULL; }
 static void open_credits(void *c) { (void)c; ++credits; }
+static int cds, resets, programs_closed, sp_menus, mp_screens, ed_menus, demo_ok;
+static int cd_check(void *c) { (void)c; ++cds; return cds > 1; }
+static void reset_input(void *c) { (void)c; ++resets; }
+static void quit_program(void *c) { (void)c; ++programs_closed; }
+static int play_demo(void *c) { (void)c; return demo_ok; }
+static void open_sp(void *c) { (void)c; ++sp_menus; }
+static void open_mp(void *c) { (void)c; ++mp_screens; }
+static void open_ed(void *c) { (void)c; ++ed_menus; }
+static char *load_info(void *c, const char *f, int32_t id) {
+    (void)c; (void)f; (void)id;
+    char *s = malloc(4);
+    strcpy(s, "x");
+    return s;
+}
 static uint8_t state;
 static uint8_t player_state(void *c, void *p) { (void)c; (void)p; return state; }
 
@@ -276,6 +290,67 @@ int main(void) {
         ap = &a->dialog.ez.panel;
         ap->vt->action(ap, &a->credits->panel, 1, 0, 0);
         assert(credits == 1 && !aoe_ui_system_find_ror(&sys, "About Dialog"));
+    }
+
+    /* The main menu: five buttons, the CD check before single player,
+       credits on C, the demo on L, Exit closes the program. Opening another
+       screen closes (and frees) the menu, so each check makes a new one. */
+    {
+        AoeMainMenuRor *mm;
+        AoeUiPanelRor *mp;
+        ez_ops.load_info = load_info;
+        ops.cd_check = cd_check;
+        ops.reset_input = reset_input;
+        ops.quit_program = quit_program;
+        ops.play_demo = play_demo;
+        ops.open_single_player_menu = open_sp;
+        ops.open_mp_startup = open_mp;
+        ops.open_editor_menu = open_ed;
+#define NEW_MENU()                                                             \
+        do {                                                                   \
+            mm = calloc(1, sizeof *mm);                                        \
+            assert(aoe_main_menu_init_ror(mm, &ui, &area, NULL));              \
+            mp = &mm->ez.panel;                                                \
+        } while (0)
+        NEW_MENU();
+        assert(aoe_ui_system_find_ror(&sys, "Main Menu") == mp);
+        assert(mm->buttons[4] && !mm->buttons[5]);
+        assert(strcmp(mm->buttons[0]->text1[0], "S9202") == 0 &&
+               strcmp(mm->buttons[4]->text1[0], "S9207") == 0);
+        assert(mm->title && mm->warning && mp->current == &mm->buttons[0]->panel);
+        mp->vt->action(mp, &mm->buttons[0]->panel, 1, 0, 0);
+        assert(cds == 1 && sp_menus == 0 && aoe_ui_system_find_ror(&sys, "OKDialog"));
+        aoe_ui_system_close_ror(&sys, "OKDialog");
+        mp->vt->action(mp, &mm->buttons[4]->panel, 1, 0, 0);
+        assert(programs_closed == 1);
+        mp->vt->key_action(mp, 'L', 0, 0, 1, 0);
+        assert(aoe_ui_system_find_ror(&sys, "OKDialog"));
+        aoe_ui_system_close_ror(&sys, "OKDialog");
+        mp->vt->action(mp, &mm->buttons[0]->panel, 1, 0, 0);
+        assert(cds == 2 && ui.cd_ok && sp_menus == 1 && resets == 1);
+        assert(!aoe_ui_system_find_ror(&sys, "Main Menu"));
+        NEW_MENU();
+        mp->vt->action(mp, &mm->buttons[3]->panel, 1, 0, 0);
+        assert(cds == 2 && ed_menus == 1);
+        NEW_MENU();
+        mp->vt->action(mp, &mm->buttons[1]->panel, 1, 0, 0);
+        assert(mp_screens == 1);
+        NEW_MENU();
+        mp->vt->key_action(mp, 'C', 0, 0, 1, 0);
+        assert(credits == 2 && !aoe_ui_system_find_ror(&sys, "Main Menu"));
+#undef NEW_MENU
+    }
+    /* The error screen: OK and X close the program. */
+    {
+        AoeErrorScreenRor *es = calloc(1, sizeof *es);
+        AoeUiPanelRor *ep = &es->ez.panel;
+        assert(aoe_error_screen_init_ror(es, &ui, &area));
+        aoe_error_screen_set_message_ror(es, 2007);
+        assert(strcmp(es->message->lines->text, "S2007") == 0);
+        ep->vt->action(ep, &es->ok->panel, 1, 0, 0);
+        ep->vt->action(ep, &es->close->panel, 1, 0, 0);
+        assert(programs_closed == 3);
+        aoe_ui_system_close_ror(&sys, "Main Error Screen");
     }
     aoe_ui_system_close_ror(&sys, "Game Screen");
     free(sys.panels);

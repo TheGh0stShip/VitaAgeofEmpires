@@ -219,8 +219,8 @@ int aoe_ui_message_dialog_setup_ror(AoeUiMessageDialogRor *m,
     return 1;
 }
 
-static int32_t message_idle(AoeUiPanelRor *p) {
-    const AoeUiEzOpsRor *ops = MSG(p)->dialog.ez.ops;
+int32_t aoe_ui_game_idle_slot_ror(AoeUiPanelRor *p) {
+    const AoeUiEzOpsRor *ops = ((AoeUiEzRor *)p)->ops;
     if (ops && ops->game_idle &&
         !(ops->idle_blocked && ops->idle_blocked(ops->context)))
         ops->game_idle(ops->context);
@@ -254,7 +254,7 @@ static int32_t message_action(AoeUiPanelRor *p, AoeUiPanelRor *from,
 }
 
 const AoeUiEzVtblRor aoe_ui_message_dialog_vtable_ror = {
-    AOE_UI_EZ_SLOTS(message_destroy, message_idle,
+    AOE_UI_EZ_SLOTS(message_destroy, aoe_ui_game_idle_slot_ror,
                     aoe_ui_panel_handle_paint_ror,
                     aoe_ui_ez_no_key_action_ror, aoe_ui_panel_zero_ror,
                     message_action, aoe_ui_ez_set_focus_slot_ror),

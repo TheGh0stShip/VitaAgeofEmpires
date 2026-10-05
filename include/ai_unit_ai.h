@@ -87,7 +87,33 @@ typedef struct {
     void (*free_self)(void *context);
     /* Virtual +0xd4 (with 1); clear_target and call_58 above serve too. */
     int32_t (*call_d4)(void *context, int32_t arg);
+    /* For the priest's searches: vtable +0x20 (refresh the nearby
+       lists), the nearby list of band `b` (globals from 0x007d2028:
+       count, entries of ID, distance byte, player byte), a target
+       (0x00414f40), the owner's index (+0x4a) and its vtable +0x18
+       (enemy) toward a player, and the unit's +0x194 test (id, 1.0, 0, 0,
+       -1, -1). */
+    void (*refresh_nearby)(void *context);
+    int32_t (*nearby)(void *context, int band, const uint8_t **entries);
+    int (*target_view)(void *context, int32_t id, int16_t *type_class, float *hp,
+                       int16_t *max_hp, uint8_t *state);
+    int16_t (*owner_index)(void *context);
+    int (*owner_enemy)(void *context, int32_t player);
+    int (*unit_194)(void *context, int32_t id);
+    /* Vtable +0x30 (a target search with 1, 1, 0), +0x10 (re-sending the
+       current order) and +0x5c with its result; the unit's action list
+       head state byte (+0xc; -1 for an empty list). */
+    int32_t (*call_30)(void *context);
+    void (*call_10)(void *context);
+    int32_t (*call_5c_r)(void *context, int32_t id, int32_t value);
+    int (*head_state)(void *context);
 } AoeAiUnitAiOpsRor;
+
+/* The unit AI's own order fields the overrides read: action (+0x28),
+   target (+0x34). */
+typedef struct {
+    int32_t action, target;
+} AoeAiUnitAiOrderRor;
 
 /* The constructors: the base, then the target-class table (and, for
    class 9 and type 0x7e, a 4000 / 6000 ms timer that is restarted).
@@ -160,5 +186,28 @@ AoeAiUnitAiRor *aoe_ai_unit_ai_delete_ror(AoeAiUnitAiRor *ai, uint8_t flags,
    an argument here, whatever override the vtable holds. */
 int32_t aoe_ai_unit_ai_5644_d8_ror(AoeAiUnitAiRor *ai,
                                    const AoeAiUnitAiOpsRor *ops);
+/* 0x004e50b0 (priest, +0xe0): after refreshing the nearby lists, the
+   damaged (hit points below the type's maximum +0x26) object below state
+   3 that is not a building (class 3) nor the priest, in bands 0..1 (our
+   player index nonzero) or 0..3 (player 0, then only distance below 3),
+   distance below 5 unless `far`, passing the unit's +0x194 test, with
+   the smallest maximum - hit points / distance (the original's
+   precedence); the first band with one wins and `dist` gets its distance.
+   -1 for none. */
+int32_t aoe_ai_unit_ai_priest_heal_target_ror(int32_t self, int32_t far, float *dist,
+                                             const AoeAiUnitAiOpsRor *ops);
+/* 0x004e5270 (priest, +0xe4): after refreshing, in band 3 the object of
+   an enemy player below state 3 the priest can convert (+0xc4) with the
+   largest maximum hit points / max(distance, 1.0); `dist` gets that
+   distance. -1 for none. */
+int32_t aoe_ai_unit_ai_priest_convert_target_ror(float *dist,
+                                                const AoeAiUnitAiOpsRor *ops);
+/* 0x004e5620 (priest, +0xd8): for a computer owner (+4 is 1), with faith
+   (+0x44) at least 100 and no action whose state is 7 at the head of the
+   list, a search target (+0x30) other than the current one: a current
+   action is re-sent (+0x10) and stopped (+0x58(1)), then +0x5c(target,
+   1) at 1 gives 10. Else 9. */
+int32_t aoe_ai_unit_ai_priest_d8_ror(const AoeAiUnitAiOrderRor *order,
+                                     const AoeAiUnitAiOpsRor *ops);
 
 #endif

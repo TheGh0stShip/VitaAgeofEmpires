@@ -248,3 +248,93 @@ int32_t aoe_ai_unit_ai_5644_d8_ror(AoeAiUnitAiRor *ai,
     ai->field_f8 = 0;
     return 10;
 }
+
+int32_t aoe_ai_unit_ai_priest_heal_target_ror(int32_t self, int32_t far, float *dist,
+                                             const AoeAiUnitAiOpsRor *ops) {
+    int band, bands, best = -1;
+    float best_v = 0.0f;
+    int16_t owner;
+    if (!ops) return -1;
+    if (ops->refresh_nearby) ops->refresh_nearby(ops->context);
+    owner = ops->owner_index ? ops->owner_index(ops->context) : 0;
+    bands = owner == 0 ? 4 : 2;
+    for (band = 0; band < bands; ++band) {
+        const uint8_t *e = NULL;
+        int32_t n = ops->nearby ? ops->nearby(ops->context, band, &e) : 0, i;
+        for (i = 0; i < n; ++i) {
+            const uint8_t *it = e + 8 * i;
+            int32_t id = (int32_t)((uint32_t)it[0] | (uint32_t)it[1] << 8 |
+                                   (uint32_t)it[2] << 16 | (uint32_t)it[3] << 24);
+            int16_t cls, max_hp;
+            float hp, d, v;
+            uint8_t state;
+            if (id == self || !ops->target_view ||
+                !ops->target_view(ops->context, id, &cls, &hp, &max_hp, &state))
+                continue;
+            if (cls == 3 || !(hp < (float)max_hp) || state >= 3) continue;
+            if (!far && it[4] >= 5) continue;
+            if (owner == 0 && it[4] >= 3) continue;
+            if (!ops->unit_194 || !ops->unit_194(ops->context, id)) continue;
+            d = (float)it[4];
+            v = (float)max_hp - hp / d;
+            if (best == -1 || v < best_v) {
+                best = id;
+                best_v = v;
+                if (dist) *dist = d;
+            }
+        }
+        if (best != -1) return best;
+    }
+    return -1;
+}
+
+int32_t aoe_ai_unit_ai_priest_convert_target_ror(float *dist,
+                                                const AoeAiUnitAiOpsRor *ops) {
+    const uint8_t *e = NULL;
+    int32_t n, i, best = -1;
+    float best_v = 0.0f;
+    if (!ops) return -1;
+    if (ops->refresh_nearby) ops->refresh_nearby(ops->context);
+    n = ops->nearby ? ops->nearby(ops->context, 3, &e) : 0;
+    for (i = 0; i < n; ++i) {
+        const uint8_t *it = e + 8 * i;
+        int32_t id = (int32_t)((uint32_t)it[0] | (uint32_t)it[1] << 8 |
+                               (uint32_t)it[2] << 16 | (uint32_t)it[3] << 24);
+        int16_t cls, max_hp;
+        float hp, d, v;
+        uint8_t state;
+        if (!ops->owner_enemy || !ops->owner_enemy(ops->context, it[5])) continue;
+        if (!ops->target_view || !ops->target_view(ops->context, id, &cls, &hp, &max_hp, &state) ||
+            state >= 3)
+            continue;
+        if (!ops->call_c4 || !ops->call_c4(ops->context, id)) continue;
+        d = (float)it[4];
+        if (d < 1.0f) d = 1.0f;
+        v = (float)max_hp / d;
+        if (best == -1 || best_v < v) {
+            best = id;
+            best_v = v;
+            if (dist) *dist = d;
+        }
+    }
+    return best;
+}
+
+int32_t aoe_ai_unit_ai_priest_d8_ror(const AoeAiUnitAiOrderRor *order,
+                                     const AoeAiUnitAiOpsRor *ops) {
+    AoeAiUnitViewRor me;
+    int32_t t;
+    if (!order || !ops || !ops->owner_field_4 || ops->owner_field_4(ops->context) != 1)
+        return 9;
+    if (!ops->self) return 9;
+    ops->self(ops->context, &me);
+    if (!(100.0f <= me.field_44)) return 9;
+    if (ops->head_state && ops->head_state(ops->context) == 7) return 9;
+    t = ops->call_30 ? ops->call_30(ops->context) : -1;
+    if (t == -1 || order->target == t) return 9;
+    if (order->action != -1) {
+        if (ops->call_10) ops->call_10(ops->context);
+        if (ops->call_58) ops->call_58(ops->context, 1);
+    }
+    return ops->call_5c_r && ops->call_5c_r(ops->context, t, 1) == 1 ? 10 : 9;
+}

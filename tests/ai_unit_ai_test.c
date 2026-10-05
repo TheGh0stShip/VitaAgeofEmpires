@@ -55,7 +55,72 @@ static int32_t call_6c(void *c, int32_t id, int32_t v) { (void)c; c6c = id; retu
 static int32_t call_94(void *c, int32_t id, float f) { (void)c; c94 = id; f94 = f; return 2; }
 static double unit_10c(void *c, int32_t v) { (void)c; return v * 0.5; }
 
+/* Priest searches: band 0 holds 31 (dist 2, player 1) and 32 (dist 6),
+   band 3 holds 41 (dist 4, enemy player 2) and 42 (dist 0, player 3). */
+static uint8_t band0[16] = {31, 0, 0, 0, 2, 1, 0, 0, 32, 0, 0, 0, 6, 1, 0, 0};
+static uint8_t band3[16] = {41, 0, 0, 0, 4, 2, 0, 0, 42, 0, 0, 0, 0, 3, 0, 0};
+static int refreshed;
+static void p_refresh(void *c) { (void)c; ++refreshed; }
+static int32_t p_nearby(void *c, int b, const uint8_t **e) {
+    (void)c;
+    if (b == 0) { *e = band0; return 2; }
+    if (b == 3) { *e = band3; return 2; }
+    return 0;
+}
+static int p_view(void *c, int32_t id, int16_t *cls, float *hp, int16_t *max, uint8_t *st) {
+    (void)c; *cls = 0; *hp = 5.0f; *max = (int16_t)(id == 42 ? 100 : 20); *st = 2; return 1;
+}
+static int16_t p_owner(void *c) { (void)c; return 1; }
+static int p_enemy(void *c, int32_t p) { (void)c; return p >= 2; }
+static int p_194(void *c, int32_t id) { (void)c; (void)id; return 1; }
+static int p_c4(void *c, int32_t id) { (void)c; (void)id; return 1; }
+
+static int32_t pd_owner4(void *c) { (void)c; return 1; }
+static void pd_self(void *c, AoeAiUnitViewRor *o) { (void)c; memset(o, 0, sizeof *o); o->field_44 = 100.0f; }
+static int32_t pd_30(void *c) { (void)c; return 55; }
+static int pd_resent;
+static void pd_10(void *c) { (void)c; ++pd_resent; }
+static int32_t pd_5c(void *c, int32_t id, int32_t v) { (void)c; return id == 55 && v == 1; }
+static int pd_state = 3;
+static int pd_head(void *c) { (void)c; return pd_state; }
+
+static void priest_search_tests(void) {
+    AoeAiUnitAiOpsRor o;
+    float d = -1.0f;
+    memset(&o, 0, sizeof o);
+    o.refresh_nearby = p_refresh;
+    o.nearby = p_nearby;
+    o.target_view = p_view;
+    o.owner_index = p_owner;
+    o.owner_enemy = p_enemy;
+    o.unit_194 = p_194;
+    o.call_c4 = p_c4;
+    /* Heal: 32 is too far unless `far`; 31 scores 20 - 5 / 2. */
+    assert(aoe_ai_unit_ai_priest_heal_target_ror(99, 0, &d, &o) == 31 && d == 2.0f);
+    assert(aoe_ai_unit_ai_priest_heal_target_ror(31, 0, &d, &o) == -1);
+    assert(aoe_ai_unit_ai_priest_heal_target_ror(31, 1, &d, &o) == 32 && d == 6.0f);
+    /* Convert: 42 (100 / max(0, 1)) beats 41 (20 / 4). */
+    assert(aoe_ai_unit_ai_priest_convert_target_ror(&d, &o) == 42 && d == 1.0f && refreshed == 4);
+    {
+        /* 0x004e5620 */
+        AoeAiUnitAiOrderRor ord = {7, 12};
+        o.owner_field_4 = pd_owner4;
+        o.self = pd_self;
+        o.call_30 = pd_30;
+        o.call_10 = pd_10;
+        o.call_5c_r = pd_5c;
+        o.head_state = pd_head;
+        assert(aoe_ai_unit_ai_priest_d8_ror(&ord, &o) == 10 && pd_resent == 1);
+        ord.target = 55;
+        assert(aoe_ai_unit_ai_priest_d8_ror(&ord, &o) == 9);
+        ord.target = 12;
+        pd_state = 7;
+        assert(aoe_ai_unit_ai_priest_d8_ror(&ord, &o) == 9 && pd_resent == 1);
+    }
+}
+
 int main(void) {
+    priest_search_tests();
     AoeAiUnitAiRor ai;
     AoeAiUnitAiOpsRor ops;
     memset(&ops, 0, sizeof ops);

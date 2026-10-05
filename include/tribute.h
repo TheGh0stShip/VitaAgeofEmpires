@@ -39,4 +39,26 @@ void aoe_tribute_send_ror(const AoeTributeRor *t, int32_t players, int32_t self,
 /* The stance of a player's three radios: ally 0, neutral 1, else enemy 3. */
 uint8_t aoe_diplomacy_stance_ror(int ally_on, int neutral_on);
 
+/* +0x30 0x00433230: the dialog's draw. The Ez draw first (0x00454f80);
+   with the colour icons (+0x60c) loaded, between the begin (+0x28 with
+   0) and end (+0x2c) of drawing, each player 1..count-1 with a colour
+   table (+0x10c) gets icon frame 0 drawn through that table (+0x28;
+   mode 1, 0x0049fe00) at (x + 10, y + 0x50 + 30 x (player - 1)), the
+   fill colour first set to (its colour +0x26 + 1) x 16. */
+typedef struct {
+    void *context;
+    void (*base_draw)(void *context);
+    int has_icons;                          /* +0x60c */
+    void (*begin_draw)(void *context, int32_t arg);
+    void (*end_draw)(void *context);
+    int16_t player_count;                   /* world +0x3c */
+    /* Player `p`'s colour table object (+0x10c): its +0x26 colour and the
+       table at +0x28; NULL without one. */
+    const uint8_t *(*colour_table)(void *context, int32_t p, int16_t *colour);
+    void (*set_fill)(void *context, uint8_t colour);
+    void (*draw_icon)(void *context, int32_t x, int32_t y, const uint8_t *table);
+    int32_t x, y;                           /* +0x0c, +0x10 */
+} AoeTributeDrawOpsRor;
+void aoe_tribute_draw_ror(const AoeTributeDrawOpsRor *ops);
+
 #endif

@@ -23,7 +23,52 @@ static void send(void *c, uint32_t b, uint32_t g) { (void)c; sent_buf = b; sent_
 static int bad_calls;
 static void bad(void *c, const AoeCommSyncRecordRor *r) { (void)c; (void)r; ++bad_calls; }
 
+/* Slots 1 (us, player 1), 2 (player 2, a computer), 3 (player 3, +0xa15
+   set), 4 (player 4). */
+static int32_t st_slot_player(void *c, int32_t slot) { (void)c; return slot <= 4 ? slot : 0; }
+static int32_t st_kind(void *c, int32_t p) { (void)c; return p == 2; }
+static uint8_t st_8db8(void *c) { (void)c; return 1; }
+static uint8_t st_8db9(void *c) { (void)c; return 0; }
+static uint8_t st_60(void *c) { (void)c; return 0; }
+static uint8_t st_64(void *c) { (void)c; return 1; }
+static uint8_t st_a15(void *c, int32_t slot) { (void)c; return slot == 3; }
+static void st_sums(void *c, uint32_t *a, int32_t *b, int32_t *d) { (void)c; *a = 11; *b = 12; *d = 13; }
+static AoeCommSyncRecordRor st_sent;
+static void st_send(void *c, const AoeCommSyncRecordRor *r) { (void)c; st_sent = *r; }
+
+static void sync_turn_tests(void) {
+    static AoeCommSyncRor s;
+    AoeCommSyncTurnOpsRor o;
+    memset(&o, 0, sizeof o);
+    o.self_slot = 1;
+    o.slot_player = st_slot_player;
+    o.player_kind = st_kind;
+    o.map_8db8 = st_8db8;
+    o.map_8db9 = st_8db9;
+    o.game_60 = st_60;
+    o.game_64 = st_64;
+    o.slot_a15 = st_a15;
+    o.world_7c = 20;
+    o.has_world = 1;
+    o.world_time = 5000;
+    o.checksums = st_sums;
+    o.settings_982 = 1;
+    o.global_sum = 100;
+    o.send = st_send;
+    /* Bits: slot 1 = 2, slot 3 = 2 << 4, slot 4 = 1 << 6. */
+    assert(aoe_comm_sync_slot_bits_ror(&o) == (2u | 2u << 4 | 1u << 6));
+    /* Sum: 20 (us) + 3 + 4. */
+    assert(aoe_comm_sync_slot_sum_ror(&o) == 27);
+    aoe_comm_sync_init_ror(&s);
+    assert(aoe_comm_sync_turn_ror(&s, 9, &o, NULL, NULL) == 0);
+    assert(aoe_comm_sync_turn_ror(&s, 10, &o, NULL, NULL) == 1 && s.next_turn == 50);
+    assert(st_sent.player == 1 && st_sent.turn == 10 && st_sent.world_time == 5000 &&
+           st_sent.values[2] == 11 && st_sent.values[4] == 13 &&
+           (uint32_t)st_sent.extra == ((2u | 2u << 4 | 1u << 6) | (1u << 15 | 27u) << 16) + 100u);
+}
+
 int main(void) {
+    sync_turn_tests();
     static AoeFrameTimerRor t;
     static AoeCommSpeedRor s;
     static AoeCommSyncRor y;

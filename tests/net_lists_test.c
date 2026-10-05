@@ -61,5 +61,16 @@ int main(void) {
         assert(aoe_net_provider_guid_ror(&pl, 2, out) == 1 && memcmp(out, g, 16) == 0);
         assert(aoe_net_provider_guid_ror(&pl, 3, out) == 0);
     }
+    {
+        /* 0x004285c0 */
+        static AoeNetSessionsRor sl;
+        AoeNetSessionStateRor st;
+        uint32_t g[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+        int comm;
+        sl.count = 9;
+        aoe_net_sessions_init_ror(&sl, &st, &comm, NULL, g, NULL);
+        assert(sl.count == 0 && st.comm == &comm && st.application[3] == 4 &&
+               st.guid_12ec[0] == 5);
+    }
     return 0;
 }

@@ -332,3 +332,69 @@ int aoe_comm_sync_vote_ror(const AoeCommSyncRor *s, int32_t player,
     if (same + differ < playing - 1) return 0;
     return same < differ;
 }
+
+static int sync_slot_counts(const AoeCommSyncTurnOpsRor *ops, int32_t slot, int32_t *player) {
+    *player = ops->slot_player ? ops->slot_player(ops->context, slot) : 0;
+    return *player != 0 && (!ops->player_kind || ops->player_kind(ops->context, *player) == 0);
+}
+
+uint32_t aoe_comm_sync_slot_bits_ror(const AoeCommSyncTurnOpsRor *ops) {
+    uint32_t bits = 0;
+    int32_t slot, shift = 0, p;
+    if (!ops) return 0;
+    for (slot = 1; shift < 16; ++slot, shift += 2) {
+        uint32_t v;
+        if (!sync_slot_counts(ops, slot, &p)) continue;
+        if (slot == ops->self_slot) {
+            v = (uint32_t)(ops->map_8db8 ? ops->map_8db8(ops->context) : 0) << 1 |
+                (ops->map_8db9 ? ops->map_8db9(ops->context) : 0);
+        } else if (ops->slot_a15 && ops->slot_a15(ops->context, slot)) {
+            bits |= 2u << shift;
+            continue;
+        } else {
+            v = (uint32_t)(ops->game_60 ? ops->game_60(ops->context) : 0) << 1 |
+                (ops->game_64 ? ops->game_64(ops->context) : 0);
+        }
+        bits |= v << shift;
+    }
+    return bits;
+}
+
+int32_t aoe_comm_sync_slot_sum_ror(const AoeCommSyncTurnOpsRor *ops) {
+    int32_t slot, p, sum = 0;
+    if (!ops) return 0;
+    for (slot = 1; slot <= 8; ++slot) {
+        if (!sync_slot_counts(ops, slot, &p)) continue;
+        sum += slot == ops->self_slot ? ops->world_7c : p;
+    }
+    return sum;
+}
+
+int aoe_comm_sync_turn_ror(AoeCommSyncRor *s, uint32_t turn, const AoeCommSyncTurnOpsRor *ops,
+                           void (*out_of_sync)(void *, const AoeCommSyncRecordRor *),
+                           void *context) {
+    AoeCommSyncRecordRor r;
+    uint32_t a = 0, v;
+    int32_t b = 0, c = 0, time;
+    if (!s || !ops || !s->enabled) return 0;
+    time = ops->has_world ? ops->world_time : 0;
+    if (turn < s->next_turn) return 0;
+    s->next_turn += 0x28;
+    if (ops->checksums) ops->checksums(ops->context, &a, &b, &c);
+    v = aoe_comm_sync_slot_bits_ror(ops) |
+        ((uint32_t)ops->settings_982 << 15 | (uint32_t)aoe_comm_sync_slot_sum_ror(ops)) << 16 |
+        (uint32_t)ops->settings_989 << 30;
+    if (!(ops->slot_a15 && ops->slot_a15(ops->context, ops->self_slot))) v += ops->global_sum;
+    r.player = ops->self_slot;
+    r.world_time = time;
+    r.turn = (int32_t)turn;
+    r.values[0] = s->extra;
+    r.values[1] = 0;
+    r.values[2] = (int32_t)a;
+    r.values[3] = b;
+    r.values[4] = c;
+    r.extra = (int32_t)v;
+    aoe_comm_sync_record_ror(s, &r, out_of_sync, context);
+    if (ops->send) ops->send(ops->context, &r);
+    return 1;
+}

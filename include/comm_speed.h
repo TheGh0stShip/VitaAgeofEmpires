@@ -152,6 +152,42 @@ int aoe_comm_sync_record_ror(AoeCommSyncRor *s, const AoeCommSyncRecordRor *r,
 int aoe_comm_sync_check_ror(AoeCommSyncRor *s, const AoeCommSyncRecordRor *r,
                             void (*out_of_sync)(void *, const AoeCommSyncRecordRor *),
                             void *context);
+/* The sync record of this turn. Slots 1..8 whose player (0x0041c080) is
+   set but not a world player with +4 set (0x00454150) count:
+   - 0x00429f20: two bits per slot from bit 0: ours the map's +0x8db8 /
+     +0x8db9 bytes (0x00520690 / 0x005206b0: high, low); a slot with its
+     game +0xa15 byte set 2; others the game's +0x60 / +0x64 bytes.
+   - 0x0042a030: the sum of their players, ours counting world +0x7c.
+   - 0x004295b0(turn): enabled and at or past +0x08 (which moves on 40),
+     the record (our slot, world time, turn, values: +0x28, 0, the three
+     checksums 0x0041bcb0, and a value: those bits | (settings byte 982
+     << 15 | the sum) << 16 | settings byte 989 << 30, plus the globals
+     0x007d2020 + 0x007d201c unless our +0xa15 byte is set) is stored
+     (0x004293e0) and sent (0x00421800). 1 then, else 0. */
+typedef struct {
+    void *context;
+    int32_t self_slot;                                  /* 0x00423c10 */
+    int32_t (*slot_player)(void *context, int32_t slot);
+    int32_t (*player_kind)(void *context, int32_t player); /* 0 when none */
+    uint8_t (*map_8db8)(void *context);
+    uint8_t (*map_8db9)(void *context);
+    uint8_t (*game_60)(void *context);
+    uint8_t (*game_64)(void *context);
+    uint8_t (*slot_a15)(void *context, int32_t slot);
+    int16_t world_7c;
+    int has_world;
+    int32_t world_time;                                 /* world +4 */
+    void (*checksums)(void *context, uint32_t *a, int32_t *b, int32_t *c);
+    uint8_t settings_982, settings_989;
+    uint32_t global_sum;                                /* 0x007d2020 + 0x007d201c */
+    void (*send)(void *context, const AoeCommSyncRecordRor *r);
+} AoeCommSyncTurnOpsRor;
+uint32_t aoe_comm_sync_slot_bits_ror(const AoeCommSyncTurnOpsRor *ops);
+int32_t aoe_comm_sync_slot_sum_ror(const AoeCommSyncTurnOpsRor *ops);
+int aoe_comm_sync_turn_ror(AoeCommSyncRor *s, uint32_t turn, const AoeCommSyncTurnOpsRor *ops,
+                           void (*out_of_sync)(void *, const AoeCommSyncRecordRor *),
+                           void *context);
+
 /* 0x00429d10 (also through 0x004259f0): is `player` the odd one out at `turn`? Its record is
    compared with every other player's; 1 when more differ than agree and
    at least playing players - 1 reported (`playing` counts slots 1..9 in

@@ -99,7 +99,8 @@ extern const AoeUiEzVtblRor aoe_ui_list_dialog_vtable_ror;
    given, the list (font 11) and its 20-wide scrollbar, the lines, the
    first selection, OK (string 4001) and Cancel (4002) of the same size on
    one row; the list has the focus. 0x00433c10 / 0x00433c20 the chosen
-   line and text. */
+   line and text. +0xb8 0x00433b50: the actions above (others to the
+   dialog's 0x00457e50). */
 int aoe_ui_list_dialog_init_ror(AoeUiListDialogRor *d, AoeUiSystemRor *system,
                                 const AoeUiEzOpsRor *ops, const char *name);
 int aoe_ui_list_dialog_setup_ror(

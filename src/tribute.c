@@ -44,3 +44,20 @@ uint8_t aoe_diplomacy_stance_ror(int ally_on, int neutral_on) {
     if (ally_on) return 0;
     return neutral_on ? 1 : 3;
 }
+
+void aoe_tribute_draw_ror(const AoeTributeDrawOpsRor *ops) {
+    int32_t p, dy = 0;
+    if (!ops) return;
+    if (ops->base_draw) ops->base_draw(ops->context);
+    if (!ops->has_icons) return;
+    if (ops->begin_draw) ops->begin_draw(ops->context, 0);
+    for (p = 1; p < ops->player_count; ++p, dy += 0x1e) {
+        int16_t colour = 0;
+        const uint8_t *table =
+            ops->colour_table ? ops->colour_table(ops->context, p, &colour) : NULL;
+        if (!table) continue;
+        if (ops->set_fill) ops->set_fill(ops->context, (uint8_t)((colour + 1) * 16));
+        if (ops->draw_icon) ops->draw_icon(ops->context, ops->x + 10, ops->y + 0x50 + dy, table);
+    }
+    if (ops->end_draw) ops->end_draw(ops->context);
+}

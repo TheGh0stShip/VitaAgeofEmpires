@@ -90,6 +90,20 @@ typedef struct {
     void (*enumerate)(void *context, AoeNetSessionsRor *list);
 } AoeNetSessionOpsRor;
 
+/* 0x004285c0, the session list's constructor: the enumeration state
+   (globals 0x00581800..0x00581814) takes the comm handler, its
+   DirectPlay interface (0x00424ea0), and its two GUIDs (+0x12dc and
+   +0x12ec); the count becomes 0; then a clear (0x00428650) and a refresh
+   (0x00428890). */
+typedef struct {
+    const void *comm;
+    void *dplay;
+    uint32_t application[4];   /* comm +0x12dc */
+    uint32_t guid_12ec[4];     /* comm +0x12ec */
+} AoeNetSessionStateRor;
+void aoe_net_sessions_init_ror(AoeNetSessionsRor *list, AoeNetSessionStateRor *state,
+                               const void *comm, void *dplay, const uint32_t guids[8],
+                               const AoeNetSessionOpsRor *ops);
 /* 0x00428650 clear; 0x00428890 clear, then enumerate; 0x00428900 the
    callback: a timed-out call (flag 1) stops, else the session is added
    (0x00428730: GUIDs, player counts, name and password; every user word

@@ -145,3 +145,20 @@ int aoe_net_provider_guid_ror(const AoeNetProvidersRor *list, int32_t index, uin
     memcpy(out, list->items[index].guid, 16);
     return 1;
 }
+
+void aoe_net_sessions_init_ror(AoeNetSessionsRor *list, AoeNetSessionStateRor *state,
+                               const void *comm, void *dplay, const uint32_t guids[8],
+                               const AoeNetSessionOpsRor *ops) {
+    if (state) {
+        state->comm = comm;
+        state->dplay = dplay;
+        if (guids) {
+            memcpy(state->application, guids, sizeof state->application);
+            memcpy(state->guid_12ec, guids + 4, sizeof state->guid_12ec);
+        }
+    }
+    if (!list) return;
+    list->count = 0;
+    aoe_net_sessions_clear_ror(list);
+    aoe_net_sessions_refresh_ror(list, ops);
+}

@@ -94,3 +94,11 @@ void aoe_unit_cleanup_actions_ror(AoeActionList *list, void (*cleanup)(void *con
     if (list) aoe_action_list_clear(list);
     cleanup(context);
 }
+
+AoeActionList *aoe_action_list_new_ror(const uint8_t *owner_state, const AoeActionListOps *ops) {
+    AoeActionList *l = calloc(1, sizeof *l);
+    if (!l) return NULL;
+    l->owner_state = owner_state;
+    l->ops = *ops;
+    return l;
+}

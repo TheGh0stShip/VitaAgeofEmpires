@@ -60,6 +60,11 @@ int aoe_unit_push_action_ror(AoeActionList *list, void *action);
 int aoe_unit_append_action_ror(AoeActionList *list, void *action);
 void aoe_unit_cleanup_actions_ror(AoeActionList *list, void (*cleanup)(void *context),
                                   void *context);
+/* A new empty list (0x00403d50) for a unit: the action unit's +0x21c
+   0x00405c60 makes one for itself, an action's +0x0c 0x004070a0 one for
+   its unit (+0x08). NULL when out of memory; free with free() once
+   cleared. */
+AoeActionList *aoe_action_list_new_ror(const uint8_t *owner_state, const AoeActionListOps *ops);
 void *aoe_action_list_head_ror(const AoeActionList *list);
 void aoe_action_list_each_ror(const AoeActionList *list, void (*fn)(void *context, void *action),
                               void *context);

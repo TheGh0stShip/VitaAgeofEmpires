@@ -2,6 +2,7 @@
 #include "building_update.h"
 #include <assert.h>
 #include <stddef.h>
+#include <stdlib.h>
 
 typedef struct {
     AoeActionList *list;
@@ -166,6 +167,12 @@ int main(void) {
         assert(!list.head && cleaned==1);
         aoe_unit_cleanup_actions_ror(NULL,count_clean,&cleaned);
         assert(cleaned==2);
+    }
+    {
+        AoeActionListOps lo={&t,destroy,set_state};
+        AoeActionList *n=aoe_action_list_new_ror(&state,&lo);
+        assert(n && !n->head && n->owner_state==&state && aoe_action_list_valid(n));
+        free(n);
     }
     return 0;
 }

@@ -528,6 +528,32 @@ static void t_build_order(void *c, int32_t b, int32_t type, float x, float y, in
 }
 static int t_action(void *c, int32_t id, int32_t *a) { (void)c; *a = id == 31 ? 0x2be : 3; return 1; }
 
+static int to_reach(void *c, int32_t id, int32_t x, int32_t y, int32_t z, float r, int32_t t) {
+    (void)c; (void)id; (void)x; (void)y; (void)z;
+    assert(r == 2.0f);
+    return t == 77;
+}
+static int32_t p124_unit = -1, p124_target;
+static void t_p124(void *c, int32_t u, int32_t t, int32_t o, float x, float y) {
+    (void)c; (void)o; (void)x; (void)y; p124_unit = u; p124_target = t;
+}
+
+static void to_object_tests(void) {
+    static AoeAiTacticalRor ai;
+    AoeAiTacticalOpsRor ops;
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    memset(&ops, 0, sizeof ops);
+    ops.object = tobject;
+    ops.can_reach = to_reach;
+    ops.player_124 = t_p124;
+    assert(aoe_ai_tactical_order_to_object_ror(&ai, 5, 77, &ops) == 1 && p124_unit == 5 &&
+           p124_target == 77 && aoe_ai_int_list_contains_ror(&ai.list_d58, 5));
+    assert(aoe_ai_tactical_order_to_object_ror(&ai, 6, 78, &ops) == 0);
+    assert(aoe_ai_tactical_order_to_object_ror(&ai, -1, 77, &ops) == 0);
+    assert(aoe_ai_tactical_order_to_object_ror(&ai, 6, 899, &ops) == 0);
+    aoe_ai_tactical_release_ror(&ai);
+}
+
 static void build_start_tests(void) {
     static AoeAiTacticalRor ai;
     static AoeAiBuildItemRor item;
@@ -594,6 +620,13 @@ static void build_start_tests(void) {
                last_order.action == 0x2ce && last_order.zero == 0);
         tg.id = 71;
         assert(aoe_ai_tactical_order_repair_ror(&ai, 35, &tg, &ops) == 0 && orders == 2);
+        /* 0x004db800 */
+        aoe_ai_tactical_add_gatherer_ror(&ai, 36);
+        assert(aoe_ai_tactical_order_explore_ror(&ai, 36, 9.0f, 8.0f, 1, &ops) == 1);
+        assert(orders == 3 && last_order.action == 0x2c1 && last_order.target == -1 &&
+               last_order.a == 9.0f && last_order.c == -1.0f && last_order.value == 1 &&
+               aoe_ai_int_list_contains_ror(&ai.lists[1], 36) &&
+               !aoe_ai_tactical_has_gatherer_ror(&ai, 36));
         orders = 0;
     }
     aoe_ai_build_item_release_ror(&item);
@@ -740,6 +773,7 @@ int main(void) {
     gather_order_tests();
     plan_tests();
     build_start_tests();
+    to_object_tests();
 
     aoe_ai_tactical_init_ror(&ai, 3, NULL);
     assert(ai.module.id == 0x3f1 && !strcmp(ai.module.name, "TacAI"));

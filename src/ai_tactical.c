@@ -1509,3 +1509,45 @@ int aoe_ai_tactical_order_repair_ror(AoeAiTacticalRor *ai, int32_t unit,
     if (!ops->can_engage || !ops->can_engage(ops->context, unit, target->id, 1.0f)) return 0;
     return order_on(ai, unit, target, 0x2ce, 0, ops);
 }
+
+int aoe_ai_tactical_order_explore_ror(AoeAiTacticalRor *ai, int32_t unit, float x,
+                                      float y, int32_t explorer,
+                                      const AoeAiTacticalOpsRor *ops) {
+    AoeAiTaskOrderRor o;
+    if (!ai) return 1;
+    aoe_ai_int_list_add_unique_ror(&ai->list_d58, unit);
+    if (explorer == 1) {
+        aoe_ai_int_list_add_unique_ror(&ai->lists[1], unit);
+        aoe_ai_tactical_remove_gatherer_ror(ai, unit);
+    }
+    if (!ops || !ops->order) return 1;
+    o.player = ops->self;
+    o.unit = unit;
+    o.action = 0x2c1;
+    o.target = o.target2 = -1;
+    o.a = x;
+    o.b = y;
+    o.c = -1.0f;
+    o.d = 1.0f;
+    o.flag = 1;
+    o.zero = 0;
+    o.value = 1;
+    ops->order(ops->context, &o);
+    return 1;
+}
+
+int aoe_ai_tactical_order_to_object_ror(AoeAiTacticalRor *ai, int32_t unit,
+                                        int32_t target,
+                                        const AoeAiTacticalOpsRor *ops) {
+    AoeAiWorldObjectRor u, t;
+    if (!ai || !ops || !ops->object || !ops->object(ops->context, unit, &u) || unit == -1 ||
+        !ops->object(ops->context, target, &t))
+        return 0;
+    if (!ops->can_reach ||
+        !ops->can_reach(ops->context, unit, aoe_ftol32(t.x), aoe_ftol32(t.y), aoe_ftol32(t.z),
+                        2.0f, target))
+        return 0;
+    aoe_ai_int_list_add_unique_ror(&ai->list_d58, unit);
+    if (ops->player_124) ops->player_124(ops->context, unit, target, t.owner, t.x, t.y);
+    return 1;
+}

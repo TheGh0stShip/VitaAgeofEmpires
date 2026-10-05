@@ -277,6 +277,10 @@ typedef struct {
     int (*can_engage)(void *context, int32_t id, int32_t target, float range);
     double (*object_distance)(void *context, int32_t from, int32_t to);
     int (*delete_object)(void *context, int32_t id);
+    /* The tribe player's vtable +0x124 (unit, target, the target's owner
+       index, its x and y). */
+    void (*player_124)(void *context, int32_t unit, int32_t target, int32_t owner,
+                       float x, float y);
 } AoeAiTacticalOpsRor;
 
 /* 0x004e0630: in list order, the group with task `task` and +0x180
@@ -398,6 +402,18 @@ int aoe_ai_tactical_order_help_build_ror(AoeAiTacticalRor *ai, int32_t unit,
 int aoe_ai_tactical_order_repair_ror(AoeAiTacticalRor *ai, int32_t unit,
                                      const AoeAiWorldObjectRor *target,
                                      const AoeAiTacticalOpsRor *ops);
+/* 0x004db800: `unit` is marked tasked; with `explorer` 1 it also joins
+   list 1 (once) and stops gathering (0x004e1940); then it is ordered to
+   explore (x, y): 0x2c1, no targets, (x, y, -1.0, 1.0), 1, 0, value 1. 1. */
+int aoe_ai_tactical_order_explore_ror(AoeAiTacticalRor *ai, int32_t unit, float x,
+                                      float y, int32_t explorer,
+                                      const AoeAiTacticalOpsRor *ops);
+/* 0x004dbb00: our `unit` (not -1) is sent to our object `target` when its
+   path test to the target's truncated position within 2.0 passes: marked
+   tasked, then the tribe player's vtable +0x124. 1 when sent. */
+int aoe_ai_tactical_order_to_object_ror(AoeAiTacticalRor *ai, int32_t unit,
+                                        int32_t target,
+                                        const AoeAiTacticalOpsRor *ops);
 /* 0x004dc650: ftol(number 34 / f), at most 99. */
 int32_t aoe_ai_tactical_effort_ror(const AoeAiTacticalRor *ai, float f);
 /* 0x004e2f90: +0xd68[i] (0..3, else -1). 0x004e2f30 / 0x004e2f60 /

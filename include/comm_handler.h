@@ -320,6 +320,14 @@ void aoe_comm_check_players_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp);
 uint8_t *aoe_comm_next_command_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp);
 int32_t aoe_comm_unlink_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp, int32_t level);
 
+/* 0x0041f2e0: with guaranteed delivery on, the receive log line "GTD:
+   RX Ser#%d From P#%d T#%ld ToExecT#%d Cmd=%d '%c' Seq=%d" (the command
+   byte both as a number and a character). 0x004200d0: a post with 0 as
+   the second value. */
+void aoe_comm_gtd_rx_log_ror(const AoeCommRor *c, const AoeCommOpsRor *ops, int32_t serial,
+                             int32_t from, int32_t exec_turn, uint8_t command, uint8_t sequence);
+void aoe_comm_post_ror(const AoeCommOpsRor *ops, uint32_t w);
+
 /* The lobby (0x00425a10..0x00425e30). */
 typedef struct {
     uint32_t window;      /* +0x00 */
@@ -353,5 +361,12 @@ int32_t aoe_lobby_send_ror(AoeLobbyRor *l, const AoeLobbyOpsRor *ops, const uint
                            const void *data, uint32_t size, int32_t a, int32_t b, int32_t c,
                            int32_t d);
 int aoe_lobby_enum_player_ror(int32_t dpid, const char *name, uint8_t flags);
+/* 0x00425930: the game options to the lobby zone: unless launched it
+   logs "NOT LOBBY LAUNCHED.  EXITING" and gives 0; else it logs "Sending
+   zone message.", sends (the game's +0x8f8..+0x904 values) and on a
+   failure reports it as "SendGameOptions" (0). */
+int aoe_lobby_send_options_ror(AoeLobbyRor *l, const AoeLobbyOpsRor *ops, const uint32_t guid[4],
+                               const void *data, uint32_t size, const int32_t values[4],
+                               const AoeCommOpsRor *comm);
 
 #endif

@@ -19,7 +19,8 @@ static int32_t set_data(void *c, const void *d, uint32_t n) { (void)c; (void)d; 
 static int32_t message(void *c, uint8_t k, const void *d, uint32_t n) { (void)c; (void)d; (void)n; msgs[nmsgs++] = k; return 0; }
 static void chat(void *c, int32_t from, const char r[10], const char *t) { (void)c; (void)from; (void)t; memcpy(last_mask, r, 10); }
 static void post(void *c, uint32_t w, uint32_t l) { (void)c; posts[nposts][0] = w; posts[nposts][1] = l; nposts++; }
-static void log_(void *c, const char *t) { (void)c; (void)t; }
+static char last_log[200];
+static void log_(void *c, const char *t) { (void)c; snprintf(last_log, sizeof last_log, "%s", t); }
 static void report(void *c, int32_t hr, const char *t) { (void)c; (void)hr; (void)t; }
 static void drop(void *c, uint32_t s, int32_t d) { (void)c; (void)s; (void)d; drops++; }
 static void refresh(void *c, uint32_t s, int f) { (void)c; (void)s; (void)f; refreshes++; }
@@ -230,8 +231,30 @@ int main(void) {
         l.launched = 1;
         assert(aoe_lobby_send_ror(&l, &lops, g, "z", 1, 0, 0, 0, 0) == 0 && lobby_sent == 0x31);
         assert(aoe_lobby_hosting_ror(&l, 2) == 1 && aoe_lobby_hosting_ror(&l, 1) == 0);
+        {
+            int32_t v[4] = {9, 8, 7, 6};
+            assert(aoe_lobby_send_options_ror(&l, &lops, g, "z", 1, v, &ops));
+            assert(!strcmp(last_log, "Sending zone message."));
+            l.launched = 0;
+            assert(!aoe_lobby_send_options_ror(&l, &lops, g, "z", 1, v, &ops));
+            assert(!strcmp(last_log, "NOT LOBBY LAUNCHED.  EXITING"));
+            l.launched = 1;
+        }
         aoe_lobby_release_ror(&l, &lops);
         assert(!aoe_lobby_launched_ror(&l));
+    }
+    {
+        static AoeCommRor gc;
+        int n = nposts;
+        gc.turn = 12;
+        last_log[0] = 0;
+        aoe_comm_gtd_rx_log_ror(&gc, &ops, 3, 2, 14, 'A', 5);
+        assert(last_log[0] == 0);
+        gc.gtd = 1;
+        aoe_comm_gtd_rx_log_ror(&gc, &ops, 3, 2, 14, 'A', 5);
+        assert(!strcmp(last_log, "GTD: RX Ser#3 From P#2 T#12 ToExecT#14 Cmd=65 'A' Seq=5"));
+        aoe_comm_post_ror(&ops, 77);
+        assert(nposts == n + 1 && posts[n][0] == 77 && posts[n][1] == 0);
     }
     puts("comm_handler_test: ok");
     return 0;

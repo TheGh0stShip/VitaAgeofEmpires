@@ -932,3 +932,30 @@ int aoe_lobby_enum_player_ror(int32_t dpid, const char *name, uint8_t flags) {
     (void)flags; /* 0x10 remote, 8 local: logged only */
     return 1;
 }
+
+int aoe_lobby_send_options_ror(AoeLobbyRor *l, const AoeLobbyOpsRor *ops, const uint32_t guid[4],
+                               const void *data, uint32_t size, const int32_t values[4],
+                               const AoeCommOpsRor *comm) {
+    int32_t hr;
+    if (!l->launched) {
+        comm->log(comm->context, "NOT LOBBY LAUNCHED.  EXITING");
+        return 0;
+    }
+    comm->log(comm->context, "Sending zone message.");
+    hr = aoe_lobby_send_ror(l, ops, guid, data, size, values[0], values[1], values[2], values[3]);
+    if (hr == 0) return 1;
+    comm->report(comm->context, hr, "SendGameOptions");
+    return 0;
+}
+
+void aoe_comm_gtd_rx_log_ror(const AoeCommRor *c, const AoeCommOpsRor *ops, int32_t serial,
+                             int32_t from, int32_t exec_turn, uint8_t command, uint8_t sequence) {
+    char line[160];
+    if (!c->gtd) return;
+    snprintf(line, sizeof line, "GTD: RX Ser#%d From P#%d T#%ld ToExecT#%d Cmd=%d '%c' Seq=%d",
+             (int)serial, (int)from, (long)c->turn, (int)exec_turn, (int)command, (char)command,
+             (int)sequence);
+    ops->log(ops->context, line);
+}
+
+void aoe_comm_post_ror(const AoeCommOpsRor *ops, uint32_t w) { ops->post(ops->context, w, 0); }

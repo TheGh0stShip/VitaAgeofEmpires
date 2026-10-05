@@ -152,7 +152,7 @@ int aoe_comm_sync_record_ror(AoeCommSyncRor *s, const AoeCommSyncRecordRor *r,
 int aoe_comm_sync_check_ror(AoeCommSyncRor *s, const AoeCommSyncRecordRor *r,
                             void (*out_of_sync)(void *, const AoeCommSyncRecordRor *),
                             void *context);
-/* 0x00429d10: is `player` the odd one out at `turn`? Its record is
+/* 0x00429d10 (also through 0x004259f0): is `player` the odd one out at `turn`? Its record is
    compared with every other player's; 1 when more differ than agree and
    at least playing players - 1 reported (`playing` counts slots 1..9 in
    state 2). */

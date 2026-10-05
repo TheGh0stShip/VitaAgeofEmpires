@@ -40,6 +40,17 @@ static void menu_set_mode(void *c, int32_t m) { (void)c; menu_mode = m; }
 static void menu_play_track(void *c, int32_t t) { (void)c; menu_track = t; }
 static void menu_play_file(void *c, const char *f) { (void)c; snprintf(menu_file, sizeof menu_file, "%s", f); }
 
+static uint32_t lv_clock;
+static int lv_polls, lv_resets, lv_pending = 3, lv_status, lv_unlink, lv_state = -1, lv_video = -1;
+static void lv_reset(void *c) { (void)c; ++lv_resets; }
+static void lv_poll(void *c) { (void)c; ++lv_polls; lv_clock += 100; if (lv_polls % 6 == 0 && lv_pending) --lv_pending; }
+static int32_t lv_unacked(void *c) { (void)c; return lv_pending; }
+static void lv_stat(void *c, int32_t id) { (void)c; lv_status = id; }
+static uint32_t lv_now(void *c) { (void)c; return lv_clock; }
+static void lv_unl(void *c, int32_t l) { (void)c; lv_unlink = l; }
+static void lv_set_state(void *c, int32_t s) { (void)c; lv_state = s; }
+static void lv_play(void *c, int32_t k, int w) { (void)c; (void)k; lv_video = w; }
+
 int main(void) {
     char coded[64];
     AoeGameRorCommandOpsRor cops = {NULL, ns, sp, bc};
@@ -181,6 +192,42 @@ int main(void) {
         m.music_held = 1;
         menu_file[0] = 0;
         assert(aoe_game_ror_to_menu_ror("Main Menu", &m) && !menu_file[0]);
+    }
+    {
+        /* 0x005063e0 / 0x00505f10 / 0x00503060 leaving a session. */
+        AoeGameRorEndOpsRor e;
+        memset(&e, 0, sizeof e);
+        e.leave.reset_comm = lv_reset;
+        e.leave.poll = lv_poll;
+        e.leave.unacknowledged = lv_unacked;
+        e.leave.status = lv_stat;
+        e.leave.now_ms = lv_now;
+        e.leave.unlink = lv_unl;
+        e.set_state = lv_set_state;
+        e.play_video = lv_play;
+        aoe_game_ror_leave_ror(&e.leave);
+        assert(lv_resets == 1 && !lv_polls);
+        e.leave.networked = 1;
+        e.leave.state = 4;
+        aoe_game_ror_leave_ror(&e.leave);
+        assert(lv_status == 0x4c0 && lv_pending == 0 && lv_unlink == 5 && lv_resets == 2);
+        /* Commands that are never acknowledged stop after 15 s. */
+        lv_pending = 1000;
+        lv_polls = 0;
+        lv_clock = 0;
+        aoe_game_ror_leave_ror(&e.leave);
+        assert(lv_clock >= 15000 && lv_clock < 16000);
+        e.has_comm = 0;
+        assert(aoe_game_ror_quit_session_ror(&e) && lv_state == -1);
+        e.has_comm = 1;
+        lv_pending = 0;
+        assert(aoe_game_ror_quit_session_ror(&e) && lv_state == 0);
+        lv_state = -1;
+        e.leave.state = 5;
+        e.has_world = 1;
+        e.won = 1;
+        aoe_game_ror_end_session_ror(&e);
+        assert(lv_state == 0 && lv_video == 1);
     }
     return 0;
 }

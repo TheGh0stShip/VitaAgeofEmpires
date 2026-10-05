@@ -222,4 +222,47 @@ typedef struct {
 } AoeGameRorMenuOpsRor;
 int aoe_game_ror_to_menu_ror(const char *screen, const AoeGameRorMenuOpsRor *ops);
 
+/* Leaving a session. 0x005063e0: outside a networked game the comm
+   object is reset (0x0041df70); in one that is running (states 4..7)
+   the turn markers go out (0x00421680), the comm is polled (0x0041f3d0)
+   and, with commands still unacknowledged (0x00421b10), the wait cursor
+   and status 1216 show while polling continues for at least 500 ms and
+   then as long as some remain, up to 15 s from the start (stopping early
+   once the world is gone or its +0x1d is 1); then the reset and an
+   unlink to level 5 (0x004237c0). 0x00505f10 (+0x12c): with a comm
+   object, leave and return to state 0; always 1. 0x00503060: leave; a
+   pending scenario test (+0xae8) returns to the editor (0x00500d80);
+   else a running or ended game (states 3..6) goes to state 0 and, with a
+   world, the viewed player's victory (+0x80 1) or defeat video plays
+   (0x005003f0 kind 4 with the scenario's +0x15e8 / +0x16c8 name). */
+typedef struct {
+    void *context;
+    int networked;
+    int32_t state;                               /* +0x1b0 */
+    void (*reset_comm)(void *context);
+    void (*send_markers)(void *context);
+    void (*poll)(void *context);
+    int32_t (*unacknowledged)(void *context);
+    void (*wait_cursor)(void *context);
+    void (*status)(void *context, int32_t string_id);
+    uint32_t (*now_ms)(void *context);
+    int (*world_done)(void *context);           /* no world, or its +0x1d is 1 */
+    void (*unlink)(void *context, int32_t level);
+} AoeGameRorLeaveOpsRor;
+void aoe_game_ror_leave_ror(const AoeGameRorLeaveOpsRor *ops);
+
+typedef struct {
+    AoeGameRorLeaveOpsRor leave;
+    int has_comm;                                /* +0x18c */
+    int test_pending;                            /* +0xae8 */
+    int has_world;                               /* +0x3f4 */
+    int won;                                     /* viewed player +0x80 == 1 */
+    void (*set_state)(void *context, int32_t state);
+    void (*back_to_editor)(void *context);       /* 0x00500d80 */
+    void (*world_ended)(void *context);          /* 0x0041bc50 */
+    void (*play_video)(void *context, int32_t kind, int won);
+} AoeGameRorEndOpsRor;
+int aoe_game_ror_quit_session_ror(const AoeGameRorEndOpsRor *ops);
+void aoe_game_ror_end_session_ror(const AoeGameRorEndOpsRor *ops);
+
 #endif

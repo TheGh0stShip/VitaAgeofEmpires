@@ -454,3 +454,58 @@ int aoe_game_ror_to_menu_ror(const char *screen, const AoeGameRorMenuOpsRor *ops
     }
     return 1;
 }
+
+void aoe_game_ror_leave_ror(const AoeGameRorLeaveOpsRor *o) {
+    int32_t s;
+    if (!o) return;
+    if (!o->networked) {
+        if (o->reset_comm) o->reset_comm(o->context);
+        return;
+    }
+    s = o->state;
+    if (s != 4 && s != 6 && s != 7 && s != 5) return;
+    if (o->send_markers) o->send_markers(o->context);
+    if (o->poll) o->poll(o->context);
+    if (o->unacknowledged && o->unacknowledged(o->context) > 0 && o->now_ms) {
+        uint32_t start, last;
+        if (o->wait_cursor) o->wait_cursor(o->context);
+        if (o->status) o->status(o->context, 0x4c0);
+        start = last = o->now_ms(o->context);
+        for (;;) {
+            uint32_t now;
+            if (o->world_done && o->world_done(o->context)) break;
+            if (o->poll) o->poll(o->context);
+            now = o->now_ms(o->context);
+            if (now - last < 500) continue;
+            if (!o->unacknowledged(o->context)) break;
+            last = o->now_ms(o->context);
+            if (last - start >= 15000) break;
+        }
+    }
+    if (o->reset_comm) o->reset_comm(o->context);
+    if (o->unlink) o->unlink(o->context, 5);
+}
+
+int aoe_game_ror_quit_session_ror(const AoeGameRorEndOpsRor *o) {
+    if (o && o->has_comm) {
+        aoe_game_ror_leave_ror(&o->leave);
+        if (o->set_state) o->set_state(o->leave.context, 0);
+    }
+    return 1;
+}
+
+void aoe_game_ror_end_session_ror(const AoeGameRorEndOpsRor *o) {
+    int32_t s;
+    if (!o) return;
+    aoe_game_ror_leave_ror(&o->leave);
+    if (o->test_pending) {
+        if (o->back_to_editor) o->back_to_editor(o->leave.context);
+        return;
+    }
+    s = o->leave.state;
+    if (s != 4 && s != 6 && s != 5 && s != 3) return;
+    if (o->set_state) o->set_state(o->leave.context, 0);
+    if (!o->has_world) return;
+    if (o->world_ended) o->world_ended(o->leave.context);
+    if (o->play_video) o->play_video(o->leave.context, 4, o->won);
+}

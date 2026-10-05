@@ -362,3 +362,38 @@ void aoe_player_conditions_create_ror(AoePlayerObjectRor *player,
                                      flag)
             : NULL;
 }
+
+int32_t aoe_player_default_14_ror(AoePlayerObjectRor *player, int32_t a) {
+    (void)player;
+    (void)a;
+    return 0;
+}
+
+void aoe_player_default_38_ror(AoePlayerObjectRor *player, int32_t a) {
+    (void)player;
+    (void)a;
+}
+
+int32_t aoe_player_default_3c_ror(AoePlayerObjectRor *player, int32_t a) {
+    (void)player;
+    (void)a;
+    return -1;
+}
+
+void aoe_player_default_5c_ror(AoePlayerObjectRor *player, int32_t a,
+                               int32_t b, int32_t c) {
+    (void)player;
+    (void)a;
+    (void)b;
+    (void)c;
+}
+
+void aoe_player_default_2c_ror(AoePlayerObjectRor *player, int32_t a,
+                               int32_t b, int32_t c, int32_t d, int32_t e) {
+    (void)player;
+    (void)a;
+    (void)b;
+    (void)c;
+    (void)d;
+    (void)e;
+}

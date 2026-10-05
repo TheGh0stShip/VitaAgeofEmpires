@@ -266,7 +266,41 @@ static void test_assign(void) {
            aoe_le_i32(cap.rec[3] + 0xc) == 1 && cap.rec[3][0x10] == 2);
 }
 
+static int chats;
+static char last_chat[64];
+static int32_t last_from, last_slot;
+static int32_t chat_count(void *c) {
+    (void)c;
+    return 4;
+}
+static int32_t chat_owner(void *c, int32_t slot) {
+    (void)c;
+    return slot == 2 ? 5 : 3; /* slots 1, 3, 4: player 3; slot 2: 5 */
+}
+static void chat_send(void *c, int32_t from, int32_t slot, const char *t) {
+    (void)c;
+    chats++;
+    last_from = from;
+    last_slot = slot;
+    strncpy(last_chat, t, sizeof(last_chat) - 1);
+}
+
+static void test_chat(void) {
+    AoePlayerChatOps chat = {NULL, chat_count, chat_owner, chat_send};
+    setup();
+    aoe_player_send_chat_ror(&player, 5, 0, &chat, "%s", "");
+    assert(chats == 0);
+    aoe_player_send_chat_ror(&player, 5, 0, &chat, "hi %d", 7);
+    assert(chats == 1 && last_slot == 2 && last_from == 3 &&
+           strcmp(last_chat, "hi 7") == 0);
+    aoe_player_send_chat_ror(&player, 5, 1, &chat, "x");
+    assert(chats == 5 && last_slot == 4);
+    aoe_player_send_chat_ror(&player, 3, 1, &chat, "x"); /* no echo */
+    assert(chats == 8);
+}
+
 int main(void) {
+    test_chat();
     test_selection_orders();
     test_direct_records();
     test_tribute();

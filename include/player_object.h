@@ -204,4 +204,19 @@ void aoe_player_conditions_create_ror(AoePlayerObjectRor *player,
                                       int32_t flag,
                                       const AoePlayerObjectOps *ops);
 
+/* Base player vtable defaults that ignore their arguments (the derived
+   player vtables override each):
+   0x0045bd40 (+0x14, one argument) returns 0;
+   0x0045bcd0 (+0x38, one argument) does nothing;
+   0x0045bce0 (+0x3c and +0x58, one argument) returns -1;
+   0x0045bcf0 (+0x5c, three arguments) does nothing;
+   0x0045be50 (+0x2c, five arguments) does nothing. */
+int32_t aoe_player_default_14_ror(AoePlayerObjectRor *player, int32_t a);
+void aoe_player_default_38_ror(AoePlayerObjectRor *player, int32_t a);
+int32_t aoe_player_default_3c_ror(AoePlayerObjectRor *player, int32_t a);
+void aoe_player_default_5c_ror(AoePlayerObjectRor *player, int32_t a,
+                               int32_t b, int32_t c);
+void aoe_player_default_2c_ror(AoePlayerObjectRor *player, int32_t a,
+                               int32_t b, int32_t c, int32_t d, int32_t e);
+
 #endif

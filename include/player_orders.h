@@ -174,4 +174,22 @@ int aoe_player_record_selection_ror(const AoePlayerOrdersRor *player,
                                     float a, float b,
                                     const AoePlayerOrdersOps *ops);
 
+typedef struct {
+    void *context;
+    int32_t (*slot_count)(void *context);              /* re-read per step */
+    int32_t (*slot_player)(void *context, int32_t slot);
+    /* The command sender's chat object: deliver `text` from player `from`
+       to session slot `slot`. */
+    void (*send)(void *context, int32_t from, int32_t slot,
+                 const char *text);
+} AoePlayerChatOps;
+
+/* 0x0045c1d0: format the message (vsprintf into a 1028-byte buffer; port:
+   bounded to 1024 bytes) and, when it is not empty, send it to every slot
+   1..count of player `to`; with `echo` equal to 1 and `to` another
+   player, also to every slot of this player. */
+void aoe_player_send_chat_ror(const AoePlayerOrdersRor *player, int32_t to,
+                              int32_t echo, const AoePlayerChatOps *ops,
+                              const char *format, ...);
+
 #endif

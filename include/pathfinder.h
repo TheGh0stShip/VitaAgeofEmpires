@@ -115,4 +115,21 @@ AoePathPrecheckRor aoe_path_precheck_ror(const AoePathfinderRor *path,
                                          int32_t mode, float *distance,
                                          const AoePathPrecheckOps *ops);
 
+/* A growable ID list: data, count (+4) and capacity (+0xc). */
+typedef struct {
+    int32_t *ids;
+    int32_t count;
+    int32_t capacity;
+} AoePathIdListRor;
+
+/* 0x0045ade0: append to `out` (each ID once, growing it one slot at a
+   time) the pathfinder's met unit IDs from index nearby_count down to 0.
+   The original starts one past the last ID: when that slot lies beyond
+   the array it grows the array (leaving the slot uninitialised) and
+   appends whatever the slot holds. Here a slot inside the capacity is
+   read as in the original (a stale ID), while one beyond it is skipped
+   (host-only guard). Returns 0 on allocation failure. */
+int aoe_path_collect_nearby_ror(const AoePathfinderRor *path,
+                                AoePathIdListRor *out);
+
 #endif

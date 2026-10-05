@@ -2,6 +2,7 @@
 
 #include <math.h>
 #include <stddef.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "aoe_ftol.h"
@@ -143,4 +144,30 @@ uint8_t aoe_path_penalty_ror(const AoePathfinderRor *path, int32_t first,
 
 void aoe_path_count_search_ror(AoePathfinderRor *path) {
     if (path) ++path->searches;
+}
+
+int aoe_path_collect_nearby_ror(const AoePathfinderRor *path,
+                                AoePathIdListRor *out) {
+    int64_t index;
+    if (!path || !out) return 0;
+    for (index = (int64_t)path->nearby_count; index >= 0; --index) {
+        int32_t id, k;
+        if (!path->nearby_ids || (uint64_t)index >= path->nearby_capacity)
+            continue;
+        id = path->nearby_ids[index];
+        for (k = 0; k < out->count && k < out->capacity; ++k)
+            if (out->ids[k] == id) break;
+        if (k < out->count && k < out->capacity) continue;
+        if (out->capacity - 1 < out->count) {
+            int32_t *grown = malloc(((size_t)out->count + 1) * sizeof(*grown));
+            if (!grown) return 0;
+            for (k = 0; k < out->capacity && k < out->count + 1; ++k)
+                grown[k] = out->ids[k];
+            free(out->ids);
+            out->ids = grown;
+            out->capacity = out->count + 1;
+        }
+        out->ids[out->count++] = id;
+    }
+    return 1;
 }

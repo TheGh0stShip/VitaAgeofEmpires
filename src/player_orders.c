@@ -1,5 +1,7 @@
 #include "player_orders.h"
 
+#include <stdarg.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "aoe_ftol.h"
@@ -377,4 +379,31 @@ int aoe_player_record_selection_ror(const AoePlayerOrdersRor *player,
                                            o.count, (uint8_t)first,
                                            (uint8_t)second));
     return 1;
+}
+
+static void chat_to(const AoePlayerChatOps *ops, int32_t from, int32_t owner,
+                    const char *text) {
+    int32_t slot;
+    for (slot = 1; ops->slot_count && slot <= ops->slot_count(ops->context);
+         ++slot)
+        if (ops->slot_player && ops->slot_player(ops->context, slot) == owner &&
+            ops->send)
+            ops->send(ops->context, from, slot, text);
+}
+
+void aoe_player_send_chat_ror(const AoePlayerOrdersRor *player, int32_t to,
+                              int32_t echo, const AoePlayerChatOps *ops,
+                              const char *format, ...) {
+    char text[1024];
+    va_list args;
+    int32_t self;
+
+    if (!player || !player->selection || !ops || !format) return;
+    va_start(args, format);
+    vsnprintf(text, sizeof(text), format, args);
+    va_end(args);
+    if (text[0] == '\0') return;
+    self = player->selection->player_id;
+    chat_to(ops, self, to, text);
+    if (echo == 1 && to != self) chat_to(ops, self, self, text);
 }

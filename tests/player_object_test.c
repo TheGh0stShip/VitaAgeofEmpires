@@ -288,6 +288,11 @@ static void test_members(void) {
 }
 
 int main(void) {
+    assert(aoe_player_default_14_ror(NULL, 5) == 0);
+    assert(aoe_player_default_3c_ror(NULL, 5) == -1);
+    aoe_player_default_38_ror(NULL, 1);
+    aoe_player_default_5c_ror(NULL, 1, 2, 3);
+    aoe_player_default_2c_ror(NULL, 1, 2, 3, 4, 5);
     test_init();
     test_round_trip();
     test_view_and_color();

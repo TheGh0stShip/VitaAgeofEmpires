@@ -634,7 +634,7 @@ add_library(aoe_unit_class STATIC src/unit_class.c)
 target_include_directories(aoe_unit_class PUBLIC include)
 target_compile_options(aoe_unit_class PRIVATE -Wall -Wextra)
 
-add_library(aoe_ui_panel STATIC src/ui_panel.c src/ui_button.c src/command_button.c src/resource_panel.c src/info_panel.c src/population_panel.c src/timer_panel.c src/edit_toolbar.c src/diamond_map.c src/game_minimap.c
+add_library(aoe_ui_panel STATIC src/ui_panel.c src/ui_button.c src/command_button.c src/resource_panel.c src/info_panel.c src/population_panel.c src/timer_panel.c src/edit_toolbar.c src/diamond_map.c src/game_minimap.c src/game_screen.c
             src/ui_text.c
             src/ui_scrollbar.c
             src/ui_list.c
@@ -1517,6 +1517,10 @@ else()
   target_link_libraries(small_functions_test PRIVATE aoe_live_unit_factory aoe_effects_io)
   target_compile_options(small_functions_test PRIVATE -UNDEBUG)
   add_test(NAME original_ror_small_functions COMMAND small_functions_test)
+  add_executable(game_screen_test tests/game_screen_test.c)
+  target_link_libraries(game_screen_test PRIVATE aoe_ui_panel)
+  target_compile_options(game_screen_test PRIVATE -UNDEBUG)
+  add_test(NAME original_ror_game_screen COMMAND game_screen_test)
   add_executable(game_startup_test tests/game_startup_test.c)
   target_link_libraries(game_startup_test PRIVATE aoe_game_settings)
   target_compile_options(game_startup_test PRIVATE -UNDEBUG)

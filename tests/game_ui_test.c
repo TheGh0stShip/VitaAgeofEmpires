@@ -285,7 +285,7 @@ int main(void) {
     }
     /* The quick chat line: Enter sends; single player shows it locally. */
     {
-        AoeUiEditOpsRor eops = {0};
+        static AoeUiEditOpsRor eops;
         AoeQuickChatDialogRor *q = calloc(1, sizeof(*q));
         AoeUiPanelRor *qp;
         eops.create = ed_create; eops.destroy = ed_destroy;

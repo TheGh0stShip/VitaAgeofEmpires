@@ -33,6 +33,9 @@ typedef struct {
    Patched 1.0a remove 0x004156f0 and clear 0x00415580 are the same walk;
    their redraw test is 0x00415c80 (the graphic on layer zero,
    0x004a63e0), which the `is_animated` op stands for. */
+/* 0x004153b0, the RoR list's destructor: the list is cleared
+   (0x00415580). */
+void aoe_sprite_list_destroy_ror(AoeSpriteList *list);
 int aoe_sprite_list_add(AoeSpriteList *list, const void *graphic,
                         uint8_t priority, int32_t arg1, int32_t arg2);
 int aoe_sprite_list_remove(AoeSpriteList *list, const void *graphic);

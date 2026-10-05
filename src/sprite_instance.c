@@ -1,5 +1,7 @@
 #include "sprite_instance.h"
 
+#include <stdlib.h>
+
 #include <limits.h>
 #include <math.h>
 
@@ -128,4 +130,9 @@ void aoe_sprite_instance_restart_ror(AoeSpriteInstance *instance) {
     instance->animation.frame_changed = 1;
     instance->animation.previous_frame = instance->animation.frame;
     instance->animation.frame = 0;
+}
+
+AoeSpriteInstance *aoe_sprite_instance_delete_ror(AoeSpriteInstance *instance, uint8_t flags) {
+    if (instance && (flags & 1)) free(instance);
+    return instance;
 }

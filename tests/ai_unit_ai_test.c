@@ -388,6 +388,47 @@ static void d4_5564_tests(void) {
     assert(aoe_ai_unit_ai_5564_d4_ror(&ord, 0, &o) == 5);
 }
 
+static double b_damage(void *c, int32_t id) { (void)c; return id == 41 ? 3.0 : 7.0; }
+static int b_view(void *c, int32_t id, int16_t *cls, float *hp, int16_t *max, uint8_t *st) {
+    (void)c; *cls = 0; *hp = id == 41 ? 4.0f : 9.0f; *max = 20; *st = id == 31 ? 3 : 2; return 1;
+}
+static int b_reports, b_last;
+static void b_e8(void *c, int32_t kind, int32_t sender) { (void)c; assert(kind == 0x20d); ++b_reports; b_last = sender; }
+static int32_t b_rand(void *c) { (void)c; return 12345; }
+static int32_t b_dc = 8;
+static int32_t b_call_dc(void *c) { (void)c; return b_dc; }
+static int32_t b_30(void *c, int32_t a, int32_t b, int32_t d) { (void)c; assert(a == 1 && b == 0 && d == 0); return 55; }
+
+static void base_method_tests(void) {
+    AoeAiUnitAiOpsRor o;
+    AoeAiUnitAiOrderRor ord;
+    float v = -1.0f;
+    memset(&o, 0, sizeof o);
+    memset(&ord, 0, sizeof ord);
+    o.refresh_nearby = p_refresh;
+    o.nearby = p_nearby;
+    o.target_view = b_view;
+    o.damage_to = b_damage;
+    o.owner_e8 = b_e8;
+    o.rand = b_rand;
+    /* Band 3: 42 takes more damage, 41 has fewer hit points. */
+    assert(aoe_ai_unit_ai_most_damaged_ror(&o, &v) == 42 && v == 7.0f);
+    assert(aoe_ai_unit_ai_weakest_ror(&o, &v) == 41 && v == 4.0f);
+    /* Bands 3 and 2 (empty) reported; the timer is redrawn. */
+    assert(aoe_ai_unit_ai_report_nearby_ror(&ord, &o) == 12 && b_reports == 2 &&
+           ord.field_10c == 4345 && ord.field_108 == 0);
+    /* +0xd4: 6 from +0xdc 8 on the first call, else from +0x5c. */
+    o.call_dc = b_call_dc;
+    o.call_30_args = b_30;
+    o.call_5c_r = pd_5c;
+    assert(aoe_ai_unit_ai_base_d4_ror(&o, 1) == 6);
+    b_dc = 0;
+    assert(aoe_ai_unit_ai_base_d4_ror(&o, 1) == 6);
+    o.call_5c_r = NULL;
+    assert(aoe_ai_unit_ai_base_d4_ror(&o, 0) == 5);
+    refreshed = 0;
+}
+
 static void priest_search_tests(void) {
     AoeAiUnitAiOpsRor o;
     float d = -1.0f;
@@ -424,6 +465,7 @@ static void priest_search_tests(void) {
 }
 
 int main(void) {
+    base_method_tests();
     priest_search_tests();
     d4_5564_tests();
     cc_5644_tests();

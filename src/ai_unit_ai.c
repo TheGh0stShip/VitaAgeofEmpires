@@ -865,3 +865,88 @@ int32_t aoe_ai_unit_ai_villager_cc_ror(AoeAiUnitAiOrderRor *order,
     stop_pass(msg, ops);
     return 2;
 }
+
+static int32_t near_id(const uint8_t *it) {
+    return (int32_t)((uint32_t)it[0] | (uint32_t)it[1] << 8 | (uint32_t)it[2] << 16 |
+                     (uint32_t)it[3] << 24);
+}
+
+int32_t aoe_ai_unit_ai_most_damaged_ror(const AoeAiUnitAiOpsRor *ops, float *out) {
+    const uint8_t *e = NULL;
+    int32_t n, i, best = -1;
+    float best_v = 0.0f;
+    if (!ops) return -1;
+    if (ops->refresh_nearby) ops->refresh_nearby(ops->context);
+    n = ops->nearby ? ops->nearby(ops->context, 3, &e) : 0;
+    for (i = 0; i < n; ++i) {
+        int32_t id = near_id(e + 8 * i);
+        int16_t cls, max_hp;
+        float hp, v;
+        uint8_t state;
+        if (!ops->target_view || !ops->target_view(ops->context, id, &cls, &hp, &max_hp, &state))
+            continue;
+        v = (float)(ops->damage_to ? ops->damage_to(ops->context, id) : 0.0);
+        if (best == -1 || best_v < v) {
+            best_v = v;
+            best = id;
+        }
+    }
+    if (out) *out = best_v;
+    return best;
+}
+
+int32_t aoe_ai_unit_ai_weakest_ror(const AoeAiUnitAiOpsRor *ops, float *out) {
+    const uint8_t *e = NULL;
+    int32_t n, i, best = -1;
+    float best_v = 0.0f;
+    if (!ops) return -1;
+    if (ops->refresh_nearby) ops->refresh_nearby(ops->context);
+    n = ops->nearby ? ops->nearby(ops->context, 3, &e) : 0;
+    for (i = 0; i < n; ++i) {
+        int32_t id = near_id(e + 8 * i);
+        int16_t cls, max_hp;
+        float hp;
+        uint8_t state;
+        if (!ops->target_view || !ops->target_view(ops->context, id, &cls, &hp, &max_hp, &state))
+            continue;
+        if (best == -1 || hp < best_v) {
+            best_v = hp;
+            best = id;
+        }
+    }
+    if (out) *out = best_v;
+    return best;
+}
+
+int32_t aoe_ai_unit_ai_report_nearby_ror(AoeAiUnitAiOrderRor *ai, const AoeAiUnitAiOpsRor *ops) {
+    int band;
+    int32_t r;
+    if (!ai || !ops) return 0;
+    if (ops->refresh_nearby) ops->refresh_nearby(ops->context);
+    for (band = 3; band >= 2; --band) {
+        const uint8_t *e = NULL;
+        int32_t n = ops->nearby ? ops->nearby(ops->context, band, &e) : 0, i;
+        for (i = 0; i < n; ++i) {
+            int32_t id = near_id(e + 8 * i);
+            int16_t cls, max_hp;
+            float hp;
+            uint8_t state;
+            if (ops->target_view && ops->target_view(ops->context, id, &cls, &hp, &max_hp, &state) &&
+                state < 3 && ops->owner_e8)
+                ops->owner_e8(ops->context, 0x20d, id);
+        }
+    }
+    ai->field_108 = 0;
+    r = ops->rand ? ops->rand(ops->context) : 0;
+    ai->field_10c = r % 1000 + 4000;
+    return r / 1000;
+}
+
+int32_t aoe_ai_unit_ai_base_d4_ror(const AoeAiUnitAiOpsRor *ops, int32_t first) {
+    int32_t t;
+    if (!ops) return 5;
+    if (first == 1 && ops->call_dc && ops->call_dc(ops->context) == 8) return 6;
+    t = ops->call_30_args ? ops->call_30_args(ops->context, 1, 0, 0) : -1;
+    if (t != -1 && ops->call_5c_r && ops->call_5c_r(ops->context, t, 1) == 1) return 6;
+    return 5;
+}

@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include "sprite_instance.h"
 
 #include <assert.h>
@@ -120,6 +121,12 @@ int main(int argc, char **argv) {
         inst.kind = 1;
         assert(!aoe_sprite_instance_reached_ror(&inst, 9) &&
                !aoe_sprite_instance_looped_ror(&inst));
+    }
+    {
+        /* 0x00415d60: bit 0 frees the instance. */
+        AoeSpriteInstance stack_inst, *heap = malloc(sizeof *heap);
+        assert(heap && aoe_sprite_instance_delete_ror(&stack_inst, 0) == &stack_inst);
+        assert(aoe_sprite_instance_delete_ror(heap, 1) == heap);
     }
     return 0;
 }

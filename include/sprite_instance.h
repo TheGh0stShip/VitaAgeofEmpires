@@ -50,6 +50,10 @@ int aoe_sprite_instance_looped_ror(const AoeSpriteInstance *instance);
    the animated destructor 0x00415e30 resets its own and runs that one.
    The
    animated update +0x0c is 0x00415eb0 (aoe_sprite_animation_tick). */
+/* 0x00415d60, the animated sprite's deleting destructor: the destructor
+   (0x00415e30, vtables only) and, with bit 0 of `flags`, the allocator's
+   free. Returns the instance (freed or not, as the original does). */
+AoeSpriteInstance *aoe_sprite_instance_delete_ror(AoeSpriteInstance *instance, uint8_t flags);
 void aoe_sprite_instance_set_offset_ror(AoeSpriteInstance *instance,
                                         int32_t x, int32_t y);
 int16_t aoe_sprite_instance_current_frame_ror(const AoeSpriteInstance *instance);

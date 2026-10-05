@@ -178,6 +178,11 @@ typedef struct {
     void (*call_90)(void *context, float x, float y, float z);
     double (*unit_f4)(void *context);
     int (*unit_134)(void *context);
+    /* Vtable +0x30 with three arguments; the damage our unit does to an
+       object (its vtable +0x74 with the object type's armour, +0x108 count
+       and +0x10c list, and its +0xf0 multiplier against the object). */
+    int32_t (*call_30_args)(void *context, int32_t a, int32_t b, int32_t c);
+    double (*damage_to)(void *context, int32_t id);
 } AoeAiUnitAiOpsRor;
 
 /* The unit AI's own order fields the overrides read: action (+0x28),
@@ -190,6 +195,7 @@ typedef struct {
     int32_t field_5c;       /* +0x5c */
     float x, y, z;          /* +0x3c..+0x44 */
     uint8_t flag_130;       /* +0x130 */
+    int32_t field_108, field_10c; /* +0x108, +0x10c */
 } AoeAiUnitAiOrderRor;
 
 /* A message to a unit AI: sender (+0), type (+8), value (+0xc). */
@@ -206,6 +212,22 @@ typedef struct {
    0x004e6900 the 19 without 3 and 0x1b and a 5000 ms timer. */
 void aoe_ai_unit_ai_init_ror(AoeAiUnitAiRor *ai, int kind,
                              const AoeAiUnitAiOpsRor *ops);
+
+/* Base unit AI methods (vtable 0x00542d10).
+   - +0x34 = 0x004114b0: after refreshing the nearby lists, the band-3
+     object (0x00414f40) our unit damages most, the first kept on ties;
+     -1 for none; `out` gets that damage (0.0 without one).
+   - +0x38 = 0x00411570: the band-3 object with the fewest hit points.
+   - 0x004130e0: every band-3 and band-2 object below state 3 is reported
+     to the owner (+0xe8 with 0x20d); +0x108 becomes 0 and +0x10c
+     rand() % 1000 + 4000, the same draw / 1000 being returned.
+   - +0xd4 = 0x004145a0: with `first` 1 and +0xdc giving 8, 6; else a
+     target from +0x30 (1, 0, 0) that +0x5c (id, 1) takes gives 6; else
+     5. */
+int32_t aoe_ai_unit_ai_most_damaged_ror(const AoeAiUnitAiOpsRor *ops, float *out);
+int32_t aoe_ai_unit_ai_weakest_ror(const AoeAiUnitAiOpsRor *ops, float *out);
+int32_t aoe_ai_unit_ai_report_nearby_ror(AoeAiUnitAiOrderRor *ai, const AoeAiUnitAiOpsRor *ops);
+int32_t aoe_ai_unit_ai_base_d4_ror(const AoeAiUnitAiOpsRor *ops, int32_t first);
 
 /* Fixed overrides: 0x004e3fa0 (vtable +0x54) 1, 0x004e4160 (+0xd4) 5,
    0x004e4df0 (+0xd8) 9. */

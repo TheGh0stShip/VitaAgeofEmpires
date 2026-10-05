@@ -181,3 +181,7 @@ int aoe_graphic_on_layer_zero_ror(const DatGraphic *graphic) {
         if (graphic->deltas[i].graphic && graphic->deltas[i].graphic->layer == 0) return 1;
     return 0;
 }
+
+void aoe_sprite_list_destroy_ror(AoeSpriteList *list) {
+    aoe_sprite_list_clear(list);
+}

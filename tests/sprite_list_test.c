@@ -128,5 +128,9 @@ int main(void) {
         deltas[1].graphic = &g0;
         assert(aoe_graphic_on_layer_zero_ror(&parent));
     }
+    /* 0x004153b0: the destructor clears the list. */
+    assert(aoe_sprite_list_add(&list, &animated_a, 1, 0, 0));
+    aoe_sprite_list_destroy_ror(&list);
+    assert(aoe_sprite_list_count(&list) == 0);
     return 0;
 }

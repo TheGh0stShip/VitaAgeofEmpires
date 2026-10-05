@@ -78,6 +78,13 @@ typedef struct {
     const char *(*scenario_dir)(void *context);
     /* 0x00504e50: the editor on a scenario file (0: a new one). */
     void (*editor_load)(void *context, const char *file, int32_t flag);
+    /* The wait cursor (0x0041bd60); the screens made and registered:
+       "Scenario Editor Open" (0x0049aaa0), "Campaign Editor Screen"
+       (0x00479360), "Main Menu" (0x00486600). */
+    void (*wait_cursor)(void *context);
+    void (*open_editor_open_screen)(void *context);
+    void (*open_campaign_editor)(void *context);
+    void (*open_main_menu)(void *context);
 } AoeGameUiOpsRor;
 
 typedef struct {
@@ -341,5 +348,26 @@ int aoe_scenario_editor_open_init_ror(AoeScenarioEditorOpenRor *o, AoeGameUiRor 
                                       AoeUiAreaRor *area, const char *info_name,
                                       int32_t info_id);
 void aoe_scenario_editor_open_fill_ror(AoeScenarioEditorOpenRor *o);
+
+/* The editor menu "Scenario Editor Menu" (vtable 0x0054748c,
+   0x0049a5f0..0x0049a8a0): title 9261 and four 300 x 40 buttons at x 170
+   from y 170 every 50: create a scenario (9262), edit one (9263), the
+   campaign editor (9265), cancel (9264, Escape); and the hidden close
+   button (string 1002). 0x0049a5f0 constructor ("scr6", 50054);
+   0x0049a810 destructor (deleting 0x0049a7f0). +0xb8 0x0049a8a0: a new
+   scenario (0x00504e50(0, 0)), the open screen, the campaign editor, the
+   main menu (with the wait cursor), or the close button closes the
+   program. */
+typedef struct {
+    AoeUiEzRor ez;
+    AoeUiTextRor *title;              /* +0x478 */
+    AoeUiButtonRor *buttons[4];       /* +0x47c..+0x488 */
+    AoeUiButtonRor *close;            /* +0x48c */
+    AoeGameUiRor *ui;
+} AoeScenarioEditorMenuRor;
+
+extern const AoeUiEzVtblRor aoe_scenario_editor_menu_vtable_ror;
+int aoe_scenario_editor_menu_init_ror(AoeScenarioEditorMenuRor *m, AoeGameUiRor *ui,
+                                      AoeUiAreaRor *area);
 
 #endif

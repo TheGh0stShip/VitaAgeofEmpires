@@ -99,7 +99,8 @@ static void press(AoeMenuDialogRor *m, int i) {
 }
 
 static char loaded[64], deleted[64];
-static int deletes;
+static int deletes, open_screens;
+static void open_open_screen(void *c) { (void)c; ++open_screens; }
 static void list_files(void *c, const char *pat, void (*found)(void *, const char *), void *u) {
     (void)c;
     if (strstr(pat, ".scn")) {
@@ -112,7 +113,7 @@ static void list_files(void *c, const char *pat, void (*found)(void *, const cha
 static int file_exists(void *c, const char *path) { (void)c; return strstr(path, "beta.scn") == NULL; }
 static void delete_file(void *c, const char *path) { (void)c; ++deletes; snprintf(deleted, sizeof deleted, "%s", path); }
 static const char *scen_dir(void *c) { (void)c; return "scen/"; }
-static void editor_load(void *c, const char *f, int32_t flag) { (void)c; (void)flag; snprintf(loaded, sizeof loaded, "%s", f); }
+static void editor_load(void *c, const char *f, int32_t flag) { (void)c; (void)flag; snprintf(loaded, sizeof loaded, "%s", f ? f : ""); }
 
 int main(void) {
     AoeUiPlatformRor pf = {0};
@@ -473,6 +474,21 @@ int main(void) {
         /* Cancel without an editor screen: the editor menu. */
         op->vt->action(op, &o->cancel->panel, 1, 0, 0);
         assert(!aoe_ui_system_find_ror(&sys, "Scenario Editor Open"));
+    }
+    /* The editor menu. */
+    {
+        AoeScenarioEditorMenuRor *m = calloc(1, sizeof *m);
+        AoeUiPanelRor *mp = &m->ez.panel;
+        ops.open_editor_open_screen = open_open_screen;
+        assert(aoe_scenario_editor_menu_init_ror(m, &ui, &area));
+        assert(m->buttons[3] && m->buttons[3]->hotkey == 0x1b && m->close);
+        assert(strcmp(m->buttons[1]->text1[0], "S9263") == 0);
+        assert(m->buttons[2]->panel.y - mp->y == (0xaa + 0x64) * 600 / 480);
+        loaded[0] = 'x';
+        mp->vt->action(mp, &m->buttons[0]->panel, 1, 0, 0);
+        assert(loaded[0] == 0);
+        mp->vt->action(mp, &m->buttons[1]->panel, 1, 0, 0);
+        assert(open_screens == 1 && !aoe_ui_system_find_ror(&sys, "Scenario Editor Menu"));
     }
     aoe_ui_system_close_ror(&sys, "Game Screen");
     free(sys.panels);

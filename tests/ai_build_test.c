@@ -58,6 +58,11 @@ static void fail_mark(void *c, int32_t t, int32_t x, int32_t y, uint8_t s) {
     (void)c; (void)t; (void)x; (void)y; fail_mark_state = s;
 }
 static int32_t aug_sn(void *c, int32_t i) { (void)c; return i == 0xb4 ? 1 : 0; }
+static int32_t pick_sn(void *c, int32_t i) { (void)c; return i == 0x73 || i == 0x72 ? 10 : i == 0xae ? 5 : 0; }
+static int32_t pick_extra(void *c, int32_t t) { (void)c; (void)t; return 0; }
+static int pick_yes(void *c, int32_t t) { (void)c; (void)t; return 1; }
+static int pick_afford(void *c, const AoeAiCountersRor *k) { (void)c; (void)k; return 1; }
+static int pick_fits(void *c, const AoeAiPlanItemRor *i) { (void)c; return i->type == 12; }
 static int32_t extra_count(void *c, int32_t type) { (void)c; return type == 0x67 ? 10 : 0; }
 static int32_t retry_count(void *c, int32_t type, int32_t category) {
     (void)c; (void)type; (void)category; return 0;
@@ -319,6 +324,30 @@ int main(void) {
                 houses += it->plan.type == 0x46;
             assert(houses == 1 && al.base.count == 7);
             aoe_ai_ror_build_list_release_ror(&al);
+        }
+        {
+            /* 0x004b8110: the next building that fits, then the next unit. */
+            AoeAiRorBuildListRor pl;
+            AoeAiRorPickOpsRor po;
+            AoeAiBuildItemRor *got;
+            memset(&po, 0, sizeof po);
+            po.sn = pick_sn;
+            po.count_extra = pick_extra;
+            po.usable = pick_yes;
+            po.affordable = pick_afford;
+            po.plan_fits = pick_fits;
+            po.producer_present = pick_yes;
+            aoe_ai_ror_build_list_init_ror(&pl, 3, &sink);
+            assert(aoe_ai_build_list_load_text_ror(&pl.base, "pick.ai",
+                                                   "B109 House 1 -1\nB12 Barracks 1 -1\nU83 Man 1 12\n",
+                                                   objects, NULL));
+            got = aoe_ai_ror_build_next_ror(&pl, 0, &po);
+            assert(got && got->plan.type == 12 && !strcmp(pl.base.name_3a6, "Barracks"));
+            assert(pl.base.field_5a8 == got->plan.unique_id && got->build_attempts == 1);
+            got = aoe_ai_ror_build_next_ror(&pl, 2, &po);
+            assert(got && got->plan.type == 83);
+            assert(!aoe_ai_ror_build_next_ror(&pl, 3, &po));
+            aoe_ai_ror_build_list_release_ror(&pl);
         }
         aoe_ai_ror_build_list_release_ror(&rl);
     }

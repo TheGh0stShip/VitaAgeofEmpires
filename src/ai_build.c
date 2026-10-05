@@ -1419,3 +1419,150 @@ int aoe_ai_ror_build_list_augment_ror(AoeAiRorBuildListRor *list, AoeAiObjectFn 
 #undef SN
     return 1;
 }
+
+static void picked(AoeAiRorBuildListRor *list, AoeAiBuildItemRor *it) {
+    AoeAiBuildListRor *l = &list->base;
+    snprintf(l->name_3a6, 64, "%s", it->plan.name);
+    l->field_5a8 = it->plan.unique_id;
+    snprintf(l->name_4a7, 64, "%s", it->next ? it->next->plan.name : "");
+    l->field_5a8 = it->plan.unique_id;
+}
+
+static void item_costs(const AoeAiRorPickOpsRor *o, const AoeAiBuildItemRor *it, int research,
+                       AoeAiCountersRor *c) {
+    int16_t pairs[6] = {-1, 0, -1, 0, -1, 0};
+    aoe_ai_counters_init_ror(c, 4);
+    if (research) {
+        if (o->research_cost) o->research_cost(o->context, it->plan.type, pairs);
+    } else if (o->object_cost) {
+        o->object_cost(o->context, it->plan.type, pairs);
+    }
+    for (int i = 0; i < 3; ++i) aoe_ai_counters_add_ror(c, pairs[2 * i], pairs[2 * i + 1]);
+}
+
+AoeAiBuildItemRor *aoe_ai_ror_build_next_ror(AoeAiRorBuildListRor *list, int32_t mode,
+                                             const AoeAiRorPickOpsRor *o) {
+    AoeAiBuildListRor *l = &list->base;
+    int32_t c67, c44, c46, counted = 0, pending = 0;
+#define SN(i) (o->sn ? o->sn(o->context, (i)) : 0)
+    c67 = aoe_ai_build_list_count_ror2(l, 0x67, 0, o->count_extra, o->context);
+    c44 = aoe_ai_build_list_count_ror2(l, 0x44, 0, o->count_extra, o->context);
+    c46 = aoe_ai_build_list_count_ror2(l, 0x46, 0, o->count_extra, o->context);
+    if (SN(0x73) < 0) return NULL;
+    for (AoeAiBuildItemRor *it = l->sentinel.next; it && it != &l->sentinel;) {
+        AoeAiBuildItemRor *next = it->next;
+        int32_t ty = it->plan.type, cat = it->category;
+        if ((cat == 1 || cat == 4) && (ty == 0x65 || ty == 0x66 || ty == 0x67) && o->tech_state) {
+            switch (o->tech_state(o->context, ty)) {
+            case 0: case 1: it->built = 0; it->in_progress = 0; break;
+            case 2: it->built = 0; it->in_progress = 1; break;
+            case 3: it->built = 1; it->in_progress = 0; break;
+            default: break;
+            }
+        }
+        if (it->built || it->in_progress) goto advance;
+        {
+            int flag = 1;
+            int32_t rule = SN(0xa1);
+            ++pending;
+            if (rule == 1) flag = c44 || c67;
+            else if (rule == 2) flag = (o->resource && o->resource(o->context, 1) >= 0xfa) || c67;
+            else if (rule == 3) flag = c44 != 0;
+            else if (rule == 4) flag = c44 && c67;
+            if (mode == 0) {
+                if (!flag && cat == 0 && ty != 0x46 && ty != 0x6d && ty != 0x67 && ty != 0x44)
+                    goto advance;
+                if (cat == 0 && !(c44 && c67) && c46 >= SN(0xae) && ty != 0x6d && ty != 0x67 &&
+                    ty != 0x44)
+                    goto advance;
+            }
+        }
+        if (cat == 5 && counted == 0) {
+            if (o->tactical_mark) o->tactical_mark(o->context);
+            it->in_progress = 0;
+            it->built = 1;
+            goto advance;
+        }
+        if (cat == 6) {
+            if (counted >= 1) goto advance;
+            if (o->set_sn) o->set_sn(o->context, ty + 0x9c, it->build_from);
+            it->in_progress = 0;
+            it->built = 1;
+            goto advance;
+        }
+        if (mode == 3 && counted > 0) return NULL;
+        if (it->cap != -1 && it->built_count > it->cap) goto advance;
+        if (mode == 1 && (cat == 1 || cat == 4) && o->can_research &&
+            !o->can_research(o->context, ty)) {
+            it->in_progress = 0;
+            it->built = 1;
+            goto advance;
+        }
+        if (cat == 4) {
+            AoeAiCountersRor c;
+            int ok;
+            item_costs(o, it, 1, &c);
+            ok = o->tech_open && o->tech_open(o->context, ty) && o->affordable &&
+                 o->affordable(o->context, &c);
+            aoe_ai_counters_release_ror(&c);
+            if (!ok || mode != 1) return NULL;
+        }
+        if ((it->plan.skip == 1 && it->build_attempts > 0) || it->permanent_skip) {
+            if (it->build_attempts > 0) --it->build_attempts;
+            goto advance;
+        }
+        if (it->plan.skip == 1 && it->build_attempts <= 0) {
+            it->plan.skip = 0;
+            if (cat == 0 && (ty == 0x67 || ty == 0x44)) it->build_attempts = SN(0x72) - 1;
+        }
+        if (!(o->population_full && o->population_full(o->context) && cat == 2)) ++counted;
+        if (mode == 1) {
+            if (cat != 1 && cat != 4) goto advance;
+        } else if (cat != mode) {
+            goto advance;
+        }
+        ++it->build_attempts;
+        if (it->build_attempts > SN(0x72) && it->plan.skip == 0 && !it->permanent_skip) {
+            if (mode == 1 && cat == 4) {
+                it->build_attempts = 0;
+                return NULL;
+            }
+            if (!(ty == SN(0xb1) && cat == 0)) {
+                it->plan.skip = 1;
+                it->build_attempts =
+                    cat == 0 && (ty == 0x67 || ty == 0x44) ? SN(0x72) * 6 : SN(0x72);
+                goto advance;
+            }
+        }
+        if (mode == 3) {
+            if (cat == 3) {
+                picked(list, it);
+                return it;
+            }
+        }
+        if (mode == 1 ? !(o->tech_open && o->tech_open(o->context, ty))
+                      : !(o->usable && o->usable(o->context, ty)))
+            goto advance;
+        {
+            AoeAiCountersRor c;
+            int found = 0;
+            item_costs(o, it, mode == 1, &c);
+            if (o->affordable && o->affordable(o->context, &c)) {
+                if (mode == 2 || mode == 1)
+                    found = o->producer_present && o->producer_present(o->context, it->build_from);
+                else
+                    found = o->plan_fits && o->plan_fits(o->context, &it->plan);
+            }
+            aoe_ai_counters_release_ror(&c);
+            if (found) {
+                picked(list, it);
+                return it;
+            }
+        }
+    advance:
+        it = next;
+        if (counted > SN(0x73)) return NULL;
+    }
+#undef SN
+    return NULL;
+}

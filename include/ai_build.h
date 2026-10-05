@@ -514,4 +514,56 @@ int aoe_ai_ror_build_list_augment_ror(AoeAiRorBuildListRor *list, AoeAiObjectFn 
                                       void *context, int32_t (*sn)(void *context, int32_t i),
                                       AoeAiCostFn research_cost, AoeAiCostFn object_cost);
 
+/* 0x004b8110(mode), the RoR list's next item to work on (mode 0
+   buildings, 1 research, 2 units, 3 walls; NULL for none). Research
+   items for ages 0x65..0x67 first take their state from the tech tree
+   (0x004f2140: 0 / 1 open, 2 researching, 3 done). Walking the list while
+   at most number 0x73 items have counted, for each item neither built nor
+   in progress:
+   - in mode 0, buildings other than houses, centres (0x6d), 0x67 and
+     0x44 wait unless number 0xa1 allows (1: some 0x44 or 0x67 counted; 2:
+     resource 1 at least 250 or some 0x67; 3: some 0x44; 4: both), and
+     while 0x44 and 0x67 are not both present the houses counted must stay
+     below number 0xae except for 0x6d, 0x67, 0x44;
+   - category 5 before anything counted marks the tactical AI (0x004e15f0)
+     and is done; gather settings before anything counted set number
+     0x9c + type to the item's value (0x004d77f0) and are done;
+   - mode 3 stops once anything counted; items over their cap are passed;
+     in mode 1 research that cannot start (0x004f2110) is done; category 4
+     needs its tech open (0x004f20f0) and its costs met (0x004c8c90), else
+     the search ends (in mode 1 it then goes on);
+   - a skipped item with attempts left loses one (and permanent skips
+     too); once its attempts run out the skip ends (0x67 / 0x44 buildings
+     get number 0x72 - 1 attempts);
+   - it counts unless the population is full and it is a unit;
+   - only items of the mode's category go on (mode 1: research and
+     category 4; mode 3 with another category ends the search); one more
+     attempt; past number 0x72 attempts an item is skipped (attempts
+     reset to 0x72, or 6 x 0x72 for 0x67 / 0x44) unless it is the
+     building of number 0xb1 (mode 1 category 4 ends the search instead);
+   - mode 3 takes a wall; otherwise it must be open (research) or usable
+     (0x004f20c0) and its costs met; units and research also need their
+     producer present (0x0040bad0), buildings a plan site (0x004b9700).
+   The pick's name goes to +0x3a6 and the next item's to +0x4a7, its
+   unique ID to +0x5a8. */
+typedef struct {
+    void *context;
+    int32_t (*sn)(void *context, int32_t i);
+    void (*set_sn)(void *context, int32_t i, int32_t value);
+    int32_t (*count_extra)(void *context, int32_t type);
+    uint8_t (*tech_state)(void *context, int32_t type);
+    int (*can_research)(void *context, int32_t type);
+    int (*tech_open)(void *context, int32_t type);
+    int (*usable)(void *context, int32_t type);
+    AoeAiCostFn research_cost, object_cost;
+    int (*affordable)(void *context, const AoeAiCountersRor *costs);
+    int32_t (*resource)(void *context, int32_t i);
+    int (*population_full)(void *context);
+    void (*tactical_mark)(void *context);
+    int (*producer_present)(void *context, int32_t type);
+    int (*plan_fits)(void *context, const AoeAiPlanItemRor *item);
+} AoeAiRorPickOpsRor;
+AoeAiBuildItemRor *aoe_ai_ror_build_next_ror(AoeAiRorBuildListRor *list, int32_t mode,
+                                             const AoeAiRorPickOpsRor *ops);
+
 #endif

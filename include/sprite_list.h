@@ -29,7 +29,10 @@ typedef struct {
 
 /* Base 0x0044fb80/0x0044fc30; RoR 0x00415c80/0x00415d20.
    A null graphic is a no-op. Equal priorities retain insertion order.
-   add returns 0 only for invalid arguments or allocation/factory failure. */
+   add returns 0 only for invalid arguments or allocation/factory failure.
+   Patched 1.0a remove 0x004156f0 and clear 0x00415580 are the same walk;
+   their redraw test is 0x00415c80 (the graphic on layer zero,
+   0x004a63e0), which the `is_animated` op stands for. */
 int aoe_sprite_list_add(AoeSpriteList *list, const void *graphic,
                         uint8_t priority, int32_t arg1, int32_t arg2);
 int aoe_sprite_list_remove(AoeSpriteList *list, const void *graphic);

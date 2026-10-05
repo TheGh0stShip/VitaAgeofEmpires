@@ -38,7 +38,113 @@ void aoe_unit_path_free_ror(AoeUnitPathRor *path) {
     if (!path) return;
     free(path->points);
     path->points = NULL;
-    path->count = path->cursor = 0;
+    path->count = path->cursor = path->capacity = 0;
+}
+
+void aoe_unit_path_init_ror(AoeUnitPathRor *path, int32_t capacity) {
+    if (!path) return;
+    path->points = NULL;
+    path->count = path->cursor = path->capacity = 0;
+    if (capacity < 0) return;
+    path->capacity = capacity;
+    if (capacity) path->points = calloc((size_t)capacity, sizeof(*path->points));
+}
+
+static int path_reserve(AoeUnitPathRor *path, int32_t capacity) {
+    AoePathWaypointRor *grown;
+    if (capacity < 1) capacity = 1;
+    grown = malloc((size_t)capacity * sizeof(*grown));
+    if (!grown) return 0;
+    if (path->count > 0 && path->points)
+        memcpy(grown, path->points, (size_t)path->count * sizeof(*grown));
+    free(path->points);
+    path->points = grown;
+    path->capacity = capacity;
+    return 1;
+}
+
+int aoe_unit_path_assign_ror(AoeUnitPathRor *path, const AoeUnitPathRor *from) {
+    int32_t need;
+    if (!path || !from) return 0;
+    if (path->capacity < from->capacity &&
+        !path_reserve(path, from->capacity
+                                ? path->capacity + from->capacity
+                                : path->capacity * 2))
+        return 0;
+    /* Port guard: room for every copied waypoint. */
+    need = from->count > 0 ? from->count : 0;
+    if (need > path->capacity && !path_reserve(path, need)) return 0;
+    if (need) memcpy(path->points, from->points, (size_t)need * sizeof(*path->points));
+    path->cursor = from->cursor;
+    path->count = from->count;
+    return 1;
+}
+
+int aoe_unit_path_append_ror(AoeUnitPathRor *path, float x, float y, float z,
+                             uint8_t direction) {
+    AoePathWaypointRor *w;
+    if (!path || path->count < 0) return 0;
+    if (path->count >= path->capacity) {
+        int32_t want = path->capacity * 2;
+        if (want <= path->count) want = path->count + 1;
+        if (!path_reserve(path, want)) return 0;
+    }
+    w = &path->points[path->count++];
+    w->x = x;
+    w->y = y;
+    w->z = z;
+    w->direction = direction;
+    return 1;
+}
+
+int32_t aoe_unit_path_count_ror(const AoeUnitPathRor *path) {
+    return path ? path->count : 0;
+}
+
+const AoePathWaypointRor *aoe_unit_path_at_ror(const AoeUnitPathRor *path,
+                                               int32_t index) {
+    if (!path || !path->points || index < 0 || index >= path->count) return NULL;
+    return &path->points[index];
+}
+
+const AoePathWaypointRor *aoe_unit_path_last_ror(const AoeUnitPathRor *path) {
+    if (!path || !path->points || path->count <= 0) return NULL;
+    return &path->points[path->count - 1];
+}
+
+int32_t aoe_unit_path_cursor_ror(const AoeUnitPathRor *path) {
+    return path ? path->cursor : 0;
+}
+
+void aoe_unit_path_set_cursor_ror(AoeUnitPathRor *path, int32_t cursor) {
+    if (path) path->cursor = cursor;
+}
+
+double aoe_unit_path_length_ror(const AoeUnitPathRor *path) {
+    double total = 0.0;
+    int32_t i;
+    if (!path || path->count <= 1 || !path->points) return total;
+    for (i = 1; i < path->count; ++i) {
+        const AoePathWaypointRor *a = &path->points[i - 1], *b = &path->points[i];
+        double dy = (double)b->y - a->y, dx = (double)b->x - a->x;
+        double dz = (double)b->z - a->z, q = (double)b->z - a->x;
+        total += sqrt(dz * q + dx * dx + dy * dy);
+    }
+    return total;
+}
+
+double aoe_unit_path_segment_ror(const AoeUnitPathRor *path) {
+    const AoePathWaypointRor *a, *b;
+    double dx, dy, dz;
+    if (!path || !path->points || path->cursor < 0 ||
+        path->cursor >= path->count - 1)
+        return 0.0;
+    a = &path->points[path->cursor];
+    b = a + 1;
+    dx = (double)b->x - a->x;
+    dz = (double)b->z - a->z;
+    dy = (double)b->y - a->y;
+    return sqrt(dy * dy + dz * dz + dx * dx);
 }
 
 typedef struct {

@@ -46,7 +46,15 @@ typedef struct {
     /* +0x11dc4c: the last search's target ID (-1 when it did not resolve),
        left for later fit checks. */
     int32_t target_id;
+    int32_t searches;           /* +0x11dcc4 (0x0045a4e0 counts one) */
 } AoePathfinderRor;
+
+/* 0x004587e0: the penalty byte of cell [first * 255 + second] (0 without
+   storage or outside the grid; the original reads unchecked). */
+uint8_t aoe_path_penalty_ror(const AoePathfinderRor *path, int32_t first,
+                             int32_t second);
+/* 0x0045a4e0: one more search counted. */
+void aoe_path_count_search_ror(AoePathfinderRor *path);
 
 /* Global table 0x006a18c0, filled by the constructor: entry i is
    __ftol(i * 1.4142f * 16.0f + 0.5f), the diagonal cost of i steps in

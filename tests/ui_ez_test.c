@@ -1,4 +1,4 @@
-/* Patched RoR 1.0a easy panel 0x00454430..0x00457fe0 and the value
+/* Patched RoR 1.0a easy panel 0x00454430..0x00457e50 and the value
    scrollbars 0x00468360..0x00468540. */
 #include "ui_ez.h"
 

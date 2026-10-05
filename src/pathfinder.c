@@ -132,3 +132,15 @@ AoePathPrecheckRor aoe_path_precheck_ror(const AoePathfinderRor *path,
     }
     return AOE_PATH_PRECHECK_SEARCH_ROR;
 }
+
+uint8_t aoe_path_penalty_ror(const AoePathfinderRor *path, int32_t first,
+                             int32_t second) {
+    int32_t index = first * AOE_PATH_GRID_SIDE_ROR + second;
+    if (!path || !path->penalty || index < 0 || index >= AOE_PATH_GRID_CELLS_ROR)
+        return 0;
+    return path->penalty[index];
+}
+
+void aoe_path_count_search_ror(AoePathfinderRor *path) {
+    if (path) ++path->searches;
+}

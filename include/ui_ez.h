@@ -11,7 +11,7 @@
 #include "ui_text.h"
 
 /* Patched Rise of Rome 1.0a "easy" panel (panel_ez, vtable 0x00544bbc,
-   0x00454430..0x00457fe0): the base of the game's screens and dialogs. It
+   0x00454430..0x00457e50): the base of the game's screens and dialogs. It
    reads a screen info file (backgrounds per resolution, palette, mouse
    pointer, shadow, button pictures, popup info, colours and bevel), and
    creates child panels laid out on a 640x480 reference grid scaled to its

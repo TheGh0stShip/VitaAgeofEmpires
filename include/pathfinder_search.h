@@ -16,7 +16,36 @@ typedef struct {
 typedef struct {
     AoePathWaypointRor *points;
     int32_t count, cursor;
+    int32_t capacity;             /* +0x28: grown by append, not prepend */
 } AoeUnitPathRor;
+
+/* 0x00457fe0: an empty path with room for `capacity` waypoints (none for
+   0; a negative capacity allocates nothing). */
+void aoe_unit_path_init_ror(AoeUnitPathRor *path, int32_t capacity);
+/* 0x004580b0: copy another path (count, cursor, waypoints). Capacity
+   grows to its own plus the other's when smaller. */
+int aoe_unit_path_assign_ror(AoeUnitPathRor *path, const AoeUnitPathRor *from);
+/* 0x00458260: append one waypoint, doubling a full capacity. Port
+   guard: the original only grows when count equals capacity, so a
+   prepended path (count above capacity) or capacity 0 would write past
+   the storage; here it grows to fit. */
+int aoe_unit_path_append_ror(AoeUnitPathRor *path, float x, float y, float z,
+                             uint8_t direction);
+/* 0x00458340 count; 0x004583a0 waypoint `index` (NULL outside);
+   0x00458420 the last waypoint; 0x00458400 / 0x00458410 the cursor. */
+int32_t aoe_unit_path_count_ror(const AoeUnitPathRor *path);
+const AoePathWaypointRor *aoe_unit_path_at_ror(const AoeUnitPathRor *path,
+                                               int32_t index);
+const AoePathWaypointRor *aoe_unit_path_last_ror(const AoeUnitPathRor *path);
+int32_t aoe_unit_path_cursor_ror(const AoeUnitPathRor *path);
+void aoe_unit_path_set_cursor_ror(AoeUnitPathRor *path, int32_t cursor);
+/* 0x00458350: the summed segment lengths. Each term is
+   sqrt(dz * (z1 - x0) + dx^2 + dy^2): the original's z factor subtracts
+   the first point's x, kept here. 0x00458470: the length of the segment
+   after the cursor (a true 3-D distance; 0 at the end). Extended
+   precision is modelled with doubles. */
+double aoe_unit_path_length_ror(const AoeUnitPathRor *path);
+double aoe_unit_path_segment_ror(const AoeUnitPathRor *path);
 
 /* 0x00458330: count and cursor become 0 (storage is kept). */
 void aoe_unit_path_clear_ror(AoeUnitPathRor *path);
@@ -24,6 +53,7 @@ void aoe_unit_path_clear_ror(AoeUnitPathRor *path);
    (returns 0) once count exceeds 1000, or on allocation failure. */
 int aoe_unit_path_prepend_ror(AoeUnitPathRor *path,
                               const AoePathWaypointRor *point);
+/* 0x004580a0 frees the waypoints (the port also empties the path). */
 void aoe_unit_path_free_ror(AoeUnitPathRor *path);
 
 /* Arguments of 0x00458930 (15 stack arguments). */

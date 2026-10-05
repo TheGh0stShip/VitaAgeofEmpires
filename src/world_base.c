@@ -664,3 +664,137 @@ const AoeWorldVtblRor aoe_world_base_vtable_ror = {
     aoe_world_save_data_file_ror,
     aoe_world_save_data_ror,
 };
+
+/* ---- objects and lists ---- */
+
+int32_t aoe_world_next_id_ror(AoeWorldBaseRor *w) {
+    if (w->field_74) return w->field_70;
+    while (w->field_68 <= w->objects_cap - 1 && w->objects[w->field_68]) ++w->field_68;
+    return w->field_68++;
+}
+
+void aoe_world_next_negative_id_ror(AoeWorldBaseRor *w) {
+    if (!w->field_74)
+        --w->field_6c;
+    else if (w->field_70 < w->field_6c)
+        w->field_6c = w->field_70 - 1;
+}
+
+/* A table grown to hold `id`: doubled, or to id x 1.1 when that is not
+   enough; the new part zeroed. */
+static int grow(void ***table, int32_t *cap, int32_t id) {
+    int32_t n = *cap * 2, i;
+    void **t;
+    if (n < id) n = (int32_t)((float)id * 1.1f);
+    t = malloc((size_t)(n > 0 ? n : 1) * sizeof *t);
+    if (!t) return 0;
+    for (i = 0; i < *cap; ++i) t[i] = (*table)[i];
+    for (; i < n; ++i) t[i] = NULL;
+    free(*table);
+    *table = t;
+    *cap = n;
+    return 1;
+}
+
+int aoe_world_register_ror(AoeWorldBaseRor *w, void *object, int32_t id) {
+    if (id < 0) {
+        if (w->objects2_cap - 1 < -id && !grow(&w->objects2, &w->objects2_cap, -id)) return 0;
+        w->objects2[-id] = object;
+        ++w->field_98;
+    } else {
+        void *old;
+        if (w->objects_cap - 1 < id) {
+            if (!grow(&w->objects, &w->objects_cap, id)) return 0;
+            aoe_world_object_table_ror = w->objects;
+        }
+        old = w->objects[id];
+        w->objects[id] = object;
+        ++w->field_8c;
+        if (old && w->field_74) {
+            w->field_74 = 0;
+            OPS->object_displaced(CTX, old);
+        }
+    }
+    return 1;
+}
+
+int aoe_world_unregister_ror(AoeWorldBaseRor *w, int32_t id) {
+    if (id < 0 && -id < w->objects2_cap) {
+        w->objects2[-id] = NULL;
+        return 1;
+    }
+    if (id >= 0 && id < w->objects_cap) {
+        w->objects[id] = NULL;
+        return 1;
+    }
+    return 0;
+}
+
+static void *kind_list(AoeWorldBaseRor *w, uint8_t kind) {
+    switch (kind) {
+    case 10: return w->lists[0];
+    case 20: return w->lists[1];
+    case 25: return w->lists[6];
+    case 30: return w->lists[2];
+    case 40: return w->lists[3];
+    case 50: return w->lists[4];
+    case 60: return w->lists[5];
+    default: return NULL;
+    }
+}
+
+int aoe_world_list_add_ror(AoeWorldBaseRor *w, uint8_t kind, void *object) {
+    void *list = kind_list(w, kind);
+    if (!list) return 0;
+    OPS->list_add(CTX, list, object);
+    return 1;
+}
+
+void *aoe_world_list_take_ror(AoeWorldBaseRor *w, uint8_t kind) {
+    void *list = kind_list(w, kind), *first;
+    if (!list) return NULL;
+    first = OPS->list_first(CTX, list);
+    if (first) OPS->list_remove(CTX, list, first);
+    return first;
+}
+
+void aoe_world_next_player_of_type_ror(AoeWorldBaseRor *w, uint8_t type) {
+    int32_t cursor = w->field_fc, n = w->player_count, i, k;
+    if (cursor == -1) {
+        for (i = 0; i < n; ++i) {
+            if (OPS->player_type(CTX, w->players[i]) == type) {
+                w->field_fc = i;
+                return;
+            }
+        }
+        return;
+    }
+    if (cursor >= n) return;
+    for (i = cursor, k = 0; k < n; ++k) {
+        if (OPS->player_type(CTX, w->players[i]) == type && i != cursor) {
+            w->field_fc = i;
+            return;
+        }
+        i = (i + 1) % n;
+    }
+}
+
+void aoe_world_f8_less_ror(AoeWorldBaseRor *w, uint32_t v) {
+    if ((uint32_t)w->field_f8 < v)
+        w->field_f8 = 0;
+    else
+        w->field_f8 = (int32_t)((uint32_t)w->field_f8 - v);
+}
+
+int32_t aoe_world_field_100_ror(AoeWorldBaseRor *w) {
+    if (w->field_100 == -1) w->field_100 = OPS->default_100(CTX);
+    return w->field_100;
+}
+
+uint8_t aoe_world_map_8db8_ror(const AoeWorldBaseRor *w) {
+    return w->map ? OPS->map_byte(CTX, w->map, 0) : 1;
+}
+
+uint8_t aoe_world_map_8db9_ror(const AoeWorldBaseRor *w) {
+    return w->map ? OPS->map_byte(CTX, w->map, 1) : 0;
+}

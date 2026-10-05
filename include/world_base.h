@@ -119,6 +119,17 @@ typedef struct {
        closed. */
     AoeOutcomeStream *(*open_write)(void *context, const char *path);
     void (*close_write)(void *context, AoeOutcomeStream *s);
+    /* Objects: a player's type byte (+0x48), the list append 0x00450fa0
+       and removal 0x00450fe0(object, 0) and the list's first object, the
+       displaced object's 0x004a7010, the map's +0x8db8 / +0x8db9 bytes
+       and the settings' 0x0041b990. */
+    uint8_t (*player_type)(void *context, void *player);
+    void (*list_add)(void *context, void *list, void *object);
+    void (*list_remove)(void *context, void *list, void *object);
+    void *(*list_first)(void *context, void *list);
+    void (*object_displaced)(void *context, void *object);
+    uint8_t (*map_byte)(void *context, void *map, int which);
+    int32_t (*default_100)(void *context);
 } AoeWorldOpsRor;
 
 /* The overridable methods (slots noted; the base table is
@@ -340,5 +351,32 @@ void aoe_world_new_player_ror(AoeWorldBaseRor *w, int16_t index, uint8_t flag, u
                                                   int16_t index, const char *name,
                                                   uint8_t civ_id, int flag));
 void aoe_world_new_views_ror(AoeWorldBaseRor *w);
+
+/* Objects and lists (0x005204d0..0x00520b10). 0x00520720: the next
+   free object ID (the loading ID +0x70 while +0x74 is set), from the
+   +0x68 cursor. 0x00520760: the next negative ID (+0x6c down; while
+   loading, below +0x70). 0x00520790 (+0xf8): register an object by its
+   ID (negative IDs in the second table); a full table doubles (or grows
+   to ID x 1.1); a displaced object while loading ends the load and gets
+   0x004a7010. 0x00520960 (+0xfc): unregister an ID (0 when out of
+   range). 0x00520a00 / 0x00520b10: append to / take the first of the
+   list for a kind (10 +0xd8, 20 +0xdc, 25 +0xf0, 30 +0xe0, 40 +0xe4, 50
+   +0xe8, 60 +0xec; others 0 / NULL). */
+int32_t aoe_world_next_id_ror(AoeWorldBaseRor *w);
+void aoe_world_next_negative_id_ror(AoeWorldBaseRor *w);
+int aoe_world_register_ror(AoeWorldBaseRor *w, void *object, int32_t id);
+int aoe_world_unregister_ror(AoeWorldBaseRor *w, int32_t id);
+int aoe_world_list_add_ror(AoeWorldBaseRor *w, uint8_t kind, void *object);
+void *aoe_world_list_take_ror(AoeWorldBaseRor *w, uint8_t kind);
+/* 0x005204d0: the +0xfc cursor moves to the next player (cycling,
+   another than the current) of `type`; from none (-1), the first. */
+void aoe_world_next_player_of_type_ror(AoeWorldBaseRor *w, uint8_t type);
+/* 0x00520560: +0xf8 less `v` (0 when it would go below). 0x00520660:
+   +0x100, from the settings when -1. 0x00520690 / 0x005206b0: the
+   map's +0x8db8 (1 without a map) / +0x8db9 (0). */
+void aoe_world_f8_less_ror(AoeWorldBaseRor *w, uint32_t v);
+int32_t aoe_world_field_100_ror(AoeWorldBaseRor *w);
+uint8_t aoe_world_map_8db8_ror(const AoeWorldBaseRor *w);
+uint8_t aoe_world_map_8db9_ror(const AoeWorldBaseRor *w);
 
 #endif

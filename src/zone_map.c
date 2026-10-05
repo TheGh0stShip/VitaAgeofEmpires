@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "aoe_ftol.h"
+#include "aoe_stream.h"
 
 static int passable(const AoeZoneMapRor *m, const uint8_t *terrain,
                     int32_t x, int32_t y) {
@@ -171,4 +172,90 @@ void aoe_zone_manager_free_ror(AoeZoneManagerRor *z) {
     free(z->maps);
     z->maps = NULL;
     z->count = 0;
+}
+
+int aoe_zone_map_load_ror(AoeZoneMapRor *m, AoeOutcomeStream *s, int32_t width,
+                          int32_t height) {
+    const uint8_t *p;
+    size_t n = (size_t)width * (size_t)height;
+    m->width = width;
+    m->height = height;
+    m->zones = calloc(n ? n : 1, 1);
+    if (!m->zones) return 0;
+    p = aoe_stream_take(s, sizeof m->field_40c);
+    if (p) memcpy(m->field_40c, p, sizeof m->field_40c);
+    for (int i = 0; i < 255; ++i) m->counts[i] = aoe_stream_i32(s);
+    p = aoe_stream_take(s, n);
+    if (p) memcpy(m->zones, p, n);
+    m->table_count = aoe_stream_i32(s);
+    m->table = NULL;
+    if (m->table_count > 0) {
+        m->table = calloc((size_t)m->table_count, sizeof *m->table);
+        if (!m->table) return 0;
+        for (int32_t i = 0; i < m->table_count; ++i) m->table[i] = aoe_stream_f32(s);
+    }
+    return 1;
+}
+
+void aoe_zone_map_save_ror(const AoeZoneMapRor *m, AoeOutcomeStream *s) {
+    aoe_stream_put(s, m->field_40c, sizeof m->field_40c);
+    for (int i = 0; i < 255; ++i) aoe_stream_put_i32(s, m->counts[i]);
+    aoe_stream_put(s, m->zones, (size_t)m->width * (size_t)m->height);
+    aoe_stream_put_i32(s, m->table_count);
+    for (int32_t i = 0; i < m->table_count; ++i) aoe_stream_put_f32(s, m->table[i]);
+}
+
+int aoe_zone_near_tile_ror(const AoeZoneMapRor *m, int32_t zx, int32_t zy, int32_t x,
+                           int32_t y, float distance) {
+    return aoe_zone_near_ror(m, aoe_zone_at_ror(m, zx, zy), x, y, distance);
+}
+
+int aoe_zone_nearest_terrain_ror(const AoeZoneMapRor *m, int32_t x, int32_t y,
+                                 int32_t out[2], uint32_t a, uint32_t b, int32_t r,
+                                 uint32_t (*terrain_at)(void *context, int32_t x, int32_t y),
+                                 void *context) {
+    int32_t x0 = x - r, y0 = y - r, x1 = x + r, y1 = y + r, best = -1;
+    if (x0 < 0) x0 = 0;
+    if (y0 < 0) y0 = 0;
+    if (x1 > m->width - 1) x1 = m->width - 1;
+    if (y1 > m->height - 1) y1 = m->height - 1;
+    for (int32_t i = x0; i <= x1; ++i)
+        for (int32_t j = y0; j <= y1; ++j) {
+            uint32_t t = terrain_at(context, i, j) & 0xff;
+            int32_t d = (x - i) * (x - i) + (y - j) * (y - j);
+            if ((t == a || t == b) && (best == -1 || d < best)) {
+                out[0] = i;
+                out[1] = j;
+                best = d;
+            }
+        }
+    return best != -1;
+}
+
+void aoe_zone_manager_init_ror(AoeZoneManagerRor *z) {
+    z->maps = NULL;
+    z->count = 0;
+}
+
+int aoe_zone_manager_load_ror(AoeZoneManagerRor *z, AoeOutcomeStream *s, int32_t width,
+                              int32_t height) {
+    int32_t n = aoe_stream_i32(s);
+    z->maps = NULL;
+    z->count = n;
+    if (n < 1) {
+        z->count = n;
+        return 1;
+    }
+    z->maps = calloc((size_t)n, sizeof *z->maps);
+    if (!z->maps) return 0;
+    for (int32_t i = 0; i < n; ++i) {
+        z->maps[i] = calloc(1, sizeof *z->maps[i]);
+        if (!z->maps[i] || !aoe_zone_map_load_ror(z->maps[i], s, width, height)) return 0;
+    }
+    return 1;
+}
+
+void aoe_zone_manager_save_ror(const AoeZoneManagerRor *z, AoeOutcomeStream *s) {
+    aoe_stream_put_i32(s, z->count);
+    for (int32_t i = 0; i < z->count; ++i) aoe_zone_map_save_ror(z->maps[i], s);
 }

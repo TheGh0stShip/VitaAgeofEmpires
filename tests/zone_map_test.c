@@ -1,7 +1,14 @@
 #include "zone_map.h"
 
 #include <assert.h>
+#include <stdlib.h>
 #include <string.h>
+
+static const uint8_t *terrain_tab;
+static uint32_t terrain_at(void *c, int32_t x, int32_t y) {
+    (void)c;
+    return 0x100u | terrain_tab[y * 6 + x]; /* the high byte is ignored */
+}
 
 /* Patched RoR 1.0a terrain-restriction zones (0x00521060 / 0x00521210 /
    0x00521330 / 0x00521620 / 0x00521680 / 0x00521770 / 0x005215c0 /
@@ -59,6 +66,35 @@ int main(void) {
         assert(aoe_zone_at_ror(&m, 14, 12) == 254 &&
                aoe_zone_at_ror(&m, 15, 12) == 0);
         aoe_zone_map_free_ror(&m);
+    }
+    {
+        /* Save and load (0x00521190 / 0x00520f60) and the manager. */
+        static uint8_t buf[8192];
+        AoeOutcomeStream st = {buf, sizeof buf, 0, 0};
+        AoeZoneMapRor a, *only = &a;
+        AoeZoneManagerRor mgr = {&only, 1}, back;
+        int32_t at[2];
+        assert(aoe_zone_map_build_ror(&a, N, N, t, land, 2));
+        a.field_40c[3] = 9;
+        aoe_zone_manager_save_ror(&mgr, &st);
+        assert(!st.failed && st.pos == 4 + 255 + 255 * 4 + N * N + 4 + 2 * 4);
+        st.size = st.pos;
+        st.pos = 0;
+        assert(aoe_zone_manager_load_ror(&back, &st, N, N) && back.count == 1);
+        assert(st.pos == st.size && back.maps[0]->field_40c[3] == 9);
+        assert(aoe_zone_at_ror(back.maps[0], 4, 4) == 3 && back.maps[0]->table[0] == 1.0f);
+        /* Near the zone of (4, 4) (the pond). */
+        assert(aoe_zone_near_tile_ror(back.maps[0], 4, 4, 4, 3, 1.0f));
+        assert(!aoe_zone_near_tile_ror(back.maps[0], 4, 4, 1, 1, 2.0f));
+        aoe_zone_manager_free_ror(&back);
+        aoe_zone_manager_init_ror(&back);
+        assert(back.count == 0 && back.maps == NULL);
+        /* Nearest water (1) tile to (0, 0) within 3: (2, 0). */
+        terrain_tab = t;
+        assert(aoe_zone_nearest_terrain_ror(&a, 0, 0, at, 1, 99, 3, terrain_at, NULL));
+        assert(at[0] == 2 && at[1] == 0);
+        assert(!aoe_zone_nearest_terrain_ror(&a, 0, 5, at, 1, 99, 1, terrain_at, NULL));
+        aoe_zone_map_free_ror(&a);
     }
     return 0;
 }

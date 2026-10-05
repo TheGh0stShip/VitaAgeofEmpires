@@ -104,6 +104,21 @@ static AoeOutcomeStream *open_write(void *c, const char *path) {
     return &out;
 }
 static void close_write(void *c, AoeOutcomeStream *s) { (void)c; (void)s; }
+static int displaced;
+static uint8_t ptype(void *c, void *p) { (void)c; return (uint8_t)((Obj *)p)->value; }
+static void *list_items[8];
+static int list_n;
+static void list_add(void *c, void *l, void *o) { (void)c; ((Obj *)l)->entries++; list_items[list_n++] = o; }
+static void list_remove(void *c, void *l, void *o) {
+    int i;
+    (void)c;
+    ((Obj *)l)->entries--;
+    for (i = 0; i < list_n; ++i) if (list_items[i] == o) { list_items[i] = list_items[--list_n]; break; }
+}
+static void *list_first(void *c, void *l) { (void)c; (void)l; return list_n ? list_items[0] : NULL; }
+static void obj_displaced(void *c, void *o) { (void)c; (void)o; displaced++; }
+static uint8_t map_byte(void *c, void *m, int which) { (void)c; (void)m; return (uint8_t)(which + 5); }
+static int32_t def100(void *c) { (void)c; return 42; }
 
 static const AoeWorldOpsRor ops = {
     NULL, sound_text, sound_read, sound_write, sound_stop, sound_idle, ofree,
@@ -114,7 +129,8 @@ static const AoeWorldOpsRor ops = {
     scen_new, scen_read, ofree,
     player_read, player_view, player_68, ofree,
     list_new, list_clear, ofree, ofree,
-    open_text, open_read, close_read, open_write, close_write};
+    open_text, open_read, close_read, open_write, close_write,
+    ptype, list_add, list_remove, list_first, obj_displaced, map_byte, def100};
 
 static void add_file(const char *name, const char *text) {
     snprintf(files[nfiles], sizeof files[0], "%s", name);
@@ -217,6 +233,72 @@ int main(void) {
     assert(aoe_world_update_slot_is_ror(&w2, 4) && aoe_world_update_time_ror(&w2, 3) == 3);
     aoe_world_clear_times_ror(&w2);
     assert(w2.update_slot == 0);
+
+    /* Object IDs and registration. */
+    w2.objects[0] = obj(0, 0);
+    w2.objects[1] = obj(0, 1);
+    w2.field_68 = 0;
+    assert(aoe_world_next_id_ror(&w2) == 2 && w2.field_68 == 3);
+    w2.field_74 = 1;
+    w2.field_70 = 77;
+    assert(aoe_world_next_id_ror(&w2) == 77);
+    w2.field_6c = 5;
+    aoe_world_next_negative_id_ror(&w2);
+    assert(w2.field_6c == 5); /* below +0x70 already */
+    w2.field_6c = 90;
+    aoe_world_next_negative_id_ror(&w2);
+    assert(w2.field_6c == 76);
+    /* A displaced object while loading ends the load. */
+    {
+        void *old = w2.objects[1];
+        assert(aoe_world_register_ror(&w2, obj(0, 1), 1) && displaced == 1 && w2.field_74 == 0);
+        free(old);
+    }
+    free(w2.objects[0]);
+    w2.objects[0] = NULL;
+    /* Growth: 10000 doubles to 20000; 25000 needs x 1.1. */
+    assert(aoe_world_register_ror(&w2, w2.objects[1], 12000) && w2.objects_cap == 20000);
+    assert(aoe_world_object_table_ror == w2.objects);
+    assert(aoe_world_register_ror(&w2, w2.objects[1], 45000) && w2.objects_cap == 49500);
+    assert(aoe_world_register_ror(&w2, w2.objects[1], -1500) && w2.objects2_cap == 2000);
+    assert(w2.objects2[1500] == w2.objects[1]);
+    assert(aoe_world_unregister_ror(&w2, -1500) && w2.objects2[1500] == NULL);
+    assert(aoe_world_unregister_ror(&w2, 45000) && !aoe_world_unregister_ror(&w2, 50000));
+    w2.objects[12000] = NULL;
+    free(w2.objects[1]);
+    w2.objects[1] = NULL;
+    /* Kind lists. */
+    {
+        Obj a, b2;
+        assert(aoe_world_list_add_ror(&w2, 25, &a) && ((Obj *)w2.lists[6])->entries == 1);
+        assert(!aoe_world_list_add_ror(&w2, 26, &b2));
+        assert(aoe_world_list_take_ror(&w2, 25) == &a && ((Obj *)w2.lists[6])->entries == 0);
+        assert(aoe_world_list_take_ror(&w2, 25) == NULL && aoe_world_list_take_ror(&w2, 1) == NULL);
+    }
+    /* Next player of a type (player +0x48 kept in `value`). */
+    {
+        Obj p[4];
+        void *pp[4];
+        for (i = 0; i < 4; ++i) { memset(&p[i], 0, sizeof p[i]); pp[i] = &p[i]; }
+        p[1].value = 3; p[3].value = 3;
+        w2.players = pp;
+        w2.player_count = 4;
+        w2.field_fc = -1;
+        aoe_world_next_player_of_type_ror(&w2, 3);
+        assert(w2.field_fc == 1);
+        aoe_world_next_player_of_type_ror(&w2, 3);
+        assert(w2.field_fc == 3);
+        aoe_world_next_player_of_type_ror(&w2, 3);
+        assert(w2.field_fc == 1);
+        w2.players = NULL;
+        w2.player_count = 0;
+    }
+    w2.field_f8 = 5;
+    aoe_world_f8_less_ror(&w2, 9);
+    assert(w2.field_f8 == 0);
+    w2.field_100 = -1;
+    assert(aoe_world_field_100_ror(&w2) == 42 && w2.field_100 == 42);
+    assert(aoe_world_map_8db8_ror(&w2) == 5 && aoe_world_map_8db9_ror(&w2) == 6);
 
     aoe_world_release_ror(&w2, NULL);
     aoe_world_release_ror(&w, NULL);

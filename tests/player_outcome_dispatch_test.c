@@ -277,6 +277,13 @@ int main(void) {
     other_resources[1] = 130.0f;
     assert(aoe_outcome_dispatch_event(&dispatch, &event));
     assert(event.rival_threshold_08 == 130 && event.contribution_10 == 0);
+    /* Patched 1.0a: a best sample equal to the threshold earns the weight. */
+    assert(aoe_outcome_event_kind3_patched_ror(&manager, &event));
+    assert(event.rival_threshold_08 == 130 && event.contribution_10 == 10);
+    other_resources[1] = 140.0f;
+    owner_resources[1] = 140.0f;
+    assert(aoe_outcome_event_kind3_patched_ror(&manager, &event));
+    assert(event.rival_threshold_08 == 140 && event.contribution_10 == 10); /* the weight on a tie */
     owner_resources[1] = 100.0f;
     other_resources[1] = 50.0f;
     AoeOutcomeManager other_manager = {0};
@@ -297,6 +304,12 @@ int main(void) {
     condition.status = 2;
     assert(aoe_outcome_dispatch_condition(&dispatch, &condition));
     assert(condition.status == 2); /* Falling below target does not reset. */
+    assert(aoe_outcome_condition_kind12_patched_ror(&manager, &condition));
+    assert(condition.status == 0); /* The patched body resets it. */
+    condition.score_target_20 = 100;
+    assert(aoe_outcome_condition_kind12_patched_ror(&manager, &condition) && condition.status == 2);
+    condition.score_target_20 = 151;
+    condition.status = 2;
     manager.score_sum_1c = 0;
     condition.kind = 6;
     condition.resource_index_1c = 1;

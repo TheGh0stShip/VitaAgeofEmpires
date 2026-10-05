@@ -575,3 +575,46 @@ int aoe_outcome_dispatch_condition(void *user, AoeOutcomeCondition *condition) {
     if (kind == 12) return aoe_outcome_condition_kind12(dispatch->manager, condition);
     return 1;
 }
+
+int aoe_outcome_event_kind3_patched_ror(AoeOutcomeManager *manager, AoeOutcomeEvent *event) {
+    AoeOutcomePlayerRef *owner;
+    AoeOutcomeWorldRef *world;
+    int32_t whole;
+    uint32_t contribution;
+    if (!event) return 0;
+    if (event->status != 0) return 1;
+    if (!event_world(manager, &owner, &world) ||
+        !resource_whole(owner, event->resource_index_04, &whole)) return 0;
+    if (event->sample_14 < (float)whole) event->sample_14 = (float)whole;
+    for (int i = 1; i < world->player_count; ++i) {
+        float rival;
+        if (i == owner->index4a) continue;
+        if (!resource_at(world->players[i], event->resource_index_04, &rival)) return 0;
+        if ((float)event->rival_threshold_08 <= rival) {
+            int32_t rival_whole;
+            if (!resource_whole(world->players[i], event->resource_index_04,
+                                &rival_whole)) return 0;
+            event->rival_threshold_08 = rival_whole;
+        }
+    }
+    if (event->sample_14 < (float)event->rival_threshold_08)
+        contribution = whole == event->rival_threshold_08 ? event->contribution_10 : 0;
+    else
+        contribution = (uint32_t)event->weight_0c;
+    manager->score_sum_1c += contribution - event->contribution_10;
+    event->contribution_10 = contribution;
+    return 1;
+}
+
+int aoe_outcome_condition_kind12_patched_ror(AoeOutcomeManager *manager,
+                                             AoeOutcomeCondition *condition) {
+    uint8_t before;
+    int r;
+    if (!condition || !manager) return 0;
+    if (!manager->owner) return 1;
+    before = condition->status;
+    condition->status = 0;
+    r = aoe_outcome_condition_kind12(manager, condition);
+    if (!r) condition->status = before;
+    return r;
+}

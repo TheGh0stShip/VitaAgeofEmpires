@@ -132,11 +132,13 @@ typedef struct {
     int (*update_condition)(void *user, AoeOutcomeCondition *condition);
 } AoeOutcomeOps;
 
-/* RoR 0x005100e0 / base 0x004337d0: group conditions after their updates.
+/* RoR 0x005100e0 (patched 1.0a 0x0050d950) / base 0x004337d0: group
+   conditions after their updates.
    If no conditions exist, original code leaves the previous outcome alone. */
 int aoe_outcome_recompute(AoeOutcomeManager *manager);
 
-/* RoR 0x005101c0 / base 0x004338c0: update status-non-1/non-3 entries of both
+/* RoR 0x005101c0 (patched 1.0a 0x0050da30) / base 0x004338c0: update
+   status-non-1/non-3 entries of both
    lists, then recompute and return the outcome byte. Returns zero on invalid
    state or callback failure; result receives the game outcome on success. */
 int aoe_outcome_manager_update(AoeOutcomeManager *manager,

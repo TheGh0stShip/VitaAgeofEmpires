@@ -57,6 +57,17 @@ typedef struct {
     /* Order the unit to stop (the player's +0x30 task with
        action 0x2c2 and the given value). */
     void (*dismiss)(void *context, int32_t id, int32_t value);
+    /* The unit's distance to a point (0x004aaf50 on the world object:
+       |dx| and |dy| less the type's +0x30 / +0x34 sizes, not below 0,
+       then the root of the squares). */
+    double (*distance)(void *context, int32_t id, float x, float y, float z);
+    /* The world object and its unit AI (+0x74): the type ID (type +0x10),
+       the AI's task (+0x30) and action (+0x28). 0 when there is no object
+       (0x0040bab0) or it has no unit AI. */
+    int (*unit_ai)(void *context, int32_t id, int32_t *type_id,
+                   int32_t *task, int32_t *action);
+    /* The tactical AI's strategic number (0x004d77d0). */
+    int32_t (*sn)(void *context, int32_t index);
 } AoeAiUnitGroupOpsRor;
 
 /* 0x004cc630 constructor (0x004cc780 / 0x004cc760 destructors). */
@@ -102,6 +113,36 @@ void aoe_ai_unit_group_set_all_locations_ror(AoeAiUnitGroupRor *g, float x,
    0x004cd2a0 / 0x004cd2b0 +0x1c4, 0x004cd2c0 +0x1c8 (plain fields). */
 void aoe_ai_unit_group_set_location_ror(float out[4], float x, float y,
                                         float z);
+
+/* 0x004ce950: every member near the +0x19c location: a missing member
+   (or one without a unit AI) is dropped by slot (0x004ccd90); otherwise
+   its distance less 1.0 (not below 0, kept as a float) must not exceed
+   strategic number 23 for task 0x6d, else 41. 0 at the first one too
+   far, else 1. */
+int aoe_ai_unit_group_in_range_ror(AoeAiUnitGroupRor *g,
+                                   const AoeAiUnitGroupOpsRor *ops);
+/* 0x004cea40: every member settled: missing members are dropped; type
+   0x7d is skipped; with `allow_600` set, a unit AI task of 600 is skipped
+   for group tasks 100 and 0x67; any other member with a task other than
+   -1 must have action 0x2bd. 0 at the first that is not, else 1. */
+int aoe_ai_unit_group_settled_ror(AoeAiUnitGroupRor *g,
+                                  const AoeAiUnitGroupOpsRor *ops,
+                                  int32_t allow_600);
+/* 0x004ceb10 / 0x004ceb20: +0x1cc. */
+int32_t aoe_ai_unit_group_field_1cc_ror(const AoeAiUnitGroupRor *g);
+void aoe_ai_unit_group_set_field_1cc_ror(AoeAiUnitGroupRor *g, int32_t v);
+/* 0x004ceb30: append a waypoint (x, y, 1.0) to the 16-byte entries at
+   +0x1d8 while fewer than 14 are stored (+0x1d4 counts them). The entries
+   stay little-endian bytes so the save writes them unchanged. */
+void aoe_ai_unit_group_add_waypoint_ror(AoeAiUnitGroupRor *g, float x,
+                                        float y);
+/* Waypoint `i` as written above (the port's reader; 0 outside). */
+int aoe_ai_unit_group_waypoint_ror(const AoeAiUnitGroupRor *g, int i,
+                                   float out[3]);
+/* 0x004ceb90: entry `i` (0..19) of the +0x2d0 list, else -1; 0x004cebb0
+   appends while +0x2cc is below 19 (1), else 0. */
+int32_t aoe_ai_unit_group_list_ror(const AoeAiUnitGroupRor *g, int32_t i);
+int aoe_ai_unit_group_list_add_ror(AoeAiUnitGroupRor *g, int32_t value);
 
 /* 0x004cca20 save / 0x004cc790 load: i32 id, type, 40 pairs (member,
    value), +0x15c..+0x16c, 16-byte location, +0x180..+0x188, three 16-byte

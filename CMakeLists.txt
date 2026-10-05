@@ -699,6 +699,13 @@ target_compile_options(aoe_player_pair_list PRIVATE -Wall -Wextra)
 add_library(aoe_tribe_civ_setup STATIC src/tribe_civ_setup.c)
 target_include_directories(aoe_tribe_civ_setup PUBLIC include)
 target_compile_options(aoe_tribe_civ_setup PRIVATE -Wall -Wextra)
+# --- AI worker ---
+add_library(aoe_ai_ror STATIC src/ai_strategy.c src/ai_tactical.c src/ai_player.c src/ai_unit_ai.c
+            src/ai_info.c)
+target_include_directories(aoe_ai_ror PUBLIC include)
+target_link_libraries(aoe_ai_ror PUBLIC aoe_ai_build m)
+target_compile_options(aoe_ai_ror PRIVATE -Wall -Wextra)
+# --- end AI worker ---
 
 if(VITA)
   include("${VITASDK}/share/vita.cmake" REQUIRED)
@@ -1582,6 +1589,14 @@ else()
   target_link_libraries(tribe_civ_setup_test PRIVATE aoe_tribe_civ_setup)
   target_compile_options(tribe_civ_setup_test PRIVATE -UNDEBUG)
   add_test(NAME original_ror_tribe_civ_setup COMMAND tribe_civ_setup_test)
+  # --- AI worker ---
+  foreach(ai_test ai_strategy ai_tactical ai_info ai_player ai_unit_ai)
+    add_executable(${ai_test}_test tests/${ai_test}_test.c)
+    target_link_libraries(${ai_test}_test PRIVATE aoe_ai_ror)
+    target_compile_options(${ai_test}_test PRIVATE -UNDEBUG)
+    add_test(NAME original_${ai_test} COMMAND ${ai_test}_test)
+  endforeach()
+  # --- end AI worker ---
   add_executable(cdtrack_tool tools/cdtrack_tool.c)
   add_executable(cpx_tool tools/cpx_tool.c)
   target_link_libraries(cpx_tool PRIVATE aoe_cpx)

@@ -18,11 +18,25 @@ static int32_t now(void *c) { (void)c; return 777; }
 static int present(void *c, int32_t id) { (void)c; return id != 12; }
 static int hp(void *c, int32_t id, float *out) { (void)c; if (id == 12) return 0; *out = (float)id + 0.9f; return 1; }
 static void dismiss(void *c, int32_t id, int32_t v) { (void)c; assert(v == 100); dismissed = id; }
+static double dist(void *c, int32_t id, float x, float y, float z) {
+    (void)c; assert(x == 5.0f && y == 6.0f && z == 7.0f);
+    return id == 21 ? 0.25 : (double)id;
+}
+static int unit_ai(void *c, int32_t id, int32_t *type, int32_t *task, int32_t *action) {
+    (void)c;
+    if (id == 20) return 0;
+    *type = id == 22 ? 0x7d : 1;
+    *task = id == 23 ? 600 : id == 24 ? -1 : 5;
+    *action = id == 25 ? 0x2bd : 0;
+    return 1;
+}
+static int32_t sn_asked;
+static int32_t sn(void *c, int32_t i) { (void)c; sn_asked = i; return i == 23 ? 30 : 3; }
 
 int main(void) {
     static AoeAiUnitGroupRor g, h;
     AoeAiUnitGroupOpsRor ops = {NULL, lead, follow, unfollow, release, now,
-                                present, hp, dismiss};
+                                present, hp, dismiss, dist, unit_ai, sn};
     static uint8_t buf[2048];
     AoeOutcomeStream out = {buf, sizeof buf, 0, 0}, in;
 
@@ -83,5 +97,50 @@ int main(void) {
 
     aoe_ai_unit_group_clear_ror(&g, &ops);
     assert(g.count == 0 && g.members[1] == -1);
+
+    /* Range: a missing member is dropped; distance less 1.0 (0.25 gives
+       0) against SN 41, or 23 for task 0x6d. */
+    aoe_ai_unit_group_init_ror(&g);
+    aoe_ai_unit_group_set_all_locations_ror(&g, 5, 6, 7);
+    aoe_ai_unit_group_add_ror(&g, 20, &ops);
+    aoe_ai_unit_group_add_ror(&g, 21, &ops);
+    aoe_ai_unit_group_add_ror(&g, 4, &ops);
+    assert(aoe_ai_unit_group_in_range_ror(&g, &ops) && sn_asked == 41 &&
+           g.count == 2 && g.members[0] == -1);
+    aoe_ai_unit_group_add_ror(&g, 5, &ops);
+    assert(!aoe_ai_unit_group_in_range_ror(&g, &ops));
+    g.task = 0x6d;
+    assert(aoe_ai_unit_group_in_range_ror(&g, &ops) && sn_asked == 23);
+
+    /* Settled: type 0x7d skipped, task -1 fine, action 0x2bd fine, task
+       600 skipped only when allowed for group tasks 100 / 0x67. */
+    aoe_ai_unit_group_init_ror(&g);
+    aoe_ai_unit_group_add_ror(&g, 22, &ops);
+    aoe_ai_unit_group_add_ror(&g, 24, &ops);
+    aoe_ai_unit_group_add_ror(&g, 25, &ops);
+    aoe_ai_unit_group_add_ror(&g, 20, &ops);
+    assert(aoe_ai_unit_group_settled_ror(&g, &ops, 0) && g.count == 3);
+    aoe_ai_unit_group_add_ror(&g, 23, &ops);
+    g.task = 100;
+    assert(!aoe_ai_unit_group_settled_ror(&g, &ops, 0));
+    assert(aoe_ai_unit_group_settled_ror(&g, &ops, 1));
+    g.task = 101;
+    assert(!aoe_ai_unit_group_settled_ror(&g, &ops, 1));
+
+    /* Waypoints and the +0x2d0 list. */
+    {
+        float w[3];
+        int i;
+        for (i = 0; i < 16; ++i) aoe_ai_unit_group_add_waypoint_ror(&g, (float)i, 2.0f);
+        assert(g.flag_1d4 == 14 && aoe_ai_unit_group_waypoint_ror(&g, 13, w) &&
+               w[0] == 13.0f && w[1] == 2.0f && w[2] == 1.0f);
+        assert(g.block_1d8[16 + 2] == 0x80 && g.block_1d8[16 + 3] == 0x3f);
+        for (i = 0; i < 25; ++i) aoe_ai_unit_group_list_add_ror(&g, 100 + i);
+        assert(g.field_2cc == 19 && aoe_ai_unit_group_list_ror(&g, 18) == 118 &&
+               aoe_ai_unit_group_list_ror(&g, 19) == -1 &&
+               aoe_ai_unit_group_list_ror(&g, 20) == -1);
+        aoe_ai_unit_group_set_field_1cc_ror(&g, 9);
+        assert(aoe_ai_unit_group_field_1cc_ror(&g) == 9);
+    }
     return 0;
 }

@@ -219,6 +219,8 @@ typedef struct {
        villagers' terrain (template 19's +0x66 through 0x00521b50; the
        same map `map_zone` reads). */
     int32_t (*zone_size)(void *context, int32_t zone);
+    /* An object's vtable +0x114: whether it could stand at (x, y). */
+    int (*free_tile)(void *context, int32_t id, float x, float y);
 } AoeAiInfoOpsRor;
 
 /* 0x004bc690: 1 when the object exists and its zone has no flag;
@@ -676,5 +678,27 @@ AoeAiConItemRor *aoe_ai_info_shore_site_ror(AoeAiInfoRor *info, AoeAiConPlanRor 
 AoeAiConItemRor *aoe_ai_ror_plan_add_shore_ror(AoeAiConPlanRor *plan, AoeAiInfoRor *info,
                                                const AoeAiPlanItemRor *item,
                                                const AoeAiInfoOpsRor *ops);
+
+/* 0x004b98e0(item, builder, search, start), the RoR plan's site for an
+   item: without an origin inside the map the information AI's finder
+   decides (0x004be2e0 with the item, the builder and the search); docks
+   (0x2d) take a shore site (0x004b9f80) and return a copy; types 0x67,
+   0x44, 0x4f, 199, 0x45, 0x48, 0x75 and 0x9b, free placement or an
+   empty plan go to the finder. Otherwise, with an object of class 4 (else
+   NULL), each unused planned entry of the item's type (or none) and its
+   size whose footprint (from x - size_x, y - size_y, size_x by size_y
+   tiles) lies inside the map, in the builder's zone and free for that
+   object is a candidate; with no candidate used fewer than twice the
+   finder is asked first. Without candidates +0x310 becomes 5 (NULL).
+   The chosen candidate is the first, replaced by any used more than five
+   fewer times (type 0x48), else the least used (0x004ba0a0); the plan
+   entry there (0x0040a640) is marked used (+0x74 1), its count raised and
+   its unique ID set from the item; the result is a copy of that entry
+   with the item's type, +0x310 0. */
+AoeAiConItemRor *aoe_ai_ror_plan_choose_ror(AoeAiConPlanRor *plan, AoeAiInfoRor *info,
+                                            struct AoeValueGridRor *grid,
+                                            const AoeAiPlanItemRor *item, int32_t builder,
+                                            int free_placement, AoeAiSiteSearchRor *search,
+                                            uint32_t start, const AoeAiInfoOpsRor *ops);
 
 #endif

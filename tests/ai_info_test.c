@@ -630,6 +630,7 @@ static uint8_t shore_tile(void *c, int32_t x, int32_t y) { (void)c; (void)y; ret
 static uint8_t shore_zone(void *c, int32_t x, int32_t y) { (void)c; (void)x; (void)y; return 3; }
 static int32_t shore_zone_size(void *c, int32_t z) { (void)c; return z == 3 ? 50 : 0; }
 static int32_t shore_sn(void *c, int32_t i) { (void)c; return i == 0x70 ? 10 : 0; }
+static int choose_free(void *c, int32_t id, float x, float y) { (void)c; (void)id; (void)x; (void)y; return 1; }
 static void site_tests(void) {
     /* 0x004c1ef0 the site grid for mode 3 (a 20 x 20 map). */
     static AoeAiInfoRor info;
@@ -747,6 +748,41 @@ static void site_tests(void) {
         assert(plan.placed_count == 1 && plan.placed.next == dock && plan.field_310 == 0);
         so.zone_size = NULL;
         assert(!aoe_ai_ror_plan_add_shore_ror(&plan, &si, &want, &so) && plan.field_310 == 5);
+        aoe_ai_con_plan_release_ror(&plan);
+    }
+    {
+        /* 0x004b98e0: the least used planned spot that fits. */
+        static AoeAiInfoRor ci;
+        static AoeAiConPlanRor plan;
+        AoeAiInfoOpsRor co;
+        AoeAiPlanItemRor want;
+        AoeAiSiteSearchRor search;
+        AoeAiConItemRor *picked, *a, *b2;
+        memset(&co, 0, sizeof co);
+        memset(&search, 0, sizeof search);
+        co.first_of_class = finder_first_class;
+        co.free_tile = choose_free;
+        aoe_ai_con_plan_init_ror(&plan, 1, NULL);
+        assert(aoe_ai_con_plan_load_text_ror(&plan, "p.cp", "0 0 0 1 1 1 12 A\n3 3 0 1 1 1 12 B\n",
+                                             32, 32, 5.0f, 5.0f, 0.0f));
+        a = plan.plan.next;
+        b2 = a->next;
+        a->counter = 3;
+        b2->counter = 1;
+        aoe_ai_plan_item_init_ror(&want);
+        want.type = 12;
+        want.size_x = want.size_y = 1.0f;
+        want.unique_id = 44;
+        picked = aoe_ai_ror_plan_choose_ror(&plan, &ci, &g, &want, 0, 0, &search, 0, &co);
+        assert(picked && picked->plan.x == b2->plan.x && picked->plan.type == 12);
+        assert(b2->field_74 == 1 && b2->counter == 2 && b2->plan.unique_id == 44 && plan.field_310 == 0);
+        aoe_ai_con_item_release_ror(picked);
+        free(picked);
+        /* The other entry is the only one left. */
+        picked = aoe_ai_ror_plan_choose_ror(&plan, &ci, &g, &want, 0, 0, &search, 0, &co);
+        assert(picked && picked->plan.x == a->plan.x && a->field_74 == 1);
+        aoe_ai_con_item_release_ror(picked);
+        free(picked);
         aoe_ai_con_plan_release_ror(&plan);
     }
     aoe_value_grid_free_ror(&g);

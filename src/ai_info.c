@@ -1943,3 +1943,99 @@ AoeAiConItemRor *aoe_ai_ror_plan_add_shore_ror(AoeAiConPlanRor *plan, AoeAiInfoR
     plan->field_310 = 0;
     return it;
 }
+
+static AoeAiConItemRor *copy_con_item(const AoeAiConItemRor *from) {
+    AoeAiConItemRor *it = malloc(sizeof *it);
+    if (!it) return NULL;
+    aoe_ai_con_item_init_ror(it);
+    aoe_ai_con_item_copy_ror(it, from);
+    return it;
+}
+
+static AoeAiConItemRor *ask_finder(AoeAiInfoRor *info, AoeValueGridRor *g,
+                                   const AoeAiPlanItemRor *item, int32_t builder,
+                                   AoeAiSiteSearchRor *search, uint32_t start,
+                                   const AoeAiInfoOpsRor *ops) {
+    return aoe_ai_info_find_site_ror(info, g, item, builder, -1, 0.0f, NULL, -1, -1, -1, -1,
+                                     search, start, NULL, ops);
+}
+
+AoeAiConItemRor *aoe_ai_ror_plan_choose_ror(AoeAiConPlanRor *plan, AoeAiInfoRor *info,
+                                            AoeValueGridRor *g, const AoeAiPlanItemRor *item,
+                                            int32_t builder, int free_placement,
+                                            AoeAiSiteSearchRor *search, uint32_t start,
+                                            const AoeAiInfoOpsRor *ops) {
+    const AoeAiConItemRor *cands[256];
+    int32_t n = 0, least = -1, class4, i;
+    uint8_t zone = 0;
+    int have_builder;
+    AoeAiWorldObjectRor b;
+    const AoeAiConItemRor *chosen;
+    AoeAiConItemRor *e, *result;
+    if (!(plan->origin_x > 0.0f && plan->origin_y > 0.0f && (float)plan->map_width > plan->origin_x &&
+          (float)plan->map_height > plan->origin_y))
+        return ask_finder(info, g, item, builder, search, start, ops);
+    if (item->type == 0x2d) {
+        AoeAiConItemRor *dock = aoe_ai_ror_plan_add_shore_ror(plan, info, item, ops);
+        return dock ? copy_con_item(dock) : NULL;
+    }
+    switch (item->type) {
+    case 0x67: case 0x44: case 0x4f: case 199: case 0x45: case 0x48: case 0x75: case 0x9b:
+        return ask_finder(info, g, item, builder, search, start, ops);
+    default:
+        break;
+    }
+    if (free_placement || !plan->count) return ask_finder(info, g, item, builder, search, start, ops);
+    class4 = ops->first_of_class ? ops->first_of_class(ops->context, 4) : 0;
+    if (!class4) return NULL;
+    memset(&b, 0, sizeof b);
+    have_builder = ops->object && ops->object(ops->context, builder, &b);
+    if (have_builder && ops->zone) zone = ops->zone(ops->context, builder);
+    for (const AoeAiConItemRor *c = plan->plan.next; c && c != &plan->plan; c = c->next) {
+        int32_t lx, ly, hx, hy, x, y, ok = 1;
+        if (c->plan.type != item->type && c->plan.type != -1) continue;
+        if (item->size_x != c->plan.size_x || item->size_y != c->plan.size_y) continue;
+        if (c->field_78 == 1 || c->field_74 == 1) continue;
+        lx = aoe_ftol32(c->plan.x - c->plan.size_x);
+        ly = aoe_ftol32(c->plan.y - c->plan.size_y);
+        hx = aoe_ftol32(c->plan.size_x) + lx;
+        hy = aoe_ftol32(c->plan.size_y) + ly;
+        if (lx < 0 || ly < 0 || hx >= plan->map_width || hy >= plan->map_height) continue;
+        for (x = lx; x < hx && ok; ++x)
+            for (y = ly; y < hy && ok; ++y) {
+                if (have_builder && ops->tile_zone && ops->tile_zone(ops->context, builder, x, y) != zone)
+                    ok = 0;
+                else if (!ops->free_tile ||
+                         !ops->free_tile(ops->context, class4, (float)x + 0.5f, (float)y + 0.5f))
+                    ok = 0;
+            }
+        if (!ok) continue;
+        if (n < (int32_t)(sizeof cands / sizeof cands[0])) cands[n++] = c;
+        if (least == -1 || c->counter < least) least = c->counter;
+    }
+    if (least >= 2 || least == -1) {
+        AoeAiConItemRor *found = ask_finder(info, g, item, builder, search, start, ops);
+        if (found) return found;
+    }
+    if (!n) {
+        plan->field_310 = 5;
+        return NULL;
+    }
+    chosen = cands[0];
+    for (i = 1; i < n; ++i) {
+        if (item->type == 0x48) {
+            if (chosen->counter > cands[i]->counter + 5) chosen = cands[i];
+        } else if (chosen->counter > cands[i]->counter) {
+            chosen = cands[i];
+        }
+    }
+    e = aoe_ai_con_plan_at_ror(plan, chosen->plan.x, chosen->plan.y);
+    if (!e) return NULL; /* host guard: the original uses it unchecked */
+    e->field_74 = 1;
+    aoe_ai_con_item_add_ror(e);
+    e->plan.unique_id = item->unique_id;
+    plan->field_310 = 0;
+    result = copy_con_item(e);
+    if (result) result->plan.type = item->type;
+    return result;
+}

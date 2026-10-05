@@ -55,9 +55,10 @@ typedef struct {
 
 /* Unit +0x44. The unit's selection highlight (+0x36 bit 0, the player's
    highlight refresh) and the type-70 per-unit owner bytes (+0x18c[9]
-   +0x05) are interface state that is not modelled. Returns 0 for missing bindings or a failed
-   list move or template copy; 1 otherwise, including when the new owner
-   lacks the template (nothing changes, as in the original). */
+   +0x05) are interface state that is not modelled. Returns 0 for missing
+   bindings or a failed list move or template copy; 1 otherwise, including
+   when the new owner lacks the template (nothing changes, as in the
+   original). */
 int aoe_live_unit_change_owner_ror(AoeLiveUnit *unit, int16_t new_owner,
                                    const AoeLiveUnitOwnerOps *ops);
 

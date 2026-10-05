@@ -131,7 +131,7 @@ void aoe_ui_scrollbar_set_range_ror(AoeUiScrollbarRor *s, int32_t range,
 }
 
 void aoe_ui_scrollbar_set_pictures_ror(AoeUiScrollbarRor *s,
-                                       const int32_t pictures[5]) {
+                                       void *const pictures[5]) {
     if (s && pictures) memcpy(s->pictures, pictures, sizeof(s->pictures));
 }
 

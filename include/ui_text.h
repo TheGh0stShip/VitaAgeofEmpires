@@ -108,7 +108,8 @@ const char *aoe_ui_text_selected_text_ror(const AoeUiTextRor *t);
 const char *aoe_ui_text_column_ror(const AoeUiTextRor *t, int32_t index);
 int32_t aoe_ui_text_id_ror(const AoeUiTextRor *t, int32_t index);
 int32_t aoe_ui_text_selected_id_ror(const AoeUiTextRor *t);
-/* 0x0046a100 select (and re-lay out), 0x0046a120 select by ID. */
+/* 0x0046a100 select (and re-lay out; 0x0046a0e0 forwards to it),
+   0x0046a120 select by ID. */
 void aoe_ui_text_select_ror(AoeUiTextRor *t, int16_t index);
 void aoe_ui_text_select_id_ror(AoeUiTextRor *t, int32_t id);
 /* 0x00469310: visible lines from the height, then the window and
@@ -170,6 +171,18 @@ int aoe_ui_text_setup_ror(AoeUiTextRor *t, AoeUiAreaRor *area,
                           uint8_t fill_color, int32_t border,
                           uint8_t border_color, int16_t max_chars,
                           const char *text);
+/* 0x00468850 setup from a line array: the panel, fill, border, line limit,
+   the lines (slot +0xe4), the font, alignment 3/1 (top, left) and the
+   background picture. */
+int aoe_ui_text_setup_lines_ror(AoeUiTextRor *t, AoeUiAreaRor *area,
+                                AoeUiPanelRor *parent, int32_t x, int32_t y,
+                                int32_t w, int32_t h, uintptr_t font,
+                                int32_t font_width, int32_t line_height,
+                                void *background, int16_t background_w,
+                                int16_t background_h, int32_t fill,
+                                uint8_t fill_color, int32_t border,
+                                uint8_t border_color, int16_t max_chars,
+                                const char *const *lines, int16_t count);
 /* 0x004f7cf0: vertical (+0x110) and horizontal (+0x114) alignment. */
 void aoe_ui_text_set_alignment_ror(AoeUiTextRor *t, int32_t vertical,
                                    int32_t align);

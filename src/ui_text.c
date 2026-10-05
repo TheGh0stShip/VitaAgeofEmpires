@@ -486,6 +486,30 @@ int aoe_ui_text_setup_ror(AoeUiTextRor *t, AoeUiAreaRor *area,
     return 1;
 }
 
+int aoe_ui_text_setup_lines_ror(AoeUiTextRor *t, AoeUiAreaRor *area,
+                                AoeUiPanelRor *parent, int32_t x, int32_t y,
+                                int32_t w, int32_t h, uintptr_t font,
+                                int32_t font_width, int32_t line_height,
+                                void *background, int16_t background_w,
+                                int16_t background_h, int32_t fill,
+                                uint8_t fill_color, int32_t border,
+                                uint8_t border_color, int16_t max_chars,
+                                const char *const *lines, int16_t count) {
+    if (!t) return 0;
+    aoe_ui_panel_setup_ror(&t->panel, area, parent, x, y, w, h, 0);
+    t->fill = fill;
+    t->fill_color = fill_color;
+    t->border = border;
+    t->border_color = border_color;
+    t->max_chars = max_chars;
+    if (border) t->bevel_type = 1;
+    ((const AoeUiTextVtblRor *)t->panel.vt)->set_lines(t, lines, count);
+    aoe_ui_text_set_font_ror(t, font, font_width, line_height);
+    aoe_ui_text_set_alignment_ror(t, 3, 1);
+    aoe_ui_text_set_background_ror(t, background, background_w, background_h);
+    return 1;
+}
+
 int aoe_ui_text_set_text_ror(AoeUiTextRor *t, const char *text) {
     const char *nl;
     if (!t) return 0;

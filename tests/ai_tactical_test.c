@@ -366,6 +366,48 @@ static void pick_tests(void) {
     aoe_ai_tactical_release_ror(&ai);
 }
 
+static int ng_zone(void *c, int32_t id, uint8_t *z) {
+    (void)c;
+    if (id < 0) return 0;
+    *z = (uint8_t)(id == 70 ? 2 : 1);
+    return 1;
+}
+
+static void nearest_group_tests(void) {
+    static AoeAiTacticalRor ai;
+    AoeAiTacticalOpsRor ops;
+    AoeAiUnitGroupRor *a, *b, *c;
+    int32_t pt[2] = {10, 10};
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    memset(&ops, 0, sizeof ops);
+    ops.object_zone = ng_zone;
+    a = aoe_ai_tactical_new_group_ror(&ai, 1);
+    b = aoe_ai_tactical_new_group_ror(&ai, 1);
+    c = aoe_ai_tactical_new_group_ror(&ai, 1);
+    a->task = b->task = c->task = 0x6a;
+    a->field_180 = b->field_180 = 4;
+    c->field_180 = 5;
+    a->loc_19c[0] = 13.9f; a->loc_19c[1] = 14.2f;   /* 3, 4: 5 */
+    b->loc_19c[0] = 11.0f; b->loc_19c[1] = 10.0f;   /* 1 */
+    c->loc_19c[0] = 10.0f; c->loc_19c[1] = 10.0f;
+    a->commander = 70;
+    b->commander = 71;
+    assert(aoe_ai_tactical_nearest_group_ror(&ai, -1, 4, 6, pt, -1, &ops) == b);
+    assert(aoe_ai_tactical_nearest_group_ror(&ai, -1, 4, 1, pt, -1, &ops) == NULL);
+    assert(aoe_ai_tactical_nearest_group_ror(&ai, -1, -1, 6, pt, -1, &ops) == c);
+    /* With max -1 the last match wins. */
+    assert(aoe_ai_tactical_nearest_group_ror(&ai, -1, 4, -1, pt, -1, &ops) == b);
+    a->loc_19c[0] = 10.0f;
+    assert(aoe_ai_tactical_nearest_group_ror(&ai, -1, 4, -1, pt, -1, &ops) == b);
+    /* Zone 2 keeps only a. */
+    assert(aoe_ai_tactical_nearest_group_ror(&ai, -1, 4, 9, pt, 2, &ops) == a);
+    /* Task 0x6a skips a group another names in +0x1c4. */
+    c->field_1c4 = b->id;
+    assert(aoe_ai_tactical_nearest_group_ror(&ai, 0x6a, 4, 9, pt, -1, &ops) == a);
+    assert(aoe_ai_tactical_nearest_group_ror(&ai, 0x6b, 4, 9, pt, -1, &ops) == NULL);
+    aoe_ai_tactical_release_ror(&ai);
+}
+
 int main(void) {
     static AoeAiTacticalRor ai, back;
     static uint8_t buf[1 << 16];
@@ -373,6 +415,8 @@ int main(void) {
     AoeAiUnitGroupRor *g1, *g2, *g3;
     AoeAiStrategyRor strategy;
     size_t full;
+
+    nearest_group_tests();
 
     aoe_ai_tactical_init_ror(&ai, 3, NULL);
     assert(ai.module.id == 0x3f1 && !strcmp(ai.module.name, "TacAI"));

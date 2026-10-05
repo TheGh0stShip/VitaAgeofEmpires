@@ -958,6 +958,68 @@ static void pick_target_tests(void) {
     assert(aoe_ai_info_pick_target_ror(&info, 0, 8, pos, &drop, NULL, 0, &ops) == -1);
 }
 
+static int32_t res_sn(void *c, int32_t i) { (void)c; return i == 0x5c ? 6 : 100 + i; }
+static int res_group_near(void *c, int32_t f, int32_t max, const int32_t pt[2]) {
+    (void)c;
+    assert(f == 4 && max == 6);
+    return pt[0] == 9;
+}
+static uint8_t res_zone(void *c, int32_t id) { (void)c; return (uint8_t)(id == 13 ? 2 : 1); }
+static double res_range(void *c, int32_t id) { (void)c; (void)id; return 3.0; }
+static int res_reaches(void *c, int32_t id, uint8_t z, float r, const int32_t pt[2]) {
+    (void)c; (void)id;
+    assert(z == 1 && r == 3.0f);
+    return pt[0] == 4;
+}
+static int res_object(void *c, int32_t id, AoeAiWorldObjectRor *o) {
+    (void)c;
+    if (id == 14) return 0;
+    memset(o, 0, sizeof *o);
+    o->id = id;
+    o->x = (float)(id - 9) + 0.5f;
+    return 1;
+}
+
+static void resource_tests(void) {
+    static AoeAiInfoRor info;
+    static AoeAiInfoObjectRor objs[6];
+    AoeAiInfoOpsRor ops;
+    int32_t list[5] = {10, 11, 12, 13, 14};
+    memset(&ops, 0, sizeof ops);
+    ops.sn = res_sn;
+    ops.object = res_object;
+    ops.group_near = res_group_near;
+    ops.zone = res_zone;
+    ops.range = res_range;
+    ops.zone_reaches = res_reaches;
+    /* 0x004c15d0 */
+    assert(aoe_ai_info_resource_priority_ror(0x2d, 0, &ops) == 170 &&
+           aoe_ai_info_resource_priority_ror(0xa3, 0, &ops) == 154 &&
+           aoe_ai_info_resource_priority_ror(1, 8, &ops) == 151 &&
+           aoe_ai_info_resource_priority_ror(1, 0x20, &ops) == 150 &&
+           aoe_ai_info_resource_priority_ror(1, 9, &ops) == -1);
+    /* Entries: 10 (class 7, 152), 11 (type 0x6d, 156, but a group is near
+       its tile x 9), 12 (class 0x20, 150, worked: +0x10 1), 13 (class 8,
+       151, another zone at x 4), 14 (class 0x20, gone), 15 (unlisted). */
+    objs[0].id = 10; objs[0].type_class = 7; objs[0].x = 1;
+    objs[1].id = 11; objs[1].type_id = 0x6d; objs[1].x = 9;
+    objs[2].id = 12; objs[2].type_class = 0x20; objs[2].field_10 = 1;
+    objs[3].id = 13; objs[3].type_class = 8; objs[3].x = 4;
+    objs[4].id = 14; objs[4].type_class = 0x20;
+    objs[5].id = 15; objs[5].type_class = 0x20;
+    info.objects = objs;
+    info.object_count = 6;
+    info.list_148.data = list;
+    info.list_148.count = 5;
+    info.list_148.capacity = 5;
+    assert(aoe_ai_info_free_resource_ror(&info, 7, &ops) == &objs[4]);
+    assert(aoe_ai_info_free_resource_ror(&info, 14, &ops) == NULL);
+    /* 0x004c1450 against class 7 (152): 13 reaches (151) and wins. */
+    assert(aoe_ai_info_better_resource_ror(&info, 7, 1, 7, &ops) == &objs[3]);
+    /* Against class 8 (151) nothing is strictly better. */
+    assert(aoe_ai_info_better_resource_ror(&info, 7, 1, 8, &ops) == NULL);
+}
+
 static void lifecycle_tests(void) {
     static AoeAiInfoRor a, b;
     static uint8_t buf[200000];
@@ -1082,6 +1144,7 @@ int main(void) {
     lifecycle_tests();
     explore_step_tests();
     pick_target_tests();
+    resource_tests();
     memset(&ops, 0, sizeof ops);
     ops.self = 1;
     ops.object = object;

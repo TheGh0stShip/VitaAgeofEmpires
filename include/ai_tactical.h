@@ -232,8 +232,20 @@ typedef struct {
     double (*distance)(void *context, int32_t id, float x, float y, float z);
     /* Our first town centre (0x0040bad0 with type 0x6d), -1 for none. */
     int32_t (*first_center)(void *context);
+    /* Our object's own zone (0x0040bab0, 0x004aba60); 0 without one. */
+    int (*object_zone)(void *context, int32_t id, uint8_t *zone);
 } AoeAiTacticalOpsRor;
 
+/* 0x004e0630: in list order, the group with task `task` and +0x180
+   `field_180` (-1 matches any) nearest to tile `pt` by ftol(sqrt(dx^2 +
+   dy^2)) from its truncated +0x19c location; for task 0x6a, groups some
+   group names in +0x1c4 are skipped; with `zone` not -1 the commander
+   must be in that zone. A group is taken when it is nearer than `max`
+   with none taken yet, when `max` is -1 (so the last match wins) or when
+   it is nearer than the one taken. NULL for none. */
+AoeAiUnitGroupRor *aoe_ai_tactical_nearest_group_ror(
+    const AoeAiTacticalRor *ai, int32_t task, int32_t field_180, int32_t max,
+    const int32_t pt[2], int32_t zone, const AoeAiTacticalOpsRor *ops);
 /* 0x004dc650: ftol(number 34 / f), at most 99. */
 int32_t aoe_ai_tactical_effort_ror(const AoeAiTacticalRor *ai, float f);
 /* 0x004e2f90: +0xd68[i] (0..3, else -1). 0x004e2f30 / 0x004e2f60 /

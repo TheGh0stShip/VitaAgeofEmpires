@@ -242,6 +242,14 @@ typedef struct {
        and its +0xd68 slot `i` (0x004e2f90). */
     int32_t (*gatherers)(void *context, int32_t id);
     int32_t (*tactical_d68)(void *context, int32_t i);
+    /* The tactical AI's nearest group (0x004e0630, any task, zone -1)
+       with +0x180 `field_180` within `max` of tile `pt`: nonzero for one. */
+    int (*group_near)(void *context, int32_t field_180, int32_t max,
+                      const int32_t pt[2]);
+    /* Unit `id`'s zone map holds `zone` within `range` of tile `pt` (the
+       unit's own zone-map search). */
+    int (*zone_reaches)(void *context, int32_t id, uint8_t zone, float range,
+                        const int32_t pt[2]);
 } AoeAiInfoOpsRor;
 
 /* 0x004ba1c0: the constructor's state (the base part, 0x0040b470, is the
@@ -477,6 +485,24 @@ void aoe_ai_info_refresh_all_targets_ror(AoeAiInfoRor *info,
    list; list 1 needs no gatherers, lists 2 and 3 fewer than 4; type 0x30
    in state 2 needs tactical slot 0 at least number 204; and the target
    tile must be in our unit's zone. The winner's picks (+6) rise. */
+/* 0x004c15d0: the strategic number giving a resource's priority: type
+   0x2d number 70, 0x6d 56, 0x9e and 0xa3 54, 0x9f 55; else class 7
+   number 52, 8 51, 0x20 50; otherwise -1. */
+int32_t aoe_ai_info_resource_priority_ror(int32_t type_id, int32_t type_class,
+                                          const AoeAiInfoOpsRor *ops);
+/* 0x004c1310: for our unit `id`, the remembered +0x148-listed object with
+   +0x10 below 1 and no group of +0x180 4 within number 92 of its tile
+   whose priority is lowest (the first on ties); NULL without one. */
+AoeAiInfoObjectRor *aoe_ai_info_free_resource_ror(const AoeAiInfoRor *info,
+                                                  int32_t id,
+                                                  const AoeAiInfoOpsRor *ops);
+/* 0x004c1450: for our unit `id`, the remembered +0x148-listed object with
+   +0x10 at most 0 that still exists, is in the unit's zone or within its
+   range (vtable +0x10c) of a tile of that zone, and whose priority is
+   below that of (`type_id`, `type_class`) and the best so far. */
+AoeAiInfoObjectRor *aoe_ai_info_better_resource_ror(
+    const AoeAiInfoRor *info, int32_t id, int32_t type_id, int32_t type_class,
+    const AoeAiInfoOpsRor *ops);
 int32_t aoe_ai_info_pick_target_ror(AoeAiInfoRor *info, int32_t k,
                                     int32_t id, float pos[2], int32_t *drop,
                                     const int32_t *exclude,

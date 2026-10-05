@@ -2,6 +2,7 @@
 #include "value_grid.h"
 #include "aoe_ftol.h"
 
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -1002,4 +1003,37 @@ void aoe_ai_tactical_block_sites_ror(const AoeAiTacticalRor *ai, const AoeAiInfo
         aoe_value_grid_set_box_ror(g, c[0], c[1], d[0], d[1], 0xff);
         tac_box(info, g, o.x, o.y, square_min2(1), 10, 1);
     }
+}
+
+AoeAiUnitGroupRor *aoe_ai_tactical_nearest_group_ror(
+    const AoeAiTacticalRor *ai, int32_t task, int32_t field_180, int32_t max,
+    const int32_t pt[2], int32_t zone, const AoeAiTacticalOpsRor *ops) {
+    AoeAiUnitGroupRor *best = NULL;
+    int32_t best_d = -1, i, j;
+    if (!ai) return NULL;
+    for (i = 0; i < ai->groups_len; ++i) {
+        AoeAiUnitGroupRor *g = ai->groups[i];
+        int32_t dx, dy, d;
+        if (task != -1 && g->task != task) continue;
+        if (field_180 != -1 && g->field_180 != field_180) continue;
+        if (task == 0x6a) {
+            for (j = 0; j < ai->groups_len; ++j)
+                if (ai->groups[j]->field_1c4 == g->id) break;
+            if (j < ai->groups_len) continue;
+        }
+        if (zone != -1) {
+            uint8_t z;
+            if (!ops || !ops->object_zone ||
+                !ops->object_zone(ops->context, g->commander, &z) || z != zone)
+                continue;
+        }
+        dy = pt[1] - aoe_ftol32(g->loc_19c[1]);
+        dx = pt[0] - aoe_ftol32(g->loc_19c[0]);
+        d = aoe_ftol32(sqrt((double)(dy * dy + dx * dx)));
+        if ((d < max && best_d == -1) || max == -1 || d < best_d) {
+            best = g;
+            best_d = d;
+        }
+    }
+    return best;
 }

@@ -2639,3 +2639,87 @@ int32_t aoe_ai_info_pick_target_ror(AoeAiInfoRor *info, int32_t k,
     *drop = best->field_10;
     return best->id;
 }
+
+int32_t aoe_ai_info_resource_priority_ror(int32_t type_id, int32_t type_class,
+                                          const AoeAiInfoOpsRor *ops) {
+    int32_t n;
+    switch (type_id) {
+    case 0x2d: n = 0x46; break;
+    case 0x6d: n = 0x38; break;
+    case 0x9e: case 0xa3: n = 0x36; break;
+    case 0x9f: n = 0x37; break;
+    default:
+        if (type_class == 7) n = 0x34;
+        else if (type_class == 8) n = 0x33;
+        else if (type_class == 0x20) n = 0x32;
+        else return -1;
+    }
+    return ops && ops->sn ? ops->sn(ops->context, n) : -1;
+}
+
+/* The ID is among the first entries of +0x148 (count, bounded by the
+   capacity). */
+static int in_list_148(const AoeAiInfoRor *info, int32_t id) {
+    int32_t i;
+    for (i = 0; i < info->list_148.count && i < info->list_148.capacity; ++i)
+        if (info->list_148.data[i] == id) return 1;
+    return 0;
+}
+
+AoeAiInfoObjectRor *aoe_ai_info_free_resource_ror(const AoeAiInfoRor *info,
+                                                  int32_t id,
+                                                  const AoeAiInfoOpsRor *ops) {
+    AoeAiWorldObjectRor unit;
+    AoeAiInfoObjectRor *best = NULL;
+    int32_t best_p = -1, i, p, pt[2];
+    if (!info || !ops || !ops->object || !ops->object(ops->context, id, &unit))
+        return NULL;
+    for (i = 0; i < info->object_count; ++i) {
+        AoeAiInfoObjectRor *e = &info->objects[i];
+        if (e->id == -1 || !in_list_148(info, e->id) || e->field_10 >= 1) continue;
+        pt[0] = e->x;
+        pt[1] = e->y;
+        if (ops->group_near &&
+            ops->group_near(ops->context, 4, ops->sn ? ops->sn(ops->context, 0x5c) : -1, pt))
+            continue;
+        p = aoe_ai_info_resource_priority_ror(e->type_id, e->type_class, ops);
+        if (!best || p < best_p) {
+            best = e;
+            best_p = p;
+        }
+    }
+    return best;
+}
+
+AoeAiInfoObjectRor *aoe_ai_info_better_resource_ror(
+    const AoeAiInfoRor *info, int32_t id, int32_t type_id, int32_t type_class,
+    const AoeAiInfoOpsRor *ops) {
+    AoeAiWorldObjectRor unit, obj;
+    AoeAiInfoObjectRor *best = NULL;
+    int32_t best_p, i, p, pt[2];
+    uint8_t zone;
+    if (!info || !ops || !ops->object || !ops->object(ops->context, id, &unit))
+        return NULL;
+    zone = ops->zone ? ops->zone(ops->context, id) : 0;
+    best_p = aoe_ai_info_resource_priority_ror(type_id, type_class, ops);
+    for (i = 0; i < info->object_count; ++i) {
+        AoeAiInfoObjectRor *e = &info->objects[i];
+        if (e->id == -1 || !in_list_148(info, e->id) || e->field_10 > 0) continue;
+        if (!ops->object(ops->context, e->id, &obj)) continue;
+        if ((ops->zone ? ops->zone(ops->context, e->id) : 0) != zone) {
+            pt[0] = aoe_ftol32(obj.x);
+            pt[1] = aoe_ftol32(obj.y);
+            if (!ops->zone_reaches ||
+                ops->zone_reaches(ops->context, id, zone,
+                                  ops->range ? (float)ops->range(ops->context, id) : 0.0f,
+                                  pt) != 1)
+                continue;
+        }
+        p = aoe_ai_info_resource_priority_ror(e->type_id, e->type_class, ops);
+        if (p < best_p) {
+            best = e;
+            best_p = p;
+        }
+    }
+    return best;
+}

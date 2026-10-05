@@ -221,8 +221,8 @@ int aoe_ai_info_key_building_ror(int16_t type_class, int16_t type_id) {
     }
 }
 
-int32_t aoe_ai_info_field_14c_ror(const AoeAiInfoRor *info) {
-    return info->field_14c;
+int32_t aoe_ai_info_list_148_count_ror(const AoeAiInfoRor *info) {
+    return info->list_148.count;
 }
 
 void aoe_ai_info_set_field_204_ror(AoeAiInfoRor *info, int32_t value) {
@@ -808,4 +808,325 @@ float aoe_ai_info_ids_endurance_ror(const AoeAiInfoRor *info,
     if (!ids || !unit) return 0.0f;
     for (i = 0; i < count; ++i) sum = endurance_one(info, ids[i], unit, sum, ops);
     return sum;
+}
+
+/* ---- Sightings, lists and penalty maps ---- */
+
+/* Append unless present, searching up to the capacity and growing to
+   count + 1 (the inline form shared by these members). */
+static void list_add_cap(AoeAiIntListRor *list, int32_t value) {
+    int32_t i;
+    for (i = 0; i < list->count && i < list->capacity; ++i)
+        if (list->data[i] == value) return;
+    aoe_ai_int_list_add_unique_ror(list, value);
+}
+
+/* Remove the first match within the capacity, shifting the rest down;
+   the count drops (not below 0). */
+static void list_remove_cap(AoeAiIntListRor *list, int32_t value) {
+    int32_t i, n = list->capacity;
+    for (i = 0; i < n; ++i)
+        if (list->data[i] == value) break;
+    if (i >= n) return;
+    for (; i < n - 1; ++i) list->data[i] = list->data[i + 1];
+    if (--list->count < 0) list->count = 0;
+}
+
+static int sn_positive(const AoeAiInfoOpsRor *ops, int32_t index) {
+    return ops->sn && ops->sn(ops->context, index) > 0;
+}
+
+int aoe_ai_info_note_special_ror(AoeAiInfoRor *info,
+                                 const AoeAiObjectViewRor *object,
+                                 const AoeAiInfoOpsRor *ops) {
+    int32_t number;
+    if (!info || !object || !ops) return 0;
+    switch (object->type_id) {
+    case 0x2d:
+        if (object->owner != ops->self || !sn_positive(ops, 0x46)) return 0;
+        break;
+    case 0x6d:
+        if (object->owner != ops->self || !sn_positive(ops, 0x38)) return 0;
+        break;
+    case 0x9e:
+    case 0xa3:
+        if (!sn_positive(ops, 0x36)) return 0;
+        break;
+    case 0x9f:
+        if (!sn_positive(ops, 0x37)) return 0;
+        break;
+    default:
+        if (object->type_class == 7)
+            number = 0x34;
+        else if (object->type_class == 8)
+            number = 0x33;
+        else if (object->type_class == 0x20)
+            number = 0x32;
+        else
+            return 0;
+        if (!sn_positive(ops, number)) return 0;
+        break;
+    }
+    list_add_cap(&info->list_148, object->id);
+    return 1;
+}
+
+static void keep_best(AoeAiInfoRor *info, int16_t type_class, float d,
+                      int32_t id) {
+    int32_t slot, v;
+    switch (type_class) {
+    case 0xf: slot = 1; break;
+    case 0x20: slot = 3; break;
+    case 8: slot = 2; break;
+    case 7: slot = 0; break;
+    default: return;
+    }
+    v = aoe_ftol32(d);
+    if (v < info->best_distance[slot] || info->best_distance[slot] == -1) {
+        info->best_distance[slot] = v;
+        info->current_target[slot] = id;
+    }
+}
+
+int aoe_ai_info_add_target_ror(AoeAiInfoRor *info,
+                               const AoeAiObjectViewRor *object,
+                               const AoeAiInfoOpsRor *ops) {
+    int32_t list, i, cap, dropsite = -1;
+    AoeAiInfoTargetRor *t;
+    float d;
+    if (!info || !object) return 0;
+    if (object->type_class == 0xf)
+        list = 1;
+    else if (object->type_class == 8)
+        list = 2;
+    else if (object->type_class == 0x20)
+        list = 3;
+    else
+        list = 0;
+    if (info->target_count[list] == info->target_capacity[list] ||
+        !info->targets[list]) {
+        AoeAiInfoTargetRor *grown;
+        cap = info->target_capacity[list] ? info->target_capacity[list] * 2 : 100;
+        grown = (AoeAiInfoTargetRor *)malloc((size_t)cap * sizeof(*grown));
+        if (!grown) return 0;
+        i = 0;
+        if (info->targets[list])
+            for (; i < info->target_capacity[list]; ++i)
+                grown[i] = info->targets[list][i];
+        for (; i < cap; ++i) {
+            memset(&grown[i], 0, sizeof grown[i]);
+            grown[i].id = -1;
+            grown[i].field_8 = 0xff;
+            grown[i].field_e = grown[i].pad_f = 0xff;
+            grown[i].field_10 = -1;
+        }
+        free(info->targets[list]);
+        info->targets[list] = grown;
+        info->target_capacity[list] = cap;
+    }
+    for (i = 0; i < info->target_capacity[list]; ++i) {
+        t = &info->targets[list][i];
+        if (t->id != object->id) continue;
+        d = aoe_ai_info_nearest_dropsite_ror(info, object, 1, &dropsite, ops);
+        t->field_8 = aoe_ftol32((double)d + (double)d + (double)10.0f);
+        t->field_10 = dropsite;
+        keep_best(info, object->type_class, d, t->id);
+        return 1;
+    }
+    t = &info->targets[list][info->target_count[list]];
+    t->id = object->id;
+    t->x = (uint8_t)aoe_ftol32(object->x);
+    t->y = (uint8_t)aoe_ftol32(object->y);
+    t->picks = 0;
+    t->wait = 0;
+    t->gone = 0;
+    t->pad_f = (uint8_t)list;
+    d = aoe_ai_info_nearest_dropsite_ror(info, object, 1, &dropsite, ops);
+    t->field_e = (uint8_t)aoe_ftol32(d);
+    t->field_10 = dropsite;
+    t->field_8 = aoe_ftol32((double)d + (double)d + (double)10.0f);
+    ++info->target_count[list];
+    keep_best(info, object->type_class, d, object->id);
+    return 1;
+}
+
+void aoe_ai_info_own_object_ror(AoeAiInfoRor *info,
+                                const AoeAiObjectViewRor *object,
+                                const AoeAiInfoOpsRor *ops) {
+    AoeAiInfoObjectRor *e;
+    if (!info || !object || object->id < 0) return;
+    e = aoe_ai_info_find_object_ror(info, object->id);
+    if (e) e->owner = (uint8_t)object->owner;
+    list_add_cap(&info->list_180, object->id);
+    if (object->type_class != 3 && object->type_class != 0x1b) return;
+    list_add_cap(&info->list_190, object->id);
+    if (object->type_id == 0x6d || object->type_id == 0x67 ||
+        object->type_id == 0x44)
+        aoe_ai_info_refresh_all_targets_ror(info, ops);
+    if (object->type_id == 0x32) aoe_ai_info_add_target_ror(info, object, ops);
+}
+
+void aoe_ai_info_lose_object_ror(AoeAiInfoRor *info, int32_t id,
+                                 const AoeAiInfoOpsRor *ops) {
+    AoeAiObjectViewRor o;
+    if (!info) return;
+    list_remove_cap(&info->list_190, id);
+    list_remove_cap(&info->list_180, id);
+    if (get_object(ops, id, &o)) {
+        AoeAiInfoObjectRor *e = aoe_ai_info_find_object_ror(info, id);
+        if (e) e->owner = (uint8_t)o.owner;
+    }
+}
+
+int aoe_ai_info_notice_ror(AoeAiInfoRor *info,
+                           const AoeAiObjectViewRor *object, int32_t from_ally,
+                           const AoeAiInfoOpsRor *ops) {
+    int32_t c, special;
+    if (!info || !object || object->id < 0 || !ops) return 0;
+    c = object->type_class;
+    if (!aoe_ai_info_known_class_ror(c)) return 0;
+    if (from_ally == 0 && object->owner > 0 && ops->is_enemy &&
+        ops->is_enemy(ops->context, object->owner) && ops->player_count > 3 &&
+        ops->sn && ops->sn(ops->context, 0xc2) == 1) {
+        int32_t p;
+        for (p = 1; p < ops->player_count; ++p) {
+            if (p == ops->self) continue;
+            if (!ops->player_field_4 || !ops->player_field_4(ops->context, p))
+                continue;
+            if (!ops->is_ally || !ops->is_ally(ops->context, p)) continue;
+            if (!ops->names_us_ally || !ops->names_us_ally(ops->context, p))
+                continue;
+            if (ops->share) ops->share(ops->context, p, object->id);
+        }
+    }
+    special = aoe_ai_info_note_special_ror(info, object, ops);
+    list_add_cap(&info->list_118, object->id);
+    if (aoe_ai_info_unit_class_ror(c) == 1)
+        list_add_cap(&info->list_128, object->id);
+    else if (aoe_ai_info_resource_class_ror(c) == 1)
+        aoe_ai_info_add_target_ror(info, object, ops);
+    else if (c == 1 || c == 0x1e)
+        list_add_cap(&info->list_138, object->id);
+    if (aoe_ai_info_unit_class_ror(c) == 1 || special == 1) {
+        float v108 = (float)(ops->value_108 ? ops->value_108(ops->context, object->id) : 0.0);
+        float v100 = (float)(ops->value_100 ? ops->value_100(ops->context, object->id) : 0.0);
+        float range = (float)(ops->range ? ops->range(ops->context, object->id) : 0.0);
+        aoe_ai_info_remember_ror(info, object, v108, v100, range, ops);
+    }
+    return 1;
+}
+
+int aoe_ai_info_notice_id_ror(AoeAiInfoRor *info, int32_t id,
+                              const AoeAiInfoOpsRor *ops) {
+    AoeAiObjectViewRor o;
+    if (!get_object(ops, id, &o)) return 0;
+    return aoe_ai_info_notice_ror(info, &o, 0, ops);
+}
+
+static void raise_penalty(const AoeAiInfoRor *info, int32_t x0, int32_t y0,
+                          int32_t x1, int32_t y1, const AoeAiInfoOpsRor *ops) {
+    int32_t a[2], b[2], x, y;
+    a[0] = x0; a[1] = y0;
+    aoe_ai_info_clamp_ror(info, a);
+    b[0] = x1; b[1] = y1;
+    aoe_ai_info_clamp_ror(info, b);
+    for (x = a[0]; x <= b[0]; ++x)
+        for (y = a[1]; y <= b[1]; ++y) {
+            uint32_t v = (uint32_t)ops->penalty_get(ops->context, x, y) + 10;
+            ops->penalty_set(ops->context, x, y, (uint8_t)(v > 0xff ? 0xff : v));
+        }
+}
+
+void aoe_ai_info_penalize_objects_ror(const AoeAiInfoRor *info,
+                                      uint32_t owner, int32_t skip,
+                                      const AoeAiInfoOpsRor *ops) {
+    int32_t i;
+    if (!info || !ops || !ops->penalty_get || !ops->penalty_set) return;
+    for (i = 0; i < info->object_count; ++i) {
+        const AoeAiInfoObjectRor *e = &info->objects[i];
+        AoeAiObjectViewRor o;
+        double r;
+        if (e->owner != owner || e->id == skip || !get_object(ops, e->id, &o))
+            continue;
+        r = o.type_28;
+        raise_penalty(info, aoe_ftol32((double)o.x - r), aoe_ftol32((double)o.y - r),
+                      aoe_ftol32(r + (double)o.x), aoe_ftol32(r + (double)o.y), ops);
+        if (!(e->range > 1.0f)) continue;
+        r = e->range;
+        raise_penalty(info, aoe_ftol32((double)o.x - r), aoe_ftol32((double)o.y - r),
+                      aoe_ftol32((double)o.x + r), aoe_ftol32(r + (double)o.y), ops);
+    }
+}
+
+static void fill_penalty(const AoeAiInfoRor *info, int32_t a[2], int32_t b[2],
+                         uint8_t value, const AoeAiInfoOpsRor *ops) {
+    int32_t x, y;
+    aoe_ai_info_clamp_ror(info, a);
+    aoe_ai_info_clamp_ror(info, b);
+    for (x = a[0]; x <= b[0]; ++x)
+        for (y = a[1]; y <= b[1]; ++y) ops->penalty_set(ops->context, x, y, value);
+}
+
+void aoe_ai_info_penalize_areas_ror(const AoeAiInfoRor *info,
+                                    uint32_t player_a,
+                                    const AoeAiInfoOpsRor *ops) {
+    int32_t i;
+    if (!info || !ops || !ops->penalty_set) return;
+    for (i = 0; i < info->area_count; ++i) {
+        const AoeAiInfoAreaRor *r = &info->areas[i];
+        int32_t a[2], b[2];
+        if (r->id == -1 || r->player_a != player_a ||
+            (uint16_t)r->player_9 != (uint16_t)ops->self)
+            continue;
+        a[0] = r->x0; a[1] = r->y0;
+        b[0] = r->x1; b[1] = r->y1;
+        fill_penalty(info, a, b, 0x4b, ops);
+        a[0] -= 5; a[1] -= 5;
+        b[0] += 5; b[1] += 5;
+        fill_penalty(info, a, b, 0xf, ops);
+    }
+}
+
+void aoe_ai_info_unit_influence_ror(const AoeAiInfoRor *info, uint32_t owner,
+                                    int32_t x, int32_t y,
+                                    const AoeAiInfoOpsRor *ops) {
+    int32_t i;
+    if (!info || !ops || !ops->influence_clear || !ops->influence_origin ||
+        !ops->influence_add || !ops->influence_finish)
+        return;
+    ops->influence_clear(ops->context, 0);
+    ops->influence_origin(ops->context, 0, x, y);
+    for (i = 0; i < info->object_count; ++i) {
+        const AoeAiInfoObjectRor *e = &info->objects[i];
+        AoeAiObjectViewRor o;
+        int32_t r, ox, oy;
+        double v;
+        if (e->owner != owner || !get_object(ops, e->id, &o)) continue;
+        r = aoe_ftol32(o.type_28);
+        ox = aoe_ftol32(o.x);
+        oy = aoe_ftol32(o.y);
+        v = ops->value_108 ? ops->value_108(ops->context, o.id) : 0.0;
+        ops->influence_add(ops->context, 0, ox - r, oy - r, ox + r, r + oy,
+                           v > 0.0 ? 5 : 1);
+    }
+    ops->influence_finish(ops->context, 0);
+}
+
+void aoe_ai_info_area_influence_ror(const AoeAiInfoRor *info,
+                                    uint32_t player_a, int32_t x, int32_t y,
+                                    const AoeAiInfoOpsRor *ops) {
+    int32_t i;
+    if (!info || !ops || !ops->influence_clear || !ops->influence_origin ||
+        !ops->influence_add || !ops->influence_finish)
+        return;
+    ops->influence_clear(ops->context, 1);
+    ops->influence_origin(ops->context, 1, x, y);
+    for (i = 0; i < info->area_count; ++i) {
+        const AoeAiInfoAreaRor *r = &info->areas[i];
+        if (r->player_a != player_a ||
+            (uint16_t)r->player_9 != (uint16_t)ops->self)
+            continue;
+        ops->influence_add(ops->context, 1, r->x0, r->y0, r->x1, r->y1, 1);
+    }
+    ops->influence_finish(ops->context, 1);
 }

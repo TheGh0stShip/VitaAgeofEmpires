@@ -178,6 +178,181 @@ static void dropsite_tests(void) {
     aoe_ai_int_list_release_ror(&info.list_190);
 }
 
+/* World three for sightings: 500 our dock, 501 an enemy cavalry (class
+   0xc), 502 a tree (class 0xf) at (4,4), 503 an enemy type 0x9f, 504 a
+   class-1 object, 505 class 0x22 (unknown), 506 our granary (0x67, class
+   3), 507 our type 0x32 (class 3). */
+static int32_t shared_to[8], shared_n;
+static uint8_t penalty[16][16];
+static int32_t influence_log[16][7], influence_n;
+static int object3(void *c, int32_t id, AoeAiObjectViewRor *o) {
+    (void)c;
+    memset(o, 0, sizeof *o);
+    o->id = id;
+    o->state = 2;
+    o->owner = 1;
+    switch (id) {
+    case 500: o->type_id = 0x2d; o->type_class = 3; return 1;
+    case 501: o->type_class = 0xc; o->owner = 2; o->x = 5.5f; o->y = 5.5f; o->type_28 = 1.5f; return 1;
+    case 502: o->type_class = 0xf; o->owner = 0; o->x = 4.0f; o->y = 4.0f; return 1;
+    case 503: o->type_id = 0x9f; o->type_class = 0x16; o->owner = 2; return 1;
+    case 504: o->type_class = 1; return 1;
+    case 505: o->type_class = 0x22; return 1;
+    case 506: o->type_id = 0x67; o->type_class = 3; o->x = 4.0f; o->y = 6.0f; return 1;
+    case 507: o->type_id = 0x32; o->type_class = 3; o->x = 2.0f; o->y = 2.0f; return 1;
+    default: return 0;
+    }
+}
+static int32_t sn3(void *c, int32_t i) { (void)c; return i == 0xc2 || i == 0x46 || i == 0x37 ? 1 : 0; }
+static int32_t field4(void *c, int32_t p) { (void)c; return p != 3; }
+static int names_ally(void *c, int32_t p) { (void)c; return p == 4 || p == 3; }
+static int ally3(void *c, int32_t p) { (void)c; return p == 1 || p >= 3; }
+static void share(void *c, int32_t p, int32_t id) { (void)c; (void)id; shared_to[shared_n++] = p; }
+static uint8_t pen_get(void *c, int32_t x, int32_t y) { (void)c; return penalty[x][y]; }
+static void pen_set(void *c, int32_t x, int32_t y, uint8_t v) { (void)c; penalty[x][y] = v; }
+static void inf_clear(void *c, int m) { (void)c; influence_log[influence_n][0] = 100 + m; ++influence_n; }
+static void inf_origin(void *c, int m, int32_t x, int32_t y) {
+    (void)c; influence_log[influence_n][0] = 200 + m; influence_log[influence_n][1] = x;
+    influence_log[influence_n][2] = y; ++influence_n;
+}
+static void inf_add(void *c, int m, int32_t x0, int32_t y0, int32_t x1, int32_t y1, int32_t v) {
+    int32_t *l = influence_log[influence_n++];
+    (void)c; l[0] = 300 + m; l[1] = x0; l[2] = y0; l[3] = x1; l[4] = y1; l[5] = v;
+}
+static void inf_finish(void *c, int m) { (void)c; influence_log[influence_n][0] = 400 + m; ++influence_n; }
+static double v108_3(void *c, int32_t id) { (void)c; return id == 501 ? 2.0 : 0.0; }
+static double range3(void *c, int32_t id) { (void)c; return id == 501 ? 2.5 : 0.5; }
+
+static void sighting_tests(void) {
+    static AoeAiInfoRor info;
+    AoeAiInfoOpsRor ops;
+    AoeAiObjectViewRor o;
+    int k;
+
+    memset(&ops, 0, sizeof ops);
+    ops.self = 1;
+    ops.object = object3;
+    ops.world_object = object3;
+    ops.zone = zone2;
+    ops.tile_zone = tile_zone2;
+    ops.is_enemy = is_enemy;
+    ops.is_ally = ally3;
+    ops.sn = sn3;
+    ops.player_count = 5;
+    ops.player_field_4 = field4;
+    ops.names_us_ally = names_ally;
+    ops.share = share;
+    ops.value_108 = v108_3;
+    ops.range = range3;
+    ops.penalty_get = pen_get;
+    ops.penalty_set = pen_set;
+    ops.influence_clear = inf_clear;
+    ops.influence_origin = inf_origin;
+    ops.influence_add = inf_add;
+    ops.influence_finish = inf_finish;
+    info.map_width = info.map_height = 16;
+    info.object_count = 4;
+    info.objects = (AoeAiInfoObjectRor *)calloc(4, sizeof *info.objects);
+    for (k = 0; k < 4; ++k) info.objects[k].id = -1;
+    for (k = 0; k < 4; ++k) info.best_distance[k] = -1;
+
+    /* An enemy cavalry: shared with player 4 only (3 has +4 clear, 2 is
+       the owner and not an ally), listed as a unit and remembered. */
+    object3(NULL, 501, &o);
+    assert(aoe_ai_info_notice_ror(&info, &o, 0, &ops) == 1);
+    assert(shared_n == 1 && shared_to[0] == 4);
+    assert(info.list_118.count == 1 && info.list_128.count == 1 &&
+           info.objects[0].id == 501 && info.objects[0].range == 2.5f &&
+           info.objects[0].field_18 == 2.0f && info.list_148.count == 0);
+    assert(aoe_ai_info_notice_ror(&info, &o, 1, &ops) == 1 && shared_n == 1 &&
+           info.list_118.count == 1);
+    /* Unknown class: nothing. */
+    assert(!aoe_ai_info_notice_id_ror(&info, 505, &ops) && !aoe_ai_info_notice_id_ror(&info, 9, &ops));
+    /* Class 1 goes on the +0x138 list, not remembered. */
+    assert(aoe_ai_info_notice_id_ror(&info, 504, &ops) && info.list_138.count == 1 &&
+           info.objects[1].id == -1);
+    /* 0x9f with number 55 set: special, remembered. */
+    assert(aoe_ai_info_notice_id_ror(&info, 503, &ops) && info.list_148.count == 1 &&
+           info.list_148.data[0] == 503 && info.objects[1].id == 503);
+    /* Our dock with number 70 set. */
+    object3(NULL, 500, &o);
+    assert(aoe_ai_info_note_special_ror(&info, &o, &ops) == 1 && info.list_148.count == 2);
+    assert(aoe_ai_info_note_special_ror(&info, &o, &ops) == 1 && info.list_148.count == 2);
+    o.owner = 2;
+    assert(aoe_ai_info_note_special_ror(&info, &o, &ops) == 0);
+
+    /* A tree: a new target in list 1 (capacity 100) with no dropsite yet. */
+    assert(aoe_ai_info_notice_id_ror(&info, 502, &ops));
+    assert(info.target_capacity[1] == 100 && info.target_count[1] == 1 &&
+           info.targets[1][0].id == 502 && info.targets[1][0].x == 4 &&
+           info.targets[1][0].pad_f == 1 && info.targets[1][0].field_10 == -1 &&
+           info.targets[1][0].field_8 == 2010 && info.targets[1][1].id == -1 &&
+           info.targets[1][1].field_8 == 0xff && info.best_distance[1] == 1000);
+    /* Our granary appears: dropsite list, targets refreshed (d = 2). */
+    object3(NULL, 506, &o);
+    aoe_ai_info_own_object_ror(&info, &o, &ops);
+    assert(info.list_180.count == 1 && info.list_190.count == 1 &&
+           info.targets[1][0].field_10 == 506 && info.targets[1][0].field_8 == 14 &&
+           info.best_distance[1] == 2 && info.current_target[1] == 502);
+    /* Seeing the tree again keeps one entry and refreshes +8. */
+    info.targets[1][0].field_8 = 0;
+    object3(NULL, 502, &o);
+    assert(aoe_ai_info_add_target_ror(&info, &o, &ops) && info.target_count[1] == 1 &&
+           info.targets[1][0].field_8 == 14);
+    /* Our type 0x32 becomes a target in list 0. */
+    object3(NULL, 507, &o);
+    aoe_ai_info_own_object_ror(&info, &o, &ops);
+    assert(info.target_count[0] == 1 && info.targets[0][0].id == 507 &&
+           info.list_190.count == 2);
+    /* Losing the granary. */
+    info.objects[2].id = 506;
+    info.objects[2].owner = 7;
+    aoe_ai_info_lose_object_ror(&info, 506, &ops);
+    assert(info.list_190.count == 1 && info.list_190.data[0] == 507 &&
+           info.list_180.count == 1 && info.objects[2].owner == 1);
+
+    /* Penalties: 501 (seen as 2) at (5,5) with type +0x28 1.5 and range
+       2.5: the 4..7 square twice, the 3..8 square once more. */
+    aoe_ai_info_penalize_objects_ror(&info, 2, -1, &ops);
+    assert(penalty[5][5] == 20 && penalty[4][7] == 20 && penalty[3][3] == 10 &&
+           penalty[8][8] == 10 && penalty[9][9] == 0 && penalty[2][5] == 0);
+    memset(penalty, 0xfa, sizeof penalty);
+    aoe_ai_info_penalize_objects_ror(&info, 2, 501, &ops);
+    assert(penalty[5][5] == 0xfa);
+    aoe_ai_info_penalize_objects_ror(&info, 2, -1, &ops);
+    assert(penalty[5][5] == 0xff && penalty[3][3] == 0xff);
+    memset(penalty, 0, sizeof penalty);
+    info.area_count = 2;
+    info.areas = (AoeAiInfoAreaRor *)calloc(2, sizeof *info.areas);
+    info.areas[0] = (AoeAiInfoAreaRor){1, 0, 6, 6, 7, 7, 1, 2, 0, 0, 0, 0, 0, 0};
+    info.areas[1] = (AoeAiInfoAreaRor){-1, 0, 1, 1, 1, 1, 1, 2, 0, 0, 0, 0, 0, 0};
+    aoe_ai_info_penalize_areas_ror(&info, 2, &ops);
+    assert(penalty[6][6] == 0xf && penalty[1][1] == 0xf && penalty[12][12] == 0xf &&
+           penalty[13][13] == 0 && penalty[0][0] == 0);
+
+    /* Influence maps. */
+    aoe_ai_info_unit_influence_ror(&info, 2, 3, 4, &ops);
+    assert(influence_n == 5 && influence_log[0][0] == 100 && influence_log[1][0] == 200 &&
+           influence_log[1][1] == 3 && influence_log[2][0] == 300 &&
+           influence_log[2][1] == 4 && influence_log[2][3] == 6 && influence_log[2][5] == 5 &&
+           influence_log[3][0] == 300 && influence_log[3][5] == 1 && influence_log[4][0] == 400);
+    influence_n = 0;
+    aoe_ai_info_area_influence_ror(&info, 2, 0, 0, &ops);
+    /* The area pass has no ID test: the free area counts too. */
+    assert(influence_n == 5 && influence_log[2][0] == 301 && influence_log[2][1] == 6 &&
+           influence_log[3][1] == 1 && influence_log[3][0] == 301 && influence_log[2][5] == 1);
+
+    for (k = 0; k < 4; ++k) free(info.targets[k]);
+    free(info.objects);
+    free(info.areas);
+    aoe_ai_int_list_release_ror(&info.list_118);
+    aoe_ai_int_list_release_ror(&info.list_128);
+    aoe_ai_int_list_release_ror(&info.list_138);
+    aoe_ai_int_list_release_ror(&info.list_148);
+    aoe_ai_int_list_release_ror(&info.list_180);
+    aoe_ai_int_list_release_ror(&info.list_190);
+}
+
 int main(void) {
     static AoeAiInfoRor info;
     AoeAiInfoOpsRor ops;
@@ -394,14 +569,15 @@ int main(void) {
     info.history[15999] = 1;
     assert(aoe_ai_info_stat_share_ror(&info) == 75);
     aoe_ai_info_set_field_204_ror(&info, 6);
-    info.field_14c = 2;
-    assert(info.field_204 == 6 && aoe_ai_info_field_14c_ror(&info) == 2);
+    info.list_148.count = 2;
+    assert(info.field_204 == 6 && aoe_ai_info_list_148_count_ror(&info) == 2);
 
     free(info.objects);
     free(info.marks);
     free(info.areas);
     free(info.targets[2]);
     dropsite_tests();
+    sighting_tests();
     puts("ai info ok");
     return 0;
 }

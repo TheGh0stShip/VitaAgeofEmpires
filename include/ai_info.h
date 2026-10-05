@@ -84,7 +84,8 @@ typedef struct {
     AoeAiInfoObjectRor *objects;      /* +0x114 */
     int32_t object_count;             /* +0x110, 500 at first */
     AoeAiIntListRor list_118, list_128, list_138; /* +0x118 .. +0x138 */
-    int32_t field_14c;                /* +0x14c */
+    AoeAiIntListRor list_148;         /* +0x148 (count +0x14c) */
+    AoeAiIntListRor list_180;         /* +0x180 */
     AoeAiIntListRor list_190;         /* +0x190 */
     AoeAiInfoMarkRor *marks;          /* +0x1f8 */
     int32_t mark_count;               /* +0x1f4 */
@@ -95,6 +96,7 @@ typedef struct {
     int32_t cells[4][4][3];           /* +0x408 */
     AoeAiInfoTargetRor *targets[4];   /* +0x4d0 */
     int32_t target_count[4];          /* +0x4e0 */
+    int32_t target_capacity[4];       /* +0x4f0 */
     int32_t best_distance[4];         /* +0x540 */
     int32_t current_target[4];        /* +0x550 */
     int32_t history[AOE_AI_INFO_HISTORY]; /* +0x564 */
@@ -140,6 +142,28 @@ typedef struct {
     double (*value_104)(void *context, int32_t unit, int32_t target);
     double (*value_100)(void *context, int32_t id);
     double (*range)(void *context, int32_t id);
+    double (*value_108)(void *context, int32_t id);
+    /* The pathfinder penalty grid (0x004587e0 / 0x00458800 on the global
+       at 0x00583bc8). */
+    uint8_t (*penalty_get)(void *context, int32_t x, int32_t y);
+    void (*penalty_set)(void *context, int32_t x, int32_t y, uint8_t value);
+    /* The two influence maps (map 0 the global at 0x007c0478 for units,
+       map 1 at 0x007c04c8 for areas): clear to 0 (0x0043d510), set the
+       origin (0x00415ac0), add a value over a rectangle (0x0043d830) and
+       finish (0x0043dfe0). */
+    void (*influence_clear)(void *context, int map);
+    void (*influence_origin)(void *context, int map, int32_t x, int32_t y);
+    void (*influence_add)(void *context, int map, int32_t x0, int32_t y0,
+                          int32_t x1, int32_t y1, int32_t value);
+    void (*influence_finish)(void *context, int map);
+    /* World players (+0x3c +0x3c), a player's +4 (0x00454150), whether
+       that player names us an ally (its vtable +0x1c with our index),
+       and passing a sighting to that player's information AI (its
+       +0x23c +0xcec, 0x004bdd10 with `from_ally` 1). */
+    int16_t player_count;
+    int32_t (*player_field_4)(void *context, int32_t player);
+    int (*names_us_ally)(void *context, int32_t player);
+    void (*share)(void *context, int32_t player, int32_t id);
 } AoeAiInfoOpsRor;
 
 /* 0x004bc690: 1 when the object exists and its zone has no flag;
@@ -202,9 +226,9 @@ int aoe_ai_info_known_class_ror(int32_t type_class);
 /* 0x004be250: class 3 with type 0, 0xc, 0x2d, 0x31, 0x57, 0x65, 0x68 or
    0x6d. */
 int aoe_ai_info_key_building_ror(int16_t type_class, int16_t type_id);
-/* 0x004c1ab0: +0x14c. 0x004c3cf0: set +0x204. 0x004c6550: the current
+/* 0x004c1ab0: the count of the +0x148 list. 0x004c3cf0: set +0x204. 0x004c6550: the current
    target of list `i` (0..3), else -1. */
-int32_t aoe_ai_info_field_14c_ror(const AoeAiInfoRor *info);
+int32_t aoe_ai_info_list_148_count_ror(const AoeAiInfoRor *info);
 void aoe_ai_info_set_field_204_ror(AoeAiInfoRor *info, int32_t value);
 int32_t aoe_ai_info_current_target_ror(const AoeAiInfoRor *info, int32_t i);
 /* 0x004c2d60: clamp a tile to the map; 1 when it moved (a negative
@@ -344,6 +368,72 @@ float aoe_ai_info_group_endurance_ror(const AoeAiInfoRor *info,
 float aoe_ai_info_ids_endurance_ror(const AoeAiInfoRor *info,
                                     const int32_t *ids, int32_t count,
                                     const AoeAiObjectViewRor *unit,
+                                    const AoeAiInfoOpsRor *ops);
+/* 0x004c1730: special objects go on the +0x148 list (once): a dock
+   (type 0x2d) or town centre (0x6d) of ours while number 70 / 56 is
+   positive, types 0x9e and 0xa3 while 54 is, 0x9f while 55 is, and the
+   classes 7, 8 and 0x20 while 52, 51 and 50 are. 1 when the object is of
+   such a kind with its number positive (already listed or not). */
+int aoe_ai_info_note_special_ror(AoeAiInfoRor *info,
+                                 const AoeAiObjectViewRor *object,
+                                 const AoeAiInfoOpsRor *ops);
+/* 0x004c49c0: add a resource object to target list 1 (class 0xf), 2
+   (class 8), 3 (class 0x20) or 0 (others). A full list grows to twice
+   its capacity (100 at first; new entries free). A listed object gets
+   +8 = ftol(2d + 10) and its dropsite; a new one its tile, list index
+   (+0xf), +0xe = ftol(d), dropsite and +8. Classes 0xf, 0x20, 8 and 7
+   then keep the smallest ftol(d) as before. 0 when the list cannot grow,
+   else 1. */
+int aoe_ai_info_add_target_ror(AoeAiInfoRor *info,
+                               const AoeAiObjectViewRor *object,
+                               const AoeAiInfoOpsRor *ops);
+/* 0x004bf250: one of our objects appeared: its remembered owner is
+   updated, it joins the +0x180 list and, for building classes 3 and 0x1b,
+   the dropsite list; town centres, 0x67 and 0x44 refresh all target
+   lists (0x004c5250) and type 0x32 becomes a target (0x004c49c0). */
+void aoe_ai_info_own_object_ror(AoeAiInfoRor *info,
+                                const AoeAiObjectViewRor *object,
+                                const AoeAiInfoOpsRor *ops);
+/* 0x004bf440: one of our objects is gone from the dropsite and +0x180
+   lists (searched up to their capacity, as in the original); if it still
+   exists its remembered owner is updated. */
+void aoe_ai_info_lose_object_ror(AoeAiInfoRor *info, int32_t id,
+                                 const AoeAiInfoOpsRor *ops);
+/* 0x004bdd10: an object was seen. Known classes only: a sighting of
+   our own (not `from_ally`) of an enemy-owned object, in a game of more
+   than three players with number 194 at 1, is passed to every computer
+   ally (+4 set) that names us an ally. Then the special list (0x004c1730),
+   the +0x118 list, and the unit (+0x128), resource (0x004c49c0) or
+   +0x138 list; units and special objects are remembered (0x004bd750).
+   0x004be0d0 looks the object up by ID first. */
+int aoe_ai_info_notice_ror(AoeAiInfoRor *info,
+                           const AoeAiObjectViewRor *object, int32_t from_ally,
+                           const AoeAiInfoOpsRor *ops);
+int aoe_ai_info_notice_id_ror(AoeAiInfoRor *info, int32_t id,
+                              const AoeAiInfoOpsRor *ops);
+/* 0x004bd360: raise the pathfinder penalty by 10 (to 255) over the
+   clamped square of the type's +0x28 around each live remembered object
+   seen as `owner` (other than `skip`), and again over its range square
+   when the range is above 1.0. */
+void aoe_ai_info_penalize_objects_ror(const AoeAiInfoRor *info,
+                                      uint32_t owner, int32_t skip,
+                                      const AoeAiInfoOpsRor *ops);
+/* 0x004bd590: for each of our areas of kind `player_a`, set the penalty
+   to 0x4b over its clamped rectangle, then to 0xf over that rectangle
+   grown by 5 (which also covers the first). */
+void aoe_ai_info_penalize_areas_ror(const AoeAiInfoRor *info,
+                                    uint32_t player_a,
+                                    const AoeAiInfoOpsRor *ops);
+/* 0x004c4770: influence map 0 from the origin: each live remembered
+   object seen as `owner` adds 5 (1 when its vtable +0x108 value is not
+   above 0) over the square of its truncated type +0x28 around its
+   truncated tile. 0x004c4880: map 1 gains 1 over each of our areas of
+   kind `player_a`. */
+void aoe_ai_info_unit_influence_ror(const AoeAiInfoRor *info, uint32_t owner,
+                                    int32_t x, int32_t y,
+                                    const AoeAiInfoOpsRor *ops);
+void aoe_ai_info_area_influence_ror(const AoeAiInfoRor *info,
+                                    uint32_t player_a, int32_t x, int32_t y,
                                     const AoeAiInfoOpsRor *ops);
 /* 0x004c65c0: the statistics bucket of a unit: class 0x12 5, 0x1c 3,
    0xd 4, 0xc 2, 0x23 7; type 0x49 0, 0x4b 1, 4/5/0x27 6, 0x29 10,

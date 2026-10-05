@@ -971,3 +971,69 @@ fail:
     plan->count = plan->placed_count = 0;
     return 0;
 }
+
+int aoe_ai_build_list_add_research_ror(AoeAiBuildListRor *list, AoeAiObjectFn objects,
+                                       void *context, int32_t type, int32_t position) {
+    if (type != 5 && (type < 7 || type > 8)) return 0;
+    if (position == -1) {
+        const AoeAiBuildItemRor *i = list->sentinel.next;
+        position = 0;
+        while (i != &list->sentinel && i && i->built == 1) {
+            i = i->next;
+            ++position;
+        }
+    }
+    return aoe_ai_build_list_insert_ror(list, objects, context, type, 1, 1, 0x2d, 1, position);
+}
+
+int aoe_ai_build_list_add_gather_ror(AoeAiBuildListRor *list, AoeAiObjectFn objects,
+                                     void *context, int32_t type, int32_t build_from,
+                                     int32_t position) {
+    return aoe_ai_build_list_insert_ror(list, objects, context, type, 1, 6, build_from, 1, position);
+}
+
+int32_t aoe_ai_build_list_count_ror2(const AoeAiBuildListRor *list, int32_t type,
+                                     int32_t category,
+                                     int32_t (*extra)(void *context, int32_t type),
+                                     void *context) {
+    if (category == 0 && (type == 0x67 || type == 0x44))
+        return aoe_ai_build_list_count_of_ror(list, type, 0, AOE_AI_COUNT_IN_PROGRESS) +
+               extra(context, type);
+    return aoe_ai_build_list_count_of_ror(list, type, category, AOE_AI_COUNT_BUILT_OR_IN_PROGRESS);
+}
+
+int aoe_ai_build_list_all_started_ror(const AoeAiBuildListRor *list, int32_t category_a,
+                                      int32_t category_b) {
+    const AoeAiBuildItemRor *i;
+    for (i = list->sentinel.next; i && i != &list->sentinel; i = i->next)
+        if ((i->category == category_a || i->category == category_b) && i->built == 0 &&
+            i->in_progress == 0)
+            return 0;
+    return 1;
+}
+
+AoeAiBuildItemRor *aoe_ai_build_list_pending_ror(const AoeAiBuildListRor *list, int32_t type,
+                                                 int32_t category_a, int32_t category_b) {
+    AoeAiBuildItemRor *i;
+    for (i = list->sentinel.next; i && i != &list->sentinel; i = i->next)
+        if (i->built == 0 && i->in_progress == 0 && i->plan.type == type &&
+            (i->category == category_a || i->category == category_b))
+            return i;
+    return NULL;
+}
+
+void aoe_ai_build_list_retry_ror(AoeAiBuildListRor *list,
+                                 int32_t (*count)(void *context, int32_t type, int32_t category),
+                                 void *context) {
+    int32_t c67 = count(context, 0x67, 0), c44 = count(context, 0x44, 0);
+    AoeAiBuildItemRor *i;
+    for (i = list->sentinel.next; i && i != &list->sentinel; i = i->next) {
+        if (i->built == 1 || i->in_progress == 1) continue;
+        if (c67 >= 1 && i->plan.type == 0x67) continue;
+        if (c44 >= 1 && i->plan.type == 0x44) continue;
+        aoe_ai_plan_item_set_skip_ror(&i->plan, 0);
+        i->build_attempts = 0;
+        i->skip_cycles = 0;
+        i->permanent_skip = 0;
+    }
+}

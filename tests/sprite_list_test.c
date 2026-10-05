@@ -44,6 +44,11 @@ static void invalidate(void *context) {
     ++trace->invalidated;
 }
 
+static void count_sprite(void *c, void *s) {
+    (void)s;
+    ++*(int *)c;
+}
+
 int main(void) {
     int still = 0, animated_a = 1, animated_b = 2, animated_c = 3;
     Trace trace = {0};
@@ -80,6 +85,19 @@ int main(void) {
     assert(aoe_sprite_list_remove(&list, &animated_a));
     assert(aoe_sprite_list_count(&list) == 3 && trace.invalidated == 5);
 
+    {
+        int seen = 0;
+        AoeSpriteList copy;
+        aoe_sprite_list_each_ror(&list, count_sprite, &seen);
+        assert(seen == 3);
+        seen = 0;
+        aoe_sprite_list_each_of_ror(&list, &animated_b, count_sprite, &seen);
+        assert(seen == 1);
+        assert(aoe_sprite_list_first_ror(&list, &animated_b) == aoe_sprite_list_sprite_at(&list, 2));
+        assert(aoe_sprite_list_first_ror(&list, &animated_a) == NULL);
+        aoe_sprite_list_init_ror(&copy, &list.ops, &seen);
+        assert(copy.head == NULL && copy.has_redraw_target && aoe_sprite_list_count(&copy) == 0);
+    }
     aoe_sprite_list_clear(&list);
     assert(aoe_sprite_list_count(&list) == 0);
     assert(trace.created == 4 && trace.destroyed == 4);

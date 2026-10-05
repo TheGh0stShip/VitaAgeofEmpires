@@ -319,4 +319,36 @@ int aoe_ai_con_plan_save_ror(const AoeAiConPlanRor *plan,
 int aoe_ai_con_plan_load_ror(AoeAiConPlanRor *plan, int32_t player,
                              AoeAiLogRor *log, AoeOutcomeStream *in);
 
+/* The RoR build list (vtable 0x00548acc) over the same list:
+   0x004b9300 adds research `type` (5, 7 or 8 only; else 0) built at
+   0x2d, cap 1, at `position` (-1: after the leading built items);
+   0x004b93a0 adds a gather setting (category 6) for `type` from
+   `build_from` at `position`. Both go through 0x00408d90 with the
+   computer player's objects. */
+int aoe_ai_build_list_add_research_ror(AoeAiBuildListRor *list, AoeAiObjectFn objects,
+                                       void *context, int32_t type, int32_t position);
+int aoe_ai_build_list_add_gather_ror(AoeAiBuildListRor *list, AoeAiObjectFn objects,
+                                     void *context, int32_t type, int32_t build_from,
+                                     int32_t position);
+/* 0x004b93d0 (+0x48): built or in progress, except for buildings 0x67
+   and 0x44 (category 0), which count those in progress plus `extra`
+   (0x004c55b0 / 0x004c5680, the player's own counts). */
+int32_t aoe_ai_build_list_count_ror2(const AoeAiBuildListRor *list, int32_t type,
+                                     int32_t category,
+                                     int32_t (*extra)(void *context, int32_t type),
+                                     void *context);
+/* 0x004b9440: 0 when an item of either category is neither built nor in
+   progress, else 1. 0x004b95e0: the first such item of plan type `type`
+   (and either category), or NULL. */
+int aoe_ai_build_list_all_started_ror(const AoeAiBuildListRor *list, int32_t category_a,
+                                      int32_t category_b);
+AoeAiBuildItemRor *aoe_ai_build_list_pending_ror(const AoeAiBuildListRor *list, int32_t type,
+                                                 int32_t category_a, int32_t category_b);
+/* 0x004b9540: every item neither built nor in progress (except 0x67 /
+   0x44 items while the list's +0x48 count of that building is positive)
+   has its skip, attempts, skip cycles and permanent skip reset to 0. */
+void aoe_ai_build_list_retry_ror(AoeAiBuildListRor *list,
+                                 int32_t (*count)(void *context, int32_t type, int32_t category),
+                                 void *context);
+
 #endif

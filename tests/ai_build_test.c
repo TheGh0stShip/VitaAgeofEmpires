@@ -33,6 +33,11 @@ static int objects(void *c, int32_t type, const char **name, float *rx,
     return 1;
 }
 
+static int32_t extra_count(void *c, int32_t type) { (void)c; return type == 0x67 ? 10 : 0; }
+static int32_t retry_count(void *c, int32_t type, int32_t category) {
+    (void)c; (void)type; (void)category; return 0;
+}
+
 int main(void) {
     static Log log;
     AoeAiLogRor sink = {&log, log_open, log_close, log_write, log_time, 0, -1};
@@ -172,6 +177,31 @@ int main(void) {
     assert(!aoe_ai_build_list_has_file_ror(&list));
     assert(!aoe_ai_build_list_load_text_ror(&list, "missing", NULL, objects,
                                             NULL));
+    /* RoR build list additions. */
+    assert(!aoe_ai_build_list_add_research_ror(&list, objects, NULL, 6, -1));
+    assert(aoe_ai_build_list_add_gather_ror(&list, objects, NULL, 0x67, 3, 0));
+    list.sentinel.next->built = 1;
+    /* One built item: position 1 walks onto the sentinel, so the
+       research goes to the front (as 0x00408d90 does). */
+    assert(aoe_ai_build_list_add_research_ror(&list, objects, NULL, 7, -1));
+    {
+        AoeAiBuildItemRor *r = list.sentinel.next, *g = r->next;
+        assert(list.count == 2 && r->plan.type == 7 && r->category == 1 && r->build_from == 0x2d);
+        assert(g->category == 6 && g->build_from == 3);
+        assert(!aoe_ai_build_list_all_started_ror(&list, 1, 9));
+        assert(aoe_ai_build_list_all_started_ror(&list, 6, 9));
+        assert(aoe_ai_build_list_pending_ror(&list, 7, 2, 1) == r);
+        assert(aoe_ai_build_list_pending_ror(&list, 0x67, 6, 6) == NULL);
+        g->category = 0;
+        g->built = 0;
+        g->in_progress = 1;
+        assert(aoe_ai_build_list_count_ror2(&list, 0x67, 0, extra_count, NULL) == 1 + 10);
+        assert(aoe_ai_build_list_count_ror2(&list, 7, 1, extra_count, NULL) == 0);
+        r->build_attempts = 4;
+        r->permanent_skip = 1;
+        aoe_ai_build_list_retry_ror(&list, retry_count, NULL);
+        assert(r->build_attempts == 0 && !r->permanent_skip);
+    }
     aoe_ai_build_list_release_ror(&list);
     assert(log.closes == 1 && !list.excluded);
 

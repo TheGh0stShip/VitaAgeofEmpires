@@ -10,3 +10,5 @@ float aoe_unit_default_minus_one_float_ror(void) { return -1.0f; }
 void aoe_unit_default_nothing_ror(void) {}
 float aoe_unit_animation_rate_ror(const AoeLiveUnit *unit) { return unit->animation_rate; }
 float aoe_unit_rotation_ror(const AoeLiveUnit *unit) { return unit->core.scenario_rotation; }
+const DatUnit *aoe_unit_template_ror(const AoeLiveUnit *unit) { return unit->core.unit_template; }
+uint8_t aoe_unit_default_ff_ror(void) { return 0xff; }

@@ -29,4 +29,13 @@ void aoe_unit_default_nothing_ror(void);
 float aoe_unit_animation_rate_ror(const AoeLiveUnit *unit);
 float aoe_unit_rotation_ror(const AoeLiveUnit *unit);
 
+/* The slots the base unit vtable 0x00542e14 adds (inherited unchanged by
+   0x005434b4, 0x005468cc and 0x00548474): +0x98 / +0x9c / +0xa0
+   0x00415300 nothing (aoe_unit_default_nothing_ror); +0xbc 0x00415310
+   the template (+0x08); +0x118 0x00415320 0xff; +0x198 0x00415330,
+   +0x19c / +0x1a0 0x00415340, +0x1a4 0x00415350 and +0x194 / +0x1ac /
+   +0x1b4 0x00415360 0 (aoe_unit_default_zero_ror). */
+const DatUnit *aoe_unit_template_ror(const AoeLiveUnit *unit);
+uint8_t aoe_unit_default_ff_ror(void);
+
 #endif

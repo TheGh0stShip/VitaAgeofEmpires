@@ -18,6 +18,8 @@ static void unit_defaults(void) {
     u.animation_rate = 1.25f;
     u.core.scenario_rotation = 3.5f;
     assert(aoe_unit_animation_rate_ror(&u) == 1.25f && aoe_unit_rotation_ror(&u) == 3.5f);
+    u.core.unit_template = (const DatUnit *)&u;
+    assert(aoe_unit_template_ror(&u) == (const DatUnit *)&u && aoe_unit_default_ff_ror() == 0xff);
 }
 
 static void text_helpers(void) {

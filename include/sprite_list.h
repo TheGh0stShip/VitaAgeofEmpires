@@ -38,6 +38,19 @@ int aoe_sprite_list_tick(AoeSpriteList *list, float time_delta, float speed);
    loaded sprite and then reverses it; this appends in stream order with
    priority 0 and no extra references, the same result. */
 int aoe_sprite_list_append_loaded(AoeSpriteList *list, void *sprite);
+/* Patched RoR 1.0a list methods (vtable 0x00543000): 0x00415370
+   constructs it empty with its redraw target. 0x00415760 (+0x08) and
+   0x004157e0 (+0x10) hand every sprite in order to its +0x0c update /
+   +0x14 draw (`fn`). 0x00415860 (+0x04), 0x00415950 (+0x28) and
+   0x00415980 ask the first sprite of the graphic its +0x1c / +0x30 /
+   +0x34 (0 when none: aoe_sprite_list_first_ror gives NULL); 0x004158c0
+   (+0x1c) hands every sprite of the graphic to its +0x24. */
+void aoe_sprite_list_init_ror(AoeSpriteList *list, const AoeSpriteListOps *ops, void *redraw_target);
+void aoe_sprite_list_each_ror(const AoeSpriteList *list, void (*fn)(void *context, void *sprite),
+                              void *context);
+void *aoe_sprite_list_first_ror(const AoeSpriteList *list, const void *graphic);
+void aoe_sprite_list_each_of_ror(const AoeSpriteList *list, const void *graphic,
+                                 void (*fn)(void *context, void *sprite), void *context);
 size_t aoe_sprite_list_count(const AoeSpriteList *list);
 const void *aoe_sprite_list_graphic_at(const AoeSpriteList *list, size_t index);
 const void *aoe_sprite_list_sprite_at(const AoeSpriteList *list, size_t index);

@@ -147,3 +147,29 @@ uint8_t aoe_sprite_list_priority_at(const AoeSpriteList *list, size_t index) {
         node = node->next;
     return node ? node->priority : 0;
 }
+
+void aoe_sprite_list_init_ror(AoeSpriteList *list, const AoeSpriteListOps *ops, void *redraw_target) {
+    list->head = NULL;
+    list->ops = *ops;
+    list->has_redraw_target = redraw_target != NULL;
+}
+
+void aoe_sprite_list_each_ror(const AoeSpriteList *list, void (*fn)(void *context, void *sprite),
+                              void *context) {
+    const AoeSpriteNode *n;
+    for (n = list->head; n; n = n->next) fn(context, n->sprite);
+}
+
+void *aoe_sprite_list_first_ror(const AoeSpriteList *list, const void *graphic) {
+    const AoeSpriteNode *n;
+    for (n = list->head; n; n = n->next)
+        if (list->ops.graphic_of(list->ops.context, n->sprite) == graphic) return n->sprite;
+    return NULL;
+}
+
+void aoe_sprite_list_each_of_ror(const AoeSpriteList *list, const void *graphic,
+                                 void (*fn)(void *context, void *sprite), void *context) {
+    const AoeSpriteNode *n;
+    for (n = list->head; n; n = n->next)
+        if (list->ops.graphic_of(list->ops.context, n->sprite) == graphic) fn(context, n->sprite);
+}

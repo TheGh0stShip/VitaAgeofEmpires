@@ -98,6 +98,16 @@ typedef struct {
     void (*open_name_selection)(void *context);
     void (*open_new_name)(void *context, AoeUiPanelRor *parent);
     int32_t (*campaign_players)(void *context);
+    /* The world's scenario (+0x5c): its title (0x00475b30) and message i
+       (0x00476c70; NULL when none). The game start (0x00503a70); back in
+       a running game, resuming when it is paused by the settings
+       (0x0041b750 == 1, game +0xa00 clear: 0x00419a60(0, 0)). A picture
+       drawn at a point of an area (0x0045b370). */
+    const char *(*scenario_title)(void *context);
+    const char *(*scenario_message)(void *context, int32_t i);
+    void (*start_game)(void *context);
+    void (*resume_game)(void *context);
+    void (*draw_picture)(void *context, void *picture, AoeUiAreaRor *area, int32_t x, int32_t y);
 } AoeGameUiOpsRor;
 
 typedef struct {
@@ -425,5 +435,33 @@ typedef struct {
 extern const AoeUiEzVtblRor aoe_single_player_menu_vtable_ror;
 int aoe_single_player_menu_init_ror(AoeSinglePlayerMenuRor *m, AoeGameUiRor *ui,
                                     AoeUiAreaRor *area);
+
+/* The scenario's "Mission Dialog" (vtable 0x00547b94,
+   0x0049ec00..0x0049f460): the scenario title (else string 9813), the
+   message text with its scrollbar and three buttons switching it between
+   the instructions (message 0, 10802), the hints (4, 10801) and the
+   history (1, 10807), kept to the messages there are (no buttons with
+   only one, no text with none), OK, and a picture. Laid out for 640,
+   800 and 1024 wide screens. 0x0049ec00 constructor ("scr9", 50060;
+   `in_game` +0x494, the picture +0x498); 0x0049f2c0 destructor
+   (deleting 0x0049f2a0): before the game a playing sound is stopped.
+   +0x30 0x0049f3a0: the picture drawn below the title. +0xb8 0x0049f460:
+   a button shows its message; OK starts the game (before it) or goes
+   back to the game screen and resumes it. */
+typedef struct {
+    AoeUiEzRor ez;
+    AoeUiTextRor *title;              /* +0x478 */
+    AoeUiTextRor *text;               /* +0x47c */
+    AoeUiScrollbarRor *scrollbar;     /* +0x480 */
+    AoeUiButtonRor *ok;               /* +0x484 */
+    AoeUiButtonRor *buttons[3];       /* +0x488: hints, instructions, history */
+    uint8_t in_game;                  /* +0x494 */
+    void *picture;                    /* +0x498 */
+    AoeGameUiRor *ui;
+} AoeMissionDialogRor;
+
+extern const AoeUiEzVtblRor aoe_mission_dialog_vtable_ror;
+int aoe_mission_dialog_init_ror(AoeMissionDialogRor *d, AoeGameUiRor *ui, AoeUiAreaRor *area,
+                                const char *text, uint8_t in_game, void *picture);
 
 #endif

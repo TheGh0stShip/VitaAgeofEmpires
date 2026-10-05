@@ -99,7 +99,12 @@ static void press(AoeMenuDialogRor *m, int i) {
 }
 
 static char loaded[64], deleted[64];
-static int deletes, open_screens, new_names;
+static int deletes, open_screens, new_names, has_hints, starts, resumes, pictures;
+static const char *scen_title(void *c) { (void)c; return "Rome"; }
+static const char *scen_message(void *c, int32_t i) { (void)c; return i == 0 ? "Instr" : (i == 4 && has_hints) ? "Hints" : NULL; }
+static void start_game(void *c) { (void)c; ++starts; }
+static void resume_game(void *c) { (void)c; ++resumes; }
+static void draw_pic(void *c, void *p, AoeUiAreaRor *a, int32_t x, int32_t y) { (void)c; (void)p; (void)a; (void)x; (void)y; ++pictures; }
 static void new_name(void *c, AoeUiPanelRor *p) { (void)c; (void)p; ++new_names; }
 static int32_t no_players(void *c) { (void)c; return 0; }
 static void open_open_screen(void *c) { (void)c; ++open_screens; }
@@ -522,6 +527,36 @@ int main(void) {
         mp->vt->action(mp, &m->buttons[2]->panel, 1, 0, 0);
         assert(aoe_settings_option_ae5_ror(&settings) == 1 && aoe_settings_flag_8fc_ror(&settings) == 0);
         assert(!aoe_ui_system_find_ror(&sys, "Single Player Menu"));
+    }
+    /* The mission dialog. */
+    {
+        AoeMissionDialogRor *d = calloc(1, sizeof *d);
+        AoeUiPanelRor *dp = &d->ez.panel;
+        ops.scenario_title = scen_title;
+        ops.scenario_message = scen_message;
+        ops.start_game = start_game;
+        ops.resume_game = resume_game;
+        ops.draw_picture = draw_pic;
+        has_hints = 1;
+        assert(aoe_mission_dialog_init_ror(d, &ui, &area, "x", 0, &d));
+        assert(strcmp(d->title->lines->text, "Rome") == 0);
+        assert(strcmp(d->text->lines->text, "Instr") == 0);
+        assert(d->buttons[0]->panel.active && d->buttons[1]->panel.active && !d->buttons[2]->panel.active);
+        assert(d->ok->panel.x - dp->x == 0x25d * 800 / 800);
+        dp->vt->action(dp, &d->buttons[0]->panel, 1, 0, 0);
+        assert(strcmp(d->text->lines->text, "Hints") == 0);
+        dp->vt->draw(dp);
+        assert(pictures == 1);
+        dp->vt->action(dp, &d->ok->panel, 1, 0, 0);
+        assert(starts == 1 && !aoe_ui_system_find_ror(&sys, "Mission Dialog"));
+        /* Only the instructions: no buttons. */
+        has_hints = 0;
+        d = calloc(1, sizeof *d);
+        dp = &d->ez.panel;
+        assert(aoe_mission_dialog_init_ror(d, &ui, &area, "x", 1, NULL));
+        assert(!d->buttons[0]->panel.active && !d->buttons[1]->panel.active);
+        dp->vt->action(dp, &d->ok->panel, 1, 0, 0);
+        assert(resumes == 1 && starts == 1);
     }
     aoe_ui_system_close_ror(&sys, "Game Screen");
     free(sys.panels);

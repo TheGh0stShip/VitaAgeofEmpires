@@ -19,9 +19,9 @@
 
 typedef struct {
     void *context;
-    /* The panel system's modal stack (0x005830e8): 0x00451da0 returns to
-       the previous modal panel (0 when there is none), 0x00451ce0 makes a
-       panel (or none) modal. */
+    /* The panel system's modal stack (0x005830e8): return to the
+       previous modal panel (0 when there is none), or make a panel (or
+       none) modal. */
     int (*pop_modal)(void *context);
     void (*set_modal)(void *context, AoeUiPanelRor *panel);
 } AoeUiDropdownOpsRor;

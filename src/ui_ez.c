@@ -88,8 +88,8 @@ static void free_shadow_table(AoeUiEzRor *ez) {
 
 void aoe_ui_ez_free_ror(AoeUiEzRor *ez) {
     if (!ez) return;
-    /* The shadow panel (0x004383d0) belongs to the untranslated shadow
-       area; whoever builds it through the callback frees it. */
+    /* The shadow panel belongs to the untranslated shadow area; whoever
+       builds it through the callback frees it. */
     ez->shadow_panel = NULL;
     ez->brush = 0; /* the original deletes a brush that is not stock */
     free_shape(ez, &ez->background);
@@ -944,7 +944,7 @@ static int32_t no_key_action(AoeUiPanelRor *p, int32_t a, int32_t b,
     return 0;
 }
 
-/* Background drawing 0x00454fd0 is not translated. */
+/* Background drawing is not translated. */
 static void ez_draw_background(AoeUiEzRor *ez, int32_t parent_rect) {
     (void)ez;
     (void)parent_rect;

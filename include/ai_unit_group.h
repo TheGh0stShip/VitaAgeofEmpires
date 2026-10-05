@@ -54,7 +54,7 @@ typedef struct {
     int (*present)(void *context, int32_t id);
     /* The object's hit points (+0x30); 0 when there is no object. */
     int (*hit_points)(void *context, int32_t id, float *out);
-    /* 0x004da110: order the unit to stop (the player's +0x30 task with
+    /* Order the unit to stop (the player's +0x30 task with
        action 0x2c2 and the given value). */
     void (*dismiss)(void *context, int32_t id, int32_t value);
 } AoeAiUnitGroupOpsRor;

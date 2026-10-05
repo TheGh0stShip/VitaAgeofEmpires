@@ -45,9 +45,9 @@ void aoe_shore_fix_beaches_ror(const AoeShoreMapRor *map, int32_t x0,
 void aoe_shore_smooth_ror(const AoeShoreMapRor *map, int32_t x0, int32_t y0,
                           int32_t x1, int32_t y1, uint8_t terrain);
 
-/* 0x004eda70: the base line paint 0x00446050 (callback), then smoothing
-   of the line's box grown by r + 2. 0x004edb00: the base raise 0x00446250,
-   then slope drying and smoothing to terrain 0 of the box grown by
+/* 0x004eda70: the base map's line paint (callback), then smoothing of
+   the line's box grown by r + 2. 0x004edb00: the base map's raise
+   (callback), then slope drying and smoothing to terrain 0 of the box grown by
    (size & 0xff) + r + 2. Both return 1. */
 typedef void (*AoeShoreBaseFn)(void *context, int32_t x0, int32_t y0,
                                int32_t x1, int32_t y1, int32_t r,

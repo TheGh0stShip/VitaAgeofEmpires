@@ -260,7 +260,7 @@ typedef struct {
     void *(*unit_zones)(void *context, int32_t player, int32_t unit);
     uint8_t (*zone_at)(void *context, void *zones, int32_t x, int32_t y);
     /* 0x00448270(gaia, world, 0, 0, w - 1, h - 1, 1, 0, 0) and the zone
-       manager reset 0x00521c80. */
+       manager reset. */
     void (*clear_all)(void *context);
     void (*zones_reset)(void *context);
 } AoeRmWorldOpsRor;

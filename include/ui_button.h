@@ -18,8 +18,7 @@ typedef struct AoeUiButtonRor AoeUiButtonRor;
 
 typedef struct {
     void *context;
-    /* Sound object +0x148: 0x004a3440 playing, 0x004a3410 stop,
-       0x004a32f0 play. */
+    /* Sound object +0x148: playing, stop, play. */
     int (*sound_playing)(void *context, void *sound);
     void (*sound_stop)(void *context, void *sound);
     void (*sound_play)(void *context, void *sound);
@@ -28,7 +27,7 @@ typedef struct {
     void (*paint_now)(void *context, AoeUiAreaRor *area);
     void (*command)(void *context, AoeUiAreaRor *area, int32_t id,
                     int32_t value);
-    /* Shape hit test 0x0049fb90(x, y, frame) on the state's picture. */
+    /* Shape hit test (x, y, frame) on the state's picture. */
     int (*shape_hit)(void *context, void *picture, int32_t x, int32_t y,
                      int16_t frame);
 } AoeUiButtonOpsRor;

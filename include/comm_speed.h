@@ -12,13 +12,13 @@
    Player slots are 1..9. Semantic storage; comments give offsets. */
 typedef struct {
     void *context;
-    int (*active)(void *context, int32_t player);       /* 0x00423da0 */
-    int (*is_host)(void *context);                      /* 0x00423c20 */
-    int (*caught_up)(void *context);                    /* 0x00421770 */
+    int (*active)(void *context, int32_t player);
+    int (*is_host)(void *context);
+    int (*caught_up)(void *context);
     uint32_t (*turn)(void *context);                    /* comm +0x10c8 */
     uint8_t (*turn_lead)(void *context);                /* comm +0x1590 */
     void (*send_speed)(void *context, uint32_t buffer,
-                       uint32_t granularity);           /* 0x00421640 */
+                       uint32_t granularity);
 } AoeCommSpeedOpsRor;
 
 typedef struct {

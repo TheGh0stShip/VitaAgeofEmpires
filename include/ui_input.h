@@ -12,11 +12,11 @@
    kept in step with the text panel's line (+0x100) and column (+0x102).
    Formats (+0x19c): 1 number with '.', 2 integer, 3 unsigned integer,
    4 file name, 5 file name without '.', 6 path, 7 multi-line text, 8 a
-   percentage up to 100; anything else is free text. Drawing 0x00464140
-   (the caret) is not translated; clipboard and beeps are callbacks. */
+   percentage up to 100; anything else is free text. Drawing (the caret)
+   is not translated; clipboard and beeps are callbacks. */
 typedef struct {
     void *context;
-    /* Sound object play 0x004a32f0 when a sound is set, else MessageBeep. */
+    /* The sound object's play when a sound is set, else MessageBeep. */
     void (*beep)(void *context, void *sound);
     /* CF_TEXT clipboard text (at most `size` - 1 bytes); length or -1. */
     int32_t (*clipboard)(void *context, char *out, int32_t size);

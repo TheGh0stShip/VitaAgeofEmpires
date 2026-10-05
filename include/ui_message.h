@@ -17,22 +17,22 @@ typedef struct {
     /* GetTextExtentPoint32A; 0 on failure. */
     int (*extent)(void *context, uintptr_t font, const char *text,
                   int32_t *cx, int32_t *cy);
-    /* The image buffer (0x004382a0 + 0x00438500) and its release. */
+    /* The image buffer and its release. */
     void *(*image_create)(void *context, int32_t width, int32_t height);
     void (*image_free)(void *context, void *image);
-    /* 0x00438d20: clear the buffer rect. */
+    /* Clear the buffer rect. */
     void (*image_clear)(void *context, void *image, const AoeUiRectRor *r);
     /* DrawTextA into the buffer (image) or the panel's area (NULL). */
     void (*draw_text)(void *context, void *image, const char *text,
                       const AoeUiRectRor *r, uint32_t format, uint32_t rgb,
                       int opaque);
-    /* 0x00439240: blit part of the buffer to the area at (x, y). */
+    /* Blit part of the buffer to the area at (x, y). */
     void (*blit)(void *context, void *image, int32_t x, int32_t y,
                  const AoeUiRectRor *src);
     /* Palette entry as a COLORREF (GetPaletteEntries). */
     uint32_t (*palette_rgb)(void *context, uint8_t index);
     /* Icon frame metrics (shape frame header +0x10 width, +0x18 / +0x1c
-       hotspot) and drawing (0x0049fe00). */
+       hotspot) and drawing. */
     int (*icon_frame)(void *context, void *shape, int32_t frame,
                       int32_t *width, int32_t *hot_x, int32_t *hot_y);
     void (*draw_icon)(void *context, void *image, void *shape, int32_t frame,

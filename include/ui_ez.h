@@ -15,9 +15,8 @@
    reads a screen info file (backgrounds per resolution, palette, mouse
    pointer, shadow, button pictures, popup info, colours and bevel), and
    creates child panels laid out on a 640x480 reference grid scaled to its
-   own size. Background drawing 0x00454fd0 and the shadow area 0x00454d90
-   are not translated; the slider creator 0x00456a30 needs the
-   untranslated slider class. A zero reference size leaves positions
+   own size. Background drawing and the shadow area are not translated,
+   nor is the slider creator (the slider class is a native edit window). A zero reference size leaves positions
    unscaled (the original divides by zero). Semantic storage; offsets
    are noted. */
 
@@ -25,49 +24,45 @@ typedef struct AoeUiEzRor AoeUiEzRor;
 
 typedef struct {
     void *context;
-    /* The game's font table +0x1e4 (0x004199e0): font, width, height. 0
-       when there is no table. */
+    /* The game's font table +0x1e4: font, width, height. 0 when there is
+       no table. */
     int (*font)(void *context, int32_t index, uintptr_t *font,
                 int32_t *width, int32_t *height);
-    /* The game's sound table +0x6c (0x00419a20). */
+    /* The game's sound table +0x6c. */
     void *(*sound)(void *context, int32_t id);
-    /* A shape from "<file>" or, with no file, resource `id` (0x0049f5f0
-       then the loaded check 0x0049f9e0); NULL when it does not load.
-       0x0049f840 frees it. */
+    /* A shape from "<file>" or, with no file, resource `id`, checked as
+       loaded; NULL when it does not load. free_shape frees it. */
     void *(*load_shape)(void *context, const char *file, int32_t id);
     void (*free_shape)(void *context, void *shape);
-    /* The shadow table 0x0041d090 for a palette and amount, and its
-       deletion. */
+    /* The shadow table for a palette and amount, and its deletion. */
     void *(*create_shadow)(void *context, AoeUiAreaRor *area, int32_t amount,
                            uintptr_t palette);
     void (*free_shadow)(void *context, void *shadow);
     /* The info text: "<name>.sin" from disk when loose files are on
-       (0x007c0464), else resource 'bina' `id` (0x0046b360). A
+       (0x007c0464), else resource 'bina' `id`. A
        NUL-terminated buffer the panel frees with free(), or NULL. */
     char *(*load_info)(void *context, const char *file, int32_t id);
     int loose_files;
-    /* The mouse pointer picture 0x00449b70(name, id, 0), done only when
-       the game has a pointer object (+0x1c0). */
+    /* The mouse pointer picture (name, id), done only when the game has
+       a pointer object (+0x1c0). */
     int (*has_pointer)(void *context);
     void (*set_pointer)(void *context, const char *name, int32_t id);
     /* Palettes: the area's current one, the game default (+0x1c), and
-       switching the area (clear, 0x00437ac0, 0x00438170). */
+       switching the area (clear, flip, set). */
     uintptr_t (*area_palette)(void *context, AoeUiAreaRor *area);
     uintptr_t (*default_palette)(void *context);
     void (*set_area_palette)(void *context, AoeUiAreaRor *area,
                              uintptr_t palette);
-    /* IME association 0x00452280 (on) / 0x00452250 (off). */
+    /* IME association on / off. */
     void (*ime)(void *context, int on);
-    /* Pointer shape and mode: LoadCursor(arrow / help) with 0x00419d40,
-       0x00419da0(mode); the pointer object's +0x13c (0x00449b10 /
-       0x00449b00). */
+    /* Pointer shape and mode: LoadCursor(arrow / help) and the game's
+       pointer mode; the pointer object's +0x13c. */
     void (*cursor)(void *context, int help, int32_t mode);
     int32_t (*pointer_state)(void *context);
     void (*set_pointer_state)(void *context, int32_t state);
-    /* Dialogs: 0x00451ae0 a panel by name exists, 0x00451df0 close it;
-       0x00434550 / 0x00434630 a message dialog of `type` (0 OK, 2 yes/no,
-       4 yes/no/cancel, 5 help) with the popup info; 0x00433310 the help
-       popup; WinHelp for help mode 1. */
+    /* Dialogs: a panel by name exists, close it; a message dialog of
+       `type` (0 OK, 2 yes/no, 4 yes/no/cancel, 5 help) with the popup
+       info; the help popup; WinHelp for help mode 1. */
     int (*panel_exists)(void *context, const char *name);
     void (*close_panel)(void *context, const char *name);
     void (*dialog)(void *context, AoeUiEzRor *parent, const char *name,
@@ -83,7 +78,7 @@ typedef struct {
     const AoeUiInputOpsRor *input_ops;
     uint32_t caret_blink_ms;
     const AoeUiDropdownOpsRor *dropdown_ops;
-    /* 0x00454d90: rebuild the shadow area (not translated). */
+    /* Rebuild the shadow area (not translated). */
     void (*shadow_area)(void *context, AoeUiEzRor *ez, int32_t force);
 } AoeUiEzOpsRor;
 
@@ -300,8 +295,8 @@ int32_t aoe_ui_ez_help_press_ror(AoeUiEzRor *ez, uint8_t button, int32_t x,
 /* The screen subclass (vtable 0x0054579c): 0x00468150 constructor,
    0x00468170 / 0x00468130 destructors, 0x00468180 setup (full area, no
    parent), +0x54 0x004681b0 (paint, then 0), +0xb0 0x00468340 (the help
-   popup, string 120055 at 450, 100). Its fading focus 0x004681c0 and
-   drawing 0x004300c0 are not translated. */
+   popup, string 120055 at 450, 100). Its fading focus and drawing are
+   not translated. */
 extern const AoeUiEzVtblRor aoe_ui_screen_vtable_ror;
 int aoe_ui_screen_init_ror(AoeUiEzRor *ez, AoeUiSystemRor *system,
                            const AoeUiEzOpsRor *ops, const char *name);
@@ -314,6 +309,6 @@ int aoe_ui_screen_setup_ror(AoeUiEzRor *ez, AoeUiAreaRor *area,
    rect flag passed), +0x70 0x004553a0 (help mode first), +0xb8
    0x00457e50 (an OK / yes-no / yes-no-cancel dialog's buttons close it),
    +0xc4 0x00457670 (focus: the pointer, the palette, the IME). The
-   shadow area 0x00454d90 is the `shadow_area` callback. */
+   shadow area is the `shadow_area` callback. */
 
 #endif

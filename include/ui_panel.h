@@ -29,12 +29,13 @@ typedef struct {
     /* InvalidateRect(area window, rect, 0). */
     void (*invalidate)(void *context, AoeUiAreaRor *area,
                        const AoeUiRectRor *rect);
-    /* 0x00437ac0 + ValidateRect. */
+    /* The surface flip + ValidateRect. */
     void (*validate)(void *context, AoeUiAreaRor *area,
                      const AoeUiRectRor *rect);
-    /* 0x00438b50(rect, color). */
+    /* Fill (rect, color). */
     void (*fill)(void *context, const AoeUiRectRor *rect, uint8_t color);
-    /* SelectClipRgn(area dc, region of `rect`, or none) + 0x00439020. */
+    /* SelectClipRgn(area dc, region of `rect`, or none) and the surface
+       clip. */
     void (*clip)(void *context, AoeUiAreaRor *area, const AoeUiRectRor *rect);
     void (*capture)(void *context, AoeUiAreaRor *area); /* SetCapture */
     void (*release)(void *context);                     /* ReleaseCapture */
@@ -43,7 +44,7 @@ typedef struct {
     int (*iconic)(void *context, AoeUiAreaRor *area);   /* IsIconic */
     /* Game vtable +0x20(id, buffer, size): the string table. */
     void (*string)(void *context, int32_t id, char *out, int size);
-    /* Palette cache: 0x0042eb90(name, id, 1) and DeleteObject. */
+    /* Palette cache: load (name, id, 1) and DeleteObject. */
     uintptr_t (*create_palette)(void *context, const char *name, int32_t id);
     void (*delete_palette)(void *context, uintptr_t palette);
     /* GetTextExtentPoint32A width of `count` bytes in a font. */

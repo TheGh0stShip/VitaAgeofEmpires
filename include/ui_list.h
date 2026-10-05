@@ -9,7 +9,7 @@
    0x00464a50..0x004656e0): a text panel whose selection follows the mouse
    and keyboard, auto-scrolls while a drag holds above or below it, and
    reports to its parent (action 1 selected, 2 released, 3 chosen).
-   Drawing 0x00465340 / 0x00465470 is not translated. */
+   Drawing is not translated. */
 typedef struct {
     AoeUiTextRor text;
     int32_t hover_select;     /* +0x188 */

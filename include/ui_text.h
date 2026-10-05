@@ -10,7 +10,7 @@
    with a selection, scrolling, an optional scrollbar child and word wrap.
    Text is single-byte here; the original also steps double-byte
    characters with the _mbs* functions, which the port does not model.
-   GDI drawing (0x00469750 and its helpers) is not translated. */
+   GDI drawing is not translated. */
 
 typedef struct AoeUiLineRor {
     char *text;               /* +0 */

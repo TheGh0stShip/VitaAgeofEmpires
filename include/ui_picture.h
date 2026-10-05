@@ -11,20 +11,19 @@
    draw. Loading and blitting go through AoeUiPictureOpsRor. */
 typedef struct {
     void *context;
-    /* 0x0049f5f0 shape load (name may be "") and 0x0049f9e0 validity;
-       0x0049f840 free. */
+    /* Shape load (name may be ""), validity and free. */
     void *(*load_shape)(void *context, const char *name, int32_t id);
     int (*shape_valid)(void *context, void *shape);
     void (*free_shape)(void *context, void *shape);
-    /* 0x0049fa00: frame size. */
+    /* A frame's size. */
     int (*shape_size)(void *context, void *shape, int32_t frame,
                       int16_t *w, int16_t *h);
-    /* 0x0045af10 bitmap load (NULL or no pixels fail), size (+0x14,
-       +0x18), 0x0045b0d0 free. */
+    /* Bitmap load (NULL or no pixels fail), size (+0x14, +0x18) and
+       free. */
     void *(*load_bitmap)(void *context, const char *name);
     void (*bitmap_size)(void *context, void *bitmap, int32_t *w, int32_t *h);
     void (*free_bitmap)(void *context, void *bitmap);
-    /* 0x0045b370 / 0x0049fe00 at (x, y) in the area. */
+    /* Bitmap / shape drawing at (x, y) in the area. */
     void (*draw_bitmap)(void *context, AoeUiAreaRor *area, void *bitmap,
                         int32_t x, int32_t y);
     void (*draw_shape)(void *context, AoeUiAreaRor *area, void *shape,

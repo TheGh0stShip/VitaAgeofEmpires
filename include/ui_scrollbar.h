@@ -79,8 +79,8 @@ void aoe_ui_scrollbar_set_rect_slot_ror(AoeUiPanelRor *p, int32_t x, int32_t y,
    0x00468390, setup 0x004683c0, +0x0c 0x00468440 the scrollbar's) and
    horizontal 0x00468470 (vtable 0x005459ac; destructors 0x004684b0 /
    0x00468490, setup 0x004684c0, +0x0c 0x00468540: no arrow buttons, the
-   thumb runs from x + 1 to x + w - h + 1). Their drawing (0x00468460, the
-   scrollbar's 0x00467bb0) is not translated. */
+   thumb runs from x + 1 to x + w - h + 1). Their drawing (the
+   scrollbar's) is not translated. */
 typedef struct {
     AoeUiScrollbarRor bar;
     int32_t field_1c4, field_1c8;  /* +0x1c4 1, +0x1c8 0 */

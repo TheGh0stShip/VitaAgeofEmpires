@@ -99,6 +99,12 @@ static void press(AoeMenuDialogRor *m, int i) {
 }
 
 static char loaded[64], deleted[64];
+static int mp_setups;
+static void mp_setup(void *c) { (void)c; ++mp_setups; }
+static const char *idx_name(void *c, int32_t i) { (void)c; return i == 0 ? "Gaul.scn" : i == 1 ? "Egypt.scx" : NULL; }
+static int idx_info(void *c, int32_t id, const char **d, int32_t *f, int32_t *pl) {
+    (void)c; *d = id == 0 ? "About Gaul" : "About Egypt"; *f = id == 0; *pl = id == 0 ? 3 : 4; return 1;
+}
 static int deletes, open_screens, new_names, has_hints, starts, resumes, pictures;
 static const char *scen_title(void *c) { (void)c; return "Rome"; }
 static const char *scen_message(void *c, int32_t i) { (void)c; return i == 0 ? "Instr" : (i == 4 && has_hints) ? "Hints" : NULL; }
@@ -557,6 +563,26 @@ int main(void) {
         assert(!d->buttons[0]->panel.active && !d->buttons[1]->panel.active);
         dp->vt->action(dp, &d->ok->panel, 1, 0, 0);
         assert(resumes == 1 && starts == 1);
+    }
+    /* The scenario choice. */
+    {
+        AoeSelectScenarioRor *se = calloc(1, sizeof *se);
+        AoeUiPanelRor *sp2 = &se->ez.panel;
+        ops.scenario_index_name = idx_name;
+        ops.scenario_index_info = idx_info;
+        ops.open_mp_setup = mp_setup;
+        aoe_settings_set_scenario_name_ror(&settings, "Gaul");
+        assert(aoe_select_scenario_init_ror(se, &ui, &area));
+        assert(se->count == 2 && aoe_ui_text_count_ror(&se->list->text) == 2);
+        assert(!strcmp(aoe_ui_text_line_ror(&se->list->text, 0), "Egypt"));
+        assert(!strcmp(aoe_ui_text_column_ror(&se->list->text, 0), "2 - 4"));
+        assert(!strcmp(aoe_ui_text_column_ror(&se->list->text, 1), "3"));
+        assert(aoe_ui_text_selection_ror(&se->list->text) == 1);
+        assert(!strcmp(se->description->lines->text, "About Gaul"));
+        sp2->vt->action(sp2, &se->list->text.panel, 3, 0, 0);
+        assert(mp_setups == 1 && aoe_settings_flag_8fc_ror(&settings) == 1);
+        assert(!strcmp(aoe_settings_scenario_name_ror(&settings), "Gaul"));
+        assert(!aoe_ui_system_find_ror(&sys, "Select Scenario Screen"));
     }
     aoe_ui_system_close_ror(&sys, "Game Screen");
     free(sys.panels);

@@ -108,6 +108,15 @@ typedef struct {
     void (*start_game)(void *context);
     void (*resume_game)(void *context);
     void (*draw_picture)(void *context, void *picture, AoeUiAreaRor *area, int32_t x, int32_t y);
+    /* The scenario index (0x00476f10 refresh; entry i's file name, NULL
+       past the end, 0x004772e0; the record for an ID, 0x00477310: its
+       description, flag and player count; 0 when none). The release of
+       the wait cursor unless the game's +0x1d8 (0x0041bdc0). */
+    void (*scenario_index_refresh)(void *context);
+    const char *(*scenario_index_name)(void *context, int32_t i);
+    int (*scenario_index_info)(void *context, int32_t id, const char **description,
+                               int32_t *flag, int32_t *players);
+    void (*arrow_cursor)(void *context);
 } AoeGameUiOpsRor;
 
 typedef struct {
@@ -463,5 +472,43 @@ typedef struct {
 extern const AoeUiEzVtblRor aoe_mission_dialog_vtable_ror;
 int aoe_mission_dialog_init_ror(AoeMissionDialogRor *d, AoeGameUiRor *ui, AoeUiAreaRor *area,
                                 const char *text, uint8_t in_game, void *picture);
+
+/* The "Select Scenario Screen" (vtable 0x005476e4,
+   0x0049b360..0x0049bed0): the scenarios of the index (sorted, with
+   their player counts as a second column, "2 - n" for a scenario not
+   flagged with more than two players), the chosen one's description,
+   OK, Cancel (Escape) and the hidden close button. 0x0049b360
+   constructor ("scr2" / 50052, "scr3" / 50053 networked); 0x0049b860
+   destructor (deleting 0x0049b7d0); 0x0049bbc0 fills the list;
+   0x0049be30 picks the settings' scenario; 0x0049bde0 shows the chosen
+   one's description; 0x0049bed0 shows the labels and orders Tab;
+   0x0049be90 puts the choice in the settings. +0x4c 0x0049b950 the idle
+   (filled once; the arrow cursor). +0xb8 0x0049b9b0: OK (the settings,
+   then the game setup), Cancel (the single player menu), close, a
+   double-click (OK) or a pick. */
+typedef struct {
+    AoeUiEzRor ez;
+    AoeUiTextRor *title;              /* +0x478 */
+    AoeUiTextRor *name_label;         /* +0x47c */
+    AoeUiTextRor *players_label;      /* +0x480 */
+    int32_t list_x, list_y, list_w, list_h; /* +0x484..+0x490 */
+    AoeUiListRor *list;               /* +0x494 */
+    AoeUiScrollbarRor *list_bar;      /* +0x498 */
+    int32_t count;                    /* +0x49c */
+    char **descriptions;              /* +0x4a0 */
+    int32_t *flags;                   /* +0x4a4 */
+    int32_t filled;                   /* +0x4a8 */
+    AoeUiTextRor *description_label;  /* +0x4ac */
+    int32_t desc_x, desc_y, desc_w, desc_h; /* +0x4b0..+0x4bc */
+    AoeUiTextRor *description;        /* +0x4c0 */
+    AoeUiScrollbarRor *description_bar; /* +0x4c4 */
+    AoeUiButtonRor *ok, *cancel, *close; /* +0x4c8, +0x4cc, +0x4d0 */
+    int32_t chosen;                   /* +0x4d4 */
+    AoeGameUiRor *ui;
+} AoeSelectScenarioRor;
+
+extern const AoeUiEzVtblRor aoe_select_scenario_vtable_ror;
+int aoe_select_scenario_init_ror(AoeSelectScenarioRor *s, AoeGameUiRor *ui, AoeUiAreaRor *area);
+void aoe_select_scenario_fill_ror(AoeSelectScenarioRor *s);
 
 #endif

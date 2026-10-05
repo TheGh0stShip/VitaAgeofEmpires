@@ -127,7 +127,7 @@ void aoe_ui_text_scroll_ror(AoeUiTextRor *t, uint8_t how, int16_t value,
 /* Settings: 0x00469010 font, width, line height; 0x00469050 wrap;
    0x00469070 / 0x00469090 colours; 0x004690b0 background picture (via
    the loader); 0x00469190 border (bevel type 1 when on); 0x004691e0 bevel (+0xf0); 0x004692a0
-   spacing; 0x0046a740 sorted; 0x00468a30 scrollbar. Slots: +0x0c
+   spacing; 0x0046a740 the second column's x (+0x160, redrawn); 0x00468a30 scrollbar. Slots: +0x0c
    0x00468910 (remember the full width, re-place the scrollbar, lay out,
    and with a second column clip the first one to end 10 pixels before
    it),

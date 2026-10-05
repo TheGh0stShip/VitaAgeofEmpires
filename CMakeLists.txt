@@ -576,7 +576,7 @@ add_library(aoe_game_ui STATIC src/screens/menu_dialog.c
             src/screens/scenario_menu_dialog.c
             src/screens/chat_dialogs.c
             src/screens/about_dialog.c src/screens/main_menu.c
-    src/screens/credits.c src/screens/scenario_editor_open.c src/screens/scenario_editor_menu.c src/screens/status_screen.c src/screens/single_player_menu.c src/screens/mission_dialog.c)
+    src/screens/credits.c src/screens/scenario_editor_open.c src/screens/scenario_editor_menu.c src/screens/status_screen.c src/screens/single_player_menu.c src/screens/mission_dialog.c src/screens/select_scenario.c)
 target_include_directories(aoe_game_ui PUBLIC include)
 target_link_libraries(aoe_game_ui PUBLIC aoe_ui_panel aoe_game_base aoe_game_settings)
 target_compile_options(aoe_game_ui PRIVATE -Wall -Wextra)

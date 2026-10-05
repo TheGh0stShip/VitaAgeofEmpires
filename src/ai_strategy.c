@@ -325,12 +325,15 @@ static const Category categories[50] = {
 
 int32_t aoe_ai_sn_category_numbers_ror(int32_t category,
                                        const int16_t **numbers) {
-    if (category < 0 || category >= 50 || !categories[category].count) {
+    const Category *c;
+    uint32_t index = (uint32_t)category;
+    if (index >= 50u || !categories[index].count) {
         if (numbers) *numbers = NULL;
         return 0;
     }
-    if (numbers) *numbers = categories[category].numbers;
-    return categories[category].count;
+    c = &categories[index];
+    if (numbers) *numbers = c->numbers;
+    return c->count;
 }
 
 int32_t aoe_ai_sn_category_kind_ror(int32_t category) {

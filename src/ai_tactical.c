@@ -843,3 +843,47 @@ int32_t aoe_ai_tactical_need_pit_ror(const AoeAiTacticalRor *ai,
     *total = ops->build_items ? ops->build_items(ops->context, 0x44, 0) : 0;
     return ops->food_far ? ops->food_far(ops->context) : 0;
 }
+
+/* ---- Candidate collection ---- */
+
+int32_t aoe_ai_tactical_collect_ungrouped_ror(AoeAiTacticalRor *ai,
+                                              int32_t list) {
+    const AoeAiIntListRor *from;
+    int32_t i, n = 0;
+    if (!ai || list < 0 || list >= AOE_AI_TAC_LISTS) return 0;
+    from = &ai->lists[list];
+    ai->list_d48.count = 0;
+    for (i = 0; i < from->count; ++i) {
+        if (aoe_ai_tactical_group_of_ror(ai, from->data[i])) continue;
+        aoe_ai_int_list_add_unique_ror(&ai->list_d48, from->data[i]);
+        ++n;
+    }
+    return n;
+}
+
+int32_t aoe_ai_tactical_collect_surplus_ror(AoeAiTacticalRor *ai,
+                                            int boats) {
+    int32_t g, n = 0;
+    if (!ai) return 0;
+    ai->list_d48.count = 0;
+    for (g = 0; g < ai->groups_len; ++g) {
+        const AoeAiUnitGroupRor *grp = ai->groups[g];
+        int32_t left, i;
+        int fits = boats ? grp->task >= 0x67 && grp->task <= 0x6c
+                         : grp->task == 100 || grp->task == 0x65 ||
+                               grp->task == 0x66;
+        if (!fits || (grp->field_180 != 1 && grp->field_180 != 0)) continue;
+        if (!(grp->field_160 < aoe_ai_unit_group_count_ror(grp))) continue;
+        left = aoe_ai_unit_group_count_ror(grp);
+        for (i = 0; grp->field_160 < left; ++i) {
+            int32_t m;
+            if (aoe_ai_unit_group_count_ror(grp) <= i) break;
+            m = aoe_ai_unit_group_member_ror(grp, i);
+            if (m == grp->commander) continue;
+            --left;
+            aoe_ai_int_list_add_unique_ror(&ai->list_d48, m);
+            ++n;
+        }
+    }
+    return n;
+}

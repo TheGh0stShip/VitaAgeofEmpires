@@ -354,4 +354,16 @@ int32_t aoe_ai_tactical_need_pit_ror(const AoeAiTacticalRor *ai,
                                      int32_t *total, int32_t *unbuilt,
                                      const AoeAiTacticalOpsRor *ops);
 
+/* Collecting candidates into +0xd48 (emptied first); each returns how
+   many it found. The ungrouped units of a list: 0x004ddd30 list 2,
+   0x004df9f0 list 4, 0x004dfe00 list 6, 0x004e0000 list 7, 0x004e0200 list
+   8, 0x004de120 list 9. The surplus members of groups whose +0x180 is 0
+   or 1 and whose +0x160 is below their count, taken in member order
+   (skipping the commander) until the count would fall to +0x160:
+   0x004ddf30 for tasks 100, 0x65, 0x66 and 0x004dfbf0 for 0x67..0x6c. */
+int32_t aoe_ai_tactical_collect_ungrouped_ror(AoeAiTacticalRor *ai,
+                                              int32_t list);
+int32_t aoe_ai_tactical_collect_surplus_ror(AoeAiTacticalRor *ai,
+                                            int boats);
+
 #endif

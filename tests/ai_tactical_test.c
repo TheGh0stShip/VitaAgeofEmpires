@@ -265,6 +265,38 @@ static void share_tests(void) {
     aoe_ai_tactical_release_ror(&ai);
 }
 
+static void collect_tests(void) {
+    static AoeAiTacticalRor ai;
+    AoeAiUnitGroupRor *g;
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[2], 1);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[2], 2);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[2], 3);
+    aoe_ai_int_list_add_unique_ror(&ai.list_d48, 99);
+    g = aoe_ai_tactical_new_group_ror(&ai, 1);
+    g->task = 100;
+    aoe_ai_unit_group_add_ror(g, 2, NULL);
+    aoe_ai_unit_group_add_ror(g, 4, NULL);
+    aoe_ai_unit_group_add_ror(g, 5, NULL);
+    aoe_ai_unit_group_add_ror(g, 6, NULL);
+    assert(aoe_ai_tactical_collect_ungrouped_ror(&ai, 2) == 2 && ai.list_d48.count == 2 &&
+           ai.list_d48.data[0] == 1 && ai.list_d48.data[1] == 3);
+    assert(aoe_ai_tactical_collect_ungrouped_ror(&ai, 9) == 0 && ai.list_d48.count == 0);
+    /* Surplus: 4 members, keep 2, commander 4 skipped: 2 and 5 go. */
+    g->field_160 = 2;
+    g->commander = 4;
+    assert(aoe_ai_tactical_collect_surplus_ror(&ai, 0) == 2 && ai.list_d48.data[0] == 2 &&
+           ai.list_d48.data[1] == 5);
+    assert(aoe_ai_tactical_collect_surplus_ror(&ai, 1) == 0);
+    g->field_180 = 2;
+    assert(aoe_ai_tactical_collect_surplus_ror(&ai, 0) == 0);
+    g->field_180 = 1;
+    g->task = 0x6c;
+    g->field_160 = 3;
+    assert(aoe_ai_tactical_collect_surplus_ror(&ai, 1) == 1 && ai.list_d48.data[0] == 2);
+    aoe_ai_tactical_release_ror(&ai);
+}
+
 int main(void) {
     static AoeAiTacticalRor ai, back;
     static uint8_t buf[1 << 16];
@@ -443,6 +475,7 @@ int main(void) {
     aoe_ai_tactical_release_ror(&ai);
     member_tests();
     share_tests();
+    collect_tests();
     puts("ai tactical ok");
     return 0;
 }

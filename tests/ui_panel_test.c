@@ -26,12 +26,12 @@ static void string(void *c, int32_t id, char *out, int size) {
     (void)c;
     if (id == 7) strncpy(out, "Help text", (size_t)size);
 }
-static uintptr_t create_font(void *c, const char *name, int32_t id) {
+static uintptr_t create_palette(void *c, const char *name, int32_t id) {
     (void)c; (void)name;
     ++env.created;
     return (uintptr_t)(100 + id);
 }
-static void delete_font(void *c, uintptr_t f) { (void)c; (void)f; ++env.deleted; }
+static void delete_palette(void *c, uintptr_t f) { (void)c; (void)f; ++env.deleted; }
 
 static int32_t left_down(AoeUiPanelRor *p, int32_t x, int32_t y, int32_t c, int32_t s) {
     (void)p; (void)x; (void)y; (void)c; (void)s;
@@ -62,8 +62,8 @@ static int32_t hover(AoeUiPanelRor *p, int32_t x, int32_t y, int32_t c, int32_t 
 
 int main(void) {
     AoeUiPlatformRor pf = {NULL, invalidate, NULL, fill, NULL, capture,
-                           release, now, NULL, NULL, string, create_font,
-                           delete_font};
+                           release, now, NULL, NULL, string, create_palette,
+                           delete_palette};
     static AoeUiSystemRor sys;
     AoeUiAreaRor area = {(void *)1, 640, 480};
     static AoeUiPanelRor root, a, b, c;
@@ -77,13 +77,13 @@ int main(void) {
     sys.app_active = 1;
 
     /* Fonts: shared by name, counted, deleted on the last release. */
-    assert(aoe_ui_font_ror(&sys, "arial", 3) == 103 && env.created == 1);
-    assert(aoe_ui_font_ror(&sys, "other", 3) == 103 && sys.font_refs[0] == 2);
-    assert(!strcmp(sys.font_names[0], "arial.pal"));
-    aoe_ui_font_release_ror(&sys, 103);
+    assert(aoe_ui_palette_ror(&sys, "arial", 3) == 103 && env.created == 1);
+    assert(aoe_ui_palette_ror(&sys, "other", 3) == 103 && sys.palette_refs[0] == 2);
+    assert(!strcmp(sys.palette_names[0], "arial.pal"));
+    aoe_ui_palette_release_ror(&sys, 103);
     assert(!env.deleted);
-    aoe_ui_font_release_ror(&sys, 103);
-    assert(env.deleted == 1 && !sys.fonts[0]);
+    aoe_ui_palette_release_ror(&sys, 103);
+    assert(env.deleted == 1 && !sys.palettes[0]);
 
     /* Root fills the area; a child at (10, 20) 100 x 50. */
     assert(aoe_ui_panel_init_named_ror(&root, &sys, "Root"));

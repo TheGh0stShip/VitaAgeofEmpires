@@ -43,9 +43,9 @@ typedef struct {
     int (*iconic)(void *context, AoeUiAreaRor *area);   /* IsIconic */
     /* Game vtable +0x20(id, buffer, size): the string table. */
     void (*string)(void *context, int32_t id, char *out, int size);
-    /* Font cache: 0x0042eb90(name, id, 1) and DeleteObject. */
-    uintptr_t (*create_font)(void *context, const char *name, int32_t id);
-    void (*delete_font)(void *context, uintptr_t font);
+    /* Palette cache: 0x0042eb90(name, id, 1) and DeleteObject. */
+    uintptr_t (*create_palette)(void *context, const char *name, int32_t id);
+    void (*delete_palette)(void *context, uintptr_t palette);
 } AoeUiPlatformRor;
 
 typedef struct AoeUiNodeRor {
@@ -53,7 +53,7 @@ typedef struct AoeUiNodeRor {
     struct AoeUiNodeRor *prev, *next;
 } AoeUiNodeRor;
 
-#define AOE_UI_FONTS 10
+#define AOE_UI_PALETTES 10
 
 struct AoeUiSystemRor {
     AoeUiPanelRor *capture;  /* +0x00 (0x00451ac0) */
@@ -61,10 +61,10 @@ struct AoeUiSystemRor {
     AoeUiPanelRor *modal;    /* +0x08 (0x00451ad0) */
     AoeUiPanelRor **panels;  /* +0x10 list, in order */
     int32_t panel_count, panel_capacity;
-    char font_names[AOE_UI_FONTS][0x104]; /* +0x44 */
-    uintptr_t fonts[AOE_UI_FONTS];        /* +0x1c */
-    int32_t font_refs[AOE_UI_FONTS];      /* +0xa6c */
-    int32_t font_ids[AOE_UI_FONTS];       /* +0xa94 */
+    char palette_names[AOE_UI_PALETTES][0x104]; /* +0x44 */
+    uintptr_t palettes[AOE_UI_PALETTES];        /* +0x1c */
+    int32_t palette_refs[AOE_UI_PALETTES];      /* +0xa6c */
+    int32_t palette_ids[AOE_UI_PALETTES];       /* +0xa94 */
     int32_t enabled;                      /* +0xac8 */
     int32_t app_active;                   /* game +0x18 */
     const AoeUiPlatformRor *platform;
@@ -198,13 +198,13 @@ struct AoeUiPanelRor {
 extern const AoeUiPanelVtblRor aoe_ui_panel_vtable_ror;
 
 /* ---- panel system ---- */
-/* 0x00452030: a font by id (when not -1) or name ("<name>.pal" without a
+/* 0x00452030: a palette by id (when not -1) or name ("<name>.pal" without a
    dot) from the ten-slot cache, created into the first free slot; each
    use is counted. 0 when the cache is full or creation fails.
    0x004521f0: release one use; the last deletes it. */
-uintptr_t aoe_ui_font_ror(AoeUiSystemRor *system, const char *name,
+uintptr_t aoe_ui_palette_ror(AoeUiSystemRor *system, const char *name,
                           int32_t id);
-void aoe_ui_font_release_ror(AoeUiSystemRor *system, uintptr_t font);
+void aoe_ui_palette_release_ror(AoeUiSystemRor *system, uintptr_t palette);
 /* 0x004522b0 / 0x004522c0 / 0x004522d0: the input-enabled flag. */
 int32_t aoe_ui_enabled_ror(const AoeUiSystemRor *system);
 void aoe_ui_enable_ror(AoeUiSystemRor *system);

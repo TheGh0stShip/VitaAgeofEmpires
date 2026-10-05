@@ -10,7 +10,7 @@ static const AoeUiPlatformRor *platform(const AoeUiPanelRor *p) {
     return p && p->system ? p->system->platform : NULL;
 }
 
-uintptr_t aoe_ui_font_ror(AoeUiSystemRor *s, const char *name, int32_t id) {
+uintptr_t aoe_ui_palette_ror(AoeUiSystemRor *s, const char *name, int32_t id) {
     char key[0x104];
     int32_t free_slot = -1;
     if (!s) return 0;
@@ -19,33 +19,33 @@ uintptr_t aoe_ui_font_ror(AoeUiSystemRor *s, const char *name, int32_t id) {
         if (!strchr(name, '.')) snprintf(key, sizeof(key), "%s.pal", name);
         else snprintf(key, sizeof(key), "%s", name);
     }
-    for (int32_t i = 0; i < AOE_UI_FONTS; ++i) {
-        if (!s->fonts[i]) {
+    for (int32_t i = 0; i < AOE_UI_PALETTES; ++i) {
+        if (!s->palettes[i]) {
             if (free_slot == -1) free_slot = i;
             continue;
         }
-        if ((id != -1 && s->font_ids[i] == id) || !strcmp(s->font_names[i], key)) {
-            ++s->font_refs[i];
-            return s->fonts[i];
+        if ((id != -1 && s->palette_ids[i] == id) || !strcmp(s->palette_names[i], key)) {
+            ++s->palette_refs[i];
+            return s->palettes[i];
         }
     }
-    if (free_slot == -1 || !s->platform || !s->platform->create_font) return 0;
-    s->fonts[free_slot] = s->platform->create_font(s->platform->context, key, id);
-    if (!s->fonts[free_slot]) return 0;
-    ++s->font_refs[free_slot];
-    memcpy(s->font_names[free_slot], key, sizeof(key));
-    s->font_ids[free_slot] = id;
-    return s->fonts[free_slot];
+    if (free_slot == -1 || !s->platform || !s->platform->create_palette) return 0;
+    s->palettes[free_slot] = s->platform->create_palette(s->platform->context, key, id);
+    if (!s->palettes[free_slot]) return 0;
+    ++s->palette_refs[free_slot];
+    memcpy(s->palette_names[free_slot], key, sizeof(key));
+    s->palette_ids[free_slot] = id;
+    return s->palettes[free_slot];
 }
 
-void aoe_ui_font_release_ror(AoeUiSystemRor *s, uintptr_t font) {
-    for (int32_t i = 0; s && i < AOE_UI_FONTS; ++i) {
-        if (s->fonts[i] != font) continue;
-        if (--s->font_refs[i] == 0) {
-            if (s->platform && s->platform->delete_font)
-                s->platform->delete_font(s->platform->context, font);
-            s->fonts[i] = 0;
-            s->font_names[i][0] = '\0';
+void aoe_ui_palette_release_ror(AoeUiSystemRor *s, uintptr_t palette) {
+    for (int32_t i = 0; s && i < AOE_UI_PALETTES; ++i) {
+        if (s->palettes[i] != palette) continue;
+        if (--s->palette_refs[i] == 0) {
+            if (s->platform && s->platform->delete_palette)
+                s->platform->delete_palette(s->platform->context, palette);
+            s->palettes[i] = 0;
+            s->palette_names[i][0] = '\0';
         }
         return;
     }

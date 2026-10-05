@@ -170,3 +170,34 @@ void aoe_object_list_load_ror(AoeObjectListRor *l, const AoeObjectListOpsRor *op
     }
     aoe_object_list_reverse_ror(l);
 }
+
+void aoe_object_list_draw_ror(const AoeObjectListRor *l, const AoeObjectListDrawOpsRor *ops,
+                              int32_t a, int32_t b, int32_t c, int fogged) {
+    for (AoeObjectNodeRor *n = l->head; n; n = n->next) {
+        void *o = n->object;
+        int32_t colour;
+        int skip = 0;
+        if (!o) continue;
+        colour = ops->owner_colour(ops->context, o);
+        switch (ops->class_flag(ops->context, o)) {
+        case 0:
+            skip = fogged;
+            break;
+        case 2:
+            skip = fogged && ops->state(ops->context, o) > 2;
+            break;
+        case 3:
+            if (!fogged || !ops->viewer_sees_owner(ops->context, o)) skip = 1;
+            else colour = ops->own_colour(ops->context, o);
+            break;
+        case 4:
+            if (fogged && l->count > 1)
+                for (AoeObjectNodeRor *m = l->head; m; m = m->next)
+                    if (ops->kind(ops->context, m->object) == 0x19) skip = 1;
+            break;
+        default:
+            break;
+        }
+        if (!skip) ops->draw(ops->context, o, a, b, c, colour);
+    }
+}

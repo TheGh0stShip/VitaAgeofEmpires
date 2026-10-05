@@ -92,4 +92,24 @@ void aoe_object_list_save_ror(const AoeObjectListRor *l, const AoeObjectListOpsR
 void aoe_object_list_load_ror(AoeObjectListRor *l, const AoeObjectListOpsRor *ops,
                               AoeOutcomeStream *s, int32_t arg);
 
+/* 0x00451080(a, b, c, fogged): each object's +0x0c draw(a, b, c, colour)
+   with the owner's colour (+0x0c player +0x10c), by template class flag
+   (+0x65) when `fogged`: 0 skipped; 2 skipped above state 2 (+0x48);
+   3 skipped unless the viewed player has the owner flagged (its +0xb0
+   table) and then drawn with the object's own colour +0x90; 4 skipped
+   when the list holds more than one object and any has +0x4e 0x19. */
+typedef struct {
+    void *context;
+    uint8_t (*class_flag)(void *context, const void *object);
+    uint8_t (*state)(void *context, const void *object);          /* +0x48 */
+    uint8_t (*kind)(void *context, const void *object);           /* +0x4e */
+    int32_t (*owner_colour)(void *context, const void *object);
+    int32_t (*own_colour)(void *context, const void *object);     /* +0x90 */
+    int (*viewer_sees_owner)(void *context, const void *object);
+    void (*draw)(void *context, void *object, int32_t a, int32_t b, int32_t c,
+                 int32_t colour);
+} AoeObjectListDrawOpsRor;
+void aoe_object_list_draw_ror(const AoeObjectListRor *l, const AoeObjectListDrawOpsRor *ops,
+                              int32_t a, int32_t b, int32_t c, int fogged);
+
 #endif

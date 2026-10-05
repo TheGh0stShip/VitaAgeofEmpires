@@ -33,6 +33,14 @@ static void load(void *c, AoeObjectListRor *l, uint8_t type, AoeOutcomeStream *s
     o->id = aoe_stream_i32(s);
     aoe_object_list_append_ror(l, o);
 }
+static uint8_t dstate(void *c, const void *o) { (void)c; return (uint8_t)((const Obj *)o)->order; }
+static uint8_t dkind(void *c, const void *o) { (void)c; return ((const Obj *)o)->key; }
+static int32_t ocol(void *c, const void *o) { (void)c; return ((const Obj *)o)->id; }
+static int32_t own(void *c, const void *o) { (void)c; return -((const Obj *)o)->id; }
+static int sees(void *c, const void *o) { (void)c; return ((const Obj *)o)->dirty; }
+static void ddraw(void *c, void *o, int32_t a, int32_t b, int32_t cc, int32_t col) {
+    Ctx *x = c; (void)o; (void)a; (void)b; (void)cc; x->seen[x->seen_n++] = col;
+}
 static void record(void *c, void *o) { Ctx *x = c; x->seen[x->seen_n++] = ((Obj *)o)->id; }
 
 int main(void) {
@@ -94,5 +102,21 @@ int main(void) {
     assert(!back.head && back.count == 0);
     ctx.list = &l;
     aoe_object_list_destroy_ror(&l, &ops);
+    {
+        /* 0x00451080 the fog-filtered draw. */
+        Obj d[4] = {{1, 0, 0, 0, 0, 0, 0}, {2, 2, 0, 3, 0, 0, 0}, {3, 3, 0, 0, 1, 0, 0},
+                    {4, 9, 0, 0, 0, 0, 0}};
+        AoeObjectListDrawOpsRor dops = {&ctx, flag, dstate, dkind, ocol, own, sees, ddraw};
+        AoeObjectListRor dl;
+        aoe_object_list_init_ror(&dl);
+        for (int i = 0; i < 4; i++) aoe_object_list_append_ror(&dl, &d[i]);
+        ctx.seen_n = 0;
+        aoe_object_list_draw_ror(&dl, &dops, 0, 0, 0, 1);
+        assert(ctx.seen_n == 2 && ctx.seen[0] == 4 && ctx.seen[1] == -3);
+        ctx.seen_n = 0;
+        aoe_object_list_draw_ror(&dl, &dops, 0, 0, 0, 0);
+        assert(ctx.seen_n == 3);
+        aoe_object_list_free_nodes_ror(dl.head);
+    }
     return 0;
 }

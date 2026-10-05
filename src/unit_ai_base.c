@@ -313,3 +313,25 @@ int aoe_unit_ai_resize_ids_ror(int32_t **data, int32_t *capacity,
     *capacity = size;
     return 1;
 }
+
+void aoe_unit_ai_release_ror(AoeUnitAiRor *ai) {
+    free(ai->group);
+    ai->group = NULL;
+    ai->group_count = 0;
+    free(ai->classes);
+    ai->classes = NULL;
+    ai->class_count = 0;
+}
+
+int aoe_unit_ai_notify_filter_ror(const AoeUnitAiRor *ai, uint8_t unit_state, int32_t sender,
+                                  int32_t code, int32_t value) {
+    if (unit_state != 2) return 0;
+    if (code == 699) {
+        for (int32_t i = 0; i < ai->group_count; ++i)
+            if (ai->group[i] == sender) return 2;
+        return 0;
+    }
+    if (code == 0x1fb) return value == ai->order ? 2 : 0;
+    if (code == 0x1fa && value == 0x262 && ai->order != 0x262 && ai->order != 0x268) return 1;
+    return 2;
+}

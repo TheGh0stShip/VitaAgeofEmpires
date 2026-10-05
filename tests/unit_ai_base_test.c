@@ -164,5 +164,24 @@ int main(void) {
         free(ids);
         assert(!aoe_unit_ai_object_ror(&none, 3, &o));
     }
+    {
+        /* 0x00410930 / 0x0040ef80. */
+        AoeUnitAiRor n;
+        memset(&n, 0, sizeof n);
+        n.group = malloc(2 * sizeof *n.group);
+        n.group[0] = 5; n.group[1] = 6;
+        n.group_count = 2;
+        n.order = 0x262;
+        assert(aoe_unit_ai_notify_filter_ror(&n, 1, 5, 699, 0) == 0);
+        assert(aoe_unit_ai_notify_filter_ror(&n, 2, 6, 699, 0) == 2);
+        assert(aoe_unit_ai_notify_filter_ror(&n, 2, 7, 699, 0) == 0);
+        assert(aoe_unit_ai_notify_filter_ror(&n, 2, 1, 0x1fb, 0x262) == 2);
+        assert(aoe_unit_ai_notify_filter_ror(&n, 2, 1, 0x1fb, 0x25a) == 0);
+        assert(aoe_unit_ai_notify_filter_ror(&n, 2, 1, 0x1fa, 0x262) == 2);
+        n.order = 0x258;
+        assert(aoe_unit_ai_notify_filter_ror(&n, 2, 1, 0x1fa, 0x262) == 1);
+        aoe_unit_ai_release_ror(&n);
+        assert(!n.group && !n.group_count);
+    }
     return 0;
 }

@@ -189,4 +189,17 @@ int aoe_unit_ai_object_ror(const AoeUnitAiOpsRor *ops, int32_t id,
 int aoe_unit_ai_resize_ids_ror(int32_t **data, int32_t *capacity,
                                int32_t size);
 
+/* 0x0040ef80 the destructor (deleting 0x0040ef60): the +0x18, +0x24,
+   +0x124 and +0x12c arrays freed and the group (+0x60, its count and
+   capacity) freed and emptied. Here: the group and the class list. */
+void aoe_unit_ai_release_ror(AoeUnitAiRor *ai);
+
+/* 0x00410930 (a notification for this unit; the unit's state +0x48):
+   0 dropped (state not 2; code 699 from a sender outside the group; code
+   0x1fb whose value is not the current order), 1 taken without passing
+   it on (code 0x1fa with value 0x262 while the order is neither 0x262 nor
+   0x268), 2 passed on. */
+int aoe_unit_ai_notify_filter_ror(const AoeUnitAiRor *ai, uint8_t unit_state, int32_t sender,
+                                  int32_t code, int32_t value);
+
 #endif

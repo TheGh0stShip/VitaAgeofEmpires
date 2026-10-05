@@ -17,7 +17,7 @@ static void order(void *c, const AoeAiTaskOrderRor *o) { (void)c; last_order = *
 static uint8_t bytes44[3];
 static int32_t id44;
 static void p44(void *c, int32_t id, const uint8_t b[3]) { (void)c; id44 = id; memcpy(bytes44, b, 3); }
-static int tobject(void *c, int32_t id, AoeAiObjectViewRor *o) {
+static int tobject(void *c, int32_t id, AoeAiWorldObjectRor *o) {
     (void)c;
     memset(o, 0, sizeof *o);
     o->id = id;

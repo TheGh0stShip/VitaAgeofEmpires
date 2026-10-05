@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#include "ai_info.h" /* AoeAiObjectViewRor */
+#include "ai_info.h" /* AoeAiWorldObjectRor */
 #include "ai_module.h"
 #include "ai_strategy.h"   /* AoeAiIntListRor, AOE_AI_SN_COUNT */
 #include "ai_tactics.h"    /* AoeAiCountersRor */
@@ -188,8 +188,8 @@ typedef struct {
     void *context;
     int16_t self; /* the player's index (+0x4a) */
     /* 0x0040bab0 on the player (a listed object) and 0x005206d0 (any). */
-    int (*object)(void *context, int32_t id, AoeAiObjectViewRor *out);
-    int (*world_object)(void *context, int32_t id, AoeAiObjectViewRor *out);
+    int (*object)(void *context, int32_t id, AoeAiWorldObjectRor *out);
+    int (*world_object)(void *context, int32_t id, AoeAiWorldObjectRor *out);
     /* The object's unit AI (+0x74) and its task (+0x30); 0 without one. */
     int (*unit_task)(void *context, int32_t id, int32_t *task);
     /* Player vtable +0x30 (orders) and +0x44 (three bytes, count 1). */
@@ -252,7 +252,7 @@ int aoe_ai_tactical_remove_gatherer_ror(AoeAiTacticalRor *ai, int32_t unit);
 /* 0x004dc570: drop a unit: out of list 1 (searched to its capacity) and
    the gatherers; a unit whose AI task is 0x261 or 0x265 still listed as a
    gatherer lowers +0xd68 for its resource kind. 0x004d7790 then orders
-   it to stop (0x004da110 with 100); -1 logs "ERROR DETASKING Unit (%d)". */
+   it to stop (0x004da110 with 100); -1 logs "ERROR DETASKING Unit #%d!". */
 void aoe_ai_tactical_drop_unit_ror(AoeAiTacticalRor *ai, int32_t unit,
                                    const AoeAiTacticalOpsRor *ops);
 void aoe_ai_tactical_detask_ror(AoeAiTacticalRor *ai, int32_t unit,

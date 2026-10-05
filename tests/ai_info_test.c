@@ -17,7 +17,7 @@ static int is_enemy(void *c, int32_t p) { (void)c; return p == 2; }
 static int is_ally(void *c, int32_t p) { (void)c; return p == 1; }
 static int32_t sn(void *c, int32_t i) { (void)c; return i == 0xc9 ? 1 : 0; }
 static uint8_t zone(void *c, int32_t id) { (void)c; return (uint8_t)(id & 0xff); }
-static int object(void *c, int32_t id, AoeAiObjectViewRor *o) {
+static int object(void *c, int32_t id, AoeAiWorldObjectRor *o) {
     (void)c;
     if (id < 0 || id >= 1000) return 0;
     memset(o, 0, sizeof *o);
@@ -32,7 +32,7 @@ static int object(void *c, int32_t id, AoeAiObjectViewRor *o) {
    102 (0x44 at 2,2), 103 (0x2d dock at 20,20), 104 (0x67 in another zone);
    resources 200 (class 7 at 10,13), 201 (class 0xf, type 0x3b, at 3,3);
    enemies 300 (at 6,6, type range 5) and 301 (state 3). */
-static int object2(void *c, int32_t id, AoeAiObjectViewRor *o) {
+static int object2(void *c, int32_t id, AoeAiWorldObjectRor *o) {
     (void)c;
     memset(o, 0, sizeof *o);
     o->id = id;
@@ -58,7 +58,7 @@ static uint8_t tile_zone2(void *c, int32_t id, int32_t x, int32_t y) {
 }
 static uint8_t map_zone2(void *c, int32_t x, int32_t y) { (void)c; (void)y; return (uint8_t)(x == 20 ? 3 : 0); }
 static double dist2(void *c, int32_t id, float x, float y, float z) {
-    AoeAiObjectViewRor o;
+    AoeAiWorldObjectRor o;
     (void)z;
     object2(c, id, &o);
     return sqrt((double)(o.x - x) * (o.x - x) + (double)(o.y - y) * (o.y - y));
@@ -70,7 +70,7 @@ static double range2(void *c, int32_t id) { (void)c; (void)id; return 1.0; }
 static void dropsite_tests(void) {
     static AoeAiInfoRor info;
     AoeAiInfoOpsRor ops;
-    AoeAiObjectViewRor r, g;
+    AoeAiWorldObjectRor r, g;
     int32_t dst, ids[2] = {400, 999};
     float d;
     static AoeAiUnitGroupRor group;
@@ -185,7 +185,7 @@ static void dropsite_tests(void) {
 static int32_t shared_to[8], shared_n;
 static uint8_t penalty[16][16];
 static int32_t influence_log[16][7], influence_n;
-static int object3(void *c, int32_t id, AoeAiObjectViewRor *o) {
+static int object3(void *c, int32_t id, AoeAiWorldObjectRor *o) {
     (void)c;
     memset(o, 0, sizeof *o);
     o->id = id;
@@ -226,7 +226,7 @@ static double range3(void *c, int32_t id) { (void)c; return id == 501 ? 2.5 : 0.
 static void sighting_tests(void) {
     static AoeAiInfoRor info;
     AoeAiInfoOpsRor ops;
-    AoeAiObjectViewRor o;
+    AoeAiWorldObjectRor o;
     int k;
 
     memset(&ops, 0, sizeof ops);
@@ -357,7 +357,7 @@ static void sighting_tests(void) {
    602 (0xa3 at 8,0), 603 (0x9f at 3,4, explored), 604 (0x9f unexplored),
    all owned by 2; a berry bush 605 target in zone 2. */
 static int center_exists = 1;
-static int object4(void *c, int32_t id, AoeAiObjectViewRor *o) {
+static int object4(void *c, int32_t id, AoeAiWorldObjectRor *o) {
     (void)c;
     memset(o, 0, sizeof *o);
     o->id = id;
@@ -380,7 +380,7 @@ static double dist4(void *c, int32_t id, float x, float y, float z) {
     (void)c; (void)id; (void)z; return sqrt((double)x * x + (double)y * y);
 }
 static double odist4(void *c, int32_t a, int32_t b) {
-    AoeAiObjectViewRor o;
+    AoeAiWorldObjectRor o;
     (void)a; object4(c, b, &o); return sqrt((double)o.x * o.x + (double)o.y * o.y);
 }
 static float age4 = 2.9f;
@@ -508,7 +508,7 @@ static int32_t reach_z;
 static int can_reach5(void *c, int32_t id, int32_t x, int32_t y, int32_t z, float r) {
     (void)c; (void)id; (void)x; (void)y; reach_z = z; reach_radius = r; return reach5;
 }
-static int object5(void *c, int32_t id, AoeAiObjectViewRor *o) {
+static int object5(void *c, int32_t id, AoeAiWorldObjectRor *o) {
     (void)c;
     memset(o, 0, sizeof *o);
     o->id = id; o->z = 2.7f; o->type_28 = 3.0f;
@@ -601,7 +601,7 @@ static void mark_tests(void) {
 int main(void) {
     static AoeAiInfoRor info;
     AoeAiInfoOpsRor ops;
-    AoeAiObjectViewRor seen;
+    AoeAiWorldObjectRor seen;
     AoeAiInfoObjectRor *e;
     int32_t t[2], a[2], b[2], first, second, i;
 

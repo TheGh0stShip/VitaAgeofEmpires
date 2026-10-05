@@ -479,7 +479,7 @@ void aoe_ai_strategy_ai_load_sn_file_ror(AoeAiStrategyRor *ai,
 void aoe_ai_strategy_ai_set_sn_ror(AoeAiStrategyRor *ai, int32_t index,
                                    int32_t value) {
     if (!ai) return;
-    aoe_ai_log_ror(&ai->module, "Setting SN %d to %d", index, value);
+    aoe_ai_log_ror(&ai->module, "Setting SN[%d] to %d.", index, value);
     aoe_ai_sn_set_ror(&ai->numbers, index, value);
 }
 

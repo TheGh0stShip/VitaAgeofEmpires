@@ -216,7 +216,7 @@ const char *aoe_ai_strategy_ai_sn_file_ror(const AoeAiStrategyRor *ai);
 void aoe_ai_strategy_ai_load_sn_file_ror(AoeAiStrategyRor *ai,
                                          const char *name,
                                          const AoeAiTextFileOpsRor *files);
-/* 0x004cc030: log "Setting SN %d to %d" and set; 0x004cc060 get;
+/* 0x004cc030: log "Setting SN[%d] to %d." and set; 0x004cc060 get;
    0x004cc080 scale for difficulty (0x004cac50). */
 void aoe_ai_strategy_ai_set_sn_ror(AoeAiStrategyRor *ai, int32_t index,
                                    int32_t value);

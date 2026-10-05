@@ -29,7 +29,7 @@ typedef struct {
     int16_t max_hp;
     float type_28;
     int16_t field_4c;
-} AoeAiObjectViewRor;
+} AoeAiWorldObjectRor;
 
 /* One remembered object (0x24 bytes at +0x114): the ID (-1 free), type
    ID, class, tile position, the owner index when seen, hit points, +0x10,
@@ -112,9 +112,9 @@ typedef struct {
     void *context;
     int16_t self;  /* the owner's index (player +0x4a) */
     /* 0x0040bab0 on the player: the object, or 0. */
-    int (*object)(void *context, int32_t id, AoeAiObjectViewRor *out);
+    int (*object)(void *context, int32_t id, AoeAiWorldObjectRor *out);
     /* 0x005206d0: any world object by ID, or 0. */
-    int (*world_object)(void *context, int32_t id, AoeAiObjectViewRor *out);
+    int (*world_object)(void *context, int32_t id, AoeAiWorldObjectRor *out);
     /* 0x004aba60: the object's terrain zone. */
     uint8_t (*zone)(void *context, int32_t id);
     /* The explored grid at +0x158 (0x0043d6a0 / 0x0043d6d0). */
@@ -236,12 +236,12 @@ AoeAiInfoObjectRor *aoe_ai_info_find_object_ror(const AoeAiInfoRor *info,
    (0x004c65c0). NULL when the table cannot grow. */
 AoeAiInfoObjectRor *aoe_ai_info_store_object_ror(
     AoeAiInfoRor *info, const AoeAiInfoObjectRor *entry,
-    const AoeAiObjectViewRor *seen, const AoeAiInfoOpsRor *ops);
+    const AoeAiWorldObjectRor *seen, const AoeAiInfoOpsRor *ops);
 /* 0x004bd750: remember a seen object: ID, type ID and class, truncated
    x, y, z, owner index, truncated hit points, 0, 0 and the three unit
    values. 0 for no object. */
 AoeAiInfoObjectRor *aoe_ai_info_remember_ror(AoeAiInfoRor *info,
-                                             const AoeAiObjectViewRor *object,
+                                             const AoeAiWorldObjectRor *object,
                                              float value_108,
                                              float value_100, float range,
                                              const AoeAiInfoOpsRor *ops);
@@ -340,13 +340,13 @@ int32_t aoe_ai_info_nearest_dock_ror(const AoeAiInfoRor *info, int32_t x,
    resource's type is 0x3b or 0x32, 0x44 only for those. The distance
    (1000.0 when none; a float) and the dropsite ID in `out_id` (-1). */
 float aoe_ai_info_nearest_dropsite_ror(const AoeAiInfoRor *info,
-                                       const AoeAiObjectViewRor *resource,
+                                       const AoeAiWorldObjectRor *resource,
                                        int32_t town_center, int32_t *out_id,
                                        const AoeAiInfoOpsRor *ops);
 /* 0x004c50e0: the nearest dropsite for a gatherer in its zone: type
    0x6d, 0x67 when its +0x4c is not 0x10, 0x44 when it is. -1 for none. */
 int32_t aoe_ai_info_gatherer_dropsite_ror(const AoeAiInfoRor *info,
-                                          const AoeAiObjectViewRor *gatherer,
+                                          const AoeAiWorldObjectRor *gatherer,
                                           const AoeAiInfoOpsRor *ops);
 /* 0x004c55b0 / 0x004c5680: the dropsites of type 0x67 / 0x44. */
 int32_t aoe_ai_info_count_dropsites_ror(const AoeAiInfoRor *info,
@@ -392,11 +392,11 @@ float aoe_ai_info_ids_damage_ror(const AoeAiInfoRor *info,
                                  const AoeAiInfoOpsRor *ops);
 float aoe_ai_info_group_endurance_ror(const AoeAiInfoRor *info,
                                       const AoeAiUnitGroupRor *group,
-                                      const AoeAiObjectViewRor *unit,
+                                      const AoeAiWorldObjectRor *unit,
                                       const AoeAiInfoOpsRor *ops);
 float aoe_ai_info_ids_endurance_ror(const AoeAiInfoRor *info,
                                     const int32_t *ids, int32_t count,
-                                    const AoeAiObjectViewRor *unit,
+                                    const AoeAiWorldObjectRor *unit,
                                     const AoeAiInfoOpsRor *ops);
 /* 0x004c1730: special objects go on the +0x148 list (once): a dock
    (type 0x2d) or town centre (0x6d) of ours while number 70 / 56 is
@@ -404,7 +404,7 @@ float aoe_ai_info_ids_endurance_ror(const AoeAiInfoRor *info,
    classes 7, 8 and 0x20 while 52, 51 and 50 are. 1 when the object is of
    such a kind with its number positive (already listed or not). */
 int aoe_ai_info_note_special_ror(AoeAiInfoRor *info,
-                                 const AoeAiObjectViewRor *object,
+                                 const AoeAiWorldObjectRor *object,
                                  const AoeAiInfoOpsRor *ops);
 /* 0x004c49c0: add a resource object to target list 1 (class 0xf), 2
    (class 8), 3 (class 0x20) or 0 (others). A full list grows to twice
@@ -414,14 +414,14 @@ int aoe_ai_info_note_special_ror(AoeAiInfoRor *info,
    then keep the smallest ftol(d) as before. 0 when the list cannot grow,
    else 1. */
 int aoe_ai_info_add_target_ror(AoeAiInfoRor *info,
-                               const AoeAiObjectViewRor *object,
+                               const AoeAiWorldObjectRor *object,
                                const AoeAiInfoOpsRor *ops);
 /* 0x004bf250: one of our objects appeared: its remembered owner is
    updated, it joins the +0x180 list and, for building classes 3 and 0x1b,
    the dropsite list; town centres, 0x67 and 0x44 refresh all target
    lists (0x004c5250) and type 0x32 becomes a target (0x004c49c0). */
 void aoe_ai_info_own_object_ror(AoeAiInfoRor *info,
-                                const AoeAiObjectViewRor *object,
+                                const AoeAiWorldObjectRor *object,
                                 const AoeAiInfoOpsRor *ops);
 /* 0x004bf440: one of our objects is gone from the dropsite and +0x180
    lists (searched up to their capacity, as in the original); if it still
@@ -436,7 +436,7 @@ void aoe_ai_info_lose_object_ror(AoeAiInfoRor *info, int32_t id,
    +0x138 list; units and special objects are remembered (0x004bd750).
    0x004be0d0 looks the object up by ID first. */
 int aoe_ai_info_notice_ror(AoeAiInfoRor *info,
-                           const AoeAiObjectViewRor *object, int32_t from_ally,
+                           const AoeAiWorldObjectRor *object, int32_t from_ally,
                            const AoeAiInfoOpsRor *ops);
 int aoe_ai_info_notice_id_ror(AoeAiInfoRor *info, int32_t id,
                               const AoeAiInfoOpsRor *ops);

@@ -9,20 +9,20 @@
 #include "le_bytes.h"
 
 static int get_object(const AoeAiInfoOpsRor *ops, int32_t id,
-                      AoeAiObjectViewRor *out) {
+                      AoeAiWorldObjectRor *out) {
     return ops && ops->object && ops->object(ops->context, id, out);
 }
 
 int aoe_ai_info_zone_open_ror(const AoeAiInfoRor *info, int32_t id,
                               const AoeAiInfoOpsRor *ops) {
-    AoeAiObjectViewRor o;
+    AoeAiWorldObjectRor o;
     if (!info || !get_object(ops, id, &o) || !ops->zone) return 0;
     return info->zone_flags[ops->zone(ops->context, id)] == 0;
 }
 
 void aoe_ai_info_set_zone_flag_ror(AoeAiInfoRor *info, int32_t id,
                                    uint8_t value, const AoeAiInfoOpsRor *ops) {
-    AoeAiObjectViewRor o;
+    AoeAiWorldObjectRor o;
     if (!info || !get_object(ops, id, &o) || !ops->zone) return;
     info->zone_flags[ops->zone(ops->context, id)] = value;
 }
@@ -65,7 +65,7 @@ int32_t aoe_ai_info_count_owned_ror(const AoeAiInfoRor *info,
     if (!info || !ops || !ops->world_object) return 0;
     for (i = 0; i < info->object_count; ++i) {
         const AoeAiInfoObjectRor *e = &info->objects[i];
-        AoeAiObjectViewRor o;
+        AoeAiWorldObjectRor o;
         if (e->id == -1 || !ops->world_object(ops->context, e->id, &o)) continue;
         if (o.owner == owner && (seen_owner == -1 || seen_owner == e->owner))
             ++n;
@@ -123,7 +123,7 @@ static void free_object(AoeAiInfoObjectRor *e) {
 
 AoeAiInfoObjectRor *aoe_ai_info_store_object_ror(
     AoeAiInfoRor *info, const AoeAiInfoObjectRor *entry,
-    const AoeAiObjectViewRor *seen, const AoeAiInfoOpsRor *ops) {
+    const AoeAiWorldObjectRor *seen, const AoeAiInfoOpsRor *ops) {
     int32_t i, free_slot = -1;
     AoeAiInfoObjectRor *grown;
     if (!info || !entry) return NULL;
@@ -164,7 +164,7 @@ AoeAiInfoObjectRor *aoe_ai_info_store_object_ror(
 }
 
 AoeAiInfoObjectRor *aoe_ai_info_remember_ror(AoeAiInfoRor *info,
-                                             const AoeAiObjectViewRor *object,
+                                             const AoeAiWorldObjectRor *object,
                                              float value_108,
                                              float value_100, float range,
                                              const AoeAiInfoOpsRor *ops) {
@@ -439,7 +439,7 @@ int32_t aoe_ai_info_nearest_enemy_ror(const AoeAiInfoRor *info, float x,
     if (!info || !ops || !ops->is_enemy) return -1;
     for (i = 0; i < info->object_count; ++i) {
         const AoeAiInfoObjectRor *e = &info->objects[i];
-        AoeAiObjectViewRor o;
+        AoeAiWorldObjectRor o;
         int32_t d, t = e->type_id;
         if (!get_object(ops, e->id, &o) || o.state >= 3 || o.hp == 0.0f)
             continue;
@@ -521,7 +521,7 @@ int32_t aoe_ai_info_docks_in_zone_ror(const AoeAiInfoRor *info,
     int32_t i, n = 0;
     if (!info || !ops || !ops->map_zone) return 0;
     for (i = 0; i < info->list_190.count; ++i) {
-        AoeAiObjectViewRor o;
+        AoeAiWorldObjectRor o;
         if (!get_object(ops, info->list_190.data[i], &o) || o.type_id != 0x2d)
             continue;
         if (ops->map_zone(ops->context, aoe_ftol32(o.x), aoe_ftol32(o.y)) == zone)
@@ -535,7 +535,7 @@ int32_t aoe_ai_info_nearest_dock_ror(const AoeAiInfoRor *info, int32_t x,
     int32_t i, best = -1;
     if (!info) return -1;
     for (i = 0; i < info->list_190.count; ++i) {
-        AoeAiObjectViewRor o;
+        AoeAiWorldObjectRor o;
         uint32_t dx, dy;
         int32_t d;
         if (!get_object(ops, info->list_190.data[i], &o) || o.type_id != 0x2d)
@@ -549,7 +549,7 @@ int32_t aoe_ai_info_nearest_dock_ror(const AoeAiInfoRor *info, int32_t x,
 }
 
 float aoe_ai_info_nearest_dropsite_ror(const AoeAiInfoRor *info,
-                                       const AoeAiObjectViewRor *resource,
+                                       const AoeAiWorldObjectRor *resource,
                                        int32_t town_center, int32_t *out_id,
                                        const AoeAiInfoOpsRor *ops) {
     float best = 1000.0f;
@@ -560,7 +560,7 @@ float aoe_ai_info_nearest_dropsite_ror(const AoeAiInfoRor *info,
         return best;
     zone = ops->zone(ops->context, resource->id);
     for (i = 0; i < info->list_190.count; ++i) {
-        AoeAiObjectViewRor d;
+        AoeAiWorldObjectRor d;
         double dx, dy, dist;
         int take;
         if (!get_object(ops, info->list_190.data[i], &d)) continue;
@@ -590,7 +590,7 @@ float aoe_ai_info_nearest_dropsite_ror(const AoeAiInfoRor *info,
 }
 
 int32_t aoe_ai_info_gatherer_dropsite_ror(const AoeAiInfoRor *info,
-                                          const AoeAiObjectViewRor *gatherer,
+                                          const AoeAiWorldObjectRor *gatherer,
                                           const AoeAiInfoOpsRor *ops) {
     float best = 1000.0f;
     int32_t found = -1, i;
@@ -598,7 +598,7 @@ int32_t aoe_ai_info_gatherer_dropsite_ror(const AoeAiInfoRor *info,
     if (!info || !gatherer || !ops || !ops->zone || !ops->tile_zone) return -1;
     zone = ops->zone(ops->context, gatherer->id);
     for (i = 0; i < info->list_190.count; ++i) {
-        AoeAiObjectViewRor d;
+        AoeAiWorldObjectRor d;
         double dx, dy, dist;
         int take;
         if (!get_object(ops, info->list_190.data[i], &d)) continue;
@@ -631,7 +631,7 @@ int32_t aoe_ai_info_count_dropsites_ror(const AoeAiInfoRor *info,
     int32_t i, n = 0;
     if (!info) return 0;
     for (i = 0; i < info->list_190.count; ++i) {
-        AoeAiObjectViewRor o;
+        AoeAiWorldObjectRor o;
         if (get_object(ops, info->list_190.data[i], &o) && o.type_id == type_id)
             ++n;
     }
@@ -640,7 +640,7 @@ int32_t aoe_ai_info_count_dropsites_ror(const AoeAiInfoRor *info,
 
 static void refresh_target(AoeAiInfoRor *info, AoeAiInfoTargetRor *t,
                            const AoeAiInfoOpsRor *ops) {
-    AoeAiObjectViewRor o;
+    AoeAiWorldObjectRor o;
     int32_t dropsite = -1, v, slot;
     float d;
     if (!get_object(ops, t->id, &o)) return;
@@ -687,13 +687,13 @@ void aoe_ai_info_refresh_all_targets_ror(AoeAiInfoRor *info,
 
 float aoe_ai_info_threat_ror(const AoeAiInfoRor *info, int32_t id,
                              int32_t x, int32_t y, const AoeAiInfoOpsRor *ops) {
-    AoeAiObjectViewRor unit;
+    AoeAiWorldObjectRor unit;
     float sum = 0.0f;
     int32_t i;
     if (!info || !get_object(ops, id, &unit)) return 0.0f;
     for (i = 0; i < info->object_count; ++i) {
         const AoeAiInfoObjectRor *e = &info->objects[i];
-        AoeAiObjectViewRor o;
+        AoeAiWorldObjectRor o;
         double dist;
         float a, b;
         if (!ops->is_enemy || !ops->is_enemy(ops->context, e->owner)) continue;
@@ -717,7 +717,7 @@ int aoe_ai_info_in_reach_ror(const AoeAiInfoRor *info, int32_t owner,
     if (!info || !ops) return 0;
     for (i = 0; i < info->object_count; ++i) {
         const AoeAiInfoObjectRor *e = &info->objects[i];
-        AoeAiObjectViewRor o;
+        AoeAiWorldObjectRor o;
         float d;
         double r;
         if (owner == -1) {
@@ -739,7 +739,7 @@ int aoe_ai_info_in_reach_ror(const AoeAiInfoRor *info, int32_t owner,
 
 static float damage_one(int32_t id, int32_t attacker, float sum,
                         const AoeAiInfoOpsRor *ops) {
-    AoeAiObjectViewRor o;
+    AoeAiWorldObjectRor o;
     float a;
     double b;
     if (!get_object(ops, id, &o)) return sum;
@@ -776,9 +776,9 @@ float aoe_ai_info_ids_damage_ror(const AoeAiInfoRor *info,
 }
 
 static float endurance_one(const AoeAiInfoRor *info, int32_t id,
-                           const AoeAiObjectViewRor *unit, float sum,
+                           const AoeAiWorldObjectRor *unit, float sum,
                            const AoeAiInfoOpsRor *ops) {
-    AoeAiObjectViewRor o;
+    AoeAiWorldObjectRor o;
     float threat;
     double part;
     if (!get_object(ops, id, &o)) return sum;
@@ -790,7 +790,7 @@ static float endurance_one(const AoeAiInfoRor *info, int32_t id,
 
 float aoe_ai_info_group_endurance_ror(const AoeAiInfoRor *info,
                                       const AoeAiUnitGroupRor *group,
-                                      const AoeAiObjectViewRor *unit,
+                                      const AoeAiWorldObjectRor *unit,
                                       const AoeAiInfoOpsRor *ops) {
     float sum = 0.0f;
     int32_t i;
@@ -803,7 +803,7 @@ float aoe_ai_info_group_endurance_ror(const AoeAiInfoRor *info,
 
 float aoe_ai_info_ids_endurance_ror(const AoeAiInfoRor *info,
                                     const int32_t *ids, int32_t count,
-                                    const AoeAiObjectViewRor *unit,
+                                    const AoeAiWorldObjectRor *unit,
                                     const AoeAiInfoOpsRor *ops) {
     float sum = 0.0f;
     int32_t i;
@@ -828,7 +828,7 @@ static int sn_positive(const AoeAiInfoOpsRor *ops, int32_t index) {
 }
 
 int aoe_ai_info_note_special_ror(AoeAiInfoRor *info,
-                                 const AoeAiObjectViewRor *object,
+                                 const AoeAiWorldObjectRor *object,
                                  const AoeAiInfoOpsRor *ops) {
     int32_t number;
     if (!info || !object || !ops) return 0;
@@ -880,7 +880,7 @@ static void keep_best(AoeAiInfoRor *info, int16_t type_class, float d,
 }
 
 int aoe_ai_info_add_target_ror(AoeAiInfoRor *info,
-                               const AoeAiObjectViewRor *object,
+                               const AoeAiWorldObjectRor *object,
                                const AoeAiInfoOpsRor *ops) {
     int32_t list, i, cap, dropsite = -1;
     AoeAiInfoTargetRor *t;
@@ -942,7 +942,7 @@ int aoe_ai_info_add_target_ror(AoeAiInfoRor *info,
 }
 
 void aoe_ai_info_own_object_ror(AoeAiInfoRor *info,
-                                const AoeAiObjectViewRor *object,
+                                const AoeAiWorldObjectRor *object,
                                 const AoeAiInfoOpsRor *ops) {
     AoeAiInfoObjectRor *e;
     if (!info || !object || object->id < 0) return;
@@ -959,7 +959,7 @@ void aoe_ai_info_own_object_ror(AoeAiInfoRor *info,
 
 void aoe_ai_info_lose_object_ror(AoeAiInfoRor *info, int32_t id,
                                  const AoeAiInfoOpsRor *ops) {
-    AoeAiObjectViewRor o;
+    AoeAiWorldObjectRor o;
     if (!info) return;
     aoe_ai_int_list_remove_ror(&info->list_190, id);
     aoe_ai_int_list_remove_ror(&info->list_180, id);
@@ -970,7 +970,7 @@ void aoe_ai_info_lose_object_ror(AoeAiInfoRor *info, int32_t id,
 }
 
 int aoe_ai_info_notice_ror(AoeAiInfoRor *info,
-                           const AoeAiObjectViewRor *object, int32_t from_ally,
+                           const AoeAiWorldObjectRor *object, int32_t from_ally,
                            const AoeAiInfoOpsRor *ops) {
     int32_t c, special;
     if (!info || !object || object->id < 0 || !ops) return 0;
@@ -1009,7 +1009,7 @@ int aoe_ai_info_notice_ror(AoeAiInfoRor *info,
 
 int aoe_ai_info_notice_id_ror(AoeAiInfoRor *info, int32_t id,
                               const AoeAiInfoOpsRor *ops) {
-    AoeAiObjectViewRor o;
+    AoeAiWorldObjectRor o;
     if (!get_object(ops, id, &o)) return 0;
     return aoe_ai_info_notice_ror(info, &o, 0, ops);
 }
@@ -1035,7 +1035,7 @@ void aoe_ai_info_penalize_objects_ror(const AoeAiInfoRor *info,
     if (!info || !ops || !ops->penalty_get || !ops->penalty_set) return;
     for (i = 0; i < info->object_count; ++i) {
         const AoeAiInfoObjectRor *e = &info->objects[i];
-        AoeAiObjectViewRor o;
+        AoeAiWorldObjectRor o;
         double r;
         if (e->owner != owner || e->id == skip || !get_object(ops, e->id, &o))
             continue;
@@ -1089,7 +1089,7 @@ void aoe_ai_info_unit_influence_ror(const AoeAiInfoRor *info, uint32_t owner,
     ops->influence_origin(ops->context, 0, x, y);
     for (i = 0; i < info->object_count; ++i) {
         const AoeAiInfoObjectRor *e = &info->objects[i];
-        AoeAiObjectViewRor o;
+        AoeAiWorldObjectRor o;
         int32_t r, ox, oy;
         double v;
         if (e->owner != owner || !get_object(ops, e->id, &o)) continue;
@@ -1140,7 +1140,7 @@ AoeAiInfoObjectRor *aoe_ai_info_best_9e_ror(AoeAiInfoRor *info,
     center = ops->first_of_type ? ops->first_of_type(ops->context, 0x6d) : -1;
     for (i = 0; i < info->object_count; ++i) {
         AoeAiInfoObjectRor *e = &info->objects[i];
-        AoeAiObjectViewRor o;
+        AoeAiWorldObjectRor o;
         int32_t score;
         if (e->type_id != 0x9e && e->type_id != 0xa3) continue;
         if (!seen_as(e, owner, ops)) continue;
@@ -1166,7 +1166,7 @@ AoeAiInfoObjectRor *aoe_ai_info_best_9f_ror(AoeAiInfoRor *info,
     center = ops->first_of_type ? ops->first_of_type(ops->context, 0x6d) : -1;
     for (i = 0; i < info->object_count; ++i) {
         AoeAiInfoObjectRor *e = &info->objects[i];
-        AoeAiObjectViewRor o;
+        AoeAiWorldObjectRor o;
         int32_t score, x, y;
         if (e->type_id != 0x9f || !seen_as(e, owner, ops)) continue;
         if (!get_object(ops, e->id, &o) || o.state >= 3) continue;
@@ -1213,7 +1213,7 @@ int32_t aoe_ai_info_resource_need_ror(const AoeAiInfoRor *info, int32_t mode,
    centre or target). */
 static int same_zone_as_center(const AoeAiInfoRor *info, int32_t k,
                                const AoeAiInfoOpsRor *ops) {
-    AoeAiObjectViewRor t;
+    AoeAiWorldObjectRor t;
     int32_t center;
     if (!ops->first_of_type || !ops->zone || !ops->tile_zone) return 1;
     center = ops->first_of_type(ops->context, 0x6d);
@@ -1261,7 +1261,7 @@ void aoe_ai_info_scan_map_ror(AoeAiInfoRor *info,
             n = ops->tile_objects ? ops->tile_objects(ops->context, x, y, ids, 256)
                                   : 0;
             for (i = 0; i < n; ++i) {
-                AoeAiObjectViewRor o;
+                AoeAiWorldObjectRor o;
                 if (!ops->world_object || !ops->world_object(ops->context, ids[i], &o))
                     continue;
                 if (aoe_ai_info_known_class_ror(o.type_class) == 1)
@@ -1348,7 +1348,7 @@ void aoe_ai_info_put_mark_ror(AoeAiInfoRor *info, int32_t id, uint8_t x,
 int aoe_ai_info_explore_toward_ror(AoeAiInfoRor *info, int32_t id,
                                    int32_t out[2],
                                    const AoeAiInfoOpsRor *ops) {
-    AoeAiObjectViewRor unit;
+    AoeAiWorldObjectRor unit;
     AoeAiInfoObjectRor *best = NULL;
     int32_t i, best_d = -1;
     uint8_t zone;

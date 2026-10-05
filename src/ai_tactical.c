@@ -545,7 +545,7 @@ int aoe_ai_tactical_remove_gatherer_ror(AoeAiTacticalRor *ai, int32_t unit) {
 
 void aoe_ai_tactical_drop_unit_ror(AoeAiTacticalRor *ai, int32_t unit,
                                    const AoeAiTacticalOpsRor *ops) {
-    AoeAiObjectViewRor o;
+    AoeAiWorldObjectRor o;
     int32_t task;
     aoe_ai_int_list_remove_ror(&ai->lists[1], unit);
     aoe_ai_tactical_remove_gatherer_ror(ai, unit);
@@ -561,7 +561,7 @@ void aoe_ai_tactical_drop_unit_ror(AoeAiTacticalRor *ai, int32_t unit,
 void aoe_ai_tactical_detask_ror(AoeAiTacticalRor *ai, int32_t unit,
                                 const AoeAiTacticalOpsRor *ops) {
     if (unit == -1) {
-        aoe_ai_log_ror(&ai->module, "ERROR DETASKING Unit (%d)", -1);
+        aoe_ai_log_ror(&ai->module, "ERROR DETASKING Unit #%d!", -1);
         return;
     }
     aoe_ai_tactical_drop_unit_ror(ai, unit, ops);
@@ -618,14 +618,14 @@ void aoe_ai_tactical_player_44_ror(const AoeAiTacticalOpsRor *ops,
 
 int aoe_ai_tactical_priest_or_siege_ror(const AoeAiTacticalOpsRor *ops,
                                         int32_t id) {
-    AoeAiObjectViewRor o;
+    AoeAiWorldObjectRor o;
     if (!ops || !ops->object || !ops->object(ops->context, id, &o)) return 0;
     return o.type_class == 0x12 || o.type_class == 0xd;
 }
 
 int aoe_ai_tactical_unit_has_task_ror(const AoeAiTacticalOpsRor *ops,
                                       int32_t id, int32_t task) {
-    AoeAiObjectViewRor o;
+    AoeAiWorldObjectRor o;
     int32_t t;
     if (!ops || !ops->world_object || !ops->world_object(ops->context, id, &o))
         return 0;
@@ -634,7 +634,7 @@ int aoe_ai_tactical_unit_has_task_ror(const AoeAiTacticalOpsRor *ops,
 
 int aoe_ai_tactical_busy_103_ror(const AoeAiTacticalOpsRor *ops, int32_t id,
                                  int listed) {
-    AoeAiObjectViewRor o;
+    AoeAiWorldObjectRor o;
     int32_t t;
     int found;
     if (!ops) return 0;
@@ -700,7 +700,7 @@ int32_t aoe_ai_tactical_pick_leader_ror(const AoeAiTacticalRor *ai,
     if (!group || !ops || !ops->object) return -1;
     for (i = 0; i < aoe_ai_unit_group_count_ror(group); ++i) {
         int32_t id = aoe_ai_unit_group_member_ror(group, i), v;
-        AoeAiObjectViewRor o;
+        AoeAiWorldObjectRor o;
         if (!ops->object(ops->context, id, &o) || o.type_id == 0x7d) continue;
         v = aoe_ftol32(mode == 2 ? (ops->range ? ops->range(ops->context, id) : 0.0)
                                  : (double)o.hp);

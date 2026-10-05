@@ -148,8 +148,11 @@ const AoeUiPanelVtblRor *aoe_info_panel_vtable_ror(void);
 /* 0x004f83d0: setup (area, parent, font), the unit and building
    pictures, the player, then health.shp and itemicon.shp; 0 when setup
    fails. 0x004f8650 destructor (deleting 0x004f8630); a derived panel
-   (vtable 0x00547cc0) has the same destructor 0x004a4310 (deleting
-   0x004a42f0). */
+   (vtable 0x00547cc0, the scenario editor's) has the same destructor
+   0x004a4310 (deleting 0x004a42f0); its constructor 0x004a42a0 runs
+   this setup and clears +0x214 / +0x218, and 0x004a4320(value, object)
+   stores +0x214, the shown object (+0x110) and +0x218 = the object's
+   +0x54 byte (0 without an object). */
 int aoe_info_panel_init_ror(AoeInfoPanelRor *i, AoeUiSystemRor *system,
                             const AoeInfoPanelOpsRor *ops, AoeUiAreaRor *area,
                             AoeUiPanelRor *parent, uintptr_t font,

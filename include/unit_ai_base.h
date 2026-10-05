@@ -165,7 +165,10 @@ int aoe_unit_ai_follow_point_ror(AoeUnitAiRor *ai, const AoeUnitAiOpsRor *ops, f
                                  float y, int32_t extra, int force);
 int aoe_unit_ai_move_away_ror(AoeUnitAiRor *ai, const AoeUnitAiOpsRor *ops, int force);
 
-/* 0x00412f90 a target class allowed (+0x124 list); 0x00413190 an ID in
+/* 0x00410c00: 1 when +0x130 is 1 or the given order is ATTACK, 0x259,
+   0x25b, 0x25c, 0x26a or 0x264. 0x00414f70: printf-style text (1 KB)
+   handed to the unit's +0x144 when there is a unit.
+   0x00412f90 a target class allowed (+0x124 list); 0x00413190 an ID in
    the +0x18 table; 0x00412fd0 the owner's view of a tile (0xf visible,
    0x80 explored, 0); 0x00413010 the timer redrawn (rand % (base / 2) +
    3 base / 4). */

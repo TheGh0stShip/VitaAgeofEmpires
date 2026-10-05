@@ -4,6 +4,7 @@
 
 #include "aoe_ftol.h"
 #include "aoe_stream.h"
+#include "le_bytes.h"
 
 void aoe_ai_unit_group_set_location_ror(float out[4], float x, float y,
                                         float z) {
@@ -172,6 +173,96 @@ void aoe_ai_unit_group_set_all_locations_ror(AoeAiUnitGroupRor *g, float x,
     aoe_ai_unit_group_set_location_ror(g->location, x, y, z);
     aoe_ai_unit_group_set_location_ror(g->loc_19c, x, y, z);
     aoe_ai_unit_group_set_location_ror(g->loc_1ac, x, y, z);
+}
+
+int aoe_ai_unit_group_in_range_ror(AoeAiUnitGroupRor *g,
+                                   const AoeAiUnitGroupOpsRor *ops) {
+    int i;
+    if (!g) return 0;
+    for (i = 0; i < AOE_AI_GROUP_SLOTS; ++i) {
+        int32_t id = g->members[i], type, task, action, range;
+        float d;
+        if (id == -1) continue;
+        if (!ops || !ops->unit_ai ||
+            !ops->unit_ai(ops->context, id, &type, &task, &action)) {
+            aoe_ai_unit_group_remove_slot_ror(g, i, ops);
+            continue;
+        }
+        d = (float)((ops->distance ? ops->distance(ops->context, id,
+                                                   g->loc_19c[0],
+                                                   g->loc_19c[1],
+                                                   g->loc_19c[2])
+                                   : 0.0) -
+                    (double)1.0f);
+        if (d < 0.0f) d = 0.0f;
+        range = ops->sn ? ops->sn(ops->context, g->task == 0x6d ? 23 : 41)
+                        : -1;
+        if ((double)d > (double)range) return 0;
+    }
+    return 1;
+}
+
+int aoe_ai_unit_group_settled_ror(AoeAiUnitGroupRor *g,
+                                  const AoeAiUnitGroupOpsRor *ops,
+                                  int32_t allow_600) {
+    int i;
+    if (!g) return 0;
+    for (i = 0; i < AOE_AI_GROUP_SLOTS; ++i) {
+        int32_t id = g->members[i], type, task, action;
+        if (id == -1) continue;
+        if (!ops || !ops->unit_ai ||
+            !ops->unit_ai(ops->context, id, &type, &task, &action)) {
+            aoe_ai_unit_group_remove_slot_ror(g, i, ops);
+            continue;
+        }
+        if (type == 0x7d) continue;
+        if (allow_600 == 1 && task == 600 &&
+            (g->task == 100 || g->task == 0x67))
+            continue;
+        if (task != -1 && action != 0x2bd) return 0;
+    }
+    return 1;
+}
+
+int32_t aoe_ai_unit_group_field_1cc_ror(const AoeAiUnitGroupRor *g) {
+    return g->field_1cc;
+}
+
+void aoe_ai_unit_group_set_field_1cc_ror(AoeAiUnitGroupRor *g, int32_t v) {
+    g->field_1cc = v;
+}
+
+void aoe_ai_unit_group_add_waypoint_ror(AoeAiUnitGroupRor *g, float x,
+                                        float y) {
+    uint8_t *entry;
+    if (!g || g->flag_1d4 >= 14) return;
+    entry = g->block_1d8 + (size_t)g->flag_1d4 * 16;
+    aoe_le_put_f32(entry, x);
+    aoe_le_put_f32(entry + 4, y);
+    aoe_le_put_f32(entry + 8, 1.0f);
+    ++g->flag_1d4;
+}
+
+int aoe_ai_unit_group_waypoint_ror(const AoeAiUnitGroupRor *g, int i,
+                                   float out[3]) {
+    const uint8_t *entry;
+    if (!g || i < 0 || i >= 15) return 0;
+    entry = g->block_1d8 + (size_t)i * 16;
+    out[0] = aoe_le_f32(entry);
+    out[1] = aoe_le_f32(entry + 4);
+    out[2] = aoe_le_f32(entry + 8);
+    return 1;
+}
+
+int32_t aoe_ai_unit_group_list_ror(const AoeAiUnitGroupRor *g, int32_t i) {
+    if (!g || i < 0 || i >= 20) return -1;
+    return g->list_2d0[i];
+}
+
+int aoe_ai_unit_group_list_add_ror(AoeAiUnitGroupRor *g, int32_t value) {
+    if (!g || g->field_2cc >= 19) return 0;
+    g->list_2d0[g->field_2cc++] = value;
+    return 1;
 }
 
 static void put_loc(AoeOutcomeStream *s, const float v[4]) {

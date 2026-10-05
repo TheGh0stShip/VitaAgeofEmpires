@@ -612,6 +612,13 @@ target_include_directories(aoe_player_outcome_dispatch PUBLIC include)
 target_link_libraries(aoe_player_outcome_dispatch PUBLIC aoe_player_outcome)
 target_compile_options(aoe_player_outcome_dispatch PRIVATE -Wall -Wextra)
 
+# --- AI worker ---
+add_library(aoe_ai_ror STATIC src/ai_strategy.c)
+target_include_directories(aoe_ai_ror PUBLIC include)
+target_link_libraries(aoe_ai_ror PUBLIC aoe_ai_build)
+target_compile_options(aoe_ai_ror PRIVATE -Wall -Wextra)
+# --- end AI worker ---
+
 if(VITA)
   include("${VITASDK}/share/vita.cmake" REQUIRED)
 else()
@@ -1408,6 +1415,14 @@ else()
   target_link_libraries(player_outcome_dispatch_test PRIVATE aoe_player_outcome_dispatch)
   target_compile_options(player_outcome_dispatch_test PRIVATE -UNDEBUG)
   add_test(NAME original_outcome_dispatch COMMAND player_outcome_dispatch_test)
+  # --- AI worker ---
+  foreach(ai_test ai_strategy)
+    add_executable(${ai_test}_test tests/${ai_test}_test.c)
+    target_link_libraries(${ai_test}_test PRIVATE aoe_ai_ror)
+    target_compile_options(${ai_test}_test PRIVATE -UNDEBUG)
+    add_test(NAME original_${ai_test} COMMAND ${ai_test}_test)
+  endforeach()
+  # --- end AI worker ---
   add_executable(cdtrack_tool tools/cdtrack_tool.c)
   add_executable(cpx_tool tools/cpx_tool.c)
   target_link_libraries(cpx_tool PRIVATE aoe_cpx)

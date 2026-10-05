@@ -1969,3 +1969,72 @@ void aoe_ai_tactical_path_waypoints_ror(AoeAiUnitGroupRor *g, AoeUnitPathRor *pa
         aoe_unit_path_advance_ror(path);
     }
 }
+
+static void purge_list(AoeAiTacticalRor *ai, int k, const AoeAiTacticalOpsRor *ops,
+                       const AoeAiUnitGroupOpsRor *group_ops) {
+    int32_t i;
+    for (i = 0; i < ai->lists[k].count; ++i) {
+        int32_t *v = aoe_ai_int_list_at_ror(&ai->lists[k], i), id, task;
+        AoeAiWorldObjectRor o;
+        if (!v) continue;
+        id = *v;
+        if (ops->world_object(ops->context, id, &o) && !(o.hp < 1.0f) &&
+            ops->unit_task && ops->unit_task(ops->context, id, &task))
+            continue;
+        aoe_ai_tactical_unit_removed_ror(ai, id, ops, group_ops);
+    }
+}
+
+void aoe_ai_tactical_upkeep_ror(AoeAiTacticalRor *ai, const AoeAiTacticalOpsRor *ops,
+                                const AoeAiUnitGroupOpsRor *group_ops) {
+    int32_t i;
+    if (!ai || !ops || !ops->world_object) return;
+    for (i = 0; i < ai->lists[0].count; ++i) {
+        int32_t *v = aoe_ai_int_list_at_ror(&ai->lists[0], i), id, task;
+        AoeAiWorldObjectRor u;
+        if (!v) continue;
+        id = *v;
+        if (!ops->world_object(ops->context, id, &u) || !ops->unit_task ||
+            !ops->unit_task(ops->context, id, &task))
+            continue;
+        if (aoe_ai_int_list_contains_ror(&ai->list_d58, id)) continue;
+        if ((ops->unit_f4 ? ops->unit_f4(ops->context, id) : 0.0) == 0.0 &&
+            u.field_44 > 0.0f && !(ops->unit_130 && ops->unit_130(ops->context, id)) &&
+            !(ops->unit_134 && ops->unit_134(ops->context, id) > 2)) {
+            int32_t drop = ops->info_dropsite ? ops->info_dropsite(ops->context, id) : -1;
+            AoeAiWorldObjectRor d;
+            if (drop == -1 || !ops->world_object(ops->context, drop, &d)) {
+                aoe_ai_tactical_order_stop_ror(ops, id, 100);
+            } else {
+                if (ops->unload_at) ops->unload_at(ops->context, id, drop, d.x, d.y);
+                aoe_ai_int_list_add_unique_ror(&ai->list_d58, id);
+            }
+        } else {
+            int32_t action, target;
+            AoeAiWorldObjectRor t;
+            if (ops->unit_action && ops->unit_action(ops->context, id, &action) &&
+                action == 700 && ops->unit_ai_target &&
+                ops->unit_ai_target(ops->context, id, &target) &&
+                (!ops->object || !ops->object(ops->context, target, &t) || t.state > 2))
+                aoe_ai_tactical_order_stop_ror(ops, id, 100);
+        }
+    }
+    purge_list(ai, 0, ops, group_ops);
+    purge_list(ai, 2, ops, group_ops);
+    purge_list(ai, 4, ops, group_ops);
+    for (i = 0; i < ai->groups_len; ++i) {
+        AoeAiUnitGroupRor *g = ai->groups[i];
+        if (g->task != 0x6a || g->field_180 != 0xc) continue;
+        if (g->field_1c4 == -1 ||
+            !aoe_ai_tactical_find_group_ror(ai, g->field_1c4, -1, -1, -1)) {
+            g->field_180 = 1;
+            g->field_184 = g->field_188 = -1;
+            aoe_ai_unit_group_set_location_ror(g->loc_18c, -1.0f, -1.0f, -1.0f);
+            aoe_ai_unit_group_set_location_ror(g->loc_19c, -1.0f, -1.0f, -1.0f);
+            aoe_ai_unit_group_set_location_ror(g->loc_1ac, -1.0f, -1.0f, -1.0f);
+            g->type = 0;
+            g->field_1c0 = -1;
+            g->field_1d0 = -1;
+        }
+    }
+}

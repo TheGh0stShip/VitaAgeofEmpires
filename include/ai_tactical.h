@@ -302,6 +302,14 @@ typedef struct {
        `out` set. */
     int (*ring_site)(void *context, const int32_t centre[2], int32_t size,
                      int32_t outer, int32_t inner, int32_t unit, int32_t out[2]);
+    /* Unit vtable +0xf4 (a float), +0x130 and +0x134 (bytes); the
+       information AI's dropsite for a gatherer (0x004c50e0, -1 none); the
+       tribe player's vtable +0x40 (unit, dropsite, its x, y: unload). */
+    double (*unit_f4)(void *context, int32_t id);
+    int (*unit_130)(void *context, int32_t id);
+    int (*unit_134)(void *context, int32_t id);
+    int32_t (*info_dropsite)(void *context, int32_t id);
+    void (*unload_at)(void *context, int32_t unit, int32_t dropsite, float x, float y);
     /* The tactical AI's gathering order (0x004d99f0), run by
        0x004e1a80. */
     void (*rebalance)(void *context);
@@ -550,6 +558,22 @@ int aoe_ai_tactical_rally_group_ror(AoeAiTacticalRor *ai, AoeAiUnitGroupRor *g,
    summed length is at least the step is added (0x004ceb30). The sum is
    never reset, so after the first point every later one is added. */
 void aoe_ai_tactical_path_waypoints_ror(AoeAiUnitGroupRor *g, AoeUnitPathRor *path);
+/* 0x004d6d90: villager and group upkeep.
+   - Each list-0 villager (world object with a unit AI) not tasked this
+     round: when its +0xf4 is 0.0, it carries something (+0x44 above
+     0.0), its +0x130 is 0 and its +0x134 at most 2, it is sent to unload
+     at its dropsite (0x004c50e0; tribe player +0x40) and marked tasked,
+     or stopped (100) without one; otherwise, with action 700 on a
+     target that is gone or past state 2, it is stopped (100).
+   - Units of lists 0, 2 and 4 that are gone, below 1.0 hit points or
+     without a unit AI are removed (0x004d2a30; the scan goes on at the
+     next index, skipping the entry moved into place).
+   - Task-0x6a groups with +0x180 0xc whose +0x1c4 group is missing are
+     reset: +0x180 1, +0x184 / +0x188 / +0x1c0 / +0x1d0 -1, type 0, the
+     +0x18c, +0x19c and +0x1ac locations (-1, -1, -1). The original's
+     other branch wants +0x180 0x10 there and so never acts. */
+void aoe_ai_tactical_upkeep_ror(AoeAiTacticalRor *ai, const AoeAiTacticalOpsRor *ops,
+                                const AoeAiUnitGroupOpsRor *group_ops);
 /* 0x004dc650: ftol(number 34 / f), at most 99. */
 int32_t aoe_ai_tactical_effort_ror(const AoeAiTacticalRor *ai, float f);
 /* 0x004e2f90: +0xd68[i] (0..3, else -1). 0x004e2f30 / 0x004e2f60 /

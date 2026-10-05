@@ -768,6 +768,58 @@ static void group_misc_tests(void) {
     aoe_ai_tactical_release_ror(&ai);
 }
 
+static int up_object(void *c, int32_t id, AoeAiWorldObjectRor *o) {
+    (void)c;
+    memset(o, 0, sizeof *o);
+    o->id = id;
+    o->hp = id == 22 ? 0.5f : 10.0f;
+    o->field_44 = id == 20 ? 3.0f : 0.0f;
+    o->x = 9.0f;
+    return id != 23 && id != 99;
+}
+static int up_task(void *c, int32_t id, int32_t *t) { (void)c; (void)id; *t = 1; return 1; }
+static int up_action(void *c, int32_t id, int32_t *a) { (void)c; *a = id == 21 ? 700 : 0; return 1; }
+static int up_target(void *c, int32_t id, int32_t *t) { (void)c; (void)id; *t = 99; return 1; }
+static int32_t up_drop(void *c, int32_t id) { (void)c; return id == 20 ? 50 : -1; }
+static int32_t unload_unit = -1;
+static void up_unload(void *c, int32_t u, int32_t d, float x, float y) {
+    (void)c; (void)d; (void)y; assert(x == 9.0f); unload_unit = u;
+}
+
+static void upkeep_tests(void) {
+    static AoeAiTacticalRor ai;
+    AoeAiTacticalOpsRor ops;
+    AoeAiUnitGroupRor *g;
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    memset(&ops, 0, sizeof ops);
+    ops.world_object = up_object;
+    ops.object = up_object;
+    ops.unit_task = up_task;
+    ops.unit_action = up_action;
+    ops.unit_ai_target = up_target;
+    ops.info_dropsite = up_drop;
+    ops.unload_at = up_unload;
+    ops.order = order;
+    orders = 0;
+    /* 20 carries (unload), 21 attacks a lost target (stop), 22 is dying,
+       23 is gone (both removed). */
+    aoe_ai_int_list_add_unique_ror(&ai.lists[0], 20);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[0], 21);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[0], 22);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[2], 23);
+    g = aoe_ai_tactical_new_group_ror(&ai, 1);
+    g->task = 0x6a;
+    g->field_180 = 0xc;
+    g->field_1c4 = 77;
+    aoe_ai_tactical_upkeep_ror(&ai, &ops, NULL);
+    assert(unload_unit == 20 && aoe_ai_int_list_contains_ror(&ai.list_d58, 20));
+    assert(orders == 1 && last_order.unit == 21 && last_order.action == 0x2c2);
+    assert(ai.lists[0].count == 2 && ai.lists[2].count == 0);
+    assert(g->field_180 == 1 && g->field_1d0 == -1 && g->loc_19c[0] == -1.0f);
+    orders = 0;
+    aoe_ai_tactical_release_ror(&ai);
+}
+
 static void scout_tests(void) {
     static AoeAiTacticalRor ai;
     AoeAiTacticalOpsRor ops;
@@ -1032,6 +1084,7 @@ int main(void) {
     scout_tests();
     villager_plan_tests();
     group_misc_tests();
+    upkeep_tests();
 
     aoe_ai_tactical_init_ror(&ai, 3, NULL);
     assert(ai.module.id == 0x3f1 && !strcmp(ai.module.name, "TacAI"));

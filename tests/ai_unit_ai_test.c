@@ -233,6 +233,52 @@ static void priest_more_tests(void) {
     assert(aoe_ai_unit_ai_class14_cc_ror(&ord, &m, 1, &o) == 4 && e8_kind == 0x209);
 }
 
+static int32_t t_dock(void *c, int32_t w) { (void)c; return w == 1 ? 33 : -1; }
+static int32_t t_7c(void *c, int32_t id, int32_t v) { (void)c; (void)v; return id == 33; }
+static int g_has;
+static int t_has(void *c, int32_t id) { (void)c; (void)id; return g_has; }
+static int32_t removed = -1;
+static void t_rm(void *c, int32_t id) { (void)c; removed = id; }
+static int resent;
+static void t_10(void *c) { (void)c; ++resent; }
+
+static void attacked_tests(void) {
+    AoeAiUnitAiOpsRor o;
+    AoeAiUnitAiOrderRor ord = {-1, 9, 0x267};
+    AoeAiUnitAiMessageRor m = {45, 0x202, 0, 1};
+    memset(&o, 0, sizeof o);
+    o.call_40_dock = t_dock;
+    o.call_7c = t_7c;
+    o.clear_target = cc_clear;
+    assert(aoe_ai_unit_ai_class2_cc_ror(&ord, &m, 1, &o) == 6);
+    ord.task = 0x25d;
+    cc_cleared = 0;
+    assert(aoe_ai_unit_ai_class2_cc_ror(&ord, &m, 1, &o) == 2 && cc_cleared == 2);
+    /* 500: owner +4 set: re-send and +0xa4. */
+    o.owner_field_4 = pd_owner4;
+    o.call_10 = t_10;
+    o.call_a4 = t_a4;
+    o.group_add = cc_add;
+    m.type = 500;
+    ord.task = 0x25b;
+    assert(aoe_ai_unit_ai_attacked_ror(&ord, &m, 1, &o) == 3 && resent == 1 && cc_added == 45);
+    ord.task = 0x262;
+    assert(aoe_ai_unit_ai_class2_cc_ror(&ord, &m, 1, &o) == 3 && resent == 1);
+    /* 0x004e70c0 */
+    o.group_has = t_has;
+    o.group_remove = t_rm;
+    o.base_414eb0 = t_eb;
+    m.type = 699;
+    assert(aoe_ai_unit_ai_5804_cc_ror(&ord, &m, 1, &o) == 2 && removed == -1);
+    g_has = 1;
+    assert(aoe_ai_unit_ai_5804_cc_ror(&ord, &m, 1, &o) == 2 && removed == 45);
+    m.type = 500;
+    m.field_10 = 0;
+    assert(aoe_ai_unit_ai_5804_cc_ror(&ord, &m, 12, &o) == 4 && eb_arg == 12);
+    m.type = 0x20f;
+    assert(aoe_ai_unit_ai_5804_cc_ror(&ord, &m, 12, &o) == 2);
+}
+
 static void d4_5564_tests(void) {
     AoeAiUnitAiOpsRor o;
     AoeAiUnitAiOrderRor ord = {-1, -1};
@@ -299,6 +345,7 @@ int main(void) {
     cc_5644_tests();
     cc_more_tests();
     priest_more_tests();
+    attacked_tests();
     AoeAiUnitAiRor ai;
     AoeAiUnitAiOpsRor ops;
     memset(&ops, 0, sizeof ops);

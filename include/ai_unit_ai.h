@@ -143,6 +143,15 @@ typedef struct {
     /* rand() and the unit's vtable +0x10c (its range). */
     int32_t (*rand)(void *context);
     double (*range_10c)(void *context);
+    /* Vtable +0x40 with (-1, which, 2, 0x2d, 0), +0x7c (id, 1), +0x48 (a
+       point out, 1), the base's waypoint 0x00411c60, +0x80 (x, y, 1), and
+       removing an ID from the +0x60 list. */
+    int32_t (*call_40_dock)(void *context, int32_t which);
+    int32_t (*call_7c)(void *context, int32_t id, int32_t value);
+    int (*call_48)(void *context, int32_t *x, int32_t *y);
+    void (*add_waypoint)(void *context, int32_t x, int32_t y);
+    int32_t (*call_80)(void *context, int32_t x, int32_t y);
+    void (*group_remove)(void *context, int32_t id);
 } AoeAiUnitAiOpsRor;
 
 /* The unit AI's own order fields the overrides read: action (+0x28),
@@ -315,5 +324,29 @@ int32_t aoe_ai_unit_ai_priest_cc_ror(const AoeAiUnitAiOrderRor *order,
 int32_t aoe_ai_unit_ai_class14_cc_ror(const AoeAiUnitAiOrderRor *order,
                                       const AoeAiUnitAiMessageRor *msg, int32_t arg,
                                       const AoeAiUnitAiOpsRor *ops);
+/* 0x004e5f00 and the 500 / 0x20f part of 0x004e57a0 (class 2, +0xcc):
+   as 0x004e5c00 up to listing the sender; then, unless a gaia owner's
+   unit is busy (an action), a task other than 0x262 is re-sent (+0x10)
+   and stopped (+0x58(1)), +0xa4(1) runs and 3; the busy case gives 2.
+   0x004e57a0 also takes 0x202: a docking unit (task 0x267) tries the two
+   docks (+0x40 with 0 then 1) through +0x7c(t, 1) for 6; one returning
+   (0x25d) takes a point from +0x48, records it as a waypoint and +0x80
+   heads there; failing that it is stopped and told twice; otherwise
+   stopped and told once (clear, +0x58(1), +0x1c), 2. Others go to the
+   base. */
+int32_t aoe_ai_unit_ai_attacked_ror(const AoeAiUnitAiOrderRor *order,
+                                    const AoeAiUnitAiMessageRor *msg, int32_t arg,
+                                    const AoeAiUnitAiOpsRor *ops);
+int32_t aoe_ai_unit_ai_class2_cc_ror(const AoeAiUnitAiOrderRor *order,
+                                     const AoeAiUnitAiMessageRor *msg, int32_t arg,
+                                     const AoeAiUnitAiOpsRor *ops);
+/* 0x004e70c0 (0x00549804, +0xcc): 500 is handled as an attack (notices,
+   the warning and the list as 0x004e5c00; +0x10 below 1 passes the
+   handler's argument to the base's 0x00414eb0) and gives 2 or 4; 600
+   lists the sender and calls the unit's +0xec(1); 699 drops the sender
+   from the list when it is on it; all others give 2. */
+int32_t aoe_ai_unit_ai_5804_cc_ror(const AoeAiUnitAiOrderRor *order,
+                                   const AoeAiUnitAiMessageRor *msg, int32_t arg,
+                                   const AoeAiUnitAiOpsRor *ops);
 
 #endif

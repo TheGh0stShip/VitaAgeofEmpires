@@ -561,13 +561,16 @@ int32_t aoe_ai_unit_ai_priest_cc_ror(const AoeAiUnitAiOrderRor *order,
 
 int32_t aoe_ai_unit_ai_class14_cc_ror(const AoeAiUnitAiOrderRor *order,
                                       const AoeAiUnitAiMessageRor *msg, int32_t arg,
-                                      const AoeAiUnitAiOpsRor *ops) {
+                                      const AoeAiUnitAiOpsRor *ops);
+
+/* The shared start of the "attacked" handlers: 4 when +0x10 is below 1,
+   else the sender is noticed, warned about and listed (0). */
+static int32_t attacked_head(const AoeAiUnitAiOrderRor *order, const AoeAiUnitAiMessageRor *msg,
+                             int32_t eb_arg, const AoeAiUnitAiOpsRor *ops) {
     int32_t owner4;
-    if (!order || !msg || !ops) return 0;
-    if (msg->type != 500 && msg->type != 0x20f) return base_cc(msg, arg, ops);
     if (msg->field_10 < 1) {
         if (ops->owner_e8) ops->owner_e8(ops->context, 0x209, msg->sender);
-        if (ops->base_414eb0) ops->base_414eb0(ops->context, 0);
+        if (ops->base_414eb0) ops->base_414eb0(ops->context, eb_arg);
         return 4;
     }
     owner4 = ops->owner_field_4 ? ops->owner_field_4(ops->context) : 0;
@@ -578,6 +581,85 @@ int32_t aoe_ai_unit_ai_class14_cc_ror(const AoeAiUnitAiOrderRor *order,
         ops->alert_allies(ops->context, msg->sender);
     if (ops->group_add) ops->group_add(ops->context, msg->sender);
     if (ops->unit_ec) ops->unit_ec(ops->context, 1);
+    return 0;
+}
+
+int32_t aoe_ai_unit_ai_attacked_ror(const AoeAiUnitAiOrderRor *order,
+                                    const AoeAiUnitAiMessageRor *msg, int32_t arg,
+                                    const AoeAiUnitAiOpsRor *ops) {
+    int32_t r;
+    if (!order || !msg || !ops) return 0;
+    if (msg->type != 500 && msg->type != 0x20f) return base_cc(msg, arg, ops);
+    if ((r = attacked_head(order, msg, 0, ops)) != 0) return r;
+    if (!(ops->owner_field_4 && ops->owner_field_4(ops->context)) && order->action != -1)
+        return 2;
+    if (order->task != 0x262) {
+        if (ops->call_10) ops->call_10(ops->context);
+        if (ops->call_58) ops->call_58(ops->context, 1);
+    }
+    if (ops->call_a4) ops->call_a4(ops->context, 1);
+    return 3;
+}
+
+static void stop_and_tell(const AoeAiUnitAiMessageRor *msg, const AoeAiUnitAiOpsRor *ops) {
+    if (ops->clear_target) ops->clear_target(ops->context);
+    if (ops->call_58) ops->call_58(ops->context, 1);
+    if (ops->call_1c) ops->call_1c(ops->context, (void *)msg);
+}
+
+int32_t aoe_ai_unit_ai_class2_cc_ror(const AoeAiUnitAiOrderRor *order,
+                                     const AoeAiUnitAiMessageRor *msg, int32_t arg,
+                                     const AoeAiUnitAiOpsRor *ops) {
+    if (!order || !msg || !ops) return 0;
+    if (msg->type != 0x202) return aoe_ai_unit_ai_attacked_ror(order, msg, arg, ops);
+    if (order->task == 0x267) {
+        int which;
+        for (which = 0; which < 2; ++which) {
+            int32_t t = ops->call_40_dock ? ops->call_40_dock(ops->context, which) : -1;
+            if (t != -1 && ops->call_7c && ops->call_7c(ops->context, t, 1) == 1) return 6;
+        }
+    } else if (order->task == 0x25d) {
+        int32_t x, y;
+        int ok = 0;
+        if (ops->call_48 && ops->call_48(ops->context, &x, &y) == 1) {
+            if (ops->add_waypoint) ops->add_waypoint(ops->context, x, y);
+            ok = ops->call_80 && ops->call_80(ops->context, x, y) != 0;
+        }
+        if (!ok) stop_and_tell(msg, ops);
+    }
+    stop_and_tell(msg, ops);
+    return 2;
+}
+
+int32_t aoe_ai_unit_ai_5804_cc_ror(const AoeAiUnitAiOrderRor *order,
+                                   const AoeAiUnitAiMessageRor *msg, int32_t arg,
+                                   const AoeAiUnitAiOpsRor *ops) {
+    int32_t r;
+    if (!order || !msg || !ops) return 2;
+    switch (msg->type) {
+    case 500:
+        if ((r = attacked_head(order, msg, arg, ops)) != 0) return r;
+        return 2;
+    case 600:
+        if (ops->group_add) ops->group_add(ops->context, msg->sender);
+        if (ops->unit_ec) ops->unit_ec(ops->context, 1);
+        return 2;
+    case 699:
+        if (ops->group_has && ops->group_has(ops->context, msg->sender) && ops->group_remove)
+            ops->group_remove(ops->context, msg->sender);
+        return 2;
+    default:
+        return 2;
+    }
+}
+
+int32_t aoe_ai_unit_ai_class14_cc_ror(const AoeAiUnitAiOrderRor *order,
+                                      const AoeAiUnitAiMessageRor *msg, int32_t arg,
+                                      const AoeAiUnitAiOpsRor *ops) {
+    int32_t r;
+    if (!order || !msg || !ops) return 0;
+    if (msg->type != 500 && msg->type != 0x20f) return base_cc(msg, arg, ops);
+    if ((r = attacked_head(order, msg, 0, ops)) != 0) return r;
     if (order->action != -1) return 2;
     if (ops->head_state) {
         int st = ops->head_state(ops->context);

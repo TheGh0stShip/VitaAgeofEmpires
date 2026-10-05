@@ -211,6 +211,10 @@ void *aoe_template_create_ror(AoeTemplateRor *t, void *player, float x, float y,
    0x00440870 multiply; both then the parent's). `op` 0 set, 1 add, 2
    multiply. Returns 1 when handled here. */
 int aoe_template_set_attribute_ror(AoeTemplateRor *t, uint8_t attribute, float v, int op);
+/* Type 40: 0x0043e8f0 / 0x0043e910 play the +0xf0 / +0xf4 sound
+   (0x004a2370(1)) when it has one. */
+void aoe_template_play_sound_ror(const AoeTemplateRor *t, int second,
+                                 void (*play)(void *context, void *sound), void *context);
 /* 0x0043e6a0 (type 40): the task with ID `id` (+0x06) in the list; NULL
    for -1 or none. */
 const void *aoe_template_find_task_ror(const AoeTemplateRor *t, int32_t id,

@@ -77,6 +77,9 @@ int32_t aoe_value_grid_score_ror(const AoeValueGridRor *g,
                                  int32_t off_edge, int32_t off_corner,
                                  int32_t diagonals);
 
+/* 0x0043dfe0: the largest cell. */
+uint8_t aoe_value_grid_max_ror(const AoeValueGridRor *g);
+
 /* The three global grids built before WinMain: 0x004ba0e0 254 x 254
    (0x007c04a0), 0x004ba130 and 0x004ba180 50 x 50 (0x007c0478,
    0x007c04c8), all filled with 0; 0x004ba150 / 0x004ba1a0 register their

@@ -87,6 +87,9 @@ static void fill(AoeTemplateRor *t, uint8_t type) {
     t->field_178 = -7;
 }
 
+static void *played;
+static void play_fn(void *c, void *s) { (void)c; played = s; }
+
 int main(void) {
     static uint8_t buf[4096];
     static const uint8_t types[] = {10, 0x14, 0x19, 0x1e, 0x28, 0x32, 0x3c, 0x46, 0x50, 0x5a};
@@ -203,5 +206,15 @@ int main(void) {
     assert(aoe_template_find_task_ror(&t, 20, task_id, task_at, &ops) == &task_store.flags[2]);
     assert(aoe_template_find_task_ror(&t, -1, task_id, task_at, &ops) == NULL);
     puts("unit_template_test: ok");
+    {
+        static AoeTemplateRor st;
+        int snd = 0;
+        played = NULL;
+        aoe_template_play_sound_ror(&st, 0, play_fn, NULL);
+        assert(played == NULL);
+        st.sound_f4 = &snd;
+        aoe_template_play_sound_ror(&st, 1, play_fn, NULL);
+        assert(played == &snd);
+    }
     return 0;
 }

@@ -268,3 +268,11 @@ void aoe_value_grids_static_free_ror(AoeValueGridRor *big, AoeValueGridRor *a, A
     aoe_value_grid_free_ror(a);
     aoe_value_grid_free_ror(big);
 }
+
+uint8_t aoe_value_grid_max_ror(const AoeValueGridRor *g) {
+    int32_t i, n = g->height * g->width;
+    uint8_t best = g->cells[0];
+    for (i = 0; i < n; ++i)
+        if (g->cells[i] > best) best = g->cells[i];
+    return best;
+}

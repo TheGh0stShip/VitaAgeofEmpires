@@ -802,3 +802,9 @@ const void *aoe_template_find_task_ror(const AoeTemplateRor *t, int32_t id,
         if (task_id(ops->context, t->tasks, i) == id) return task_at(ops->context, t->tasks, i);
     return NULL;
 }
+
+void aoe_template_play_sound_ror(const AoeTemplateRor *t, int second,
+                                 void (*play)(void *context, void *sound), void *context) {
+    void *sound = second ? t->sound_f4 : t->sound_f0;
+    if (sound) play(context, sound);
+}

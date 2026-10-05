@@ -2,6 +2,7 @@
 #include "unit_ai_base.h"
 
 #include <assert.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -150,5 +151,18 @@ int main(void) {
     aoe_unit_ai_reset_timer_ror(&ai, &ops);
     assert(ai.timer == 2500 % 2000 + 3000);
     puts("unit ai base ok");
+    {
+        /* 0x00414fc0 / 0x00414f40. */
+        int32_t *ids = malloc(2 * sizeof *ids), cap = 2;
+        AoeUnitAiOpsRor none = {0};
+        AoeUnitAiObjectRor o;
+        ids[0] = 7; ids[1] = 9;
+        assert(aoe_unit_ai_resize_ids_ror(&ids, &cap, 5) && cap == 5);
+        assert(ids[0] == 7 && ids[1] == 9);
+        assert(aoe_unit_ai_resize_ids_ror(&ids, &cap, 1) && cap == 1 && ids[0] == 7);
+        assert(!aoe_unit_ai_resize_ids_ror(&ids, &cap, 0) && cap == 1);
+        free(ids);
+        assert(!aoe_unit_ai_object_ror(&none, 3, &o));
+    }
     return 0;
 }

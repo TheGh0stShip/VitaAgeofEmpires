@@ -1,5 +1,7 @@
 #include "unit_ai_base.h"
 
+#include <stdlib.h>
+
 #include <math.h>
 #include <stddef.h>
 
@@ -291,4 +293,23 @@ uint8_t aoe_unit_ai_tile_view_ror(const AoeUnitAiOpsRor *ops, int32_t x, int32_t
 void aoe_unit_ai_reset_timer_ror(AoeUnitAiRor *ai, const AoeUnitAiOpsRor *ops) {
     uint32_t base = ai->timer_base;
     ai->timer = (uint32_t)ops->rand(ops->context) % (base >> 1) + (base * 3 >> 2);
+}
+
+int aoe_unit_ai_object_ror(const AoeUnitAiOpsRor *ops, int32_t id,
+                           AoeUnitAiObjectRor *out) {
+    if (!ops || !ops->object) return 0;
+    return ops->object(ops->context, id, out);
+}
+
+int aoe_unit_ai_resize_ids_ror(int32_t **data, int32_t *capacity,
+                               int32_t size) {
+    int32_t *fresh;
+    if (!data || !capacity || size <= 0) return 0;
+    fresh = malloc((size_t)size * sizeof *fresh);
+    if (!fresh) return 0;
+    for (int32_t i = 0; i < *capacity && i < size; i++) fresh[i] = (*data)[i];
+    free(*data);
+    *data = fresh;
+    *capacity = size;
+    return 1;
 }

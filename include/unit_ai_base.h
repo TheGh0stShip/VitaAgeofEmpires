@@ -174,4 +174,16 @@ int aoe_unit_ai_table_has_ror(const AoeUnitAiRor *ai, int32_t id);
 uint8_t aoe_unit_ai_tile_view_ror(const AoeUnitAiOpsRor *ops, int32_t x, int32_t y);
 void aoe_unit_ai_reset_timer_ror(AoeUnitAiRor *ai, const AoeUnitAiOpsRor *ops);
 
+/* 0x00414f40: a world object by ID (0x005206d0) when the unit, its owner
+   and the world exist (here: when `object` is set); 0 otherwise. */
+int aoe_unit_ai_object_ror(const AoeUnitAiOpsRor *ops, int32_t id,
+                           AoeUnitAiObjectRor *out);
+
+/* 0x00414fc0: an ID array (data +0x00, capacity +0x0c) reallocated to
+   `size` entries, the first min(capacity, size) copied, the old freed.
+   0 when the allocation fails (the array is kept); host-only, a size
+   below 1 is refused. */
+int aoe_unit_ai_resize_ids_ror(int32_t **data, int32_t *capacity,
+                               int32_t size);
+
 #endif

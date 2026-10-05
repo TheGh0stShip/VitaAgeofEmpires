@@ -56,6 +56,9 @@ void aoe_task_save_ror(const AoeTaskRor *t, AoeOutcomeStream *s, const AoeTaskOp
    (a count, then each task's type, then its fields); 0x004e7c00 read
    from text (the same with "%hd"); 0x004e7cb0 saved. */
 void aoe_task_list_free_ror(AoeTaskListRor *l);
+/* 0x004e7ab0: an empty list. 0x004e7f70: whether a task's +0x06 is 7. */
+void aoe_task_list_init_ror(AoeTaskListRor *l);
+int aoe_task_is_kind_7_ror(const AoeTaskRor *t);
 int aoe_task_list_copy_ror(AoeTaskListRor *l, const AoeTaskListRor *src);
 int aoe_task_list_load_ror(AoeTaskListRor *l, AoeOutcomeStream *s, void **sprites, void **sounds);
 int aoe_task_list_text_ror(AoeTaskListRor *l, FILE *f, void **sprites, void **sounds);

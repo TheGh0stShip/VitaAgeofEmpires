@@ -47,6 +47,12 @@ int aoe_tribe_player_research_ror(const AoeTribePlayerOpsRor *ops, int16_t item)
 int aoe_tribe_player_delete_selected_ror(const AoeTribePlayerOpsRor *ops);
 int aoe_tribe_player_delete_ror(const AoeTribePlayerOpsRor *ops,
                                 const AoeTribeCommandUnitRor *object, int ours);
+/* 0x004e1ae0 (the computer player's): the player's object with this
+   ID (0x0040bab0), deleted as above; 1 when that queued. */
+int aoe_tribe_player_delete_id_ror(const AoeTribePlayerOpsRor *ops,
+                                   const AoeTribeCommandUnitRor *(*lookup)(void *context,
+                                                                         int32_t id),
+                                   int32_t id);
 /* 0x004f12c0 (+0x8f 5) opcode 0x6d value; 0x004f1350 (+0x8f 4) opcode
    0x6b (a, b); 0x004f1580 (+0x8f 7) opcode 0x6f (x, y): the first unit
    acknowledges. 0x004f1330: opcode 0x6d for one raw ID. */

@@ -1101,3 +1101,29 @@ void aoe_rm_ror_shallows_ror(AoeRmControllerRor *c) {
     aoe_rm_shallows_create_ror(c);
     (void)aoe_rng_next(c->base.rng); /* "shallows initialization" log line */
 }
+
+AoeRmControllerRor *aoe_rm_controller_new_ror(AoeOutcomeStream *in, int ror, AoeRng *rng,
+                                              const AoeRmGameOpsRor *game) {
+    AoeRmControllerRor *c = calloc(1, sizeof *c);
+    if (!c) return NULL;
+    if (!aoe_rm_controller_load_ror(c, in, ror, rng, game)) {
+        aoe_rm_controller_release_ror(c);
+        free(c);
+        return NULL;
+    }
+    return c;
+}
+
+AoeRmControllerRor *aoe_rm_controller_new_text_ror(const char *header, const char *lands,
+                                                   const char *terrains, const char *objects,
+                                                   int ror, AoeRng *rng,
+                                                   const AoeRmGameOpsRor *game) {
+    AoeRmControllerRor *c = calloc(1, sizeof *c);
+    if (!c) return NULL;
+    if (!aoe_rm_controller_load_text_ror(c, lands, terrains, objects, header, ror, rng, game)) {
+        aoe_rm_controller_release_ror(c);
+        free(c);
+        return NULL;
+    }
+    return c;
+}

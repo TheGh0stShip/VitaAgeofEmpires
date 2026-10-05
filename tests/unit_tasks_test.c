@@ -58,5 +58,13 @@ int main(void) {
     aoe_task_list_free_ror(&l2);
     aoe_task_list_free_ror(&l3);
     assert(l3.tasks == NULL && l3.count == 0);
+    l3.count = 5;
+    aoe_task_list_init_ror(&l3);
+    assert(l3.count == 0 && !l3.tasks);
+    t = aoe_task_new_ror(1, 0);
+    assert(!aoe_task_is_kind_7_ror(t));
+    t->field_6 = 7;
+    assert(aoe_task_is_kind_7_ror(t));
+    free(t);
     return 0;
 }

@@ -194,3 +194,11 @@ void aoe_tribe_save_record_ror(const int32_t record[4], AoeOutcomeStream *s) {
     aoe_stream_put_i32(s, record[3]);
     aoe_stream_put_i32(s, record[2]);
 }
+
+int aoe_tribe_player_delete_id_ror(const AoeTribePlayerOpsRor *ops,
+                                   const AoeTribeCommandUnitRor *(*lookup)(void *context,
+                                                                         int32_t id),
+                                   int32_t id) {
+    const AoeTribeCommandUnitRor *o = lookup(ops->context, id);
+    return o && aoe_tribe_player_delete_ror(ops, o, 1) == 1; /* the player's own list */
+}

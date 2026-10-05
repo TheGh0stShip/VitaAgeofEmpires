@@ -29,6 +29,8 @@ static uint8_t queued[0x200];
 static size_t qsize;
 static int queue(void *c, const uint8_t *cmd, size_t n) { (void)c; memcpy(queued, cmd, n); qsize = n; return 1; }
 
+static const AoeTribeCommandUnitRor *lookup_target;
+static const AoeTribeCommandUnitRor *lookup_fn(void *c, int32_t id) { (void)c; (void)id; return lookup_target; }
 static int f_kicks, f_added, f_trained[4], f_ids[3], f_tributes, f_sample = -9;
 static char f_log[64];
 static void f_kick(void *c, int32_t k) { (void)c; f_kicks += k; }
@@ -76,6 +78,13 @@ int main(void) {
     assert(!aoe_tribe_player_delete_ror(&ops, &bld, 1));
     otype = 'P';
     assert(!aoe_tribe_player_delete_ror(&ops, &bld, 0));
+    lookup_target = &bld;
+    assert(aoe_tribe_player_delete_id_ror(&ops, lookup_fn, 5) && queued[0] == 0x6a);
+    otype = 'D';
+    assert(!aoe_tribe_player_delete_id_ror(&ops, lookup_fn, 5));
+    otype = 'P';
+    lookup_target = NULL;
+    assert(!aoe_tribe_player_delete_id_ror(&ops, lookup_fn, 5));
     /* Selection commands acknowledge with the first unit. */
     assert(aoe_tribe_player_6d_ror(&ops, 7) && last_8f == 5 && acks_u == 1 && queued[0] == 0x6d);
     assert(aoe_tribe_player_6b_ror(&ops, 1, 2) && last_8f == 4 && queued[0] == 0x6b);

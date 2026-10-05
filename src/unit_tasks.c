@@ -179,3 +179,10 @@ void aoe_task_list_save_ror(const AoeTaskListRor *l, AoeOutcomeStream *s, const 
     p16(s, l->count);
     for (i = 0; i < l->count; ++i) aoe_task_save_ror(l->tasks[i], s, ops);
 }
+
+void aoe_task_list_init_ror(AoeTaskListRor *l) {
+    l->count = 0;
+    l->tasks = NULL;
+}
+
+int aoe_task_is_kind_7_ror(const AoeTaskRor *t) { return t->field_6 == 7; }

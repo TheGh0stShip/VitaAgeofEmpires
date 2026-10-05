@@ -50,6 +50,18 @@ int main(void) {
                !memcmp(buf, buf2, out.pos));
     }
     aoe_rm_controller_release_ror(&d);
+    {
+        AoeRmControllerRor *n, *t;
+        in = (AoeOutcomeStream){buf, out.pos, 0, 0};
+        n = aoe_rm_controller_new_ror(&in, 1, &rng, &game);
+        assert(n && n->map_count == 1 && n->maps[0].id == 7);
+        aoe_rm_controller_release_ror(n);
+        free(n);
+        t = aoe_rm_controller_new_text_ror(header, lands, terrains, objects, 0, &rng, &game);
+        assert(t && t->map_count == 1 && t->maps[0].land_count == 2);
+        aoe_rm_controller_release_ror(t);
+        free(t);
+    }
 
     /* Setup on a 64x64 map with 4 players (base controller). */
     assert(aoe_rm_controller_setup_ror(&c, &map, 0, 0, 4, 0));

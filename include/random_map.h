@@ -325,6 +325,16 @@ int aoe_rm_controller_load_text_ror(AoeRmControllerRor *c,
                                     const char *objects, const char *header,
                                     int ror, AoeRng *rng,
                                     const AoeRmGameOpsRor *game);
+/* The map keeps one at +0x8dbc: 0x00444490 (RoR map 0x004ed8a0) makes
+   it from the DAT stream, 0x004444f0 (0x004ed900) from the four text
+   files (the header file first). NULL when out of memory or when the
+   load fails (the original keeps a half-loaded one). */
+AoeRmControllerRor *aoe_rm_controller_new_ror(AoeOutcomeStream *in, int ror, AoeRng *rng,
+                                              const AoeRmGameOpsRor *game);
+AoeRmControllerRor *aoe_rm_controller_new_text_ror(const char *header, const char *lands,
+                                                   const char *terrains, const char *objects,
+                                                   int ror, AoeRng *rng,
+                                                   const AoeRmGameOpsRor *game);
 /* 0x0046dff0: positions for `count` lands from `first` (see the source:
    mode 0 random inside the edge, 1 fixed, 2 random outside a central box
    and apart from the earlier lands, moving the previous one when it is

@@ -2251,3 +2251,77 @@ void aoe_ai_tactical_plan_building_ror(AoeAiTacticalRor *ai, int32_t type, int32
         if (ai->sn[207] == 1) plan_costed(0x4f, cap, position, ai->sn[222], ops);
     }
 }
+
+int aoe_ai_tactical_try_explore_ror(AoeAiTacticalRor *ai, int32_t unit, int32_t explore,
+                                    const AoeAiTacticalOpsRor *ops, AoeAiInfoRor *info,
+                                    const AoeAiInfoOpsRor *info_ops) {
+    AoeAiWorldObjectRor u;
+    int32_t task, action, v;
+    if (!ai || !ops || !ops->world_object || !ops->world_object(ops->context, unit, &u) ||
+        !ops->unit_task || !ops->unit_task(ops->context, unit, &task))
+        return 0;
+    if (task == 600 || task == 0x25a || task == 0x26a || task == 0x25d) return 1;
+    if (u.field_44 > 0.0f) return 0;
+    action = -1;
+    if (ops->unit_action) ops->unit_action(ops->context, unit, &action);
+    if (action == 0x2c6 && ops->unit_2c && ops->unit_2c(ops->context, unit, &v) && v == 100)
+        return 0;
+    if (action == 0x2be) return 0;
+    if (ops->unit_ai_table_has && ops->unit_ai_table_has(ops->context, unit, 0x2c1) == 1)
+        return 0;
+    aoe_ai_tactical_send_explorer_ror(ai, unit, explore, ops, info, info_ops);
+    return 1;
+}
+
+void aoe_ai_tactical_insert_builds_ror(AoeAiTacticalRor *ai,
+                                       const AoeAiTacticalOpsRor *ops) {
+    int skip_pit_plan = 0;
+    uint32_t minutes;
+    if (!ai || !ops) return;
+    if (ai->sn[205] == 1) {
+        if (ops->build_file_set && ops->build_file_set(ops->context) && ai->field_f88 == 0 &&
+            ai->sn[169] <= (ops->info_field_560 ? ops->info_field_560(ops->context) : 0)) {
+            if (ops->build_add) ops->build_add(ops->context, 0x67, 1, 0);
+            ai->field_f88 = 1;
+        }
+        if (ai->sn[205] == 1 && ops->build_file_set && ops->build_file_set(ops->context) &&
+            ai->field_f8c == 0 &&
+            (ai->field_f88 == 1 ||
+             (ops->resource_amount ? ops->resource_amount(ops->context, 1) : 0) >= 0xfa) &&
+            (ops->info_best_distance ? ops->info_best_distance(ops->context, 0) : -1) != -1) {
+            if (ops->build_add) ops->build_add(ops->context, 0x44, 1, 1);
+            ai->field_f8c = 1;
+            skip_pit_plan = 1;
+        }
+    }
+    if (!skip_pit_plan && ai->field_f8c == 1) aoe_ai_tactical_plan_building_ror(ai, 0x44, 1, 0, ops);
+    minutes = (ops->game_time ? ops->game_time(ops->context) : 0) / 60000;
+    if (ai->sn[175] != -1 && (uint32_t)ai->sn[176] <= minutes) {
+        if (ops->build_add) ops->build_add(ops->context, ai->sn[175], 1, 0);
+        ai->sn[175] = -1;
+    }
+    aoe_ai_tactical_plan_building_ror(ai, 0x32, 1, 0, ops);
+    aoe_ai_tactical_plan_building_ror(ai, 0x4f, 1, 0, ops);
+}
+
+void aoe_ai_tactical_retarget_trade_ror(AoeAiTacticalRor *ai,
+                                        const AoeAiTacticalOpsRor *ops) {
+    int32_t i, k;
+    if (!ai || !ops || !ops->object) return;
+    for (i = 0; i < ai->lists[7].count; ++i) {
+        int32_t *v = aoe_ai_int_list_at_ror(&ai->lists[7], i);
+        AoeAiWorldObjectRor o;
+        int16_t kind;
+        if (!v || !ops->object(ops->context, *v, &o)) continue;
+        kind = o.field_4c;
+        if (!((ops->resource_amount ? ops->resource_amount(ops->context, kind) : 0) <
+              ai->sn[216]))
+            continue;
+        for (k = 2; k >= 0; --k)
+            if (k != kind &&
+                ai->sn[216] <= (ops->resource_amount ? ops->resource_amount(ops->context, k) : 0)) {
+                if (ops->set_trade) ops->set_trade(ops->context, *v, k);
+                break;
+            }
+    }
+}

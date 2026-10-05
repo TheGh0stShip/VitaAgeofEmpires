@@ -332,6 +332,13 @@ typedef struct {
     int (*build_all_started)(void *context, int32_t category_a, int32_t category_b);
     int32_t (*build_started)(void *context, int32_t type, int32_t category);
     void (*build_add)(void *context, int32_t type, int32_t cap, int32_t position);
+    /* A unit AI's +0x18 table holds `value` (0x00413190); the build
+       list's file is set (0x00408d00); the information AI's +0x560; a
+       trade boat's new resource (0x004f1330 with the ID and kind). */
+    int (*unit_ai_table_has)(void *context, int32_t id, int32_t value);
+    int (*build_file_set)(void *context);
+    int32_t (*info_field_560)(void *context);
+    void (*set_trade)(void *context, int32_t id, int32_t kind);
 } AoeAiTacticalOpsRor;
 
 /* 0x004e0630: in list order, the group with task `task` and +0x180
@@ -602,6 +609,28 @@ void aoe_ai_tactical_upkeep_ror(AoeAiTacticalRor *ai, const AoeAiTacticalOpsRor 
 void aoe_ai_tactical_setup_boat_groups_ror(AoeAiTacticalRor *ai,
                                            const AoeAiTacticalOpsRor *ops,
                                            const AoeAiUnitGroupOpsRor *group_ops);
+/* 0x004da200: 1 when the unit (a world object with a unit AI) is busy
+   with task 600, 0x25a, 0x26a or 0x25d; 0 when it carries something,
+   moves (action 0x2c6) with +0x2c 100, builds (0x2be) or its AI table
+   holds 0x2c1; otherwise it is sent off by 0x004db580 with `explore`
+   (whose call chain leaves 1). 0 without a unit or AI. */
+int aoe_ai_tactical_try_explore_ror(AoeAiTacticalRor *ai, int32_t unit, int32_t explore,
+                                    const AoeAiTacticalOpsRor *ops, AoeAiInfoRor *info,
+                                    const AoeAiInfoOpsRor *info_ops);
+/* 0x004d7570: build list insertions. With number 205 at 1 and a build
+   file: a granary (0x67) once (+0xf88) when the information AI's +0x560
+   reaches number 169; a storage pit (0x44, at the front) once (+0xf8c)
+   when the granary was added or wood is at least 250, and a food target
+   is known. Otherwise, with the pit added, its plan (0x004e1d00 with 1,
+   0). Number 175, when set, is added once the game time reaches number
+   176 minutes (then -1). Then plans for 0x32 and 0x4f. */
+void aoe_ai_tactical_insert_builds_ror(AoeAiTacticalRor *ai,
+                                       const AoeAiTacticalOpsRor *ops);
+/* 0x004e3250: each list-7 trade boat of ours whose resource (+0x4c) is
+   below number 216 switches to the highest kind 2..0 that is not its own
+   and has at least that much (0x004f1330). */
+void aoe_ai_tactical_retarget_trade_ror(AoeAiTacticalRor *ai,
+                                        const AoeAiTacticalOpsRor *ops);
 /* 0x004dc650: ftol(number 34 / f), at most 99. */
 int32_t aoe_ai_tactical_effort_ror(const AoeAiTacticalRor *ai, float f);
 /* 0x004e2f90: +0xd68[i] (0..3, else -1). 0x004e2f30 / 0x004e2f60 /

@@ -848,6 +848,62 @@ static void boat_group_tests(void) {
     aoe_ai_tactical_release_ror(&ai);
 }
 
+static int32_t ib_added[8][2], ib_n;
+static void ib_add(void *c, int32_t t, int32_t cap, int32_t pos) { (void)c; (void)cap; ib_added[ib_n][0] = t; ib_added[ib_n++][1] = pos; }
+static int ib_file(void *c) { (void)c; return 1; }
+static int32_t ib_560(void *c) { (void)c; return 5; }
+static int32_t tr_amounts[4] = {50, 200, 300, 10};
+static int32_t tr_amount(void *c, int32_t i) { (void)c; return tr_amounts[i]; }
+static int tr_object(void *c, int32_t id, AoeAiWorldObjectRor *o) {
+    (void)c; memset(o, 0, sizeof *o); o->id = id; o->field_4c = (int16_t)(id == 80 ? 0 : 2); return 1;
+}
+static int32_t tr_id = -1, tr_kind = -1;
+static void tr_set(void *c, int32_t id, int32_t k) { (void)c; tr_id = id; tr_kind = k; }
+
+static void insert_and_trade_tests(void) {
+    static AoeAiTacticalRor ai;
+    AoeAiTacticalOpsRor ops;
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    memset(&ops, 0, sizeof ops);
+    ops.build_add = ib_add;
+    ops.build_file_set = ib_file;
+    ops.info_field_560 = ib_560;
+    ops.info_best_distance = t_best;
+    ops.game_time = ttime;
+    ai.sn[205] = 1;
+    ai.sn[169] = 5;
+    ai.sn[175] = 0x99;
+    ai.sn[176] = 6;
+    ib_n = 0;
+    tnow = 300000; /* 5 minutes */
+    aoe_ai_tactical_insert_builds_ror(&ai, &ops);
+    assert(ib_n == 2 && ib_added[0][0] == 0x67 && ib_added[1][0] == 0x44 &&
+           ib_added[1][1] == 1 && ai.field_f88 == 1 && ai.field_f8c == 1);
+    tnow = 360000;
+    aoe_ai_tactical_insert_builds_ror(&ai, &ops);
+    assert(ib_n == 3 && ib_added[2][0] == 0x99 && ai.sn[175] == -1);
+    tnow = 300000;
+    /* 0x004e3250: boat 80 (food, 50 < 100) switches to stone (kind 2);
+       boat 81 (stone, 300) stays. */
+    ops.object = tr_object;
+    ops.resource_amount = tr_amount;
+    ops.set_trade = tr_set;
+    ai.sn[216] = 100;
+    aoe_ai_int_list_add_unique_ror(&ai.lists[7], 80);
+    aoe_ai_int_list_add_unique_ror(&ai.lists[7], 81);
+    aoe_ai_tactical_retarget_trade_ror(&ai, &ops);
+    assert(tr_id == 80 && tr_kind == 2);
+    /* 0x004da200 */
+    ops.world_object = tobject;
+    ops.unit_task = ttask;
+    ops.order = order;
+    assert(aoe_ai_tactical_try_explore_ror(&ai, 803, 0, &ops, NULL, NULL) == 0);
+    assert(aoe_ai_tactical_try_explore_ror(&ai, 804, 0, &ops, NULL, NULL) == 1 &&
+           aoe_ai_int_list_contains_ror(&ai.list_d58, 804));
+    orders = 0;
+    aoe_ai_tactical_release_ror(&ai);
+}
+
 static void scout_tests(void) {
     static AoeAiTacticalRor ai;
     AoeAiTacticalOpsRor ops;
@@ -1290,6 +1346,7 @@ int main(void) {
     group_misc_tests();
     upkeep_tests();
     boat_group_tests();
+    insert_and_trade_tests();
 
     aoe_ai_tactical_init_ror(&ai, 3, NULL);
     assert(ai.module.id == 0x3f1 && !strcmp(ai.module.name, "TacAI"));

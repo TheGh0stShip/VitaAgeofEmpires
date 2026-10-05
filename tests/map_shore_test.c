@@ -49,7 +49,7 @@ static void *create(void *c, int32_t type, float x, float y) {
 static void set_shape(void *c, void *o, uint8_t s) {
     Map *m = c;
     m->shape_set = s;
-    m->shape_of[0][((int16_t *)o - &m->cliff_type[0][0])] = s;
+    (&m->shape_of[0][0])[(int16_t *)o - &m->cliff_type[0][0]] = s; /* flat index */
 }
 static void touch(void *c, int32_t x, int32_t y) { (void)x; (void)y; ++((Map *)c)->touches; }
 static void placed(void *c, int32_t t, float x, float y) {

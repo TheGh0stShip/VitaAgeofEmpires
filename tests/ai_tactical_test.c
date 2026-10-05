@@ -1358,6 +1358,59 @@ static void notify_tests(void) {
     aoe_ai_tactical_release_ror(&ai);
 }
 
+static uint32_t st_budget = 50, st_spent, st_ms;
+static uint32_t st_world_budget(void *c) { (void)c; return st_budget; }
+static void st_spend(void *c, uint32_t ms) { (void)c; st_spent = ms; }
+static uint32_t st_real(void *c) { (void)c; return st_ms += 1; }
+static int st_d4, st_ddc;
+static void st_5204d0(void *c, int32_t v) { (void)c; st_d4 = v; }
+static void st_ddc_clear(void *c) { (void)c; ++st_ddc; }
+
+static void step_tests(void) {
+    static AoeAiTacticalRor ai;
+    AoeAiTacticalOpsRor ops;
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    memset(&ops, 0, sizeof ops);
+    ops.world_budget = st_world_budget;
+    ops.world_spend = st_spend;
+    ops.real_ms = st_real;
+    ops.world_5204d0 = st_5204d0;
+    ops.player_ddc_clear = st_ddc_clear;
+    ops.game_time = ttime;
+    /* With empty lists, the steps run on to 21, which resets the state,
+       charges the world and calls 0x005204d0 with 3. */
+    st_ms = 0;
+    ai.state = 9;
+    assert(aoe_ai_tactical_step_ror(&ai, &ops, NULL, NULL, NULL, NULL) == 1);
+    assert(ai.state == 0 && st_d4 == 3 && st_spent > 0 && ai.field_1004 == 13);
+    /* No budget: only the (zero) charge. */
+    st_budget = 0;
+    st_spent = 99;
+    ai.state = 5;
+    aoe_ai_tactical_step_ror(&ai, &ops, NULL, NULL, NULL, NULL);
+    assert(ai.state == 5 && st_spent == 1);
+    /* The update: past number 99 minutes the numbers move (26 drops to
+       0, so 16 is held at it) and double. */
+    ai.sn[99] = 1;
+    ai.last_update = 0;
+    ai.sn[26] = 10;
+    ai.sn[94] = -15;
+    ai.sn[16] = 4;
+    ai.sn[93] = 2;
+    ai.sn[30] = 60;
+    ai.sn[31] = -3;
+    ai.sn[91] = 20;
+    ai.sn[104] = 1000;
+    st_ddc = 0;
+    assert(aoe_ai_tactical_update_ror(&ai, &ops, NULL, NULL, NULL, NULL, NULL, NULL) == 1);
+    assert(ai.sn[26] == 0 && ai.sn[16] == 0 && ai.sn[30] == 100 && ai.sn[31] == 0 &&
+           ai.sn[91] == 40 && ai.last_update == 300000 && st_ddc == 1);
+    /* Without a Diplomacy AI both picks are -1: +0xd38 holds only us. */
+    assert(ai.list_d38.count == 1 && ai.list_d38.data[0] == 0 && ai.list_d28.data[0] == -1);
+    st_budget = 50;
+    aoe_ai_tactical_release_ror(&ai);
+}
+
 static uint32_t rg_ms;
 static uint32_t rg_real(void *c) { (void)c; return rg_ms += 4; }
 static int32_t rg_centre(void *c) { (void)c; return 60; }
@@ -1888,6 +1941,7 @@ int main(void) {
     fill_soldier_groups_tests();
     group_tasks_tests();
     notify_tests();
+    step_tests();
 
     aoe_ai_tactical_init_ror(&ai, 3, NULL);
     assert(ai.module.id == 0x3f1 && !strcmp(ai.module.name, "TacAI"));

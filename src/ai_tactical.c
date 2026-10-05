@@ -1453,8 +1453,12 @@ int aoe_ai_tactical_start_build_ror(AoeAiTacticalRor *ai, int32_t builder,
     if (!item && !(item = ops->build_next ? ops->build_next(ops->context) : NULL)) return 0;
     if (!site && !(site = ops->con_choose ? ops->con_choose(ops->context, item, builder,
                                                             ai->block_e4c, arg)
-                                          : NULL))
+                                          : NULL)) {
+        /* A suspended search resumes with this item (the original's
+           +0xf78). */
+        if (ai->block_e4c[69] == 1) ai->search_item = item;
         return 0;
+    }
     if (builder == -1) {
         int32_t tile[2];
         tile[0] = aoe_ftol32(aoe_ai_plan_item_float_ror(&site->plan, AOE_AI_ITEM_X));
@@ -4403,4 +4407,300 @@ void aoe_ai_tactical_notify_ror(AoeAiTacticalRor *ai, int32_t unit, int32_t code
                 ++sent;
         }
     }
+}
+
+/* 0x004d1b70: enough explored and builders below number 4 (or a wonder
+   pending / set). */
+static int step_builders_free(const AoeAiTacticalRor *ai, const AoeAiTacticalOpsRor *ops) {
+    if (!aoe_ai_tactical_explored_enough_ror(ai, ops)) return 0;
+    return (ops->count_tasked ? ops->count_tasked(ops->context, 0x25a) : 0) < ai->sn[4] ||
+           ai->field_e44 != 0 || ai->field_e48 != 0;
+}
+
+static void step_repair(AoeAiTacticalRor *ai, int32_t unit_class, int32_t type,
+                        const AoeAiTacticalOpsRor *ops) {
+    AoeAiWorldObjectRor h;
+    int32_t id, v, tile[2];
+    if (!step_builders_free(ai, ops)) return;
+    id = ops->healthiest_damaged ? ops->healthiest_damaged(ops->context, unit_class, type) : -1;
+    if (id == -1 || !ops->object || !ops->object(ops->context, id, &h) || h.state != 2) return;
+    if (ops->first_tasked_on && ops->first_tasked_on(ops->context, 0x26a, id) != -1) return;
+    tile[0] = aoe_ftol32(h.x);
+    tile[1] = aoe_ftol32(h.y);
+    v = aoe_ai_tactical_pick_unit_ror(ai, tile, 1, 0x2be, 0x2ce, 0x2bc, 0, ops);
+    if (v != -1) aoe_ai_tactical_order_repair_ror(ai, v, &h, ops);
+}
+
+static int step_queue_ready(const AoeAiTacticalRor *ai, const AoeAiTacticalOpsRor *ops) {
+    return (ops->build_count ? ops->build_count(ops->context) : 0) > 0 &&
+           ai->field_d20 >= ai->sn[101];
+}
+
+static void step_timing(AoeAiTacticalRor *ai, uint32_t now, uint32_t step_start) {
+    ai->field_ffc = (int32_t)(now - step_start);
+    ai->field_1008 += ai->field_ffc;
+    ++ai->field_1004;
+    if (ai->field_1004 >= 20) {
+        ai->field_1000 = ai->field_1008 / ai->field_1004;
+        ai->field_1008 = 0;
+        ai->field_1004 = 0;
+    }
+}
+
+/* 0x004d1b70: see the header. */
+int aoe_ai_tactical_step_ror(AoeAiTacticalRor *ai, const AoeAiTacticalOpsRor *ops,
+                             const AoeAiUnitGroupOpsRor *group_ops,
+                             const AoeAiStrategyRor *strategy, AoeAiInfoRor *info,
+                             const AoeAiInfoOpsRor *info_ops) {
+    uint32_t budget, start, now = 0;
+    if (!ai || !ops) return 0;
+    budget = ops->world_budget ? ops->world_budget(ops->context) : 0;
+    start = ops->real_ms ? ops->real_ms(ops->context) : 0;
+    if (budget != 0) {
+        do {
+            uint32_t step_start = ops->real_ms ? ops->real_ms(ops->context) : 0;
+            int advance = 1;
+            switch (ai->state) {
+            case 0:
+                aoe_ai_tactical_setup_soldier_groups_ror(ai, ops, group_ops);
+                break;
+            case 1:
+                if (ai->lists[0].count > 0) {
+                    if (ai->field_e20 == 0) {
+                        ai->field_e20 = 1;
+                        aoe_ai_tactical_gather_order_ror(ai, ops);
+                    }
+                    aoe_ai_tactical_plan_villagers_ror(ai, ops);
+                }
+                break;
+            case 2:
+                aoe_ai_tactical_villager_round_ror(ai, start, budget, ops, info, info_ops);
+                if (ai->field_f7c != -1) advance = 0;
+                break;
+            case 3:
+                if (ai->lists[4].count > 0)
+                    aoe_ai_tactical_setup_boat_groups_ror(ai, ops, group_ops);
+                break;
+            case 4:
+                if (ai->lists[4].count > 0)
+                    aoe_ai_tactical_fill_boat_groups_ror(ai, ops, group_ops);
+                break;
+            case 5:
+                if (ai->lists[4].count > 0)
+                    aoe_ai_tactical_boat_groups_ror(ai, ops, group_ops, info, info_ops);
+                break;
+            case 6:
+                if (ai->lists[4].count > 0 || ai->lists[2].count > 0)
+                    aoe_ai_tactical_fill_soldier_groups_ror(ai, ops, group_ops, info_ops);
+                break;
+            case 7:
+                if (ai->lists[4].count > 0 || ai->lists[2].count > 0 || ai->lists[9].count > 0) {
+                    aoe_ai_tactical_run_groups_ror(ai, start, budget, ops, group_ops, strategy,
+                                                   info, info_ops);
+                    if (ai->field_f80 != -1) advance = 0;
+                }
+                break;
+            case 8:
+                if (ai->lists[4].count > 0 || ai->lists[2].count > 0 || ai->lists[9].count > 0) {
+                    aoe_ai_tactical_group_tasks_ror(ai, start, budget, ops, group_ops, strategy,
+                                                    info, info_ops);
+                    if (ai->field_f84 != -1) advance = 0;
+                }
+                break;
+            case 9:
+                if (ai->lists[2].count > 0) aoe_ai_tactical_start_play_ror(ai, ops, group_ops);
+                break;
+            case 10: {
+                AoeAiWorldObjectRor tc;
+                int32_t centre = ops->first_center ? ops->first_center(ops->context) : -1;
+                if (centre != -1 && ops->object && ops->object(ops->context, centre, &tc) && info) {
+                    int32_t enemy = aoe_ai_info_nearest_enemy_ror(info, tc.x, tc.y, 0x14, 0x4f,
+                                                                  199, 0x45, 0x116, info_ops);
+                    if (enemy != -1) aoe_ai_tactical_defend_ror(ai, enemy, ops, group_ops);
+                }
+                break;
+            }
+            case 11:
+                ++ai->field_d20;
+                if (step_queue_ready(ai, ops) && ops->build_next_of) {
+                    AoeAiBuildItemRor *item = ops->build_next_of(ops->context, 1);
+                    if (item) aoe_ai_tactical_research_ror(ai, item, ops);
+                }
+                break;
+            case 12:
+                if (ops->resource && ops->resource(ops->context, 11) < ops->resource(ops->context, 32) &&
+                    step_queue_ready(ai, ops) && ops->build_next_of) {
+                    AoeAiBuildItemRor *item = ops->build_next_of(ops->context, 2);
+                    if (item) aoe_ai_tactical_train_ror(ai, item, ops);
+                }
+                break;
+            case 13:
+                if (step_queue_ready(ai, ops)) {
+                    AoeAiBuildItemRor *item =
+                        ops->build_next_of ? ops->build_next_of(ops->context, 3) : NULL;
+                    if (item) {
+                        if (ops->load_build_file) ops->load_build_file(ops->context, item);
+                        aoe_ai_tactical_gather_order_ror(ai, ops);
+                    }
+                    ai->field_d20 = 0;
+                }
+                break;
+            case 14:
+                if (step_builders_free(ai, ops)) {
+                    AoeAiWorldObjectRor f;
+                    int32_t id = ops->first_unbuilt ? ops->first_unbuilt(ops->context) : -1;
+                    if (id != -1 && ops->object && ops->object(ops->context, id, &f) &&
+                        (ai->field_e44 != 0 || !ops->first_tasked_on ||
+                         ops->first_tasked_on(ops->context, 0x25a, id) == -1)) {
+                        int32_t tile[2] = {aoe_ftol32(f.x), aoe_ftol32(f.y)};
+                        int32_t v = aoe_ai_tactical_pick_unit_ror(ai, tile, 1, 0x2be, 0x2ce, 0x2bc,
+                                                                  0, ops);
+                        if (v != -1 && aoe_ai_tactical_order_help_build_ror(ai, v, &f, ops) == 1)
+                            ai->field_f90 = gt_now_ops(ops);
+                    }
+                }
+                break;
+            case 15:
+                step_repair(ai, 3, ai->field_e48 == 1 ? 0x114 : -1, ops);
+                break;
+            case 16:
+                step_repair(ai, 0x1b, -1, ops);
+                break;
+            case 17:
+                if (aoe_ai_tactical_explored_enough_ror(ai, ops) && ai->field_e44 == 0 &&
+                    ((ops->count_tasked ? ops->count_tasked(ops->context, 0x25a) : 0) < ai->sn[4] ||
+                     ai->field_e48 != 0) &&
+                    ops->build_next_of) {
+                    AoeAiBuildItemRor *item = ops->build_next_of(ops->context, 0);
+                    if (item && aoe_ai_tactical_start_build_ror(ai, -1, item, NULL, (int32_t)start,
+                                                                ops) == 1)
+                        ai->field_f90 = gt_now_ops(ops);
+                }
+                break;
+            case 18:
+                if (ai->block_e4c[69] == 1) {
+                    AoeAiConItemRor *site =
+                        ops->con_choose ? ops->con_choose(ops->context, ai->search_item,
+                                                          ai->block_e4c[66], ai->block_e4c,
+                                                          (int32_t)start)
+                                        : NULL;
+                    if (site && aoe_ai_tactical_start_build_ror(ai, ai->block_e4c[66],
+                                                                ai->search_item, site,
+                                                                (int32_t)start, ops) == 1)
+                        ai->field_f90 = gt_now_ops(ops);
+                    if (ai->block_e4c[69] == 1) advance = 0;
+                }
+                break;
+            case 19: {
+                int32_t i;
+                aoe_ai_tactical_upkeep_ror(ai, ops, group_ops);
+                for (i = 0; i < 4; ++i) {
+                    if (ai->field_d98[i] > 0 &&
+                        (ops->resource_amount ? ops->resource_amount(ops->context, i) : 0) +
+                                ai->field_d98[i] < 0) {
+                        aoe_ai_tactical_gather_order_ror(ai, ops);
+                        break;
+                    }
+                }
+                aoe_ai_tactical_ask_allies_ror(ai, ops);
+                aoe_ai_tactical_tribute_surplus_ror(ai, ops);
+                aoe_ai_tactical_research_ages_ror(ai, ops);
+                aoe_ai_tactical_retarget_trade_ror(ai, ops);
+                aoe_ai_tactical_settle_groups_ror(ai, ops);
+                break;
+            }
+            case 20:
+                if (info) {
+                    AoeAiWorldObjectRor o;
+                    int32_t t = aoe_ai_info_current_target_ror(info, 0);
+                    if (!ops->object || !ops->object(ops->context, t, &o))
+                        aoe_ai_info_refresh_targets_ror(info, 0, info_ops);
+                }
+                break;
+            case 21:
+                aoe_ai_tactical_insert_builds_ror(ai, ops);
+                if ((gt_now_ops(ops) - ai->field_f90) / 60000 > 5) {
+                    if (ops->build_retry) ops->build_retry(ops->context, ai->field_f88, ai->field_f8c);
+                    ai->field_f90 = gt_now_ops(ops);
+                }
+                now = ops->real_ms ? ops->real_ms(ops->context) : 0;
+                if (ops->world_spend) ops->world_spend(ops->context, now - start);
+                step_timing(ai, now, step_start);
+                ai->state = 0;
+                if (ops->world_5204d0) ops->world_5204d0(ops->context, 3);
+                return 1;
+            default:
+                break;
+            }
+            now = ops->real_ms ? ops->real_ms(ops->context) : 0;
+            step_timing(ai, now, step_start);
+            if (advance) ++ai->state;
+        } while (now - start < budget);
+    }
+    now = ops->real_ms ? ops->real_ms(ops->context) : 0;
+    if (ops->world_spend) ops->world_spend(ops->context, now - start);
+    return 1;
+}
+
+/* 0x004d0980: see the header. */
+int aoe_ai_tactical_update_ror(AoeAiTacticalRor *ai, const AoeAiTacticalOpsRor *ops,
+                               const AoeAiUnitGroupOpsRor *group_ops,
+                               const AoeAiStrategyRor *strategy, AoeAiInfoRor *info,
+                               const AoeAiInfoOpsRor *info_ops, AoeAiDiplomacyRor *dip,
+                               const AoeAiDiplomacyOps *dip_ops) {
+    int32_t now, disliked, liked, p, count;
+    if (!ai || !ops) return 0;
+    now = gt_now_ops(ops);
+    if ((uint32_t)ai->sn[99] * 60000u < (uint32_t)(now - ai->last_update)) {
+        int32_t *dbl[3] = {&ai->sn[30], &ai->sn[31], &ai->sn[91]};
+        int k;
+        ai->sn[26] += ai->sn[94];
+        if (ai->sn[26] < 0) ai->sn[26] = 0;
+        ai->sn[16] += ai->sn[93];
+        if (ai->sn[16] < 0) ai->sn[16] = 0;
+        if (ai->sn[16] > ai->sn[26]) ai->sn[16] = ai->sn[26];
+        if (ai->sn[26] < ai->sn[16]) ai->sn[26] = ai->sn[16];
+        for (k = 0; k < 3; ++k) {
+            *dbl[k] *= 2;
+            if (*dbl[k] < 0) *dbl[k] = 0;
+            if (*dbl[k] > 100) *dbl[k] = 100;
+        }
+        ai->last_update = now;
+    }
+    ai->list_d58.count = 0;
+    if (ops->player_ddc_clear) ops->player_ddc_clear(ops->context);
+    if ((uint32_t)now / 1000u >= (uint32_t)ai->sn[104]) aoe_ai_tactical_arm_e18_ror(ai, 2);
+    disliked = aoe_ai_diplomacy_most_disliked_ror(dip, dip_ops, ai->sn[124], ai->sn[128],
+                                                   ai->sn[188], ai->sn[195]);
+    liked = aoe_ai_diplomacy_most_liked_ror(dip, dip_ops, ai->sn[124], ai->sn[128]);
+    ai->list_d28.count = 0;
+    aoe_ai_int_list_add_unique_ror(&ai->list_d28, disliked);
+    ai->list_d38.count = 0;
+    aoe_ai_int_list_add_unique_ror(&ai->list_d38, ops->self);
+    if (disliked != liked) aoe_ai_int_list_add_unique_ror(&ai->list_d38, liked);
+    count = ops->player_count;
+    for (p = 1; p < count; ++p) {
+        if (p == ops->self) continue;
+        if (p == disliked) {
+            if (!aoe_ai_diplomacy_is_enemy_ror(dip_ops, p) &&
+                aoe_ai_diplomacy_changeable_ror(dip, dip_ops, p) &&
+                aoe_ai_diplomacy_get_ror(dip, dip_ops, p, AOE_AI_DISLIKE) > 0x4a)
+                aoe_ai_diplomacy_request_ror(dip, dip_ops, p, 3);
+        } else if (p == liked) {
+            if (!aoe_ai_diplomacy_is_ally_ror(dip_ops, p) &&
+                aoe_ai_diplomacy_changeable_ror(dip, dip_ops, p) &&
+                aoe_ai_diplomacy_get_ror(dip, dip_ops, p, AOE_AI_LIKE) > 0x4a)
+                aoe_ai_diplomacy_request_ror(dip, dip_ops, p, 0);
+        } else if (aoe_ai_diplomacy_get_ror(dip, dip_ops, p, AOE_AI_LIKE) > ai->sn[29] &&
+                   aoe_ai_diplomacy_changeable_ror(dip, dip_ops, p)) {
+            if (!aoe_ai_diplomacy_is_ally_ror(dip_ops, p))
+                aoe_ai_diplomacy_request_ror(dip, dip_ops, p, 0);
+        } else if (!aoe_ai_diplomacy_is_neutral_ror(dip_ops, p) &&
+                   aoe_ai_diplomacy_changeable_ror(dip, dip_ops, p)) {
+            aoe_ai_diplomacy_request_ror(dip, dip_ops, p, 1);
+        }
+    }
+    aoe_ai_tactical_step_ror(ai, ops, group_ops, strategy, info, info_ops);
+    ai->list_d58.count = 0;
+    return 1;
 }

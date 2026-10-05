@@ -57,6 +57,9 @@ typedef struct {
     int32_t block_fd8[9];                   /* +0xfd8 */
     int32_t field_ffc, field_1000;          /* -1 */
     int32_t field_1004, field_1008;
+    /* Port only: the build item of a suspended site search (the original
+       keeps its pointer in +0xf78, the search state's last word). */
+    struct AoeAiBuildItemRor *search_item;
 } AoeAiTacticalRor;
 
 /* 0x004cebe0: the module and the defaults above (no groups). */
@@ -362,6 +365,7 @@ typedef struct {
        -1, -1); the computer player's +0xddc list gains an ID (once). */
     int (*can_gather)(void *context, int32_t id, int32_t target, int32_t drop);
     void (*player_ddc_add)(void *context, int32_t id);
+    void (*player_ddc_clear)(void *context); /* its count (+0xde0) to 0 */
     /* Our first object whose unit AI task is `task`, accepted by the
        player's vtable +0x4c with `accept`, with +0x44 at most 0 (0x0040bad0
        with those and 0; its eighth argument is unused): its ID, else -1. */
@@ -403,6 +407,25 @@ typedef struct {
        player's 0x004c8540 (befriending number 128's player). */
     int (*player_18)(void *context, int32_t player);
     void (*befriend)(void *context);
+    /* The world's time budget (+0xf8), its 0x00520560 (spending ms) and
+       0x005204d0 with 3; the Build AI's next item of kind `k`
+       (0x004b8110), its retry pass (0x004b9540 with +0xf88 and +0xf8c)
+       and loading "<item name>.bld" (its vtable +0x44 with the player's
+       +0x1256c, then the player's 0x004c8210). */
+    uint32_t (*world_budget)(void *context);
+    void (*world_spend)(void *context, uint32_t ms);
+    void (*world_5204d0)(void *context, int32_t v);
+    AoeAiBuildItemRor *(*build_next_of)(void *context, int32_t k);
+    void (*build_retry)(void *context, int32_t a, int32_t b);
+    void (*load_build_file)(void *context, AoeAiBuildItemRor *item);
+    /* Our listed objects (0x0040b9c0 / 0x0040bad0 / 0x0040be70): how many
+       have unit AI task `task`; the first in state 0 (-1 none); the first
+       with task `task` targeting `target` (-1 none); the healthiest
+       damaged of `unit_class` and `type` (-1 any), -1 none. */
+    int32_t (*count_tasked)(void *context, int32_t task);
+    int32_t (*first_unbuilt)(void *context);
+    int32_t (*first_tasked_on)(void *context, int32_t task, int32_t target);
+    int32_t (*healthiest_damaged)(void *context, int32_t unit_class, int32_t type);
 } AoeAiTacticalOpsRor;
 
 /* 0x004e0630: in list order, the group with task `task` and +0x180
@@ -939,6 +962,50 @@ int aoe_ai_tactical_defend_object_ror(AoeAiTacticalRor *ai, int32_t enemy, int32
    without a pending 0x65 item skips the age-2 test. */
 void aoe_ai_tactical_research_ages_ror(AoeAiTacticalRor *ai,
                                        const AoeAiTacticalOpsRor *ops);
+/* 0x004d1b70: the tactical AI's work for this tick: while the time spent
+   is below the world's budget (+0xf8), state +0xe1c picks one step, then
+   moves on (+0xe1c + 1) unless a sliced step is still running. Each step
+   times itself into +0xffc and +0x1008 / +0x1004, every 20 steps their
+   average into +0x1000.
+   0 soldier groups (0x004dc670); 1 villagers, the first time the
+   gathering order (+0xe20); 2 the villager round (resumable); 3, 4, 5
+   boat groups (with list 4); 6 soldier filling (lists 4 or 2); 7, 8 the
+   group runs (lists 4, 2 or 9; resumable); 9 plays (list 2); 10 the
+   defence against an enemy tower or wall piece (0x4f, 199, 0x45, 0x116)
+   within 20 of our town centre; 11 research and 12 training (housing
+   below the cap) of the Build AI's next items once +0xd20 counts number
+   101 ticks with a build list; 13 its next build list (0x004b8110 with
+   3; +0xd20 back to 0); 14 help to build an unbuilt foundation, 15 / 16
+   repairs of buildings (wonders with +0xe48) and walls, when explored
+   enough and builders (0x25a) are below number 4 (or a wonder is set);
+   17 a new building (without +0xe44); 18 the suspended site search; 19
+   upkeep, the gathering order when a stock goes negative, and the
+   resource, research, trade and group passes; 20 the information AI's
+   first target list refreshed when its target is gone; 21 the build
+   list insertions, every 5 minutes its retry pass, then +0xe1c 0, the
+   world's 0x005204d0(3) and the end. The time spent is charged to the
+   world (0x00520560). */
+int aoe_ai_tactical_step_ror(AoeAiTacticalRor *ai, const AoeAiTacticalOpsRor *ops,
+                             const AoeAiUnitGroupOpsRor *group_ops,
+                             const AoeAiStrategyRor *strategy, AoeAiInfoRor *info,
+                             const AoeAiInfoOpsRor *info_ops);
+/* 0x004d0980: the tactical AI's update. Every number 99 minutes numbers
+   26 and 16 move by numbers 94 and 93 (not below 0; 16 at most 26 and
+   26 at least 16) and numbers 30, 31 and 91 double (0..100). The tasked
+   list and the player's +0xddc list empty; past number 104 seconds
+   +0xe18 is armed with 2. +0xd28 holds the most disliked player
+   (0x0040acb0 with numbers 124, 128, 188, 195) and +0xd38 us and the
+   most liked (0x0040ada0). Each other player: the most disliked, when
+   not yet an enemy, changeable and disliked above 74, is asked to be one
+   (stance 3); the most liked, when not an ally, changeable and liked
+   above 74, an ally (0); any other liked above number 29 and changeable
+   becomes an ally unless already one, else when not neutral and
+   changeable, neutral (1). Then the step (0x004d1b70); 1. */
+int aoe_ai_tactical_update_ror(AoeAiTacticalRor *ai, const AoeAiTacticalOpsRor *ops,
+                               const AoeAiUnitGroupOpsRor *group_ops,
+                               const AoeAiStrategyRor *strategy, AoeAiInfoRor *info,
+                               const AoeAiInfoOpsRor *info_ops, AoeAiDiplomacyRor *dip,
+                               const AoeAiDiplomacyOps *dip_ops);
 /* 0x004d7880(unit, code, other): a notification about our `unit`.
    - 0x72 / 0x74: the best remembered type-0x9f (0x004c5d10) or 0x9e /
      0xa3 (0x004c5b80) object of any enemy; up to three (at most the

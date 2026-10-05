@@ -107,6 +107,13 @@ typedef struct {
     void (*call_10)(void *context);
     int32_t (*call_5c_r)(void *context, int32_t id, int32_t value);
     int (*head_state)(void *context);
+    /* Vtable +0xdc; the unit's own type and a unit-level test the 5564
+       override asks (1 skips the setting checks); the owner's vtable
+       +0x3c(0x8f). */
+    int32_t (*call_dc)(void *context);
+    int16_t (*unit_type)(void *context);
+    int (*unit_check)(void *context);
+    int (*owner_3c_8f)(void *context);
 } AoeAiUnitAiOpsRor;
 
 /* The unit AI's own order fields the overrides read: action (+0x28),
@@ -209,5 +216,15 @@ int32_t aoe_ai_unit_ai_priest_convert_target_ror(float *dist,
    1) at 1 gives 10. Else 9. */
 int32_t aoe_ai_unit_ai_priest_d8_ror(const AoeAiUnitAiOrderRor *order,
                                      const AoeAiUnitAiOpsRor *ops);
+/* 0x004e66f0 (0x00549564, +0xd4): with `first` 1 and +0xdc at 8, 6. For
+   a non-gaia owner whose +4 is set or whose unit is not type 299, unless
+   the action is 0x2d5 for a siege type (0x23, 0x24, 0x118, 0xfa, 0x115):
+   a search target (+0x30) taken by +0x5c(t, 1) gives 6; for a computer
+   owner whose unit check is not 1, the game settings 0x0041b700 /
+   0x0041b750 with the owner's +0x3c(0x8f) clear give 5; otherwise, not
+   in action 0x2bd or 0x2d5 and with a target (+0x40) that exists, the
+   unit backs off by speed x 3 and 6. Else 5. */
+int32_t aoe_ai_unit_ai_5564_d4_ror(const AoeAiUnitAiOrderRor *order, int32_t first,
+                                   const AoeAiUnitAiOpsRor *ops);
 
 #endif

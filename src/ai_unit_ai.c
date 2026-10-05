@@ -338,3 +338,44 @@ int32_t aoe_ai_unit_ai_priest_d8_ror(const AoeAiUnitAiOrderRor *order,
     }
     return ops->call_5c_r && ops->call_5c_r(ops->context, t, 1) == 1 ? 10 : 9;
 }
+
+int32_t aoe_ai_unit_ai_5564_d4_ror(const AoeAiUnitAiOrderRor *order, int32_t first,
+                                   const AoeAiUnitAiOpsRor *ops) {
+    int16_t type;
+    int32_t t, owner4;
+    if (!order || !ops) return 5;
+    if (first == 1 && ops->call_dc && ops->call_dc(ops->context) == 8) return 6;
+    type = ops->unit_type ? ops->unit_type(ops->context) : 0;
+    owner4 = ops->owner_field_4 ? ops->owner_field_4(ops->context) : 0;
+    if ((ops->owner_index ? ops->owner_index(ops->context) : 0) == 0) return 5;
+    if (owner4 == 0 && type == 299) return 5;
+    if (order->action == 0x2d5 &&
+        (type == 0x23 || type == 0x24 || type == 0x118 || type == 0xfa || type == 0x115))
+        return 5;
+    t = ops->call_30 ? ops->call_30(ops->context) : -1;
+    if (t != -1 && ops->call_5c_r && ops->call_5c_r(ops->context, t, 1) == 1) return 6;
+    if (owner4 == 0 || (ops->unit_check && ops->unit_check(ops->context) == 1)) return 5;
+    if (ops->settings_8fc == 1 && ops->settings_97d == 1 &&
+        !(ops->owner_3c_8f && ops->owner_3c_8f(ops->context)))
+        return 5;
+    if (ops->settings_97d == 1 && !(ops->owner_3c_8f && ops->owner_3c_8f(ops->context)))
+        return 5;
+    if (order->action != 0x2bd && order->action != 0x2d5) {
+        AoeAiUnitViewRor me, o;
+        int32_t target = ops->target ? ops->target(ops->context) : -1;
+        if (target != -1 && ops->object && ops->object(ops->context, target, &o) && ops->self) {
+            double r, dx, dy;
+            float d;
+            ops->self(ops->context, &me);
+            r = (ops->speed ? ops->speed(ops->context) : 0.0) * (double)3.0f;
+            dx = (double)o.x - (double)me.x;
+            dy = (double)o.y - (double)me.y;
+            d = (float)sqrt(dx * dx + dy * dy);
+            if (ops->move)
+                ops->move(ops->context, (float)(-(dx / (double)d * r) + (double)me.x),
+                          (float)(-(dy / (double)d * r) + (double)me.y), me.z);
+            return 6;
+        }
+    }
+    return 5;
+}

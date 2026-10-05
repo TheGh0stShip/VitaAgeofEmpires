@@ -84,6 +84,41 @@ static int32_t pd_5c(void *c, int32_t id, int32_t v) { (void)c; return id == 55 
 static int pd_state = 3;
 static int pd_head(void *c) { (void)c; return pd_state; }
 
+static int32_t d4_type = 0x30;
+static int16_t u_type(void *c) { (void)c; return (int16_t)d4_type; }
+static int32_t no_30(void *c) { (void)c; return -1; }
+static int32_t tgt7(void *c) { (void)c; return 7; }
+static int obj_any(void *c, int32_t id, AoeAiUnitViewRor *o) { (void)c; memset(o, 0, sizeof *o); o->id = id; o->x = 3.0f; return 1; }
+static void me0(void *c, AoeAiUnitViewRor *o) { (void)c; memset(o, 0, sizeof *o); }
+static double spd1(void *c) { (void)c; return 1.0; }
+static float mx = -1.0f;
+static void mv(void *c, float x, float y, float z) { (void)c; (void)y; (void)z; mx = x; }
+
+static void d4_5564_tests(void) {
+    AoeAiUnitAiOpsRor o;
+    AoeAiUnitAiOrderRor ord = {-1, -1};
+    memset(&o, 0, sizeof o);
+    o.owner_index = p_owner;
+    o.owner_field_4 = pd_owner4;
+    o.unit_type = u_type;
+    o.call_30 = no_30;
+    o.target = tgt7;
+    o.object = obj_any;
+    o.self = me0;
+    o.speed = spd1;
+    o.move = mv;
+    /* Backs off 3 tiles from the target at x 3. */
+    assert(aoe_ai_unit_ai_5564_d4_ror(&ord, 0, &o) == 6 && mx == -3.0f);
+    ord.action = 0x2bd;
+    assert(aoe_ai_unit_ai_5564_d4_ror(&ord, 0, &o) == 5);
+    ord.action = 0x2d5;
+    d4_type = 0x23;
+    assert(aoe_ai_unit_ai_5564_d4_ror(&ord, 0, &o) == 5);
+    o.settings_97d = 1;
+    ord.action = -1;
+    assert(aoe_ai_unit_ai_5564_d4_ror(&ord, 0, &o) == 5);
+}
+
 static void priest_search_tests(void) {
     AoeAiUnitAiOpsRor o;
     float d = -1.0f;
@@ -121,6 +156,7 @@ static void priest_search_tests(void) {
 
 int main(void) {
     priest_search_tests();
+    d4_5564_tests();
     AoeAiUnitAiRor ai;
     AoeAiUnitAiOpsRor ops;
     memset(&ops, 0, sizeof ops);

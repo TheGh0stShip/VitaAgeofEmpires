@@ -525,3 +525,17 @@ void aoe_scenario_store_diplomacy_page_ror(AoeScenarioInfoRor *info,
     }
     aoe_scenario_set_allied_victory_ror(info, slot, allied_victory);
 }
+
+int aoe_scenario_diplomacy_page_ror(const AoeScenarioInfoRor *info,
+                                    int32_t slot, int32_t radio[8],
+                                    int32_t allied_buttons[8]) {
+    if (!info || slot < 0) return 0;
+    for (int32_t t = 0; t < 8; t++) {
+        int32_t s = aoe_scenario_diplomacy_ror(info, slot, t);
+        radio[t] = s == 0 ? 0 : s == 1 ? 1 : s == 3 ? 2 : -1;
+        allied_buttons[t] = 0;
+    }
+    if (slot < 8)
+        allied_buttons[slot] = aoe_scenario_allied_victory_ror(info, slot);
+    return 1;
+}

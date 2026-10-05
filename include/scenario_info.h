@@ -290,4 +290,15 @@ void aoe_scenario_store_diplomacy_page_ror(AoeScenarioInfoRor *info,
                                            const int32_t enemy[8],
                                            int32_t allied_victory);
 
+/* 0x004964c0: for slot >= 0 and targets 0..7, the radio to select from
+   the stored stance (0 ally, 1 neutral, 3 enemy -> radio 0, 1, 2 of the
+   target's group at editor +0x8a8 + target x 0xc; other stances -1, no
+   selection) and the allied-victory button states (+0x908[8]): all 0
+   but the slot's own, which shows the slot's allied victory. Slots above
+   7 are host-guarded (the original indexes past the eight buttons).
+   Returns 0 for a negative slot, which leaves the outputs alone. */
+int aoe_scenario_diplomacy_page_ror(const AoeScenarioInfoRor *info,
+                                    int32_t slot, int32_t radio[8],
+                                    int32_t allied_buttons[8]);
+
 #endif

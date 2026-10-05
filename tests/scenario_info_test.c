@@ -249,5 +249,20 @@ int main(void) {
                e.diplomacy[1][2] == 3 && e.diplomacy[1][3] == 3);
         assert(e.allied_victory[1] == 1);
     }
+    {
+        /* 0x004964c0 diplomacy page read-back. */
+        static AoeScenarioInfoRor d;
+        int32_t radio[8], allied[8];
+        aoe_scenario_reset_diplomacy_ror(&d);
+        d.diplomacy[2][0] = 0;
+        d.diplomacy[2][1] = 1;
+        d.diplomacy[2][4] = 2;
+        d.allied_victory[2] = 1;
+        assert(!aoe_scenario_diplomacy_page_ror(&d, -1, radio, allied));
+        assert(aoe_scenario_diplomacy_page_ror(&d, 2, radio, allied));
+        assert(radio[0] == 0 && radio[1] == 1 && radio[2] == 2 &&
+               radio[4] == -1);
+        assert(allied[2] == 1 && allied[0] == 0 && allied[7] == 0);
+    }
     return 0;
 }

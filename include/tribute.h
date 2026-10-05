@@ -3,8 +3,7 @@
 
 #include <stdint.h>
 
-/* Patched Rise of Rome 1.0a "Diplomacy Dialog" (vtable 0x00543814,
-   0x00431470..0x00433230): the tribute and stance logic behind its
+/* Patched Rise of Rome 1.0a "Diplomacy Dialog" (vtable 0x00543814): the tribute and stance logic behind its
    buttons. Resources are 0 food, 1 wood, 2 stone, 3 gold; player slots
    1..8. The dialog keeps what is already promised per resource (+0x610
    food, +0x614 wood, +0x618 gold, +0x61c stone) and per player

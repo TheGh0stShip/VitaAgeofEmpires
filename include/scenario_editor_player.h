@@ -63,4 +63,11 @@ int32_t aoe_editor_set_player_count_ror(AoeScenarioObjectRor *obj,
                                         int16_t *current_player,
                                         int *switched);
 
+/* 0x00507e00: whether any active slot (value_194c, 0x00476250) has a
+   condition record with a type (0x005075f0); each active slot is
+   selected (0x00506f10) on the way, the last one examined staying
+   selected. */
+int aoe_scenario_has_conditions_ror(AoeScenarioInfoRor *info,
+                                    const AoeScenarioObjectRor *obj);
+
 #endif

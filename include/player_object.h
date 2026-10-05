@@ -146,7 +146,9 @@ int aoe_player_object_init_ror(AoePlayerObjectRor *player,
                                uint8_t field_109, int full,
                                const AoePlayerObjectOps *ops);
 
-/* 0x0045ea50 (base vtable +0xf4): +0x34 = a new empty condition object. */
+/* 0x0045ea50 (base vtable +0xf4): +0x34 = a new empty condition object.
+   The RoR player's 0x004f6b80 loads the derived one (0x20 bytes,
+   0x005084c0) into +0x34 instead. */
 void aoe_player_conditions_new_ror(AoePlayerObjectRor *player,
                                    const AoePlayerObjectOps *ops);
 

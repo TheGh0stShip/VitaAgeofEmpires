@@ -92,7 +92,8 @@ typedef struct {
     void (*map_444560)(void *context, void *map, int32_t v);
     void (*map_444570)(void *context, void *map, int32_t v);
     void (*map_free)(void *context, void *map);
-    /* Scenario (0x1990 bytes): 0x00474c90 new (info), 0x00474d40 binary;
+    /* Scenario (0x1990 bytes): 0x00474c90 new (info), 0x00474d40 binary
+       (the game's 0x004179b0 allocates and reads one);
        +0x00 delete. */
     void *(*scenario_new)(void *context, void *info);
     void *(*scenario_read)(void *context, AoeOutcomeStream *s, int32_t arg);

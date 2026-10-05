@@ -51,7 +51,7 @@ void aoe_action_release_ror(AoeActionRecordRor *a);
 /* 0x00403d80: the list (replacing what it held): types until 0, each
    made by the factory; 0x00403e10: each action's save, then 0.
    0x00403d50 / 0x00403d70 construct and destroy the list (0x004b4180
-   the RoR list, whose factory is 0x004b41a0). */
+   the RoR list, whose factory is 0x004b41a0; 0x004ae6f0 allocates one). */
 int aoe_action_list_load_ror(AoeActionRecordRor **list, int32_t *count, AoeOutcomeStream *s,
                              int ror, int32_t player_count, float version);
 void aoe_action_list_save_ror(const AoeActionRecordRor *list, int32_t count, AoeOutcomeStream *s,

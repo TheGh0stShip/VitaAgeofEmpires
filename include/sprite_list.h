@@ -41,7 +41,7 @@ int aoe_sprite_list_tick(AoeSpriteList *list, float time_delta, float speed);
    priority 0 and no extra references, the same result. */
 int aoe_sprite_list_append_loaded(AoeSpriteList *list, void *sprite);
 /* Patched RoR 1.0a list methods (vtable 0x00543000): 0x00415370
-   constructs it empty with its redraw target. 0x00415760 (+0x08) and
+   constructs it empty with its redraw target (0x004a70f0 allocates one). 0x00415760 (+0x08) and
    0x004157e0 (+0x10) hand every sprite in order to its +0x0c update /
    +0x14 draw (`fn`). 0x00415860 (+0x04), 0x00415950 (+0x28) and
    0x00415980 ask the first sprite of the graphic its +0x1c / +0x30 /

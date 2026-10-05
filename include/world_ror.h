@@ -42,7 +42,8 @@ typedef struct AoeRorWorldOpsRor {
        0x004e8390(world, arg); players 0x004ef8c0 (kinds 1 and 3) and
        0x004f71c0 (kind 2) binary then +0x74, 0x004efb00 new (world, civ,
        index, name, civ ID, computer, 1, 0, 0, 0), gaia 0x004f7290;
-       scenario 0x00506830 new / 0x00506900 binary. */
+       scenario 0x00506830 new / 0x00506900 binary (0x514c bytes; the
+       tribe game's 0x00500270 allocates and reads one). */
     void *(*civ_text)(void *context, FILE *f);
     void *(*civ_read)(void *context, AoeOutcomeStream *s, void **sprites);
     void *(*map_text)(void *context, const char *a, const char *b, const char *c,

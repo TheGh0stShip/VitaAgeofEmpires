@@ -27,7 +27,9 @@ void aoe_explored_cells_destroy(AoeExploredCellVector *vector);
    a placement before continuing simulation. */
 void aoe_explored_cells_record(void *context, int32_t x, int32_t y);
 
-/* RoR 0x0051a890/0x0051aa20 shared zeroed 32-bit tile-mask grid. */
+/* RoR 0x0051a890/0x0051aa20 (patched 1.0a 0x00517e30 / 0x00517f30, which
+   also point the global row table at it, 0x00517fb0) shared zeroed
+   32-bit tile-mask grid. */
 typedef struct {
     uint32_t width, height;
     uint32_t *masks;

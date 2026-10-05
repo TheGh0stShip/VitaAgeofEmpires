@@ -76,3 +76,15 @@ int32_t aoe_editor_set_player_count_ror(AoeScenarioObjectRor *obj,
     }
     return n;
 }
+
+int aoe_scenario_has_conditions_ror(AoeScenarioInfoRor *info,
+                                    const AoeScenarioObjectRor *obj) {
+    if (!info || !obj) return 0;
+    for (int32_t s = 0; s < AOE_SCENARIO_PLAYERS_ROR; s++) {
+        if (!aoe_scenario_value_ror(obj->value_194c, s)) continue;
+        aoe_scenario_select_player_ror(info, s);
+        for (int32_t i = 0; i < AOE_SCENARIO_CONDITIONS; i++)
+            if (info->conditions[s][i].type) return 1;
+    }
+    return 0;
+}

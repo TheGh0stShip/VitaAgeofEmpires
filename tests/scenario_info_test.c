@@ -304,5 +304,16 @@ int main(void) {
         assert(aoe_editor_set_player_count_ror(&co, 9, 7, &cur, &sw) == 8);
         assert(!sw && cur == 4 && co.value_194c[7] == 1);
     }
+    {
+        /* 0x00507e00 any condition. */
+        static AoeScenarioInfoRor hi;
+        static AoeScenarioObjectRor ho;
+        assert(!aoe_scenario_has_conditions_ror(&hi, &ho));
+        hi.conditions[5][3].type = 2;
+        assert(!aoe_scenario_has_conditions_ror(&hi, &ho));
+        ho.value_194c[2] = 1;
+        ho.value_194c[5] = 1;
+        assert(aoe_scenario_has_conditions_ror(&hi, &ho) && hi.selected == 5);
+    }
     return 0;
 }

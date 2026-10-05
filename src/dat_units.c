@@ -65,7 +65,8 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
     unit->type = u8(cursor);
     name_len = u16(cursor);
     unit->id = (int16_t)u16(cursor);
-    take(cursor, 4); /* language-name and creation IDs */
+    unit->language_name_id = u16(cursor); /* template +0x12 */
+    take(cursor, 2); /* creation language ID */
     unit->unit_class = (int16_t)u16(cursor);
     unit->standing_graphic = (int16_t)u16(cursor);
     unit->dying_graphic = (int16_t)u16(cursor);
@@ -73,9 +74,10 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
     unit->undead_mode = u8(cursor);
     unit->hit_points = (int16_t)u16(cursor);
     unit->line_of_sight = f32(cursor);
-    take(cursor, 1); /* garrison capacity */
+    unit->garrison_capacity = u8(cursor); /* template +0x2c */
     for (unsigned i = 0; i < 3; ++i) unit->size[i] = f32(cursor);
-    take(cursor, 4); /* train sound and dead-unit ID */
+    take(cursor, 2); /* train sound */
+    unit->dead_unit_id = (int16_t)u16(cursor); /* template +0x48 */
     p = take(cursor, 8); /* sort, build-on, icon, editor, portrait, enabled */
     if (!p) return 0;
     unit->placement_mode = p[0];
@@ -98,7 +100,11 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
     unit->draw_class = p[1]; /* viewport object-list filtering */
     unit->terrain_restriction = (int16_t)at16(p + 2);
     unit->elevation_mode = p[4]; /* live placement vtable +0x34 */
+    unit->resource_capacity = (int16_t)at16(p + 5); /* template +0x7c */
     unit->decay_rate = atfloat(p + 7); /* runtime template +0x80 */
+    unit->blast_defense_level = p[11]; /* +0x8b, blast 0x00426280 */
+    unit->field_8c = p[12]; /* loader 0x004413b0 order: +0x8b,+0x8c,... */
+    unit->field_8f = p[15];
     p = take(cursor, 16); /* help/hotkey IDs and flags at +0xa4..+0xa7 */
     if (!p) return 0;
     unit->negative_id_mode = p[12]; /* live constructor 0x004a8200 */
@@ -115,7 +121,19 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
     }
     damage_count = u8(cursor);
     if (damage_count > 64) return 0;
-    take(cursor, (size_t)damage_count * 5);
+    p = take(cursor, (size_t)damage_count * 5);
+    if (damage_count && !p) return 0;
+    unit->damage_graphic_count = damage_count;
+    if (damage_count) {
+        unit->damage_graphics =
+            calloc(damage_count, sizeof(*unit->damage_graphics));
+        if (!unit->damage_graphics) return 0;
+        for (unsigned i = 0; i < damage_count; ++i) {
+            unit->damage_graphics[i].graphic_id = (int16_t)at16(p + i * 5);
+            unit->damage_graphics[i].damage_percent = p[i * 5 + 2];
+            unit->damage_graphics[i].apply_mode = p[i * 5 + 4];
+        }
+    }
     p = take(cursor, 6); /* selection/dying sounds and two reaction bytes */
     if (!p) return 0;
     unit->selection_sound = (int16_t)at16(p);
@@ -137,14 +155,19 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
     unit->speed = f32(cursor);
     if (unit->type >= 30) {
         unit->walking_graphic = (int16_t)u16(cursor);
-        take(cursor, 15); /* remaining AoE moving fields */
+        unit->walking_graphic2 = (int16_t)u16(cursor); /* +0xc0 */
+        unit->rotation_speed = f32(cursor);
+        take(cursor, 9); /* remaining AoE moving fields */
     }
     if (unit->type >= 40) {
         unit->default_task_id = (int16_t)u16(cursor);
         unit->search_radius = f32(cursor);
         unit->work_rate = f32(cursor);
-        take(cursor, 4); /* two drop sites */
-        take(cursor, 5); /* task-swap group, attack and move sounds */
+        unit->drop_sites[0] = (int16_t)u16(cursor); /* template +0xe8 */
+        unit->drop_sites[1] = (int16_t)u16(cursor); /* template +0xea */
+        p = take(cursor, 5); /* task-swap group, attack and move sounds */
+        if (!p) return 0;
+        unit->task_swap_group = p[0]; /* template +0xec, 0x0043e810 order */
         take(cursor, 1); /* run pattern */
         task_count = u16(cursor);
         if (!cursor->valid || task_count > 1024) return 0;
@@ -173,6 +196,11 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
             task->auto_search = p[33];
             task->search_wait = atfloat(p + 34);
             task->enable_targeting = p[38];
+            task->field_30 = (int16_t)at16(p + 40);
+            task->field_32 = (int16_t)at16(p + 42);
+            task->owner_mode = p[44];
+            task->requires_carried_resource = p[45];
+            task->unbuilt_target = p[46];
             task->moving_graphic = (int16_t)at16(p + 47);
             task->proceeding_graphic = (int16_t)at16(p + 49);
             task->working_graphic = (int16_t)at16(p + 51);
@@ -213,8 +241,11 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
         unit->accuracy_percent = (int16_t)u16(cursor);
         take(cursor, 1); /* break-off combat */
         unit->frame_delay = (int16_t)u16(cursor);
-        take(cursor, 12); /* graphic displacement XYZ */
-        take(cursor, 1); /* blast attack level */
+        /* Graphic displacement XYZ: projectile spawn offsets, original
+           template +0x12c/+0x130/+0x134 (0x00426520). */
+        for (unsigned i = 0; i < 3; ++i)
+            unit->projectile_offset[i] = f32(cursor);
+        unit->blast_level = u8(cursor); /* template +0x11c */
         unit->min_range = f32(cursor);
         unit->attack_graphic = (int16_t)u16(cursor);
         unit->displayed_melee_armor = (int16_t)u16(cursor);
@@ -222,7 +253,15 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
         unit->displayed_range = f32(cursor);
         unit->displayed_reload_time = f32(cursor);
     }
-    if (unit->type == 60) take(cursor, 9); /* packed missile properties */
+    if (unit->type == 60) {
+        /* Type-60 loader 0x00440530: bytes +0x148..+0x14c, float +0x150. */
+        p = take(cursor, 5);
+        if (!p) return 0;
+        unit->projectile_flight_mode = p[0];
+        unit->projectile_lead = p[1];
+        unit->projectile_hit_mode = p[2];
+        unit->projectile_arc = f32(cursor);
+    }
     if (unit->type >= 70) {
         for (unsigned i = 0; i < 3; ++i) {
             unit->costs[i].resource_type = (int16_t)u16(cursor);
@@ -257,6 +296,7 @@ void dat_free_civilizations(DatCivilizations *civilizations) {
                 for (uint16_t j = 0; j < civ->unit_count; ++j) {
                     free(civ->units[j].name);
                     free(civ->units[j].tasks);
+                    free(civ->units[j].damage_graphics);
                     free(civ->units[j].attacks);
                     free(civ->units[j].armors);
                 }

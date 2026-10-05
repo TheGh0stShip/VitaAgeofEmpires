@@ -135,6 +135,42 @@ int aoe_building_queue_cancel_ror(AoeBuildingUpdate *building,
                                    int16_t unit_id, int16_t amount,
                                    uint32_t *owner_status_four_count,
                                    const AoeBuildingQueueCancelOps *ops);
+typedef struct {
+    void *context;
+    /* Owner player 0x004f15f0(unit_id, &failing, 1.0f, 1). It must store
+       the failing resource (-1, an index, or 0x20) into `failing`. */
+    int (*can_afford)(void *, int16_t unit_id, int16_t *failing);
+    /* Owner player 0x004f1750(unit_id, 1.0f, 1): charge one unit. */
+    void (*pay)(void *, int16_t unit_id);
+    /* Global virtual +0x40(event, owner_id, reason, 0, 0). */
+    void (*notify)(void *, uint32_t event, int16_t owner_id, uint32_t reason);
+    /* 0x0052607b calloc and 0x005260f8 free for +0x1c0 entry storage; must
+       match whatever releases AoeBuildingUpdate.queue_entries. */
+    void *(*allocate_zeroed)(void *, size_t count, size_t size);
+    void (*deallocate)(void *, void *);
+    AoeBuildingQueueCancelOps cancel; /* 0x004add50 type-switch drain */
+    uint32_t *owner_status_four_count;
+} AoeBuildingQueueAddOps;
+
+/* Patched RoR 1.0a 0x004adab0 (production queue add, `this` = building).
+   - If the queue's tail entry already holds `unit_id`, up to `count` more
+     are added: each is an affordability check, then payment and a 16-bit
+     increment. A failed check sends event 0x7d with the failing resource;
+     if nothing was added it returns there. Otherwise +0x1d0 is bumped and
+     event 0x7c sent. A nonpositive count does nothing.
+   - Otherwise the whole queue is drained one item at a time through
+     0x004add50(head_id, 1), so only one unit type is ever queued. One
+     affordability check follows (0x7d and return on failure). A full
+     queue grows by 10 entries through calloc; on allocation failure it
+     returns silently. A new zero-quantity entry is then filled by the same
+     check/pay loop (each check again, a failure sends 0x7d and stops), and
+     the entry is appended even if empty, +0x1d0 bumped and 0x7c sent.
+   +0x1c4 (`queue_aux_count`) is the capacity. Returns 0 for missing
+   dependencies, inconsistent storage, or a drain that stops making
+   progress (a host guard against the original's unbounded loop). */
+int aoe_building_queue_add_ror(AoeBuildingUpdate *building, int16_t unit_id,
+                               int16_t count,
+                               const AoeBuildingQueueAddOps *ops);
 /* Queue branch of disc type-80 setter 004ae500 / patched 004acbf0. For a
    transition above state 2 from an old state above 1, preserve one head item
    normally, but remove the whole head and clear/decrement status 4. This is

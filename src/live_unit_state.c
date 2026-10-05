@@ -94,10 +94,22 @@ int aoe_live_unit_low_state_ror(AoeLiveUnitCore *unit,
         if (!isfinite(rotation) || rotation < (float)INT32_MIN ||
             rotation >= 2147483648.0f) return 0;
         unit->scenario_rotation = rotation; /* 0x0044ca40 +0x9c */
-        /* 0x0044c7b0: x87 truncation then byte store. */
+        /* 0x0044c7b0: for a current graphic with sequence flag 2 and a
+           positive angle count (+0x60), facet =
+           (rotation - pi/4) * angles * (1/2pi) - (-0.5), plus angles when
+           below 0.0, truncated (0x005283e0) and stored as a byte. The
+           constants are the floats at 0x00549920 (pi/4), 0x00549910
+           (1/2pi), 0x00549918 (-0.5) and 0x005498e0 (0.0); double stands
+           in for the x87 intermediates. */
         if (current_graphic && (current_graphic->sequence_type & 2) &&
-            current_graphic->frame_count > 0) {
-            frame = (int32_t)rotation;
+            current_graphic->angle_count > 0) {
+            double angles = (double)(float)current_graphic->angle_count;
+            double v = ((double)rotation - (double)0.7853981852531433f) *
+                           angles * (double)0.15915493667125702f -
+                       (double)-0.5f;
+            if (v < 0.0) v += angles;
+            if (!(v > -9.2e18 && v < 9.2e18)) return 0;
+            frame = (int32_t)(int64_t)v;
             unit->scenario_frame = (uint8_t)frame;
         } else {
             unit->scenario_frame = 0;

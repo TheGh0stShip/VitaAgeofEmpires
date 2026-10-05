@@ -14,6 +14,14 @@ static int checked_trunc(float value, int32_t *out) {
 int aoe_live_unit_vision_change_ror(AoeLiveUnitCore *unit,
                                      AoeLiveUnitVisionBinding *vision,
                                      int entering, int alternate) {
+    return aoe_live_unit_vision_radius_ror(unit, vision, entering, alternate,
+                                           -1);
+}
+
+int aoe_live_unit_vision_radius_ror(AoeLiveUnitCore *unit,
+                                    AoeLiveUnitVisionBinding *vision,
+                                    int entering, int alternate,
+                                    int32_t radius_override) {
     AoeVisibilityFootprintGrid *grid;
     int double_explore, radius;
     int32_t x, y, x0, y0, x1, y1;
@@ -27,9 +35,13 @@ int aoe_live_unit_vision_change_ror(AoeLiveUnitCore *unit,
         (!vision->active_relations ||
          (size_t)vision->owner_index >= vision->relation_count)) return 0;
     line_of_sight = unit->unit_template->line_of_sight;
-    if (!isfinite(line_of_sight) || line_of_sight >= 2147483648.0f ||
-        line_of_sight < (float)INT32_MIN ||
-        !checked_trunc(line_of_sight, &radius)) return 0;
+    if (radius_override >= 0) {
+        radius = radius_override;
+    } else if (!isfinite(line_of_sight) || line_of_sight >= 2147483648.0f ||
+               line_of_sight < (float)INT32_MIN ||
+               !checked_trunc(line_of_sight, &radius)) {
+        return 0;
+    }
     vision->last_new_cells = 0;
     if (radius <= 0) return 1;
     double_explore = vision->active_index >= 0 &&

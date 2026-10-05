@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "progress_percent": "10",
-  "progress_assessment": "Approximate full-port estimate: data and rendering components exist; playable runtime, combat, AI/pathfinding, UI/input, audio playback, and Vita packaging remain unfinished.",
-  "effort": "steady",
+  "progress_percent": "15",
+  "progress_assessment": "Approximate full-port estimate, up from 10%: the RoR 1.0a command layer, order-to-action routing, A* pathfinding, unit movement, the attack action, combat damage, projectiles and blasts are now translated, and units walk and fight on a real campaign map through that code. Still unfinished: unit death and most action classes (gather, build, trade, convert), the player/economy update loop, research effects, computer AI, UI/input and menus, audio playback, saves/multiplayer, and Vita integration and packaging. Not validated against original-game traces or on Vita hardware.",
+  "effort": "high",
   "workers": null,
-  "effort_assessment": "Four builders represent the steady effort setting, not four people or a measured number of work hours.",
+  "effort_assessment": "Eight builders represent the high effort setting for this reporting period (sustained simulation translation work), not eight people or a measured number of work hours.",
   "output": "status/port-progress.png",
   "assets": {
     "base_graphics": "build/original/base/data/graphics.drs",
@@ -12,7 +12,12 @@
     "palette": "build/original/base/data/Interfac.drs",
     "ror_graphics": "build/ror/disc/GAME/DATA2/GRAPHICS.DRS"
   },
-  "scene": {"scale": 2, "width": 480, "height": 268, "vertical_shift": 50},
+  "scene": {
+    "scale": 2,
+    "width": 480,
+    "height": 268,
+    "vertical_shift": 50
+  },
   "labels": {
     "title": "RISE OF ROME / VITA PORT",
     "provenance": "ORIGINAL ASSETS / STATUS ART"

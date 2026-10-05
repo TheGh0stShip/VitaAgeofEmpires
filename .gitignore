@@ -22,7 +22,9 @@ AOEPATCH.exe
 *.elf
 *.self
 eboot.bin
-assets/
+assets/*
+# Vita LiveArea images are drawn by tools/make_vita_livearea.py (no game art).
+!assets/vita/
 status/history/
 status/recipes/v4/slp_tool-linux-x86_64
 status/port-progress.json
@@ -34,3 +36,6 @@ status/port-progress-footprint-v4.jpg
 *.log
 __pycache__/
 *.py[cod]
+# Locally supplied Windows Mobile / Pocket PC research material (never commit)
+Windows Mobile AoE/
+.claude/worktrees/

@@ -3,7 +3,8 @@
 
 #include <stdint.h>
 
-/* Runtime graphic fields used by base 0x004e8ed0 / RoR 0x00416540.
+/* Runtime graphic fields used by base 0x004e8ed0 / RoR 0x00416540
+   (patched RoR 1.0a 0x00415eb0, the animated sprite's +0x0c update).
    These correspond to graphic +0x5e, +0x64, +0x68, +0x6c, +0x70. */
 typedef struct {
     int16_t frame_count;

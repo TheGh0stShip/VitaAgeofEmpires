@@ -13,11 +13,16 @@ typedef struct {
     size_t stride;
 } AoeSpriteDrawSurface;
 
+typedef struct AoeSpriteDrawQueue AoeSpriteDrawQueue;
+
 typedef struct {
     uint8_t *indices;
     size_t size;
     uint32_t width, height;
     size_t stride;
+    /* Optional: queue sprite parts instead of drawing them (the original
+       view's sprite list, see AoeSpriteDrawQueue). NULL draws at once. */
+    AoeSpriteDrawQueue *queue;
 } AoeSpriteIndexSurface;
 
 typedef void (*AoeSpriteSpecialPixel)(void *context,
@@ -32,6 +37,57 @@ typedef struct {
 
 typedef const uint8_t *(*AoeSpriteFixedColorTableRor)(
     void *context, int16_t color_id);
+
+/* One queued sprite part: the original list node of 0x00518d90. */
+typedef struct {
+    const DatGraphic *graphic;
+    AoeGraphicFrame frame;
+    int32_t anchor_x, anchor_y;
+    uint8_t player_color;
+    const uint8_t *table;
+    int32_t layer, row;
+    uint32_t sequence;
+} AoeSpriteDrawQueueEntry;
+
+/* The view's sprite list (RoR 1.0a disc, view +0x338; constructor
+   0x00518a80, reset 0x0051917e, add 0x00518d90). Sprite parts drawn during
+   the terrain tile walk are queued and drawn after all terrain (view loop
+   0x00515844 / 0x0051606f):
+   - row key: the global the live draw 0x004a8a60 sets before its
+     sprite-manager call, tile screen y + unit +0x2e (0x004a8b16);
+   - layer: max(graphic layer +0x29, caller minimum) in 0x004a6dd0; sprite
+     instances (0x00416190) pass minimum 0;
+   - nodes outside rows [-200, view height + 249] (0x00512536: 0x518a80
+     with -200 and height + 0xf9) are not queued;
+   - a row bucket appends (0x00518e3d), and the flush walks rows ascending
+     into per-layer chains, then draws layers ascending (6..40), so the
+     order is layer, then row, then queue order.
+   Archives, cache and the missing-art policy are captured for the flush. */
+struct AoeSpriteDrawQueue {
+    AoeSpriteDrawQueueEntry *entries;
+    size_t count, capacity;
+    int32_t row_key;       /* set by the live-unit draw before each unit */
+    int32_t row_min, row_max;
+    DrsArchive *const *archives;
+    size_t archive_count;
+    AoeGraphicArtCache *cache;
+    uint8_t skip_missing_art;
+    uint64_t missing_skipped;
+    uint32_t next_sequence;
+    int failed;
+};
+
+void aoe_sprite_draw_queue_reset(AoeSpriteDrawQueue *queue,
+                                 int32_t row_min, int32_t row_max);
+void aoe_sprite_draw_queue_free(AoeSpriteDrawQueue *queue);
+/* Puts queued parts in the original draw order: layer, then row, then
+   queue order (the flush calls this first). */
+void aoe_sprite_draw_queue_sort(AoeSpriteDrawQueue *queue);
+/* Draws every queued part in original order into `surface` (whose own
+   queue pointer is ignored) and empties the queue. Returns the first
+   AOE_GRAPHIC_ART_* error, honouring skip_missing_art. */
+int aoe_sprite_draw_queue_flush(AoeSpriteDrawQueue *queue,
+                                const AoeSpriteIndexSurface *surface);
 
 /* RoR 0x004a6dd0 / 1.0a 0x004a55e0 selects the caller's table for a
    negative DAT color, otherwise the registered table for that fixed ID. */

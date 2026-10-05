@@ -819,6 +819,1304 @@ Resolution remains an explicit semantic callback, so a registry entry is not
 blindly container-cast into a host `AoeLiveUnit`. Tests pin missing-target
 rejection, self exclusion, member propagation, order, and metadata.
 
+Patched `004ac0a0` (group remove) and `004ac1d0` (group clear) are translated
+as `aoe_live_unit_remove_dependency_group_ror` and
+`aoe_live_unit_clear_dependency_group_ror`. Removing an ID equal to both the
+caller's ID and its `+0x78` source tail-calls `004ac1d0`; otherwise each
+resolved non-self member gets an inline capacity scan/shift with a floored
+decrement that, unlike `004ac030`, never clears the member's `+0x78`, and
+then the caller is handled by `004ac030`. `004ac1d0` applies `004ac1b0` to
+every resolved non-self member and then to the caller. Patched `004abd80`
+(`aoe_live_unit_set_dependency_group_ror`) is thiscall, but raw disassembly
+shows it uses the caller only to reach the world (`unit+0x0c -> owner+0x3c`)
+for `005206d0`. A null list or zero count returns 0, a negative count returns
+1, and every resolved listed unit, caller included, is rebuilt by `004abc80`
+from the whole list.
+
+These four operations are the only users of the patched command opcodes 8,
+9, 0x0e and 0x0f in dispatcher `0x0042a180` (handlers `0042b460`,
+`0042b520`, `0042b4a0`, `0042b4e0`). Raw disassembly of each handler shows
+the same gate: resolve command `+0x04` through command-processor `+0x04`,
+then compare the unit owner's `+0x4a` word with the zero-extended player byte
+`+0x01`. A mismatch or failed lookup is a silent no-op. The builders
+`0042bbe0`/`0042bcc0`/`0042bc40`/`0042bc80` calloc 0x74/0x08/0x10/0x0c
+bytes: set stores context `+0x08`, up to 25 IDs at `+0x0c`, and the count
+byte at `+0x70`; propagate stores context `+0x08` and target `+0x0c`;
+remove stores the removed ID at `+0x08`. Neither the builder nor
+`004abc80` bounds the set count, so `aoe_command_execute_dependency_ror`
+rejects a count above 25 as a host-only bounds guard, not original behavior.
+`src/command_dependency.c` encodes and decodes these records little-endian
+byte by byte, so host layout and `size_t` width never reach the wire format.
+
+Patched RoR 1.0a command opcode 5 (`0x0042ad10`, builder `0x0042bae0` called
+from player vtable `+0xb4` = `0x0045e580`) is an 8-byte record: player byte
+`+0x01`, resource byte `+0x02`, float `+0x04`. The handler indexes world
+`+0x40` by the unbounded player byte and calls player vtable `+0x78` with the
+zero-extended resource word, the amount, and flag 0. Earlier player-resource
+notes quoted disc/unpatched addresses. The patched RoR player vtable is
+`0x00544d18` (installed at `0x45b46f`, `0x45b6fa`, `0x45ba71`); its
+`+0x74/+0x78` are `0x0045cfc0/0x0045cfe0`, and its `+0x7c` world-tick target
+is `0x0045d040`. Patched AoE 1.0c's set/add pair is `0x0045e7a0/0x0045e7c0`.
+Two derived RoR vtables, `0x00549a44` and `0x00549b80`, share the `+0x78`
+override `0x004f6c60`:
+- resource 3 with a nonzero flag first adds to raw value slot 49 (`+0xc4`)
+  with no count check;
+- resource `0x32` stores 1 at player `+0x104` and calls world `0x00520c60`
+  (through player `+0x3c`), which resets per-player `+0xd4..+0x104` fields;
+- every path ends in `0x0045cfe0`.
+`aoe_player_resource_add_virtual_ror` and `src/command_player.c` translate
+this; the slot-49 allocation check and the NULL-player rejection are
+host-only guards. Which players are built with which derived vtable has not
+yet been established.
+
+Opcode 7 (tribute) is processor vtable slot `+0x00` = `0x0042ad40` in both
+the base (`0x00543498`) and derived (`0x00549904`) processor vtables. Builder
+`0x0042bb20` (slot `+0x0c`) writes sender `+0x01`, receiver `+0x02`, resource
+`+0x03` and float `+0x04`. Raw disassembly shows:
+- the gate `fld values[r]; fcomp amount; test ah,1`: it proceeds only when
+  the sender's unchecked raw value is `>=` the amount, so NaN fails;
+- sender `+0x78(r, -amount, 0)` (exact `fchs`) and receiver
+  `+0x78(r, amount, 0)`, with no fee;
+- game `*0x00580e38` vtable `+0x40(7, sender, receiver, r, __ftol(amount))`;
+- receiver vtable `+0xe8(sender, receiver, 0x20a, r, __ftol(amount), 0)`.
+  Base `0x0045e930` and derived `0x004f3350` implement that slot; Ghidra
+  dropped the trailing zero argument.
+`__ftol` (`0x0052602c`) truncates via a 64-bit `fistp` and returns the low
+32 bits; `include/aoe_ftol.h` reproduces that, including integer-indefinite
+inputs.
+
+The derived processor's dispatch `0x004e83e0` (installed by `0x004e8390`
+from `0x0050a090`; the base processor is built from `0x0051c790`) calls CRT
+`rand()` once per command before routing, so command count affects the
+shared seed. It overrides opcode 4 with `0x004e8570`, handles 0x64-0x6f and
+0x77 itself (0x6c through its own vtable `+0x10` = `0x004e91b0`), and passes
+every other value to `0x0042a180`. Patched CRT `srand`/`rand` are RoR
+`0x00526053`/`0x0052605d` (seed `0x00560664`) and AoE 1.0c
+`0x0051fc8f`/`0x0051fc99` (seed `0x005591ec`); the `aoe_rng` header had
+quoted unpatched-release addresses.
+
+The derived processor is the one RoR sessions run. Entry `0x00528f78`
+calls WinMain `0x004436f0`, which allocates and constructs only the tribe
+game (`0x004fdfa0`, vtable `0x0054a264`). Its world factory (`+0xbc` =
+`0x004ff3c0`, 0x124 bytes) builds the tribe world `0x00509ae0` (vtable
+`0x0054a4f8`), and that world's `+0x54` (`0x0050a090`) installs processor
+vtable `0x00549904` at world `+0x58`. The base world vtable `0x0054a954`
+(`+0x54` = `0x0051c790`) and base game factory `0x004198d0` exist, but they
+are installed only as base-class parts of those constructors.
+
+Opcode 4 (builder `0x0042ba90`, 0x14 bytes: int16 template index `+0x02`,
+player `+0x04`, floats `+0x08/+0x0c/+0x10`) is handled in that session by
+the tribe override `0x004e8570`, not base `0x0042acd0`:
+- template `+0x68` (`elevation_mode`) equal to 1 forces z to 4.0f by
+  writing the record;
+- the template's vtable `+0x18` creates the object;
+- if the new unit's template type is 80, `0x004ad7b0` gets 10000.0f of
+  work.
+`0x004ad7b0` adds construction work. With state `+0x48` nonzero it returns
+1. Otherwise it clamps the work to the remaining `+0x15a` time, adds
+`H*work/T` hit points (`+0x26`, clamped to H), accumulates `+0x1d4`, and
+when the total reaches T calls vtable `+0x5c(2)`; NaN does not complete.
+These are `aoe_command_execute_object_create_tribe_ror` and
+`aoe_live_unit_add_build_work_ror`. Intermediates use double, on the MSVC
+default 53-bit x87 precision-control assumption, which has not yet been
+verified against the running game.
+
+The root setter labels were unpatched-release addresses. Patched RoR root
+vtable `0x00547da8` `+0x5c` is `0x004aa550` (disc `0x004abdf0`). Patched
+AoE 1.0c's setter is `0x004a9430`: it was found by its unique `+0x48`
+state-store shape, and it uses visibility slots `+0xd4/+0xd0` where RoR
+uses `+0xdc/+0xd8`. In both games the state-3 branch tests the dependency
+group: unit ID `+0x04` equals source `+0x78`, `+0x74` is nonzero, and
+count `+0x68 > 1`. It is not an action list. The disc-address table above
+(live vtables and their `+0x5c/+0x68/+0x6c/+0xb4` columns) remains
+unpatched-release evidence.
+
+That state-3 body is now `aoe_live_unit_dependency_handoff_ror`. Over the
+source's IDs, re-reading count `+0x68` each step, it skips the source's own
+ID. Each member that resolves, has state `<= 2` and a non-null `+0x74`
+(getter RoR `0x00407a60`, base `0x004aa8b0`) gets `+0x78` = the first such
+member's ID. That member then calls `0x00413050` (base `0x00412e40`) on its
+`+0x74` object with the source's `+0x74 -> +0x12c` record. That call lazily
+constructs its own 0x1c8-byte `+0x12c` record (`0x0040d2f0`) and copies the
+old one in (`0x0040d670`). The source keeps its own `+0x78` and list.
+`-1` doubles as the "no leader yet" sentinel, as in the executable. What the
+`+0x74` object and its `+0x12c` record represent is not yet identified.
+
+Tribe command 0x77 (`0x004e9450`, builder `0x004e9c20`, 0x0c bytes:
+building ID `+0x04`, int16 unit `+0x08`, int16 count `+0x0a`) has no player
+byte and no owner check. A positive count calls queue add `0x004adab0`;
+otherwise `0x004add50` cancel receives the 16-bit negated count. Raw
+disassembly of `0x004adab0`:
+- A tail entry with the same unit ID gets up to `count` additions. Each is
+  owner `0x004f15f0(unit, &slot, 1.0f, 1)` then `0x004f1750(unit, 1.0f, 1)`
+  and a word increment.
+- `0x004f15f0` always writes -1 (or the failing resource, or 0x20) to the
+  argument slot, and event 0x7d reports that slot's low word.
+- A failure with nothing added returns before the `+0x1d0` bump and event
+  0x7c.
+- A different unit ID first drains the whole queue with
+  `0x004add50(head, 1)` (one unit type per building), then performs one
+  up-front check. A full queue grows by 10 entries (`calloc`, copy,
+  `free`; allocation failure returns silently), and the new entry is
+  filled by the per-item loop. It is appended even when empty.
+`aoe_building_queue_add_ror` and `aoe_command_execute_building_queue_ror`
+translate this. The cost check and payment `0x004f15f0`/`0x004f1750`
+are translated as `aoe_player_cost_check_ror`/`aoe_player_cost_pay_ror`
+(see below), with queue-compatible adapters.
+
+Patched RoR tribe-player cost methods (`this` = player; template from
+player `+0x24[index]`, costs at `+0x148`, 6 bytes each, deduct byte
+`+0x14c`; only the low byte of the 16-bit field is read):
+- Check `0x004f15f0(index, *failing, mult, pop_flag)` writes -1 first.
+  Gold (`values[3]`) acts as a substitution budget only when `values[29]`
+  is at least the double 1.0 at `0x005425f8`; otherwise the budget is 0.0
+  (`0x00542458`).
+- Population (type 4) with `pop_flag` 0 fails with 0x20 when `+0x2c >=
+  +0x80` (`values[11] >= values[32]`). Gold's own cost reduces the budget
+  (fail 3 below zero).
+- A short resource fails with its type unless its deduct byte is set and
+  the budget covers the gap, which is then consumed. Costs are evaluated
+  in order, and `amount*mult` is rounded to float.
+- Pay `0x004f1750` re-checks with a NULL out-pointer. It then charges
+  each deductible cost (population skipped for nonzero `pop_flag`) with
+  an unrounded product. A cost above the value takes the remainder from
+  gold and zeroes the value: gold is written first, so a gold cost ends
+  at 0.
+- Refund `0x004f17f0` adds `(float)amount` back for each deductible cost of
+  a type >= 70 template, without the multiplier and including population.
+  The production queue pays with `pop_flag` 1, so a cancelled queue item
+  refunds a population unit that was never charged. This asymmetry is
+  what the code does; whether other code compensates for it is not yet
+  established.
+
+Base opcode 0 (`0x0042a280`, used by both processors) is the unit order.
+Its decompilation is unusable (registers are mistaken for pointers), so the
+translation follows raw disassembly. The record has count `+0x01`, target
+`+0x04`, x/y `+0x08/+0x0c`, issuing player `+0x10`, flag `+0x12`, masks
+`+0x14/+0x18`, and IDs from `+0x1c`.
+- A multiplayer validity gate can drop the command after storing CRT
+  `rand()` in `0x00581ab0`, so dropped commands still advance the seed. It
+  applies only when the target resolves, `0x0041b760` is true, the first
+  unit's owner `+0x04` (`0x00454150`) is 0, the issuer is not the local
+  player (world `+0x7c`), and the target type is 80/90/10/20.
+- The gate drops the command when player `+0x104` is 0 while the flag is
+  set, when the masks are disjoint, or when map cell
+  `0x007d205c[__ftol(y)][__ftol(x)]` lacks mask `+0x18`'s high bits.
+- With more than one unit whose min/max spread is at most 8.0 (double
+  `0x005434a8`) on both axes, units keep their offsets from the centre.
+  Coordinates are clamped to 1.0 when negative and to size-1 at or beyond
+  the map edge (map `+0x08/+0x0c`). The target is kept only if its template
+  `size[0]` or `size[1]` is positive.
+- The min/max scan updates the maximum only in an `else` branch.
+  Strictly decreasing coordinates therefore leave the maximum at 0, and a
+  wide group can still move in formation. This is the original behaviour
+  and is preserved and tested.
+- Each unit runs `0x004ac320` (empty the `+0x54` group when owner `+0x04`
+  is 1), vtable `+0x12c(1)`, `0x004ac280` for every other listed ID (an
+  unbounded deduplicated vector at `+0x54/+0x58/+0x60`), then vtable
+  `+0x98(target, x, y, 0)`.
+
+For action-capable live classes, unit vtable `+0x98` is `0x00405d70`, which
+calls `+0x1f8(target, x, y, z, 0)` unless the target is the unit itself and
+then increments byte `+0x188`. The root `+0x98` (`0x00415300`) is empty.
+`+0x12c` is `0x0044eb30`, which stores its byte at `+0x155`. Every
+action-capable vtable found uses `+0x1f8` = `0x00405f20`. That function asks
+the actor template's task list (`+0xd8`, list vtable `+4`) for the task an
+order means, then builds actions.
+
+There are two task-list classes:
+- Base templates (factory `+0x38` = `0x0043e4d0`) select with `0x004e7dc0`.
+- Tribe templates (template vtable `0x00549930`, factory `0x004ece50`,
+  list vtable `0x005499ac`) select with `0x00508010`, falling back to
+  `0x004e7dc0`.
+
+The task loader `0x004e74f0` and the template loader `0x004413b0` fix the
+offsets used:
+- task: `+0x08` target class, `+0x0a` target unit, `+0x0c` enable
+  targeting, `+0x0e` terrain, and `+0x10/+0x11/+0x12` from file bytes
+  44..46;
+- template: `+0x10` id, `+0x14` class, `+0x8c/+0x8f` from bytes 12 and 15
+  of the `+0x64..+0x90` block.
+
+The predicate `0x004e7f90` and both selectors are translated in
+`src/unit_task.c`. The tribe selector covers drop-off (classes 4/21 onto own
+buildings 109/103/68/45 by carried type), build (0x65), action 3 for
+`+0x8f` = 7 targets, repair (0x6a) for damaged buildings other than id 50
+and for ship classes 2/20/21/22, and priest convert/heal (0x68/0x69). The
+priest branch never falls through to the base selector. `dat_tool --unit`
+now prints the task and selector fields.
+
+Base opcodes 1 and 2 are translated:
+- Opcode 1 (`0x0042a730`, IDs at the unaligned offset `+0x02`) skips
+  template 50 and otherwise runs `0x004ac320` and unit vtable `+0xa4`.
+- Opcode 2 (`0x0042a780`) is opcode 0's simple path with `+0xa0` in place
+  of `+0x98`. For action classes `+0xa0` is `0x00405ee0`, which calls
+  `+0x1f8` with final flag 1.
+
+The `+0xa4` stop variants are root `0x0045bcc0` (ret), action `0x004064e0`
+(clear the `+0x184` list unless head `+0x2c` accepts), group `0x00426250`
+(also `+0x74` object `+0x58(1)`), and building `0x004ae290` (also drain the
+production queue through `0x004add50`). They are
+`aoe_live_unit_stop_ror`.
+
+The action-list labels were disc addresses. The patched list methods are
+update `0x004043b0`, push `0x00404400`, append `0x00404450`, pop
+`0x004044d0` and clear `0x00403e50`; patched `0x00403e70` is an action
+factory switch.
+
+Base opcode 3 (`0x0042a850`) repeats opcode 0's formation and simple paths
+without the validity gate, ordering through `+0x9c`. After each order, a
+unit whose `+0x74` group object exists calls three methods on it:
+`0x0040f6c0(0x2c6)`, `0x0040f6d0(0x262)` and `0x00412f50(target ID, target
+class, x, y, 0)`. The target ID and class are -1 when the target is missing
+or has no positive size, and x/y are the coordinates the unit was ordered
+to. In the simple path the order itself still receives the unfiltered
+target. Opcodes 0 and 3 share one routine in `src/command_order.c`.
+
+Base opcode 6 (`0x0042ae20`, int32 count `+0x04`, int32 pattern `+0x08`,
+IDs from `+0x0c`) arranges a group around a leader. Nothing happens for
+counts <= 1. The leader is the unit with the smallest unrounded
+`sqrt(x*x + y*y)`, with the best value stored as a float. If the index-0
+unit does not resolve, the original compares against an uninitialised
+local; the translation then takes the first resolved unit, a documented
+host deviation. Every resolved unit is prepared like an opcode-0 unit.
+Non-leaders are then sent through `+0x9c(0, x, y, 1.0f)` to a point
+stepped from the leader's position:
+- 0: diagonal, steps 1.0;
+- 1: anti-diagonal, steps 1.5;
+- 2: row and 3: column, steps 2.0;
+- 4/5: a zig-zag whose toggle alternates -/+ y and grows both 1.5 steps
+  only on the + half (jump tables `0x0042b0ec`, `0x0042b104`).
+
+The remaining base opcodes route through player virtuals that the base and
+both derived player vtables share:
+- **0x0a** (`0x0042b120`, builder `0x0042bcf0`, 0x28 bytes) resets the
+  group of the unit at `+0x04`. The issuing player's `+0x34`
+  (`0x0045beb0`) then receives 12 record fields; it forwards them to the
+  unit's `+0x74` group object (`+0x10`) only when the unit is owned by that
+  player.
+- **0x11** (`0x0042b1a0`) is the multi-unit form, with IDs from `+0x24`.
+  Coordinates whose bits equal `0xbf800000` (-1.0f) are replaced by the
+  unit's own `+0x38/+0x3c/+0x40`.
+- **0x0b** (`0x0042b290`) is resignation. Outside a session it calls player
+  `+0x08` (`0x0045bd00`: set `+0x81`, `+4(2)`, and event 5 on the first
+  resignation). In a session it marks game `+0xa15[slot]`, tears down a
+  local slot, and resigns the player only when every slot 1..8 mapped to it
+  (`0x0041c080`) has left.
+- **0x0c** (`0x0042b3b0`) and **0x10** (`0x0042b3f0`) feed 3-byte records to
+  unit `+0x1bc(record, 1)` through player `+0x48` (`0x0045bf90`).
+
+Tribe opcodes 0x68/0x6a/0x6b/0x6d/0x6e/0x6f (`src/command_tribe_unit.c`):
+- 0x68 (`0x004e8e20`) acts only when the world `+0x40` slot for player
+  `+0x02` exists. Each unit (IDs at `+0x0c`) then runs `0x004ac320` and
+  `+0x17c(__ftol(+0x04), __ftol(+0x08), 1)`.
+- 0x6a calls unit `+0x244` on the unit at `+0x04`.
+- 0x6b calls unit `+0x14c(+0x04, +0x08, 0, 1)` for the IDs at `+0x0c`.
+- 0x6d writes the int16 at `+0x04` to unit word `+0x4c` (the carried
+  resource type) for the IDs at `+0x08`.
+- 0x6e runs repair-target `0x004b0870` with the source at `+0x04`. That
+  method finds the actor's action-0x6a task matching the source (buildings
+  take target class -1/0, other targets their class) and builds the action.
+- 0x6f issues, for each unit, its owner's `+0x34` task (owner, unit,
+  0x2d1, unit, owner, x, y, 0, 1.0f, 1, 0, 100) after `0x004ac320`.
+
+Tribe opcodes 0x64/0x65 (`0x004e85e0`/`0x004e8780`; 0x10-byte records:
+building `+0x04`, player `+0x08`, int16 item `+0x0a`, request `+0x0c`) are
+train and research.
+- If the building resolves and its active-action query `0x004ad870` (head
+  action type) is neither 0x66 nor 0x67, the item's location is checked:
+  train uses template `+0x15c`, which must equal the building ID or be -1;
+  research uses tech tree `+0x224` entry `+0x28`, which must match exactly.
+  On a match, the 0x50-byte train action `0x004b4f10` or the 0x48-byte
+  research action `0x004b60b0` is added through building `+0x208`, and a
+  group object hears `0x0040f6d0(0x26c)` and `0x00412f50(request, -1,
+  -1.0f x3)`. A location mismatch does nothing.
+- A missing or busy building defers to player `+0x10c` (train) or
+  `+0x118` (research) with the raw building ID.
+
+Tribe sessions also have a second tribute: opcode 0x6c, through derived
+processor slot `+0x10` = `0x004e91b0`. It is built by slot `+0x14` =
+`0x004e9a10`, the tribe override of the base `+0x0c` builder `0x0042bb20`.
+The record is sender `+0x01`, receiver `+0x02`, resource `+0x03`, float
+amount `+0x04` and float fee rate `+0x08`. Unlike opcode 7 it never
+rejects the transfer:
+- A negative or NaN amount becomes 0, and fee = rate*A.
+- When A + fee exceeds the sender's stock S, fee = S*rate and A = S - fee.
+- The receiver gains A, and the sender loses A + fee.
+- Resource 0x35 records the balance: the sender gains the total, and the
+  receiver loses A.
+- Event 7 reports `__ftol(A)`, while the receiver notice reports the
+  requested amount.
+The decompiler misreads the subtraction operands as stray registers; the
+translation follows the disassembly.
+
+Tribe opcode 0x67 (`0x004e8eb0`, jump table `0x004e9104`) is game control.
+Sub-code 0 changes diplomacy: it sets player `+0x88`, calls `0x0045da70`
+with `__ftol` of the float stance, raises event 8, and refreshes the world.
+`0x0045da70` writes stance byte `+0x84[other]` and relation dword
+`+0x8c[other]`: 0 for gaia, 1 for self, 2 for stance 0, 3 for stance 1 and
+4 otherwise. It then calls `+0x94(other, stance)` on every object in the
+player's `+0x28` list. `0x0045da60` returns the raw stance byte, and the
+task predicate and tribe selector read any nonzero value as hostile, so
+stance 0 is allied. The other sub-codes are:
+- 1: world `+0x18`;
+- 2: player `+0x78` resource add;
+- 4: game `+0x9a8`;
+- 5: player `+0x108`;
+- 6: cheat dispatcher `0x0050c570`;
+- 7: world `+0x4c` object `+8(0x71, player)`;
+- 8: out-of-sync handling (`syncerr%d.gam`).
+`src/player_diplomacy.c` and `src/command_game.c` translate this; the
+cheat dispatcher and sync-error screen remain callbacks.
+
+Tribe opcode 0x66 (`0x004e8920`) places buildings. The record has builder
+count `+0x01`, player `+0x02`, x/y `+0x04/+0x08`, int16 template `+0x0c`,
+dword `+0x10` and builders from `+0x14`.
+- Template `+0x20` checks placement and writes its out-value into the
+  handler's argument slot. A failure is reported through player `+0x100`,
+  but only when the first builder resolves.
+- For template 109 whose own `enabled` byte (`+0x52`) is 0, a live town
+  center found by `0x00451370` refuses the placement silently.
+- Payment is `0x004f1750` with pop flag 0; a failed payment reports code 0.
+- On success, template `+0x3c` creates the foundation, and every builder
+  resets its group and gets `+0x98(foundation, x, y, 0)`.
+`src/command_place.c` translates this. The translation starts the
+out-value at 0 rather than truncating the host record pointer the original
+would leave there.
+
+Tribe opcode 0x69 (`0x004e8b00`) lays walls. The record has builder count
+`+0x01`, player `+0x02`, endpoint bytes x1/y1/x2/y2 at `+0x03..+0x06`,
+int16 template `+0x08`, dword `+0x0c` and builders from `+0x10`.
+- If |dx| = |dy| the wall is one straight or 45-degree run. Otherwise it
+  is an L: the longer axis is laid first from the start point, then the
+  other axis from one cell past the corner.
+- The run helper `0x004e8d00` steps -1/0/+1 per axis through both
+  endpoints. Each cell is checked at its centre (+0.5f, `0x00542468`) with
+  template `+0x20` arguments (NULL, 1, placement_class, 0, 1, 1, 1).
+- Accepted cells are paid individually; a failed payment ends only that
+  run. Pieces are created through template `+0x3c`.
+- Builders are sent to the first piece created.
+
+Unit vtable `+0x1f8` = `0x00405f20`, reached from `+0x98`/`+0xa0` (whose
+final flag it never reads), is the order-to-action step. It is translated
+as `aoe_unit_order_ror`:
+- **Task selection and job switch.** The unit's list selects a task. If
+  none fits and template `+0xec` (`task_swap_group`, the first of the five
+  bytes after the drop sites) is set, the first owner template with the
+  same class, type and swap group whose list yields a task becomes the
+  unit's template (`+0x54`). In the RoR data, the Man, Builder, Fisherman,
+  Forager, Hunter, Lumberjack and Miner templates all share class 4,
+  type 70 and swap group 1: this is the villager job switch.
+- **Reusing the head action.** A head action built from the same task is
+  retargeted through `+0x34`. A type-9 head already aimed at the target is
+  also retargeted and skips creation.
+- **Building an action.** Otherwise the `+0x184` list factory builds one:
+  the base list `0x00542600` uses `0x004040b0`, and the tribe list
+  `0x005488a8` uses `0x004b4600`, which defers to the base. The routes are
+  taken from the jump tables `0x0040434c/0x00404334` and
+  `0x004b4c04/0x004b4bd4`:
+  - base: 4 point; 5 target/point; 7 attack with group notices; 0xa
+    point; 0x15 task-only;
+  - tribe: 3 target, even for NULL; 0xc point; target/point pairs for
+    0x65, 0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6e and 0x6f; 0x78 unit-only.
+  Allocation sizes and constructor addresses are recorded per route.
+- **Fallback.** Failing all of that, the unit moves through `+0x9c` with
+  result 1.
+- **Acknowledgement.** Group objects acknowledge the result through table
+  `0x00406264/0x00406230`.
+- **Attack arguments.** The attack constructors take task range and
+  template `min_range` (`+0x138`), `projectile_unit_id` (`+0x124`) and
+  `frame_delay` (`+0x12a`).
+
+The move fallback `+0x9c` = `0x00405db0` has three steps:
+- It ignores a self-target, and it stops when the head action's `+0x30`
+  absorbs the move (`0x00404550`).
+- Otherwise it allocates a 0x44-byte move action (type 1, vtable
+  `0x005426dc`): `0x004052d0(unit, target, 0.4f, 0)` or
+  `0x00405250(unit, x, y, z, 0.4f, 0)`.
+- A group object is told (0x2c6, 0x262, target, x, y, z). The action is
+  adopted and `+0x188` incremented.
+
+Base actions (vtable `0x005429d8`) are initialised by `0x00407050`. Their
+target setter `0x00407380` calls `+0xc4(unit)` on a released target and
+`+0xc0(unit, type, 0)` on an attached one, and keeps `+0x18` in sync.
+
+The move action translated in `src/action_move.c`:
+- **Defaults.** A non-positive range becomes 0.4, and the graphic defaults
+  to template `+0xbc` or `+0x18`.
+- **Activation** (`0x00405430`): in range gives state 1; speed `+0xfc` 0
+  or NaN gives 0xd; otherwise 3.
+- **Update** (`0x00405500`, jump table `0x00405888/0x00405874`):
+  - **Validation.** A lost or dead target is cleared. The update then
+    returns 5 when quiet; otherwise it sends notice 0x1fb with the reset
+    ID and returns 4.
+  - **State 3.** It finishes if already in range. Otherwise it records the
+    destination, sets range, target ID and size on the unit's movement
+    system, and enters state 4 when `0x0044bf00` reports 0.
+  - **State 4.** A target that drifted more than 1 tile forces a re-path:
+    notice 0x1fc, state 3, then two nested updates. Here dx is compared
+    unrounded and dy after float rounding. Otherwise movement status 0
+    arrives at the point (result 3), and status 2 arrives near the target
+    (result 2).
+  - **States 1 and 0xd.** These report done (1) and arrival (3).
+
+The movement system's setters `0x0044be90..0x0044bee0` only store the
+destination (`+0x11c..+0x124`), range (`+0x134`), target ID (`+0x138`)
+and target size (`+0x13c/+0x140`). Movement start `0x0044bf00`:
+- A unit whose template `+0x38` is <= 0 (or NaN) gets a direct
+  start-to-destination path. `+0x38` is the third DAT size float (height):
+  `0x00404a60` adds half of it to `z` for a centre point, while the speed
+  getter `0x0044ead0` reads `+0xb8`. An earlier note here called `+0x38` the
+  speed.
+- Otherwise the unit must pass its owner's path budget
+  (`0x0045c180/0x0045c1c0`). Without budget, `+0x156` counts the retry and
+  the call returns 2.
+- With budget, the request goes to the global pathfinder object
+  `0x006a1cc0`.
+  `+0x156` resets and `+0x144` becomes the intermediate-waypoint count
+  `+0x16c` plus 25 (owner player `0x00454150` returns 0) or 15. The search
+  runs from the unit's tile to the intermediate tile at `*(+0x168)` (when
+  `+0x16c > 0`) or the destination tile, with range `+0x134`, target
+  `+0x138`, mode 1, no distance output, budget-limited, occupancy checked,
+  step 1 and unit queries disabled (`-1, -1`).
+- A failed search that leaves a one-waypoint path, for a unit not centred
+  on its tile (fraction 0.5 on both axes) that fits at the centre
+  (`0x0045a4f0(.., 1)`), moves the unit there through vtable `+0x34` and
+  returns 2. Otherwise the path cursor rewinds and advances (`0x00458440`,
+  `0x00458450`) and the call returns 0. The moving branch sits behind a
+  constant test (`mov ecx,0x0044f1a0; test ecx,ecx`) whose dead side
+  returns 1.
+- `aoe_movement_start_ror` (`src/movement.c`) translates this, and
+  `tests/movement_test.c` covers each branch.
+
+The movement update `0x0044c2d0` (RoR 1.0a) runs once per tick:
+- It measures the destination distance with the template footprint
+  (`+0x30/+0x34`) plus the target size (`+0x13c/+0x140`) subtracted per
+  axis and clamped at 0. A positive range `+0x134` that covers this
+  distance stops the unit: `+0x88 = 0`, status `+0x148 = 1`, vtable
+  `+0x1c0(0)`, `+0x58 = 0`, return 2.
+- Under 0.5 tiles it steps straight to the destination through `0x0044cde0`,
+  unless the unit already stands on its current waypoint (return 2 with no
+  status change).
+- Otherwise it advances past a waypoint it stands on (placing the unit there
+  when `0x0045a4f0` fits) and steps toward the current waypoint.
+  `0x0044cde0` results:
+  - 0 keeps moving (status 2, return 1);
+  - 1 also clears `+0x88`;
+  - 5 stops;
+  - 2 advances the path;
+  - 3, 4 and 6 give up. Giving up clears `+0x88`, sets status 2, and
+    returns 0 without intermediate waypoints or adds 5 to `+0x144` and
+    returns 1.
+- An exhausted path drops intermediate tiles (3 bytes each at `+0x168`, via
+  vtable `+0x1c4(0)`) until one lies beyond footprint radius + range + 0.3
+  tiles, then re-paths to it:
+  - The re-path needs the player budget and increments counter
+    `+0x11dcc0`.
+  - From the first exit only, `+0x144` is decremented and gives up at 0.
+  - The destination still counts as reached at radius + range, plus 3
+    tiles when the next two intermediate tiles share a terrain-restriction
+    zone (`0x004ab9e0`) and the distance exceeds 4.
+- `aoe_movement_update_ror` translates this, with `0x0044cde0` as a callback,
+  and `tests/movement_update_test.c` covers it.
+
+The intermediate waypoint list lives in live vtable slots `+0x1b8..+0x1c4`
+(base `0x00542748`, shared by six moving-unit vtables):
+- **Entries.** Each entry is 3 bytes at `+0x168`, with count `+0x16c` and
+  capacity `+0x170`.
+- **Get** `0x0044eb40` (`+0x1b8`) returns entry i.
+- **Append** `0x0044eb70` (`+0x1bc`) first clears the list when `+0x174` is set.
+  `0x0044edd0` sets that byte; an earlier note mislabelled it "explored".
+  Storage grows to 5 entries and then doubles, with zero fill.
+- **Clear** `0x0044ed20` (`+0x1c0`) zeroes the count. With argument 1 it
+  also calls unit `+0x74`'s vtable `+0x58(0)`.
+- **Remove** `0x0044ed50` (`+0x1c4`) shifts later entries down by one.
+  Index 0 therefore removes entry 0, but index k > 0 removes entry k − 1.
+  Movement only uses index 0.
+- These are translated as `aoe_movement_waypoint_*_ror`.
+
+The tick toward a point `0x0044cde0` (RoR 1.0a):
+- **Speed.** A zero speed `+0x88` restarts at template speed `+0xb8`
+  times a positive sprite multiplier (sprite `+0x64`), and the heading is
+  then aimed from the tile centre. The move distance is speed times world
+  `+0x84`.
+- **Blocked wait.** A wait `+0x130` drains by the move distance, and while
+  it is positive the speed stays 0. On expiry it becomes −1.
+- **Turning.** With template `+0xc4` > 0 (the DAT moving-unit float after
+  the two walking graphics, a per-facet turn delay), the turn timer
+  `+0x12c` drains by the tick. The facing `+0x9c` turns one facet
+  (`6.2831853 / facets`, sprite `+0x60` or 8) per delay while the facet
+  fraction exceeds 0.8 (0.9 after a re-path).
+- **Facet helpers.** `0x0044ef90` wraps angles and snaps them to facets,
+  reusing one stack slot for both the facet step and the best difference.
+  `0x0044bbd0` writes the facet frame to unit `+0x35`.
+- **Blocked step.** When the next step does not fit (template height
+  `+0x38` > 0) and no wait is running, a wait of
+  `rand() % 6 * 0.1 + 0.5 / speed` starts. After an expired wait the unit
+  re-centres and returns 5 if the target is within footprint radius +
+  range + 0.3. It returns 2 if the goal is occupied. Otherwise it spends
+  `+0x144` (4 at zero) and the player budget (1 without), then re-paths
+  (4 on failure).
+- **Moving.** The unit snaps onto its waypoint when overshooting it
+  within 0.25 tiles, or when within 0.5 tiles while oscillating between
+  two facets (`+0x17c/+0x17d`). The overshoot test at `0x0044d8af` reads
+  `0x00544a78` with `fcomp DWORD PTR`, so it is the float 0.25 (the
+  eight-byte slot is not used as a double there).
+  `+0x178` records the pre-move distance to the waypoint.
+- **Slope speed.** Speed is multiplied by 0.9 when climbing more than 0.02
+  and by 1.03 when descending. Within that band it resets to the base
+  speed. Either way it then takes the terrain multiplier `0x004aa880`.
+- `aoe_movement_step_to_ror` and `aoe_movement_tick_ror` translate this,
+  and `tests/movement_step_test.c` covers it. Host libm atan2/sin/cos may
+  differ from x87 in the last bit.
+
+Occupancy and fit checks (RoR 1.0a):
+- **Saturating counts.** The occupancy bitmap holds a saturating 2-bit
+  count per quarter cell. `0x00458870` increments it up to 3, and
+  `0x004588d0` decrements it while positive (clear masks `0x00557b2c`).
+- **Restore and lift.** Unit restore `0x004ab6e0` adds its footprint and
+  lift `0x004ab7f0` removes it. The footprint is
+  `[ftol((x - sx) * 4) >= 0, ftol((x + sx) * 4))` on each axis. Only units
+  with template height `+0x38` > 0 take part, and live `+0x84` and `+0x85`
+  track the current and previous state. Selector `+0x11dcf4` chooses the
+  main pathfinder (0), the secondary one at `0x00583bc8` (1), or both.
+- **Callback names.** The pathfinder callbacks previously named
+  register/unregister are `lift_obstruction`/`restore_obstruction`: the
+  search lifts its own unit's footprint and restores it afterwards.
+- **Fit check.** `0x0045a4f0(unit, x, y, check_terrain)` computes the
+  quarter footprint with negative low edges nudged up by one. It runs the
+  terrain sweep with no start-tile exemption, then the occupancy sweep
+  with the unit lifted. Touching the last search's target rectangle (target
+  `+0x11dc4c`, now kept in `AoePathfinderRor.target_id`) counts as not
+  fitting.
+- `aoe_path_fits_ror`, `aoe_path_occupancy_add/remove_ror` and
+  `aoe_unit_obstruction_restore/lift_ror` translate these, with tests in
+  `tests/pathfinder_search_test.c`.
+
+The attack action (RoR 1.0a, vtable `0x005423f8`, action type 9) is routed
+from task action type 7 to constructors `0x00401150` (target) and
+`0x00401290` (point). Base template offsets used here are confirmed by
+loader `0x004413b0`: `+0x10` ID, `+0x14` class, `+0x30/+0x34/+0x38` size.
+- **Fields:**
+  - graphics `+0x40/+0x44/+0x48` (move, attack, idle);
+  - range `+0x4c` (default template `+0x114`, then 0.4) and minimum range
+    `+0x50`;
+  - projectile `+0x54` and fire frame `+0x56`;
+  - firing `+0x58`, friendly `+0x59`, and the point-attack approach count
+    `+0x5a` (starts at 2).
+- **Set state** `0x00401520`:
+  - 1/0xd/0xe show the idle graphic. Towers (IDs 79, 199, 69, 278) also
+    clear their group target.
+  - 4 spends an approach and pushes a quiet move sub-action.
+  - 6 checks the range, then resets the reload (`0x00426a10`) and enters 7.
+  - 7 starts firing.
+- **Range check** `0x00401b60`:
+  - The unit must be able to attack the target (`+0x1f0`).
+  - Point attacks measure via `0x004aaf50`.
+  - A target must be visible unless it is Gaia-owned or class 3/27; a
+    fogged one needs draw class `+0x65`.
+  - A target within 0.5 of the cached position counts as in range.
+  - Otherwise the distance is measured via `0x004aaeb0` against the
+    minimum range and against footprint radius + range + 0.3.
+  - Too far approaches (4), or gives up (0xd) when the unit cannot move or
+    its group holds (`0x0040f6b0() == 0x2d5`).
+- **Update** `0x004017c0`:
+  - It accumulates the tick at `+0x2c`.
+  - A gone or dead target gives result 5. A refusing owner (player vtable
+    `+0x1c`) or an attached target (`+0x20`) gives 4.
+  - State 4 follows the sub-action, and state 7 reloads and fires at the
+    fire frame (default half the sprite frames) through unit vtable
+    `+0x228` (target) or `+0x224` (point).
+- `src/action_attack.c` translates the class, and
+  `tests/action_attack_test.c` covers it.
+
+World motion binding (`src/world_motion.c`). This binds movement, the A*
+search and the fit check to the owned scenario runtime, with per-unit state
+in a side table keyed by unit ID. Positions move through
+`aoe_live_unit_place_ror_with_vision` (0x004ab160). A unit's footprint is
+lifted before each move and restored after.
+- **Confirmed reads.**
+  - Border records sit at map `+0x338c` with stride 0x5a0 (the drawing code
+    reads byte `+0x338c` and short `+0x392a` per border). The pathfinder's
+    `+0x3928` short is therefore border offset `+0x59c`, the last-but-one
+    short (`underlay_terrain`). That field name is inferred from the record
+    layout.
+  - Terrain passability and the terrain speed multiplier both read the DAT
+    terrain restriction row of template `+0x66`.
+- **Assumptions to replace with traced behaviour:**
+  - every constructed unit in states 0..2 starts with its footprint
+    counted;
+  - path budgets are unlimited;
+  - owner kind is 0;
+  - free terrains are −1;
+  - one zone;
+  - idle group members;
+  - a no-op `+0x12c`.
+- **Real-map regression.** `tests/world_motion_real.c` on `EXPANS_1_1.scx`
+  drives one player-1 unit per terrain restriction class (a war boat and a
+  land unit) about 11 tiles to a stop. Both stop within the 0.4 edge range,
+  matching the move action's default.
+- **Range 0 never arrives.** With range 0 the 8-facet steps (turn threshold
+  0.8) can cycle four positions around the goal, and the two-tick
+  oscillation snap never fires. Real orders avoid this because the move
+  action substitutes 0.4 for a non-positive range.
+
+Sprite queries used by the attack action. The sprite manager (vtable
+`0x00543000`, constructor `0x00415370`) forwards `+0x20(graphic, frame)`
+and `+0x24(graphic)` to the matching sprite's `+0x28` and `+0x2c`.
+- **Animated sprites** (vtable `0x00543078`) report a frame as reached
+  when it changed this tick and either looped or `previous < f ≤ current`
+  (`0x00416180`). "Done" is the looped byte (`0x004161b0`).
+- **Static sprites** (`0x00543030`) answer 0 to both.
+
+Tribe overrides:
+- **Fire** `0x004aec50` alerts the target's non-Gaia owner (player
+  `+0x94(0x70, x, y, z, 0)`) for ranged attacks before the base fire.
+- **Melee hit** `0x004aeca0`:
+  - With the option at global `0x00580e38 +0x9a8`, template IDs 122/123
+    remove their target outright.
+  - Blast units with max range below 0.99 splash (excluding the target)
+    and then roll a direct hit.
+
+World combat binding (`src/world_combat.c`):
+- Per attacker it keeps the reload timer, the last-turn time, the attack
+  action and the sub-action list (the translated action list: push
+  activates, update pops on 1).
+- Each tick it counts the reload down and animates sprites. Live `+0x88`
+  doubles as the sprite speed, so it is synced from the movement speed.
+  Then it updates the attack.
+- Attack parameters follow the type-7 route (`0x00405f20`): the first
+  action-type-7 task supplies the graphics (`+0x34`/`+0x38`) and range,
+  and the template supplies the rest.
+- **State switch and death.** Each update runs the 0x004a8f40 state
+  switch through `aoe_live_unit_scenario_state_set_ror`, the root setter
+  0x004aa550 composed with runtime registration and vision hooks.
+  - The dying threshold is 1.0 (float `0x00542534`). Earlier code compared
+    with 0 and has been corrected.
+  - The dying sound is bracketed by `r = rand(); ...; srand(r)`, so every
+    player's RNG advances identically even though only the local player
+    hears the sound.
+  - Type 70's setter 0x004ae920 diverts only class-1 units (world byte
+    `+0x1d` clear) to untranslated 0x004aeed0.
+  - Receives follow the victim's type: 70 → `0x004ae9d0`,
+    80 → `0x004ad9b0`, otherwise the base receive.
+- **Projectiles.**
+  - **Launch.** A ranged unit creates its projectile unit from the owner's
+    template list at the rotated spawn offsets (`0x00426520`), then
+    attaches and activates the type-8 flight (`0x00449070`).
+  - **Flight.** The flight action runs as the projectile's active update.
+    It moves through the patched placement `0x004a98c0`, which lifts and
+    restores footprints with selector 2 and returns the terrain surface
+    height plus elevation. The flight lands when the placed z equals that
+    surface.
+  - **Hits.** The overlap query scans ±3 tiles of the map's object lists.
+  - **Dead launcher.** It hands its attacks, blast and terrain fields to
+    the projectile's private template copy (`0x004495b0`).
+  - **Speed and facing.** Unit `+0xf4`/`+0xf8` are `+0x88`/`+0x9c`
+    (`0x00405a10`/`0x00405a20`).
+  - **Removal.** `+0x6c` on a projectile (`0x004aa320`) zeroes its hit
+    points so the state switch retires it.
+- **Blasts** scan the runtime map's tile object lists.
+- **Not yet bound:**
+  - terrain defense bonuses;
+  - visibility, owner refusal and groups;
+  - the class-keeps-resource check `+0x13c`;
+  - removal of a unit in state 8 (left to the player update list);
+  - projectile trail units (`0x0044bc40`, template `+0xca/+0xcc/+0xd0`).
+- The real-map regression continues past the kill: the target goes
+  2 → 3 → 7 → 8 (it carries nothing and has no undead mode), and the
+  attacker's action reports result 5.
+- **Corpses.** Terminal cleanup `+0xb8` (`0x0044b910` for types 30..80,
+  root `0x004a9450`) creates the template's dead unit (`+0x48`, now parsed
+  from the DAT between train sound and placement fields) through the
+  owner's factory at the unit's position. Corpses of type ≥ 30 take its
+  facing via `+0xb4`. The real-map villager leaves template 43,
+  "Dead_Man" (type 30, decay 1.0).
+- **Ranged shot.** A player-1 war boat (template 19, range 5) then shoots
+  an enemy villager placed 4.35 tiles away. Its projectile unit (template 9)
+  flies and the launcher's attack lands for 5 damage on impact.
+- **Real-map regression** (`tests/world_combat_real.c`, `EXPANS_1_1.scx`):
+  a player-1 villager (template 83, attack 3) walks about 4 tiles to a
+  relocated enemy villager and lands 9 hits (25 → 0 hp) at a 1.51 s
+  average against the 1.5 s reload.
+  - Single gaps can be shorter than the reload: the reload resets as a
+    shot starts, while the hit lands at the fire frame of an animation
+    that is not restarted.
+
+Gather action (RoR 1.0a; vtable `0x00542598`, action type 5). It is
+routed from task action 5 to `0x00402ef0` (target) / `0x00402f80`
+(point), with the tribe activation `0x004b33a0`; `src/action_gather.c`
+translates it.
+- **Task layout** (loader `0x004e74f0`):
+  - `+0x14` resource in, `+0x16` capacity attribute, `+0x18` resource out;
+  - `+0x1c` work value 1, `+0x24` work range;
+  - `+0x34`/`+0x38`/`+0x3c`/`+0x40` moving, proceeding, working and
+    carrying graphics;
+  - `+0x44`/`+0x48` gather and deposit sounds.
+- **States:**
+  - 3 searches: every 10 s it notices 0x202 with the target template.
+  - 4 walks to the resource (quiet move, work range). 6 faces it
+    (`+0x1f0`). 7 shows the proceeding graphic and plays the gather sound.
+  - 8 finds a drop site (`0x004514d0`: nearest state-2 owner unit of
+    template `+0xe8/+0xea`, zone-matched) and walks there.
+  - 11/15 walk to a point. 13 fails (notice 0x1f9, result 3).
+- **Work** (state 7) gathers `tick × template work rate (+0xe4) × task
+  work value 1`, never more than the target holds (the option at
+  `+0x9a8` takes everything at once).
+  - The unit's capacity is template `+0x7c` scaled by the task's player
+    attribute, and an overflow is handed back to the target.
+  - It leaves (state 8) when full, or when the target is empty and not
+    template 45/50 (`+0x138`).
+- **Deposit** happens within 1.0 of the drop site (otherwise it waits 3 s
+  and zeroes `+0x88`). It calls player `+0x78(type, amount, 1)` and
+  `+0x5c`, clears the load (`+0x80(-1, 0)`), and returns to the target or
+  point, else idles.
+- **Unit methods:**
+  - `+0x80` sets the carried type and amount;
+  - `+0x84` (`0x004aace0`) sets or adds and clamps to `+0x7c`, including
+    on the target;
+  - `+0x13c` (`0x004afb90`) keeps a class-9/10 victim's resource only for
+    class-4/11 attackers. This is now used by the type-70 receive.
+- **New DAT fields:** resource capacity `+0x7c` (placement chunk bytes
+  5–6) and drop sites `+0xe8`/`+0xea`.
+- **Template change** `0x004aa160` (root `+0x54`) keeps the hit-point
+  ratio. It moves vision and the footprint across the swap, selects the
+  new standing graphic and re-enters state 2.
+- **Order step.** `aoe_world_combat_order_ror` binds the translated
+  0x00405f20 with that template change and a world-owned `+0x184` list.
+- **Real-map regression** (EXPANS_1_1):
+  - a villager (template 83, which has no gather tasks) is ordered onto
+    the nearest berry bush;
+  - the order switches it to template 120 (forager) and builds the gather
+    action;
+  - it fills 10 food, walks to a drop site and deposits, taking the
+    player's food from 200 to 210 and the bush from 150 to 140.
+
+Build action (RoR 1.0a; vtable `0x005486bc`, action type 0x65). It is
+routed from task action 0x65 to `0x004b13c0` (target) / `0x004b1450`
+(point); `src/action_build.c` translates it.
+- **Targets.** `0x004b13c0` keeps the target only when it has the unit's
+  owner. Retarget `+0x34` (`0x004b1bb0`) walks to another own target
+  (keeping states 4/6 for the same one) and otherwise walks to the point
+  (`+0x30`, `0x004b5db0`, state 11).
+- **States:**
+  - 3 idles (notice 0x202; owners of kind 1 (`0x00454150`) notice 0x1fa
+    and stop);
+  - 4 walks to the foundation within the task work range (`+0x24`);
+  - 6 faces it, then 7 shows the proceeding graphic and plays the task
+    sound;
+  - 13 fails (notice 0x1f9, result 3).
+- **Wall corner** (state 7 entry `0x004b16a8`). A builder diagonal to the
+  foundation tile cannot work when two walls of its owner (class 27,
+  world `0x00520590`) fill the neighbouring tiles across that corner.
+- **Work** (`0x004b1a42`) adds `tick × template work rate (+0xe4) × task
+  work value 1` through the target's `0x004ad7b0` (1000 with the option at
+  `+0x9a8`). On completion a farm (template 50) sets timer `+0x2c` to -1;
+  the next update resets the group (`0x004ac320`) and orders the unit
+  onto the farm. Anything else returns to idle.
+- **Finished targets** (`0x004b1880`). A finished target that is still
+  damaged queues a repair through owner player `+0x34` (0x2ce); otherwise
+  it is released.
+- **World binding.** `aoe_world_combat_order_ror` takes pending action
+  0x65 from the order step. The type-80 completion runs the translated
+  scenario state setter (`aoe_live_unit_scenario_building_complete_ror`).
+- **Movement fix found by this test.** The step overshoot snap
+  (`0x0044d8af`) compares against 0.25 as a float; reading it as a denormal
+  double left builders orbiting their waypoint.
+- **Real-map regression** (EXPANS_1_1):
+  - a villager (template 83) is ordered onto a house foundation created
+    next to it (state 0, 1 hp);
+  - the order reports 0x65 and switches it to template 118;
+  - it walks, faces and builds until the house completes at 75/75 hp.
+
+Unit update chain and world loop (RoR 1.0a). Translated in
+`src/live_unit_factory.c` and bound in `src/world_combat.c`
+(`aoe_world_combat_update_world_ror`).
+- **World loop.** The world update calls each player's `+0x7c`
+  (`0x0045d040`; the tribe players' `0x004f0030` calls it). That traverses
+  only list `+0x28` through `0x00451270`, calling each object's `+0x24`
+  predicate and its `+0x08` cleanup when the predicate is nonzero. A
+  second loop (around `0x0051daae`) traverses the players' `+0x30` lists,
+  bracketed by `r = rand()` … `srand(r)`. List `+0x2c` is never updated.
+- **Dormancy.**
+  - `+0x49` selects `+0x2c` in the register/remove pair `+0xdc`/`+0xe0`
+    (`0x0045e880`/`0x0045e8d0`). The root constructor sets it to
+    "HP > 0" (`0x004a6830`).
+  - `0x004ac380(0)` wakes a unit: remove, then register in `+0x28`.
+    `0x004ac380(1)` defers dormancy through `+0x4b` to the next update
+    prelude.
+  - The type-20 constructor `0x00415130` (and `0x00415170`) clears `+0x88`
+    and wakes the unit. Every type 20–80 unit therefore updates, while
+    root/type-90 objects with hit points (trees, rocks, clumps) stay
+    dormant.
+  - The state setter wakes units leaving states 2 and 6.
+  - Target attach `+0xc0` (root `0x004aad90`; `0x004152c0` for 50–80)
+    counts `+0x4f` (capped at 0xfa) and wakes.
+  - Target release `+0xc4` (root `0x004aadb0`) counts down. At zero, in
+    state 2 with HP >= 0 or in state 6, it defers dormancy. Types 20–40
+    (`0x004152e0`) and 50–80 (`0x00426b40`) wake again at once, and 50–80
+    also notice 0x2bb.
+  - On EXPANS_1_1 this leaves 3,046 of Gaia's 3,358 objects dormant and
+    every player-1/2 unit awake.
+- **Class chain (`+0x24`).**
+  - Type 70 (`0x004ae7d0`): class-18 units in state 2 add owner attribute
+    35 × tick to `+0x44`. A sum >= 100 is set to 100 (NaN is kept), and
+    `+0x4c` is set to 34.
+  - Then type 50 (`0x00426bf0`) counts the reload down.
+  - Then type 40 (`0x00406500`) runs `0x00415200`, which calls the root
+    switch `0x004a8f40` and then the type-20 tail.
+  - Type 50 then does visibility spotting (`+0x1b0`, `0x00516a50`), which
+    is not translated.
+  - Type 60 is type 50's update. Type 80 (`0x004acf80`) adds construction
+    frames and history shifts, calls the type-70 update, then runs
+    production `0x004adf50` (or `0x004adfc0` above state 2). That part is
+    not yet bound.
+- **Root state 2** calls `+0x28 = 0x004a9240`, the damage graphics
+  (`aoe_live_unit_damage_graphics_ror`):
+  - **Inputs.** The table lives at template `+0x93/+0x94`, filled by
+    loader `0x00441775` from the 5-byte DAT entries: graphic, damage
+    percent (byte 2), apply mode (byte 4).
+  - **Level.** It runs only when template HP > 0. The level is the byte
+    `100 - ftol(HP x 100 / template HP)`. An unchanged level returns at
+    once. A level >= 100 (unsigned, so overheal wraps) is only stored in
+    `+0x34`.
+  - **Entry choice.** It takes the last entry below the new level and the
+    last below the old one. If they differ, the new entry is applied and
+    the old one then undone:
+    - mode 0 adds its sprite at priority 0x5a (`0x00415640`);
+    - mode 1 does the same at a random offset: two rand() calls give
+      ±template size (constant `0x00547f98` = 2/32767) around the unit's
+      position in its tile, projected by `0x00448cc0`;
+    - mode 2 selects the entry's graphic (`+0x38`).
+  - **Undo.** Modes 0/1 remove their sprite (`0x004156f0`). Mode 2
+    restores the standing graphic unless the new entry is also mode 2.
+  - **`0x00448cc0`** maps an offset to the screen: x = ftol((x + y) × half
+    width) + base x, y = ftol((y − x + 1 − z) × half height) + base y − 16.
+    Map `+0x8d9c` is the half width and `+0x8d9a` the half height.
+  - **Regression.** On EXPANS_1_1 a finished house (3 entries) at 20/75 HP
+    reaches level 74 and gains its damage sprite.
+- **Type-20 tail** (`0x00415200` after the root switch):
+  - State 3 goes through the setter to 4 if template `+0x1c` (dying
+    graphic) is set, else to 5.
+  - State 4 asks sprite manager `+0x18` (`0x00415890`), which returns the
+    current graphic's sprite `+0x20` (animated `0x00416140`: the frame;
+    static `0x004aa8b0`: 0). Only AL is tested: at 0 the state byte
+    becomes 5 directly and `+0x88` is cleared.
+  - Then the sprites tick.
+  - Because the root switch moves a dying unit to 3 in the same update,
+    the observed death sequence is 2, 4, 5, 7, 8.
+- **Action list** (`0x00406500` after `0x00415200`):
+  - Above state 2, a non-empty `+0x184` list is cleared.
+  - An empty list in state 2 builds the default task through `+0x1fc`
+    (`0x004063d0`). Template `+0xdc` (type-40 loader `0x0043e230`) is an
+    index into the task list (`0x0043e670`); the task goes through the
+    list factory `+0x04` and is adopted with `+0x208`.
+  - With an attached unit (`+0x20`), the list's `+0x08` runs instead.
+  - Otherwise the list updates (`0x004043b0`, which pops on result 1), and
+    the head is popped again on 1 or 3, so result 1 pops two actions.
+- **Adopt and move.**
+  - `+0x208` (`0x00406490`) clears the list, then pushes.
+  - The move fallback `+0x9c` (`0x00405db0`) first offers the move to the
+    head's `+0x30`. The base `0x004072b0` refuses; gather `0x00403b80` and
+    build `0x004b5db0` absorb it. Otherwise it adopts a move action.
+- **Default tasks** route through the translated task factory
+  (`aoe_action_route_ror`, no target, point -1/-1/-1). On EXPANS_1_1 the
+  gazelles and alligators default to action type 6, which neither factory
+  builds (the original adopts nothing either); farms build the farm action
+  below; transport boats (type 12, `0x004067d0`) reach an action class
+  that is not translated yet and are counted.
+- **+0x184 entries.** Besides the record, the list holds heap move (type
+  1) and farm (0x15) actions; the record's first int16 is the impossible
+  type -2 so heads dispatch on their leading type. Type-80 units use their
+  building live list with the same entries.
+- **Placeholders in the binding.** Attached-unit list updates are counted
+  only. Empty outcome managers stand in for unloaded
+  victory conditions, and the map update is a no-op. Removal runs the
+  portable destroy.
+- **Setter refusal narrowed.** `aoe_live_unit_scenario_state_set_ror` no
+  longer refuses every template with `+0xa5/+0xa6` set. The root setter
+  already refuses the transitions that would reach the untranslated
+  `+0xa6 == 2` or pre-terminal methods. A 0-hp shore fish (modes 1/1)
+  therefore dies 2→3→5 into its state-5 food carcass, as in the original.
+- **Real-map regression** (EXPANS_1_1):
+  - the melee victim's death runs 2, 4, 5, 7, 8;
+  - a villager given a point order gets a move action and walks there
+    while the whole map updates;
+  - its 46 world updates remove 40 objects, among them scenario records
+    saved in state 7 (rocks, bones, clumps), 0-hp flares, finished arrows
+    and the victim;
+  - no list object fails to resolve to a runtime unit.
+
+Type-80 setter and storage (RoR 1.0a; `0x004acbf0`). Bound on the runtime by
+`aoe_live_unit_scenario_building_state_set_ror` (every state but 2) and
+the existing completion composition (state 2).
+- **Dispatch:**
+  - requested 2 runs completion;
+  - requested 3 from 2 runs `+0x25c`, world `+0x40` `0x00436980`
+    (building manager), clears `+0x1e0`, then the queue branch and root
+    setter `0x004aa550`. If owner list `+0x28` `0x00451370(template ID,
+    -1, -1, 1, 2, 0)` finds no other state-2 unit of the template, it
+    removes research template `+0x178` and 0x4a/0x4b/0x4c (`0x004ea9e4`);
+  - anything else runs only the queue branch (new state >= 3, old >= 2,
+    queue non-empty) and the root setter.
+- **Storage.** `+0x260` (`0x004acaf0`, completion) and `+0x25c`
+  (`0x004aca90`, leaving state 2) walk template storage `+0x6a` (type),
+  `+0x70` (amount) and `+0x88` (mode). For mode >= 4 and type >= 0 they
+  call owner `+0x78(type, ±amount, 0)`. This is how a house adds and
+  withdraws population room. The world binding previously left `+0x260` a
+  no-op.
+- **Not modelled.** The building manager and the owner research table:
+  removals are counted. Queue refunds are counted until production is
+  bound.
+- **Regression.** On EXPANS_1_1, completing the house moves player 1's
+  resource 4 from -29 to -25 (+4). Destroying it during the world loop
+  restores -29, and the house enters its dying states without failing the
+  update.
+
+Buildings as foundations and scenario completion (RoR 1.0a).
+- **Constructor body.** The type-80 constructor body `0x004ac8a0` runs
+  after the inherited constructors and leaves every building a foundation:
+  - setter state 0;
+  - construction graphic `+0x168` when the build time `+0x15a` > 0;
+  - elapsed `+0x1d4` = 0, HP 1.0, `+0x35` = template `+0x16e`, class code
+    0x50.
+  `aoe_live_unit_building_foundation_ror` translates this. The runtime
+  binds owned building storage (`AoeScenarioBuildingStorageRor`) at
+  construction for scenario and editor units alike.
+- **Scenario spawn.** The tribe player spawn `0x004efe70` (players 1..8;
+  computer players share it) does this per record:
+  1. The factory creates the unit.
+  2. State 7+ → `+0x68`; 3..6 → `+0x6c`.
+  3. Otherwise `+0xb4(rotation)` only for 30 < type < 90, and
+     `+0x35 = ftol(rotation)` for the rest.
+  4. A type-80 record in state 2 then gets add-build-work
+     `0x004ad7b0(10000.0)`, completing it through the normal path
+     (storage, terrain, research).
+
+  The runtime now does the same. Gaia keeps the base spawn's `+0xb4` call,
+  because its player class is not yet established. On EXPANS_1_1 this
+  takes player 1's population room from -29 to -9.
+- **Building-completion research.** The research call in completion
+  (`0x004acdda` → `0x004eaa3d`) ignores the result. The portable binding
+  now fails only for a missing manager, not for an already-completed
+  tech.
+
+Technology (RoR 1.0a; `src/tech_tree.c`).
+- **Research manager** (player `+0x224`):
+  - Entries are `{float progress, int16 state}`, plus count `+0x04`, tech
+    tree `+0x08` (techs of 0x3c bytes) and player `+0x0c`.
+  - The new-game constructor `0x004ea91c` zeroes the entries and rebuilds.
+  - Rebuild `0x004eb38d`, for each tech in state 0/1:
+    - counts prerequisites (`+0x04`, four) that are in state 3;
+    - with at least `+0x0c` of them, completes the tech when
+      `research_time (+0x1e) <= progress`, recursing, else marks it
+      available (1);
+    - otherwise drops it back to 0.
+  - With nothing available or researching, owner attribute 39 becomes 1.
+  - Completion `0x004eaa3d` applies the tech's effect `+0x20` through the
+    world's effects object (`0x004ea3bc`).
+  - Disable `0x004eb8e9` / enable `0x004eb97f` (`0x004f1870(id, flag)`):
+    disable sets state -1 unless the tech is done; enable turns -1 into 0.
+- **Effects** (world `+0x4c`, vtable `0x00549920`):
+  - `+0x08 = 0x004ebb10` disables the tech of every command 102.
+  - It then runs the base interpreter `0x0043b940` over 0x2c-byte effects
+    with 0xc-byte commands:
+    - 0, 4, 5: set/add/multiply an attribute (player `0x0045d6a0`,
+      `0x0045d7a0`, `0x0045d8a0`);
+    - 1: resource set (`0x0045cfc0`, b = 0) or add (`+0x78`);
+    - 2: enable byte (template `0x00443130` → `+0x52`);
+    - 3: upgrade (`0x0045d9a0`).
+  - An attribute command applies the live hook to every awake (`+0x28`)
+    unit of the template, then the template method. It targets template a
+    when that index is in range, else every template of class b.
+- **Template attribute methods** (`+0x08/+0x0c/+0x10`). Each class handles
+  its own attributes and defers to its parent:
+  - root: 0 HP, 1 line of sight, 2 garrison, 3/4 size, 14 resource
+    capacity;
+  - type 20: 5 speed; type 30: 6 rotation speed; type 40: 13 work rate;
+  - type 50: 8–18;
+  - type 60: 19 projectile lead;
+  - tribe 70 (`0x004ecf20`): 100 deductible costs; 101 other costs and
+    storage of resources 4/11/19;
+  - tribe 80 (`0x004ec580`): 17 building angle.
+
+  Recorded quirks:
+  - set indexes the armor/attack lists by `value >> 8`, while add searches
+    by class and multiply does nothing;
+  - the projectile set keeps only the low byte;
+  - multiply of base armor reads the projectile word;
+  - attribute 18 add/multiply store the value;
+  - type 60's attribute 19 stores for every op and then continues to type
+    50.
+- **Live attribute hooks** (`+0x48/+0x4c/+0x50`, run before the template
+  changes):
+  - root `0x004a9fd0`: attribute 0 rescales HP to the new maximum as
+    int16; attribute 1 resets a placed state-2 unit's vision with the new
+    radius (`+0xdc(owner, 0, -1)`, `+0xd8(owner, 0, radius)`);
+  - tribe 70 `0x004ae820`: attribute 101 moves the storage contributions
+    of resources 4/11/19 to the new amount;
+  - tribe 80 `0x004ad350`: attribute 17 writes `+0x35`.
+- **Upgrade.** Player `0x0045d9a0(a, b)` first calls live `+0x58(b)` on the
+  awake units of a:
+  - type 80 `0x004ad960`: construction graphic, then adjacency
+    `0x004ad550` when the old template has `+0x16c`;
+  - types 50..80 `0x00426d70`: attack graphic;
+  - types 40..80 `0x004065c0`: action list `+0x14` re-tasks each action
+    through `+0x40` (`0x00407460`);
+  - types 30..80 `0x0044ef40`: walking graphics `+0xbc/+0xc0`;
+  - root `0x004aa210`: vision reset; HP rescaled by the old/new maximum
+    ratio after briefly setting it to the old maximum; standing, dying and
+    undead graphic remap; damage graphics before and after, without
+    changing the template pointer.
+
+  It then copies template b into slot a (`+0x04`). The root copy
+  `0x00441f50` keeps a's ID (`+0x10`), enable byte (`+0x52`) and
+  editor-hide byte (`+0x4e`). It keeps a's language name (`+0x12`) only
+  when b's `+0x4e` is 1, then sets b's `+0x4e` to 1. Each class copies its
+  own region, and type 40 (`0x0043e6f0`) skips the task list `+0xd8`.
+- **New DAT fields:** language name `+0x12`, garrison `+0x2c`, second
+  walking graphic `+0xc0`.
+- **Runtime binding.**
+  - The runtime takes the tech and effect tables. Each player gets a
+    research manager built new-game style with an immediate rebuild,
+    which completes the zero-time techs.
+  - `aoe_scenario_runtime_apply_effect_ror` applies an effect to a player.
+  - Building completion now gets the player's research manager.
+  - Not ported: the game-start setup around `0x0050b760`. It covers civ
+    tech trees (`+0x110`), option effects 105/100/210, starting resources,
+    starting age (`0x004f18a0` with ages in resources 23–25), population
+    limit 32 (50 in single player, `0x005054f0`), resources 30/33/45,
+    victory conditions, and the random-map object placement.
+
+Building update and training (RoR 1.0a).
+- **Building update.** Type 80 runs its own `+0x24` (`0x004acf80`, via
+  `aoe_building_update_ror`):
+  - construction frame `+0x35` from elapsed/build time, and completion at
+    the build time;
+  - history shifts using the world update count (global `0x7d2460`,
+    incremented at `0x0051da32`);
+  - the parent chain (class-18 generation, then reload, common predicate,
+    dying tail and action list);
+  - production `0x004adf50` (or queue cleanup above state 2).
+
+  The player-list binding gained a `live_update` override for this.
+- **Queue and training.** Queue add `0x004adab0` charges at queue time, so
+  queued training actions are prepaid. Training actions (`train_action.c`)
+  live on the building's `+0x1cc` list through the training adapter. They
+  spawn through the trained template's placement check `+0x20(owner, x, y,
+  0, 1, 1, 1, 0, 0, 1)` and factory `+0x18`.
+- **Owner visibility.** The placement check (patched `0x004429d0`) tests
+  visibility with the owner's vision (`0x00517670`: visible → 0x0f,
+  explored → 0x80) unless global mode `+0x1b0` is 7. The check now takes
+  the owner's masks; it previously read the active player's view bytes,
+  which are not rebuilt after load.
+- **Regression.** On EXPANS_1_1, with the population limit set to the
+  single-player 50 (the unported game start sets it) and three houses
+  completed for room, a villager queued at player 1's town center costs
+  50 food at queue time. It trains in 401 updates (20 s) and spawns
+  beside the town center.
+
+Farm action (RoR 1.0a; vtable `0x0054261c`, action type 0x15, 0x40 bytes;
+`src/action_farm.c`). A farm (template 50) builds it as its default task
+through constructor `0x00404750(unit, task)` (base `0x00406ea0(unit, 1)`).
+- **Task layout addition.** Task `+0x30`/`+0x32` are file bytes 40..43
+  (loader `0x004e75cb`), now `DatUnitTask.field_30/field_32`. Byte 39 is
+  `+0x0d`.
+- **set_state** `+0x5c = 0x004047b0` stores the state and resets `+0x2c`
+  from owner attribute 36.
+- **Activation** `+0x1c = 0x00404780` enters state 6. When the task's
+  resource-in (`+0x14`) is >= 0 and differs from the unit's carried type,
+  it sets the carried type to it at amount 0 (`+0x80`). On EXPANS_1_1 that
+  replaces a farm's 15 food of template storage with resource 16.
+- **Update** `+0x28 = 0x004047d0`:
+  - state 1 returns 1;
+  - in state 6, while `+0x2c` > 0 or attribute 36 <= 0 (or NaN), it
+    produces tick × template work rate × task work value 1. The amount
+    goes to owner `+0x78(resource-in, amount, 0)` when task `+0x30` is
+    set, otherwise to the unit's carried amount (`+0x84(amount, 1, 1)`,
+    clamped to template `+0x7c`);
+  - `+0x2c` then falls by the carried amount actually gained;
+  - with the allowance used up, a farm that still holds stock waits;
+  - an empty farm raises global `+0x40(0x7e, owner, ID, tile x, tile y)`
+    and calls `+0x6c`. For types 70/80 that is `0x004ae970` (an extra step
+    only for head action 0x68), then `0x004aa320`: wake, and HP 0.
+- **Regression.** `tests/action_farm_test.c` covers the branches. On
+  EXPANS_1_1 a player farm grows 0.02 per 0.05 s update while the world
+  loop runs.
+
+Combat core (RoR 1.0a; type-50 vtable `0x0054324c`, tribe `0x00547fa0`):
+- **Reload.** `+0x7c` `0x004269f0` reports ready when the reload timer
+  `+0x1b4` is <= 0. `0x00426a10` resets it from template `+0x120`.
+- **Fire at target or point.** `+0x228` `0x00426520` (target) and `+0x224`
+  `0x004266a0` (point) launch a projectile when template `+0x124` >= 0:
+  - the spawn point is the template offsets `+0x12c/+0x130` rotated by the
+    facing, with z offset `+0x134` (the DAT "graphic displacement", now
+    parsed);
+  - the launch radius is footprint + max range `+0x114` + 6.0;
+  - the projectile itself is constructed via the owner's template list and
+    `0x00449070` (target) / `0x00449120` (point).
+
+  Otherwise `+0x22c` delivers a melee hit at the attacker's position.
+- **Melee hit** `0x004267b0`. Blast templates (`+0x118` > 0) go to
+  `+0x220`. Otherwise it notices 0x200 and rolls
+  `rand() * 100 / 32767 <= accuracy` (`+0x126`; the magic-number division
+  is verified for all rand values). A hit calls the target's `+0x70`.
+- **Damage** `+0x74` `0x00426910` sums, per attack class,
+  `(amount − armor) × terrain bonus × multiplier`, counting only positive
+  terms:
+  - armor is the last matching armor class entry, else base armor
+    `+0x100`;
+  - the terrain bonus is world `+0x54[+0x110][terrain]`.
+- **Receive.** Base `+0x70` `0x00426890` subtracts the damage, notices
+  0x1f4 with the truncated hit points and the template maximum, and clamps
+  below 1.0 to 0.
+  - **Types 70 and 80.** Vtable `0x0054820c` is type 70 and `0x00547fa0`
+    is type 80 (buildings); earlier notes called the latter "tribe". They
+    differ only in `+0x5c` and `+0x70`.
+  - **Type 70** `0x004ae9d0` skips targets below 1.0. On a killing hit it
+    empties the carried resource unless `+0x13c` keeps it for the
+    attacker's class. Every hit removes at least 1.0. A non-Gaia victim
+    credits attribute 0x14 and notices 0x201.
+  - **Building receive** `0x004ad9b0` skips dead targets and
+  enforces a minimum of 1.0 damage (0.1 for attacker classes 0/23/26/36
+  and tower-like IDs 79/69/199/383/380). It credits the attacker's player
+  with `+0x78(0x2b, 1.0, 0)` when a non-Gaia target drops below 1.0.
+- **Multiplier.** Base `+0xf0` is 1.0. The tribe `0x004aec00` gives ranged
+  units 1.5 when `+0x250(target)` holds, and melee units 0.6666 when below
+  their target's z.
+- **Blast damage** `+0x220`: base `0x00426280`, tribe `0x004b04a0`. The
+  call is `(x, y, z, source, excluded)` with radius template `+0x118`.
+  - It scans tiles `ftol(x ± r) ∓ 2` (end exclusive, clamped, rows by y).
+  - It skips the attacker, the excluded unit, and units whose blast
+    defense `+0x8b` (DAT chunk byte 11, per loader order) is below the
+    attacker's blast level `+0x11c`.
+  - It hits when the squared distance to the victim's footprint edge is
+    below r², subject to the accuracy roll.
+  - The tribe version also spares same-owner units for attacker classes
+    35/24, and empties the carried resource (`+0x84(0, 0, 1)` =
+    `0x004aace0`) of victims left below 1.0.
+- **Edge distances.** `0x004aaeb0` (unit to target) and `0x004aaf50`
+  (to a point) subtract the footprints per axis and clamp at 0. The
+  in-range test `0x004aadf0` is strictly `range² > edge²`.
+- **Reload countdown.** The type-50 update `0x00426bf0` counts the reload
+  timer down by the world tick and clamps it at 0, before the base update
+  `0x00406500`.
+- **Facing the target.** The attack action's "can attack" (`+0x1f0`,
+  `0x0044ba60`) is a turn-to-face step. The facet offset `0x0044b9b0` is
+  (atan2 − facing) wrapped into ±π, times facets / 2π. Within ±0.5 the unit
+  is facing the target. Otherwise it turns one facet once template `+0xc4`
+  seconds have passed since live `+0xa0` (world `+0x04` ms × 0.001), then
+  re-checks.
+- `src/combat.c` translates these, and `tests/combat_test.c` covers them.
+
+Projectiles (RoR 1.0a). The fire methods create the projectile unit and
+call `0x00449070` (target) or `0x00449120` (point). That pushes a type-8
+flight action (vtable `0x0054267c`, constructor `0x00404990`, 0x54 bytes)
+holding the aim point, the target and the launcher (secondary setter
+`0x004073f0`), and stores the launch radius at projectile `+0x1bc`. Type-60
+template fields come from loader `0x00440530`: flight mode `+0x148`, lead
+`+0x149`, hit mode `+0x14a` and arc `+0x150`.
+- **Activate** `0x00404a10` aims (3) unless it has no target and its point is marked
+  -1.0.
+- **Aiming** (state 3, `0x00404ab0`):
+  - It targets the target's centre height.
+  - With lead == 1 it leads a moving target by
+    `t = d / (d − d' + speed)` when the denominator exceeds speed / 2.
+    Launcher IDs 35/36/280 cap the target speed at 1.0.
+  - Mode 0 stores the unit direction and mode 3 the whole offset. Modes 1
+    and 2 do not move.
+  - A positive arc sets gravity `−2·d·arc/(t/2)²` and climb `2·d·arc/(t/2)`
+    with `t = d / speed`.
+- **Update** `0x00404db0`:
+  - It drops a vanished or dying target. When the launcher dies it first
+    captures the launcher's attack data (`0x004495b0`).
+  - Mode 0 moves `tick·speed` along the direction and expires at the
+    launch radius. Mode 3 moves the full offset and strikes the target.
+  - The overlap query `0x00449280` scans ±3 tiles for units whose
+    footprints (plus the step) and heights (±0.1) overlap. Hit mode 0
+    strikes only the target, 1 strikes foreign non-Gaia units, and 2
+    strikes anything but the launcher, blasting at own or Gaia units.
+  - The live launcher strikes (`+0x22c` / `+0x220`), otherwise the
+    projectile itself. A landed projectile blasts and stops.
+- `src/projectile.c` translates this, and `tests/projectile_test.c`
+  covers it.
+
+The pathfinder (vtable `0x00544cf0`, constructor `0x00458570`) works on
+255 x 255 grids (bytes at `+0x10de28`, dwords at `+0xce624`, indexed
+`[first*255 + second]`). Its distance table `0x006a18c0` holds
+`__ftol(i*1.4142f*16 + 0.5)`: octile costs in sixteenths of a tile.
+
+The search `0x00458930` takes 15 stack arguments, with integer
+coordinates despite Ghidra's float types:
+- Its entry checks compare all four coordinates with the width only.
+- With range > 1, a goal closer than range*16 succeeds at once.
+- A unit with speed 0 or NaN fails.
+- Mode 1 clears the unit's active path (`+0xa4`, or `+0xd8` when `+0x154`
+  is set) on every early exit.
+The search body is translated from the disassembly in
+`src/pathfinder_search.c`. The decompiler typed integers as floats and
+merged registers here, so it was not usable as a source.
+
+**Layout.** The pathfinder object holds:
+- `+0x0c`: state bytes (generation tag | arrival direction);
+- `+0xfe10`: f-costs;
+- `+0x4f614`: a 1-based heap of {x, y, cost} entries, with heap[0] a
+  -2,000,000,000 sentinel;
+- `+0xce624`: the quarter-tile occupancy bitmap, 1020 rows of 255 bytes
+  with 2 bits per quarter;
+- `+0x10de28`: a per-cell penalty, scaled by 16;
+- `+0x11dce4`: IDs of units met along the path.
+
+**Setup.**
+- The target rectangle in quarter tiles comes from the target's footprint.
+- The unit's own obstruction is registered.
+- The unit's sub-tile offset is computed, or set to 0.5 when the unit is
+  centred.
+- After ten retries, moving group members are registered as obstructions.
+- The generation byte advances by 8. At 0xf0 it wraps to 0 and the state
+  grid is refilled with 0xff.
+- The goal radius is range*16, or step*16 when the step exceeds the range.
+- Footprint offsets use rounding points traced from the x87 sequence
+  (+100 and +0.00005 biases).
+- The node budget is distance*2500/10 within 10 tiles and /100 beyond,
+  capped at 100 for gaia; owner kind 1 always uses distance*25.
+
+**Main loop.**
+- It pops the head node and tests the Euclidean distance (sixteenths)
+  against the goal radius.
+- The pop's sift loop only runs while child < size/2, so small heaps are
+  not re-sifted.
+- Eight neighbours form a ring at the step stride. Each is pruned by the
+  direction mask table `0x00557b34` and checked against bounds and the
+  start cell.
+- Its f-cost is parent - h(parent) + h(neighbour) + `__ftol(dist * 16)`.
+- Its swept footprint (bounding box of parent and neighbour, plus
+  offsets) is checked against terrain first. Negative low bounds are
+  bumped by only one. Terrain is tested with byte-sized loop counters, the
+  unit's free terrains and the overlay fallback (map `+0x3928`, stride
+  0x5a0).
+- Then occupancy: dword-pair span masks for spans up to 24 quarters, else
+  per-cell checks. A footprint that touches the target rectangle ends the
+  search with cost 0.
+- Blocked cells may still be entered when unit queries (`0x00520590`) find
+  only units. A penalty is then added: +0x3c when that unit's HP is at
+  least 10, otherwise +0x10. Each cell adds its penalty grid value, and a
+  direction change adds 1.
+
+**Exits.** The search succeeds on reaching the goal or touching the target.
+When the budget or heap runs out it falls back to the best node.
+
+**Path builder** (`0x0045a970`). It walks the arrival directions back to
+the start and prepends a waypoint on each direction change. A unit path
+holds at most 1001 waypoints (`0x004581b0`). It also collects nearby unit
+IDs.
+
+The obstruction registration, footprint adjust, tile-centre check and unit
+query remain explicit callbacks. The debug overlay (`0x007bf9b8`) is not
+reproduced. Synthetic tests cover open ground, walls, a sealed goal,
+in-range, generation rollover, occupancy blocking and target touching.
+They test this translation's behaviour, not a trace of the original.
+
 The type-40–70 prefix is now composed by
 `aoe_live_unit_cleanup_derived_prefix_ror`: when semantic live `+0x184` is
 present, it drains the list through `aoe_action_list_clear` (`0x00403e70`),
@@ -913,7 +2211,9 @@ portable live object. The original placement-only audit stops before state
 dispatch; the full-constructor audit now invokes only the source-complete
 0–2 branch and reports 7+ records separately.
 One directly recoverable dependency is now in `aoe_live_unit_core`:
-RoR `0x004adc70` changes the unit's positive-health registration category.
+RoR `0x004adc70` (patched `0x004ac380`) changes the unit's registration
+category. The byte `+0x49` it toggles is a dormancy flag (see "Unit update
+chain and world loop" below), initialised to "HP > 0".
 A zero-to-one change sets byte `+0x4b` and defers reclassification; a
 one-to-zero change with that byte set clears both bytes without player
 calls. Otherwise it calls player `+0xe0` to remove the old category,

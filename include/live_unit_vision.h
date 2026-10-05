@@ -52,4 +52,12 @@ int aoe_live_unit_vision_change_ror(AoeLiveUnitCore *unit,
                                      AoeLiveUnitVisionBinding *vision,
                                      int entering, int alternate);
 
+/* The same hooks with the radius argument of +0xd8/+0xdc(owner, mode,
+   radius): a negative radius means the template's line of sight (effects
+   pass an explicit radius when it changes). */
+int aoe_live_unit_vision_radius_ror(AoeLiveUnitCore *unit,
+                                    AoeLiveUnitVisionBinding *vision,
+                                    int entering, int alternate,
+                                    int32_t radius_override);
+
 #endif

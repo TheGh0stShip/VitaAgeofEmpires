@@ -54,10 +54,10 @@ meaning has not been established.
 
 | RoR address | Portable method | Original behavior |
 | --- | --- | --- |
-| 00404410 | push | link at head, then action +1c(1) |
-| 00404460 | append | link at tail, then action +1c(1) |
-| 004044e0 | pop | unlink, action destructor(1), free node, reread head/owner state, optionally action +1c(0) |
-| 00403e70 | clear | repeatedly pop until the live head is null |
+| 00404410 (patched 00404400) | push | link at head, then action +1c(1) |
+| 00404460 (patched 00404450) | append | link at tail, then action +1c(1) |
+| 004044e0 (patched 004044d0) | pop | unlink, action destructor(1), free node, reread head/owner state, optionally action +1c(0) |
+| 00403e70 (patched 00403e50) | clear | repeatedly pop until the live head is null |
 
 Insertion at owner state >2 destroys the offered action instead. Pop only
 activates a surviving head at owner state <3, inspecting state after the

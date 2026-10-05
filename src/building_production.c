@@ -94,6 +94,87 @@ int aoe_building_queue_cancel_ror(AoeBuildingUpdate *b, int16_t unit_id,
     ops->notify(ops->context,124,b->owner_id,0);
     return 1;
 }
+static int fill_entry(AoeBuildingUpdate *b, int16_t index, int16_t unit_id,
+                      int16_t count, const AoeBuildingQueueAddOps *ops) {
+    int added = 0;
+    for (int i = 0; i < count; ++i) {
+        int16_t failing = unit_id; /* the original reuses the argument slot */
+        if (!ops->can_afford(ops->context, unit_id, &failing)) {
+            ops->notify(ops->context, 0x7d, b->owner_id,
+                        (uint32_t)(int32_t)failing);
+            break;
+        }
+        ops->pay(ops->context, unit_id);
+        b->queue_entries[index].quantity =
+            (int16_t)(uint16_t)((uint16_t)b->queue_entries[index].quantity + 1u);
+        added = 1;
+    }
+    return added;
+}
+
+int aoe_building_queue_add_ror(AoeBuildingUpdate *b, int16_t unit_id,
+                               int16_t count,
+                               const AoeBuildingQueueAddOps *ops) {
+    int16_t failing;
+    if (!b || !ops || !ops->can_afford || !ops->pay || !ops->notify ||
+        !ops->allocate_zeroed || !ops->deallocate || !entries_valid(b) ||
+        b->queue_aux_count < 0 ||
+        (b->queue_aux_count && !b->queue_entries) ||
+        (size_t)b->queue_aux_count > b->queue_capacity ||
+        b->queue_count > b->queue_aux_count)
+        return 0;
+    if (b->queue_count > 0 &&
+        b->queue_entries[b->queue_count - 1].unit_id == unit_id) {
+        if (count <= 0) return 1;
+        if (!fill_entry(b, (int16_t)(b->queue_count - 1), unit_id, count,
+                        ops))
+            return 1;
+        b->queue_revision = (uint8_t)(b->queue_revision + 1);
+        ops->notify(ops->context, 0x7c, b->owner_id, 0);
+        return 1;
+    }
+    while (b->queue_count > 0) {
+        int16_t before_count = b->queue_count;
+        AoeBuildingQueueEntry before = b->queue_entries[0];
+        if (!ops->owner_status_four_count ||
+            !aoe_building_queue_cancel_ror(b, before.unit_id, 1,
+                                           ops->owner_status_four_count,
+                                           &ops->cancel))
+            return 0;
+        if (b->queue_count == before_count &&
+            b->queue_entries[0].unit_id == before.unit_id &&
+            b->queue_entries[0].quantity == before.quantity)
+            return 0;
+    }
+    failing = unit_id;
+    if (!ops->can_afford(ops->context, unit_id, &failing)) {
+        ops->notify(ops->context, 0x7d, b->owner_id,
+                    (uint32_t)(int32_t)failing);
+        return 1;
+    }
+    if (b->queue_count == b->queue_aux_count) {
+        int32_t capacity = (int32_t)b->queue_aux_count + 10;
+        AoeBuildingQueueEntry *grown = ops->allocate_zeroed(
+            ops->context, (size_t)capacity, sizeof(*grown));
+        if (!grown) return 1;
+        if (b->queue_entries) {
+            for (int16_t i = 0; i < b->queue_aux_count; ++i)
+                grown[i] = b->queue_entries[i];
+            ops->deallocate(ops->context, b->queue_entries);
+        }
+        b->queue_entries = grown;
+        b->queue_aux_count = (int16_t)capacity;
+        b->queue_capacity = (size_t)capacity;
+    }
+    b->queue_entries[b->queue_count].quantity = 0;
+    (void)fill_entry(b, b->queue_count, unit_id, count, ops);
+    b->queue_entries[b->queue_count].unit_id = unit_id;
+    ++b->queue_count;
+    b->queue_revision = (uint8_t)(b->queue_revision + 1);
+    ops->notify(ops->context, 0x7c, b->owner_id, 0);
+    return 1;
+}
+
 int aoe_building_state_queue_transition_ror(
     AoeBuildingUpdate *b, uint8_t new_state, uint32_t *count,
     const AoeBuildingQueueCancelOps *ops) {

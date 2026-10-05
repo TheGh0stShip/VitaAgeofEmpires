@@ -54,4 +54,4 @@ The objective is a faithful, native PS Vita port of *Age of Empires I*, with Ris
 - Both images have zero undefined bytes in initialized executable sections; this does not prove complete function discovery or resolved dynamic control flow.
 - The host reconstruction can compose populated scenes from user-supplied original campaign/DAT/DRS data, but this is not an interactive game.
 - The DeepSeek tooling audit was merged: incorrect replacement DRS/SLP/DAT/simulation proposals were rejected, useful WAV/validation work was rewritten to match the existing project, and both normal host CI and parser ASan/UBSan CI pass.
-- There is no playable port or installable VPK. Current Vita builds are shared reconstruction libraries.
+- There is no playable port. A non-playable tech-demo VPK (`docs/VITA_DEMO.md`) runs the reconstructed runtime, world update and renderer on user-supplied data; it is verified in Vita3K only, not yet on hardware.

@@ -102,6 +102,17 @@ int aoe_sprite_list_tick(AoeSpriteList *list, float time_delta, float speed) {
     return 1;
 }
 
+int aoe_sprite_list_append_loaded(AoeSpriteList *list, void *sprite) {
+    AoeSpriteNode **slot, *node;
+    if (!list || !sprite) return 0;
+    node = calloc(1, sizeof(*node));
+    if (!node) return 0;
+    node->sprite = sprite;
+    for (slot = &list->head; *slot; slot = &(*slot)->next) {}
+    *slot = node;
+    return 1;
+}
+
 size_t aoe_sprite_list_count(const AoeSpriteList *list) {
     size_t count = 0;
     if (list)

@@ -84,6 +84,19 @@ typedef struct {
     ScnPlayerResources resources[8];
     ScnPlayerUnits player_units[9]; /* Index 0 is the neutral/Gaia player. */
     ScnPlayerDetail player_details[8];
+    /* 1.15 fixed block (scenario-info object, reader 0x005069c0 region),
+       indexed by player - 1:
+       - +0x1990 starting resources, four int32 per player; the getters
+         0x005073e0/0x00507400/0x00507420/0x00507440 hand fields 0/1/2/3
+         to resources 3 (gold), 1 (wood), 0 (food) and 2 (stone);
+       - +0x4bf4 per-player tech toggles (20 int32, 16 used by 0x00507e50);
+       - +0x50f4 three scenario options (0x005076a0);
+       - +0x5100 starting age per player (1..4: Tool, Bronze, Iron,
+         Post-Iron). */
+    int32_t start_resources[16][4];
+    int32_t tech_toggles[16][20];
+    int32_t options[3];
+    int32_t starting_age[16];
 } ScnMap;
 
 /* Loads original 1.10/1.11 scenarios with a 1.15 player-data body. */

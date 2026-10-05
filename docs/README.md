@@ -10,6 +10,7 @@
 | [Patch revisions](PATCH_REVISIONS.md) | Exact target versions and hashes, Ghidra coverage measurements, and their limits |
 | [Decompilation exports](DECOMPILATION_EXPORTS.md) | What the checked-in generated exports contain and how to regenerate them |
 | [Vita build update](BUILDING_UPDATE.md) | Current Vita build configuration and one detailed reconstructed subsystem |
+| [Vita tech demo](VITA_DEMO.md) | Building, installing and running the on-console demo of the reconstruction |
 | [Training action](TRAIN_ACTION.md) | Evidence and implementation notes for the training action lifecycle |
 | [DeepSeek tool audit](DEEPSEEK_TOOL_AUDIT.md) | Audit disposition, corrected format assumptions, and regression coverage for the supplied helper code |
 | [Vita ABI and test lanes](VITA_ABI.md) | Verified VitaSDK data model (signed char, small enums, 64-bit long double) and the ARMv7/VitaSDK CI lanes |

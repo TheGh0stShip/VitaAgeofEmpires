@@ -294,6 +294,15 @@ typedef struct {
     int16_t amount;
 } DatUnitAttackArmor;
 
+/* Damage graphic (5 file bytes; runtime template +0x94 entries of 8 bytes,
+   loader 0x00441775): graphic +0, damage percent +4 (file byte 2) and
+   apply mode +5 (file byte 4; byte 3 is overwritten by the loader). */
+typedef struct {
+    int16_t graphic_id;
+    uint8_t damage_percent;
+    uint8_t apply_mode;
+} DatDamageGraphic;
+
 typedef struct {
     int16_t task_type, id, action_type;
     int16_t target_class, target_unit, target_terrain;
@@ -302,6 +311,14 @@ typedef struct {
     int16_t moving_graphic, proceeding_graphic, working_graphic;
     int16_t carrying_graphic, gathering_sound, deposit_sound;
     uint8_t is_default, auto_search, enable_targeting;
+    /* Runtime task +0x10/+0x11/+0x12 (file bytes 44..46), read by patched
+       RoR 1.0a 0x004e7f90/0x004e7dc0: owner-relationship mode 1..5, "target
+       must carry a resource", and "applies to a state-0 target". */
+    uint8_t owner_mode, requires_carried_resource, unbuilt_target;
+    /* Runtime task +0x30/+0x32 (file bytes 40..43, loader 0x004e75cb).
+       The farm action 0x004047d0 credits its production straight to the
+       owner when +0x30 is nonzero. */
+    int16_t field_30, field_32;
 } DatUnitTask;
 
 typedef struct {
@@ -310,13 +327,19 @@ typedef struct {
     int16_t id;
     int16_t unit_class;
     int16_t standing_graphic;
-    int16_t walking_graphic;
+    int16_t walking_graphic;   /* template +0xbc (type >= 30) */
+    int16_t walking_graphic2;  /* template +0xc0 */
     int16_t dying_graphic;
     int16_t undead_graphic; /* original template +0x20 */
     uint8_t undead_mode;    /* original template +0x24 */
+    /* Original template +0x48: the corpse spawned by terminal cleanup
+       0x0044b910 / 0x004a9450 (-1 for none). */
+    int16_t dead_unit_id;
     int16_t hit_points;
-    uint8_t hide_in_editor; /* serialized common-unit header byte */
-    uint8_t enabled;        /* serialized common-unit header byte */
+    uint16_t language_name_id; /* original template +0x12 */
+    uint8_t garrison_capacity;  /* original template +0x2c */
+    uint8_t hide_in_editor; /* template +0x4e */
+    uint8_t enabled;        /* template +0x52 (effect type 2, 0x00443130) */
     uint8_t placement_mode; /* original template +0x4a */
     uint8_t placement_overlap_mode; /* original template +0x4b */
     int16_t placement_side_terrain[2]; /* original +0x54/+0x56 */
@@ -332,14 +355,31 @@ typedef struct {
     uint8_t draw_class; /* template +0x65, RoR tile draw 0x00451fd0 */
     int16_t terrain_restriction; /* original template +0x66 */
     uint8_t elevation_mode; /* original template +0x68 */
+    /* Original template +0x7c: carried-resource capacity (0x004aace0
+       clamps to it; gathering scales it by the task's attribute). */
+    int16_t resource_capacity;
+    /* Original template +0x8c/+0x8f bytes, read by the RoR task selectors
+       0x004e7dc0/0x004e7f90/0x00508010. Their meaning beyond those uses is
+       not yet established. */
+    uint8_t field_8c, field_8f;
+    /* Template +0x8b: blasts of a lower level (+0x11c) skip this unit. */
+    uint8_t blast_defense_level;
+    uint8_t blast_level;    /* type >= 50, template +0x11c */
     float decay_rate;       /* original template +0x80 */
+    uint8_t damage_graphic_count;     /* template +0x93 */
+    DatDamageGraphic *damage_graphics; /* template +0x94 */
     int16_t selection_sound;
     int16_t dying_sound;    /* resolves to original template +0x44 */
     float speed;
+    /* Type >= 30: per-facet turn delay, original template +0xc4 (after
+       the two walking-graphic slots); 0x0044cde0 adds it to live +0x12c. */
+    float rotation_speed;
     char *name;
     DatUnitStorage storage[3];
     int16_t default_task_id;
-    float search_radius, work_rate;
+    uint8_t task_swap_group; /* original template +0xec (type >= 40) */
+    float search_radius, work_rate; /* work rate: template +0xe4 */
+    int16_t drop_sites[2];          /* type >= 40, template +0xe8/+0xea */
     uint16_t task_count;
     DatUnitTask *tasks;
     uint8_t base_armor;
@@ -347,7 +387,14 @@ typedef struct {
     DatUnitAttackArmor *attacks, *armors;
     int16_t terrain_defense_bonus, projectile_unit_id, accuracy_percent;
     int16_t frame_delay, attack_graphic;
+    /* Original template +0x114, +0x118, +0x120 and +0x138. */
     float max_range, blast_width, reload_time, min_range;
+    float projectile_offset[3]; /* +0x12c/+0x130/+0x134 */
+    /* Type 60 (0x00404ab0/0x00404db0): flight mode +0x148 (0 directed,
+       1/2 stationary, 3 instant), target leading +0x149, hit mode +0x14a
+       and arc +0x150. */
+    uint8_t projectile_flight_mode, projectile_lead, projectile_hit_mode;
+    float projectile_arc;
     int16_t displayed_melee_armor, displayed_attack;
     float displayed_range, displayed_reload_time;
     DatUnitCost costs[3];

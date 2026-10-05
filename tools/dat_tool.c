@@ -482,6 +482,21 @@ int main(int argc, char **argv) {
                    unit->undead_mode, unit->decay_rate);
         else
             printf("unit %u/%u: absent\n", query_civ, query_unit);
+        if (unit) {
+            printf("selector bytes: +0x8c %u, +0x8f %u, task swap group %u\n",
+                   unit->field_8c, unit->field_8f, unit->task_swap_group);
+            for (uint16_t t = 0; t < unit->task_count; ++t) {
+                const DatUnitTask *task = &unit->tasks[t];
+                printf("task %u: action %d, class %d, unit %d, terrain %d, "
+                       "resource in %d, owner mode %u, needs carried %u, "
+                       "unbuilt %u, targeting %u\n",
+                       t, task->action_type, task->target_class,
+                       task->target_unit, task->target_terrain,
+                       task->resource_in, task->owner_mode,
+                       task->requires_carried_resource, task->unbuilt_target,
+                       task->enable_targeting);
+            }
+        }
         if (unit && unit->type == 80)
             printf("building: construction graphic %d, adjacent mode %u, "
                    "completed angle %u, disappears %u, stack unit %d, "

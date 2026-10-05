@@ -556,7 +556,8 @@ target_include_directories(aoe_map_shore PUBLIC include)
 target_compile_options(aoe_map_shore PRIVATE -Wall -Wextra)
 
 add_library(aoe_ui_panel STATIC src/ui_panel.c src/ui_button.c
-            src/ui_text.c)
+            src/ui_text.c
+            src/ui_scrollbar.c)
 target_include_directories(aoe_ui_panel PUBLIC include)
 target_compile_options(aoe_ui_panel PRIVATE -Wall -Wextra)
 
@@ -1265,6 +1266,10 @@ else()
   target_link_libraries(ui_text_test PRIVATE aoe_ui_panel)
   target_compile_options(ui_text_test PRIVATE -UNDEBUG)
   add_test(NAME original_ui_text COMMAND ui_text_test)
+  add_executable(ui_scrollbar_test tests/ui_scrollbar_test.c)
+  target_link_libraries(ui_scrollbar_test PRIVATE aoe_ui_panel)
+  target_compile_options(ui_scrollbar_test PRIVATE -UNDEBUG)
+  add_test(NAME original_ui_scrollbar COMMAND ui_scrollbar_test)
   add_executable(map_shore_test tests/map_shore_test.c)
   target_link_libraries(map_shore_test PRIVATE aoe_map_shore)
   target_compile_options(map_shore_test PRIVATE -UNDEBUG)

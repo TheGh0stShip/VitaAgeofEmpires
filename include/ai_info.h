@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "ai_strategy.h" /* AoeAiIntListRor */
+#include "ai_unit_group.h"
 
 /* Patched Rise of Rome 1.0a computer-player information AI (vtable
    0x00548b74; the computer player holds it at +0xcec): the members in
@@ -15,7 +16,8 @@
 /* A world object as the AI reads it: the ID (+4), its type's ID (+0x10)
    and class (+0x14), the owner's index (owner +0x4a) and the owner's +4,
    position (+0x38, +0x3c, +0x40), hit points (+0x30), +0x44, the state
-   byte (+0x48) and the type's maximum hit points (+0x26). */
+   byte (+0x48), the type's maximum hit points (+0x26) and float +0x28,
+   and the object's +0x4c. */
 typedef struct {
     int32_t id;
     int16_t type_id, type_class;
@@ -25,6 +27,8 @@ typedef struct {
     float hp, field_44;
     uint8_t state;
     int16_t max_hp;
+    float type_28;
+    int16_t field_4c;
 } AoeAiObjectViewRor;
 
 /* One remembered object (0x24 bytes at +0x114): the ID (-1 free), type
@@ -91,6 +95,7 @@ typedef struct {
     int32_t cells[4][4][3];           /* +0x408 */
     AoeAiInfoTargetRor *targets[4];   /* +0x4d0 */
     int32_t target_count[4];          /* +0x4e0 */
+    int32_t best_distance[4];         /* +0x540 */
     int32_t current_target[4];        /* +0x550 */
     int32_t history[AOE_AI_INFO_HISTORY]; /* +0x564 */
     int32_t stats[AOE_AI_INFO_STATS]; /* +0xff64 */
@@ -124,6 +129,17 @@ typedef struct {
        the setting read by 0x0041b750. */
     uint8_t stats_player;
     uint8_t settings_97d;
+    /* 0x004ab9e0 on an object: the terrain zone of a tile as that object
+       moves; 0x00521620 on the map: the tile's zone. */
+    uint8_t (*tile_zone)(void *context, int32_t id, int32_t x, int32_t y);
+    uint8_t (*map_zone)(void *context, int32_t x, int32_t y);
+    /* 0x004aaf50 on an object: its distance to a point. */
+    double (*distance)(void *context, int32_t id, float x, float y, float z);
+    /* Unit vtable calls: +0x104 (`unit` against `target`), +0x100 and
+       +0x10c (the range). */
+    double (*value_104)(void *context, int32_t unit, int32_t target);
+    double (*value_100)(void *context, int32_t id);
+    double (*range)(void *context, int32_t id);
 } AoeAiInfoOpsRor;
 
 /* 0x004bc690: 1 when the object exists and its zone has no flag;
@@ -257,6 +273,78 @@ int32_t aoe_ai_info_nearest_enemy_ror(const AoeAiInfoRor *info, float x,
    `wait` (1), else 0. */
 int aoe_ai_info_set_target_wait_ror(AoeAiInfoRor *info, int32_t list,
                                     int32_t id, uint8_t wait);
+/* Dropsites (the +0x190 list). 0x004bd030: those of type 0x2d whose
+   tile (truncated position) lies in map zone `zone`. 0x004bd130: the
+   smallest nonzero truncated distance from tile (x, y) to a type-0x2d
+   dropsite's truncated tile, -1 for none. */
+int32_t aoe_ai_info_docks_in_zone_ror(const AoeAiInfoRor *info,
+                                      uint32_t zone,
+                                      const AoeAiInfoOpsRor *ops);
+int32_t aoe_ai_info_nearest_dock_ror(const AoeAiInfoRor *info, int32_t x,
+                                     int32_t y, const AoeAiInfoOpsRor *ops);
+/* 0x004c4f30: the nearest dropsite for a resource object, in the
+   object's zone: type 0x6d when `town_center` is set, 0x67 unless the
+   resource's type is 0x3b or 0x32, 0x44 only for those. The distance
+   (1000.0 when none; a float) and the dropsite ID in `out_id` (-1). */
+float aoe_ai_info_nearest_dropsite_ror(const AoeAiInfoRor *info,
+                                       const AoeAiObjectViewRor *resource,
+                                       int32_t town_center, int32_t *out_id,
+                                       const AoeAiInfoOpsRor *ops);
+/* 0x004c50e0: the nearest dropsite for a gatherer in its zone: type
+   0x6d, 0x67 when its +0x4c is not 0x10, 0x44 when it is. -1 for none. */
+int32_t aoe_ai_info_gatherer_dropsite_ror(const AoeAiInfoRor *info,
+                                          const AoeAiObjectViewRor *gatherer,
+                                          const AoeAiInfoOpsRor *ops);
+/* 0x004c55b0 / 0x004c5680: the dropsites of type 0x67 / 0x44. */
+int32_t aoe_ai_info_count_dropsites_ror(const AoeAiInfoRor *info,
+                                        int16_t type_id,
+                                        const AoeAiInfoOpsRor *ops);
+/* 0x004c53d0: refresh target list `list` (0..3): its best distance
+   (+0x540) and target (+0x550) reset to -1; each target not gone whose
+   object exists gets the nearest dropsite (with town centres): +8 =
+   ftol(2d + 10), +0xe = ftol(d), +0x10 the dropsite; classes 7, 0xf, 8
+   and 0x20 then keep the smallest ftol(d) in best distance 0, 1, 2, 3
+   with that target. 0x004c5250 refreshes the four lists in turn without
+   the gone test, each first resetting its own slot (so a later list can
+   wipe what an earlier one recorded). The original leaves the distance on the x87 stack for other
+   classes; the port does not model that stack. */
+void aoe_ai_info_refresh_targets_ror(AoeAiInfoRor *info, int32_t list,
+                                     const AoeAiInfoOpsRor *ops);
+void aoe_ai_info_refresh_all_targets_ror(AoeAiInfoRor *info,
+                                         const AoeAiInfoOpsRor *ops);
+/* 0x004c5750: the threat at tile (x, y) on unit `id`: for each live
+   remembered object seen as an enemy whose distance to the point is at
+   most its type's +0x28, value_104(id, it) / value_100(it) when both are
+   nonzero, summed as a float. 0.0 when `id` does not exist. */
+float aoe_ai_info_threat_ror(const AoeAiInfoRor *info, int32_t id,
+                             int32_t x, int32_t y, const AoeAiInfoOpsRor *ops);
+/* 0x004c5880: a live remembered object seen as `owner` (-1: an enemy)
+   reaches tile (x, y): its distance (as a float) is within its range, or,
+   unless `range_only`, within its type's +0x28 when that is larger. */
+int aoe_ai_info_in_reach_ror(const AoeAiInfoRor *info, int32_t owner,
+                             int32_t x, int32_t y, int32_t range_only,
+                             const AoeAiInfoOpsRor *ops);
+/* 0x004c62f0 (a group's members, 0x004ccf20 / 0x004ccf30) and
+   0x004c6380 (an ID array): the sum of value_104(attacker, it) /
+   value_100(it) over existing objects, as a float. 0x004c6400 / 0x004c64b0:
+   the sum of hit points / threat at the unit's truncated tile (0x004c5750
+   for each), 600 when the threat is 0. */
+float aoe_ai_info_group_damage_ror(const AoeAiInfoRor *info,
+                                   const AoeAiUnitGroupRor *group,
+                                   int32_t attacker,
+                                   const AoeAiInfoOpsRor *ops);
+float aoe_ai_info_ids_damage_ror(const AoeAiInfoRor *info,
+                                 const int32_t *ids, int32_t count,
+                                 int32_t attacker,
+                                 const AoeAiInfoOpsRor *ops);
+float aoe_ai_info_group_endurance_ror(const AoeAiInfoRor *info,
+                                      const AoeAiUnitGroupRor *group,
+                                      const AoeAiObjectViewRor *unit,
+                                      const AoeAiInfoOpsRor *ops);
+float aoe_ai_info_ids_endurance_ror(const AoeAiInfoRor *info,
+                                    const int32_t *ids, int32_t count,
+                                    const AoeAiObjectViewRor *unit,
+                                    const AoeAiInfoOpsRor *ops);
 /* 0x004c65c0: the statistics bucket of a unit: class 0x12 5, 0x1c 3,
    0xd 4, 0xc 2, 0x23 7; type 0x49 0, 0x4b 1, 4/5/0x27 6, 0x29 10,
    0x2e/0x19 9; class 0x16 8; else -1. */

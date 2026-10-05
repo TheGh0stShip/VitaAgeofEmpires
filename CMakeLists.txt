@@ -616,7 +616,7 @@ target_compile_options(aoe_player_outcome_dispatch PRIVATE -Wall -Wextra)
 add_library(aoe_ai_ror STATIC src/ai_strategy.c src/ai_tactical.c
             src/ai_info.c)
 target_include_directories(aoe_ai_ror PUBLIC include)
-target_link_libraries(aoe_ai_ror PUBLIC aoe_ai_build)
+target_link_libraries(aoe_ai_ror PUBLIC aoe_ai_build m)
 target_compile_options(aoe_ai_ror PRIVATE -Wall -Wextra)
 # --- end AI worker ---
 

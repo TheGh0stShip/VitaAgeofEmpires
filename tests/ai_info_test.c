@@ -2,6 +2,7 @@
 #include "ai_info.h"
 
 #include <assert.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,6 +26,156 @@ static int object(void *c, int32_t id, AoeAiObjectViewRor *o) {
     o->state = (uint8_t)(id == 41 ? 3 : 2);
     o->hp = id == 42 ? 0.0f : 10.0f;
     return 1;
+}
+
+/* World two: dropsites 100 (type 0x6d at 10,10), 101 (0x67 at 13,14),
+   102 (0x44 at 2,2), 103 (0x2d dock at 20,20), 104 (0x67 in another zone);
+   resources 200 (class 7 at 10,13), 201 (class 0xf, type 0x3b, at 3,3);
+   enemies 300 (at 6,6, type range 5) and 301 (state 3). */
+static int object2(void *c, int32_t id, AoeAiObjectViewRor *o) {
+    (void)c;
+    memset(o, 0, sizeof *o);
+    o->id = id;
+    o->state = 2;
+    o->hp = 40.0f;
+    switch (id) {
+    case 100: o->type_id = 0x6d; o->x = 10.5f; o->y = 10.5f; return 1;
+    case 101: o->type_id = 0x67; o->x = 13.0f; o->y = 14.0f; return 1;
+    case 102: o->type_id = 0x44; o->x = 2.0f; o->y = 2.0f; return 1;
+    case 103: o->type_id = 0x2d; o->x = 20.9f; o->y = 20.2f; return 1;
+    case 104: o->type_id = 0x67; o->x = 50.0f; o->y = 50.0f; return 1;
+    case 200: o->type_class = 7; o->x = 10.0f; o->y = 13.0f; return 1;
+    case 201: o->type_class = 0xf; o->type_id = 0x3b; o->x = 3.0f; o->y = 3.0f; return 1;
+    case 300: o->x = 6.0f; o->y = 6.0f; o->type_28 = 5.0f; o->owner = 2; return 1;
+    case 301: o->state = 3; o->owner = 2; return 1;
+    case 400: o->hp = 30.0f; return 1;
+    default: return 0;
+    }
+}
+static uint8_t zone2(void *c, int32_t id) { (void)c; (void)id; return 1; }
+static uint8_t tile_zone2(void *c, int32_t id, int32_t x, int32_t y) {
+    (void)c; (void)id; (void)y; return (uint8_t)(x >= 40 ? 2 : 1);
+}
+static uint8_t map_zone2(void *c, int32_t x, int32_t y) { (void)c; (void)y; return (uint8_t)(x == 20 ? 3 : 0); }
+static double dist2(void *c, int32_t id, float x, float y, float z) {
+    AoeAiObjectViewRor o;
+    (void)z;
+    object2(c, id, &o);
+    return sqrt((double)(o.x - x) * (o.x - x) + (double)(o.y - y) * (o.y - y));
+}
+static double v104(void *c, int32_t u, int32_t t) { (void)c; (void)u; (void)t; return 3.0; }
+static double v100(void *c, int32_t id) { (void)c; return id == 300 ? 2.0 : 4.0; }
+static double range2(void *c, int32_t id) { (void)c; (void)id; return 1.0; }
+
+static void dropsite_tests(void) {
+    static AoeAiInfoRor info;
+    AoeAiInfoOpsRor ops;
+    AoeAiObjectViewRor r, g;
+    int32_t dst, ids[2] = {400, 999};
+    float d;
+    static AoeAiUnitGroupRor group;
+
+    memset(&ops, 0, sizeof ops);
+    ops.object = object2;
+    ops.world_object = object2;
+    ops.zone = zone2;
+    ops.tile_zone = tile_zone2;
+    ops.map_zone = map_zone2;
+    ops.is_enemy = is_enemy;
+    ops.distance = dist2;
+    ops.value_104 = v104;
+    ops.value_100 = v100;
+    ops.range = range2;
+    aoe_ai_int_list_add_unique_ror(&info.list_190, 104);
+    aoe_ai_int_list_add_unique_ror(&info.list_190, 100);
+    aoe_ai_int_list_add_unique_ror(&info.list_190, 101);
+    aoe_ai_int_list_add_unique_ror(&info.list_190, 102);
+    aoe_ai_int_list_add_unique_ror(&info.list_190, 103);
+    aoe_ai_int_list_add_unique_ror(&info.list_190, 77);
+
+    assert(aoe_ai_info_docks_in_zone_ror(&info, 3, &ops) == 1 &&
+           aoe_ai_info_docks_in_zone_ror(&info, 0, &ops) == 0);
+    assert(aoe_ai_info_nearest_dock_ror(&info, 20, 20, &ops) == -1);
+    assert(aoe_ai_info_nearest_dock_ror(&info, 17, 16, &ops) == 5);
+    assert(aoe_ai_info_count_dropsites_ror(&info, 0x67, &ops) == 2 &&
+           aoe_ai_info_count_dropsites_ror(&info, 0x44, &ops) == 1);
+
+    object2(NULL, 200, &r);
+    d = aoe_ai_info_nearest_dropsite_ror(&info, &r, 1, &dst, &ops);
+    assert(dst == 100 && d == (float)sqrt(0.25 + 6.25));
+    d = aoe_ai_info_nearest_dropsite_ror(&info, &r, 0, &dst, &ops);
+    assert(dst == 101 && d == (float)sqrt(9.0 + 1.0));
+    object2(NULL, 201, &r);
+    d = aoe_ai_info_nearest_dropsite_ror(&info, &r, 0, &dst, &ops);
+    assert(dst == 102 && d == (float)sqrt(2.0));
+    r.id = 999; r.type_id = 1;
+    d = aoe_ai_info_nearest_dropsite_ror(&info, &r, 0, &dst, &ops);
+    assert(dst == 101);
+
+    memset(&g, 0, sizeof g);
+    g.x = 3.0f; g.y = 3.0f; g.field_4c = 0x10;
+    assert(aoe_ai_info_gatherer_dropsite_ror(&info, &g, &ops) == 102);
+    g.field_4c = 0;
+    assert(aoe_ai_info_gatherer_dropsite_ror(&info, &g, &ops) == 100);
+    g.x = 13.0f; g.y = 15.0f;
+    assert(aoe_ai_info_gatherer_dropsite_ror(&info, &g, &ops) == 101);
+
+    /* Target lists. */
+    info.target_count[0] = 2;
+    info.targets[0] = (AoeAiInfoTargetRor *)calloc(2, sizeof(AoeAiInfoTargetRor));
+    info.targets[0][0].id = 200;
+    info.targets[0][1].id = 201;
+    info.target_count[1] = 0;
+    info.best_distance[1] = info.best_distance[2] = info.best_distance[3] = -1;
+    aoe_ai_info_refresh_targets_ror(&info, 0, &ops);
+    /* 200: d = sqrt(6.5) = 2.55: +8 = ftol(15.1) = 15, +0xe = 2. */
+    assert(info.targets[0][0].field_8 == 15 && info.targets[0][0].field_e == 2 &&
+           info.targets[0][0].field_10 == 100 && info.best_distance[0] == 2 &&
+           info.current_target[0] == 200);
+    /* 201 (class 0xf) lands in slot 1: d = sqrt(2) with 102 (0x44). */
+    assert(info.targets[0][1].field_10 == 102 && info.best_distance[1] == 1 &&
+           info.current_target[1] == 201);
+    info.targets[0][1].gone = 1;
+    info.targets[0][1].field_8 = 0;
+    info.best_distance[1] = 9;
+    aoe_ai_info_refresh_targets_ror(&info, 0, &ops);
+    assert(info.targets[0][1].field_8 == 0 && info.best_distance[1] == 9);
+    aoe_ai_info_refresh_all_targets_ror(&info, &ops);
+    /* Each list resets its own slot first: list 1 wipes what list 0 put in
+       slot 1. */
+    assert(info.targets[0][1].field_8 == 12 && info.best_distance[1] == -1 &&
+           info.best_distance[0] == 2 &&
+           info.best_distance[2] == -1);
+
+    /* Threat and reach: enemy 300 at (6,6) reaches 5 tiles. */
+    info.object_count = 3;
+    info.objects = (AoeAiInfoObjectRor *)calloc(3, sizeof *info.objects);
+    info.objects[0].id = 300; info.objects[0].owner = 2;
+    info.objects[1].id = 301; info.objects[1].owner = 2;
+    info.objects[2].id = 100; info.objects[2].owner = 1;
+    assert(aoe_ai_info_threat_ror(&info, 400, 3, 3, &ops) == 1.5f);
+    assert(aoe_ai_info_threat_ror(&info, 400, 0, 0, &ops) == 0.0f);
+    assert(aoe_ai_info_threat_ror(&info, 999, 3, 3, &ops) == 0.0f);
+    assert(aoe_ai_info_in_reach_ror(&info, -1, 3, 3, 0, &ops) &&
+           !aoe_ai_info_in_reach_ror(&info, -1, 3, 3, 1, &ops) &&
+           aoe_ai_info_in_reach_ror(&info, 2, 6, 5, 1, &ops) &&
+           !aoe_ai_info_in_reach_ror(&info, 1, 3, 3, 0, &ops));
+
+    /* Group sums: 3 / 4 for 400, nothing for 999; endurance 30 / threat. */
+    assert(aoe_ai_info_ids_damage_ror(&info, ids, 2, 7, &ops) == 0.75f);
+    aoe_ai_unit_group_init_ror(&group);
+    aoe_ai_unit_group_add_ror(&group, 999, NULL);
+    aoe_ai_unit_group_add_ror(&group, 400, NULL);
+    assert(aoe_ai_info_group_damage_ror(&info, &group, 7, &ops) == 0.75f);
+    g.x = 3.5f; g.y = 3.9f;
+    assert(aoe_ai_info_ids_endurance_ror(&info, ids, 2, &g, &ops) == 20.0f);
+    assert(aoe_ai_info_group_endurance_ror(&info, &group, &g, &ops) == 20.0f);
+    g.x = 0.0f; g.y = 0.0f;
+    assert(aoe_ai_info_ids_endurance_ror(&info, ids, 2, &g, &ops) == 600.0f);
+
+    free(info.targets[0]);
+    free(info.objects);
+    aoe_ai_int_list_release_ror(&info.list_190);
 }
 
 int main(void) {
@@ -250,6 +401,7 @@ int main(void) {
     free(info.marks);
     free(info.areas);
     free(info.targets[2]);
+    dropsite_tests();
     puts("ai info ok");
     return 0;
 }

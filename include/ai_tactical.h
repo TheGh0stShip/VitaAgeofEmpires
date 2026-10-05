@@ -908,6 +908,26 @@ int aoe_ai_tactical_defend_object_ror(AoeAiTacticalRor *ai, int32_t enemy, int32
    without a pending 0x65 item skips the age-2 test. */
 void aoe_ai_tactical_research_ages_ror(AoeAiTacticalRor *ai,
                                        const AoeAiTacticalOpsRor *ops);
+/* 0x004dee90: fills the boat groups. The candidates are collected first
+   (0x004df9f0 list 4, 0x004dfbf0 surplus; unused).
+   - Each group of task 0x67..0x69 without a commander: with members, the
+     leader (0x004e1130) commands; else from list 4's ungrouped boats (or,
+     with none, the surplus) the leader (0x004e1200) joins and commands;
+     no candidates end the call. A group at +0x180 0 or 1 then rallies
+     (0x004e0c60).
+   - With number 40 at 0, for tasks 0x67..0x6a in turn, each such group
+     wanting more (+0x160) than it holds takes list 4's ungrouped boats:
+     all when they do not exceed the shortfall, else the nearest to its
+     +0x19c location (0x004aaf50; a missing object is passed over) one at
+     a time until full; then the surplus the same way, each first leaving
+     its group (0x004e0930).
+   - Each remaining ungrouped list-4 boat joins the group (tasks 0x67..
+     0x6c, +0x180 0 or 1) with the largest shortfall (the first on ties);
+     with none short, the one whose count less +0x160 is smallest among
+     those below their cap (0x67 number 60, 0x68 number 69, 0x69 number
+     63; others none); with neither the call ends. */
+void aoe_ai_tactical_fill_boat_groups_ror(AoeAiTacticalRor *ai, const AoeAiTacticalOpsRor *ops,
+                                          const AoeAiUnitGroupOpsRor *group_ops);
 /* 0x004d6390: the boat groups (tasks other than 100..0x69).
    First, each with +0x180 0 or 1: one with more wanted (+0x160) than held
    is updated with task 9 (0x004cd2d0, recording) unless ready (members in

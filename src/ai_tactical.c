@@ -3187,3 +3187,144 @@ void aoe_ai_tactical_boat_groups_ror(AoeAiTacticalRor *ai, const AoeAiTacticalOp
         if (skip) ++i;
     }
 }
+
+/* The index of a group (the array shifts when groups are deleted). */
+static int32_t group_index(const AoeAiTacticalRor *ai, const AoeAiUnitGroupRor *g) {
+    int32_t i;
+    for (i = 0; i < ai->groups_len; ++i)
+        if (ai->groups[i] == g) return i;
+    return -1;
+}
+
+/* 0x004dee90 / 0x004dcf40: +0xd48's candidates join `g`: all of them, or
+   (`nearest`) the nearest to its +0x19c location one at a time until it
+   is full; `move` takes each out of its group first (0x004e0930). */
+static void fill_from_d48(AoeAiTacticalRor *ai, AoeAiUnitGroupRor *g, int nearest, int move,
+                          const AoeAiTacticalOpsRor *ops, const AoeAiUnitGroupOpsRor *group_ops) {
+    int32_t j, *slot;
+    if (!nearest) {
+        for (j = 0; j < ai->list_d48.count; ++j) {
+            slot = aoe_ai_int_list_at_ror(&ai->list_d48, j);
+            if (!slot) break;
+            if (move) aoe_ai_tactical_ungroup_ror(ai, *slot, group_ops);
+            slot = aoe_ai_int_list_at_ror(&ai->list_d48, j);
+            if (slot) aoe_ai_unit_group_add_ror(g, *slot, group_ops);
+        }
+        return;
+    }
+    while (aoe_ai_unit_group_count_ror(g) < g->field_160) {
+        int32_t best = -1;
+        float best_d = -1.0f;
+        if (ai->list_d48.count < 1) break;
+        for (j = 0; j < ai->list_d48.count; ++j) {
+            AoeAiWorldObjectRor o;
+            float d;
+            slot = aoe_ai_int_list_at_ror(&ai->list_d48, j);
+            if (!slot || !ops->object || !ops->object(ops->context, *slot, &o)) continue;
+            d = (float)(ops->distance ? ops->distance(ops->context, *slot, g->loc_19c[0],
+                                                      g->loc_19c[1], g->loc_19c[2])
+                                      : 0.0);
+            if (best_d == -1.0f || d < best_d) {
+                best = *slot;
+                best_d = d;
+            }
+        }
+        if (best == -1) break;
+        if (move) aoe_ai_tactical_ungroup_ror(ai, best, group_ops);
+        aoe_ai_unit_group_add_ror(g, best, group_ops);
+        aoe_ai_int_list_remove_ror(&ai->list_d48, best);
+    }
+}
+
+/* 0x004dee90 / 0x004dcf40: a commander-less group gets one; 0 when no
+   candidate is left (the caller then ends). */
+static int lead_group(AoeAiTacticalRor *ai, AoeAiUnitGroupRor *g, int32_t list, int boats,
+                      const AoeAiTacticalOpsRor *ops, const AoeAiUnitGroupOpsRor *group_ops) {
+    int32_t found = aoe_ai_tactical_collect_ungrouped_ror(ai, list);
+    if (aoe_ai_unit_group_count_ror(g) > 0) {
+        aoe_ai_unit_group_set_commander_ror(g, aoe_ai_tactical_pick_leader_ror(ai, g, ops),
+                                            group_ops);
+    } else {
+        int32_t leader;
+        if (found == 0) aoe_ai_tactical_collect_surplus_ror(ai, boats);
+        if (ai->list_d48.count == 0) return 0;
+        leader = aoe_ai_tactical_pick_leader_ids_ror(ai, &ai->list_d48, ops);
+        aoe_ai_unit_group_add_ror(g, leader, group_ops);
+        aoe_ai_unit_group_set_commander_ror(g, leader, group_ops);
+    }
+    if (g->field_180 == 0 || g->field_180 == 1) aoe_ai_tactical_rally_group_ror(ai, g, ops);
+    return 1;
+}
+
+/* 0x004dee90 / 0x004dcf40: a short group takes ungrouped units of `list`,
+   then the surplus. */
+static void top_up_group(AoeAiTacticalRor *ai, AoeAiUnitGroupRor *g, int32_t list, int boats,
+                         const AoeAiTacticalOpsRor *ops, const AoeAiUnitGroupOpsRor *group_ops) {
+    int32_t n;
+    if (aoe_ai_unit_group_count_ror(g) >= g->field_160) return;
+    n = aoe_ai_tactical_collect_ungrouped_ror(ai, list);
+    fill_from_d48(ai, g, n > g->field_160 - aoe_ai_unit_group_count_ror(g), 0, ops, group_ops);
+    if (aoe_ai_unit_group_count_ror(g) >= g->field_160) return;
+    n = aoe_ai_tactical_collect_surplus_ror(ai, boats);
+    fill_from_d48(ai, g, n > g->field_160 - aoe_ai_unit_group_count_ror(g), 1, ops, group_ops);
+}
+
+/* 0x004dee90: see the header. */
+void aoe_ai_tactical_fill_boat_groups_ror(AoeAiTacticalRor *ai, const AoeAiTacticalOpsRor *ops,
+                                          const AoeAiUnitGroupOpsRor *group_ops) {
+    int32_t i, t, j;
+    if (!ai || !ops) return;
+    aoe_ai_tactical_collect_ungrouped_ror(ai, 4);
+    aoe_ai_tactical_collect_surplus_ror(ai, 1);
+    for (i = 0; i < ai->groups_len; ++i) {
+        AoeAiUnitGroupRor *g = ai->groups[i];
+        if (g->task < 0x67 || g->task > 0x69 || g->commander != -1) continue;
+        if (!lead_group(ai, g, 4, 1, ops, group_ops)) return;
+    }
+    if (ai->sn[40] == 0) {
+        for (t = 0x67; t <= 0x6a; ++t) {
+            for (i = 0; i < ai->groups_len; ++i) {
+                AoeAiUnitGroupRor *g = ai->groups[i];
+                if (g->task != t) continue;
+                top_up_group(ai, g, 4, 1, ops, group_ops);
+                i = group_index(ai, g);
+                if (i < 0) break;
+            }
+        }
+    }
+    if (aoe_ai_tactical_collect_ungrouped_ror(ai, 4) == 0) return;
+    for (j = 0; j < ai->list_d48.count; ++j) {
+        AoeAiUnitGroupRor *best = NULL;
+        int32_t best_v = 0, *slot;
+        for (i = 0; i < ai->groups_len; ++i) {
+            AoeAiUnitGroupRor *g = ai->groups[i];
+            int32_t n = aoe_ai_unit_group_count_ror(g);
+            if (g->task < 0x67 || g->task > 0x6c || n >= g->field_160 ||
+                (g->field_180 != 1 && g->field_180 != 0))
+                continue;
+            if (!best || g->field_160 - n > best_v) {
+                best = g;
+                best_v = g->field_160 - n;
+            }
+        }
+        if (!best) {
+            for (i = 0; i < ai->groups_len; ++i) {
+                AoeAiUnitGroupRor *g = ai->groups[i];
+                int32_t n = aoe_ai_unit_group_count_ror(g);
+                if (g->task < 0x67 || g->task > 0x6c ||
+                    (g->field_180 != 1 && g->field_180 != 0))
+                    continue;
+                if ((g->task == 0x67 && n >= ai->sn[60]) || (g->task == 0x68 && n >= ai->sn[69]) ||
+                    (g->task == 0x69 && n >= ai->sn[63]))
+                    continue;
+                if (!best || n - g->field_160 < best_v) {
+                    best = g;
+                    best_v = n - g->field_160;
+                }
+            }
+            if (!best) return;
+        }
+        slot = aoe_ai_int_list_at_ror(&ai->list_d48, j);
+        if (slot) aoe_ai_unit_group_add_ror(best, *slot, group_ops);
+    }
+}

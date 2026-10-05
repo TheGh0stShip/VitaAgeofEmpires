@@ -1216,6 +1216,31 @@ static void boat_groups_tests(void) {
     aoe_ai_tactical_release_ror(&ai);
 }
 
+static void fill_boat_groups_tests(void) {
+    static AoeAiTacticalRor ai;
+    AoeAiTacticalOpsRor ops;
+    AoeAiUnitGroupRor *a, *b;
+    int32_t i;
+    aoe_ai_tactical_init_ror(&ai, 1, NULL);
+    memset(&ops, 0, sizeof ops);
+    ops.object = tobject;
+    ops.world_object = tobject;
+    for (i = 300; i < 305; ++i) aoe_ai_int_list_add_unique_ror(&ai.lists[4], i);
+    a = aoe_ai_tactical_new_group_ror(&ai, 1);
+    a->task = 0x67;
+    a->field_160 = 2;
+    b = aoe_ai_tactical_new_group_ror(&ai, 1);
+    b->task = 0x6a;
+    b->field_160 = 0;
+    ai.sn[40] = 0;
+    aoe_ai_tactical_fill_boat_groups_ror(&ai, &ops, NULL);
+    /* A gets a leader, then one more (the nearest); the rest, with A at
+       +0x160 and capped (number 60), join B, which has no cap. */
+    assert(a->commander != -1 && aoe_ai_unit_group_count_ror(a) == 2);
+    assert(aoe_ai_unit_group_count_ror(b) == 3 && b->commander == -1);
+    aoe_ai_tactical_release_ror(&ai);
+}
+
 static uint32_t rg_ms;
 static uint32_t rg_real(void *c) { (void)c; return rg_ms += 4; }
 static int32_t rg_centre(void *c) { (void)c; return 60; }
@@ -1742,6 +1767,7 @@ int main(void) {
     gather_tests();
     villager_round_tests();
     boat_groups_tests();
+    fill_boat_groups_tests();
 
     aoe_ai_tactical_init_ror(&ai, 3, NULL);
     assert(ai.module.id == 0x3f1 && !strcmp(ai.module.name, "TacAI"));

@@ -734,3 +734,134 @@ int32_t aoe_ai_unit_ai_5564_cc_ror(const AoeAiUnitAiOrderRor *order,
     }
     return base_cc(msg, arg, ops);
 }
+
+static void stop_pass(const AoeAiUnitAiMessageRor *msg, const AoeAiUnitAiOpsRor *ops) {
+    if (ops->clear_target) ops->clear_target(ops->context);
+    if (ops->call_58) ops->call_58(ops->context, 1);
+    if (ops->call_1c) ops->call_1c(ops->context, (void *)msg);
+}
+
+static int32_t villager_attacked(AoeAiUnitAiOrderRor *order, const AoeAiUnitAiMessageRor *msg,
+                                 int32_t arg, const AoeAiUnitAiOpsRor *ops) {
+    int16_t a_owner = 0, a_cls = 0, t_owner = 0, t_cls = 0;
+    int t_ok, owner4, b134;
+    double f4;
+    if (msg->field_10 < 1) {
+        if (ops->owner_e8) ops->owner_e8(ops->context, 0x209, msg->sender);
+        if (ops->base_414eb0) ops->base_414eb0(ops->context, arg);
+        return 4;
+    }
+    if (!ops->obj_info || !ops->obj_info(ops->context, msg->sender, &a_owner, &a_cls)) return 2;
+    t_ok = ops->obj_info(ops->context, order->target, &t_owner, &t_cls);
+    owner4 = ops->owner_field_4 ? ops->owner_field_4(ops->context) : 0;
+    if (owner4 == 1 ? !(a_owner == 0 && msg->sender == order->target)
+                    : (ops->group_count ? ops->group_count(ops->context) : 0) == 0)
+        if (ops->owner_e8) ops->owner_e8(ops->context, 0x201, msg->sender);
+    if (!(ops->group_has && ops->group_has(ops->context, msg->sender)) && owner4 == 0 &&
+        order->target != msg->sender && ops->alert_allies)
+        ops->alert_allies(ops->context, msg->sender);
+    if (ops->group_add) ops->group_add(ops->context, msg->sender);
+    if (ops->unit_ec) ops->unit_ec(ops->context, 1);
+    f4 = ops->unit_f4 ? ops->unit_f4(ops->context) : 0.0;
+    b134 = ops->unit_134 ? ops->unit_134(ops->context) & 0xff : 0;
+    if ((order->action == 0x2c6 && (float)f4 > 0.0f) || order->action == 700 ||
+        (order->action == 0x2c9 && b134 == 0xc && t_ok && t_cls == 10 && a_owner == 0) ||
+        order->action == 0x2ce)
+        return 2;
+    if (a_owner != 0) {
+        if (order->task != 0x262 || (float)f4 == 0.0f) {
+            if (ops->reissue) ops->reissue(ops->context, order->action, 0);
+            if (ops->call_58) ops->call_58(ops->context, 1);
+            if (ops->call_a4) ops->call_a4(ops->context, 1);
+        }
+        return 3;
+    }
+    if (order->action != -1) {
+        if (ops->reissue) ops->reissue(ops->context, order->action, 0);
+        order->action = 700;
+        order->field_2c = 100;
+        if (ops->call_5c) ops->call_5c(ops->context, msg->sender, 1);
+        order->flag_130 = 1;
+        return 3;
+    }
+    if (ops->call_5c) ops->call_5c(ops->context, msg->sender, 1);
+    return 3;
+}
+
+/* The next resource for a gatherer (task 0x265 / 0x261): -2 when there
+   is no known kind (stop now), -1 for none found. */
+static int32_t next_resource(const AoeAiUnitAiOrderRor *order, const AoeAiUnitAiMessageRor *msg,
+                             int gatherer_261, const AoeAiUnitAiOpsRor *ops) {
+    int32_t from = order->field_38, k;
+    if (from == -1 && (from = order->field_5c) == -1) return -2;
+    k = ops->call_c0 ? ops->call_c0(ops->context, from) : -1;
+    if (k != -1) return ops->call_44 ? ops->call_44(ops->context, k) : -1;
+    if (gatherer_261 && msg->field_10 == 0x32)
+        return ops->call_40_args ? ops->call_40_args(ops->context, from, -1, 2, 0x32) : -1;
+    return ops->call_40_args ? ops->call_40_args(ops->context, from, -1, -1, -1) : -1;
+}
+
+int32_t aoe_ai_unit_ai_villager_cc_ror(AoeAiUnitAiOrderRor *order,
+                                       const AoeAiUnitAiMessageRor *msg, int32_t arg,
+                                       const AoeAiUnitAiOpsRor *ops) {
+    if (!order || !msg || !ops) return 0;
+    switch (msg->type) {
+    case 0x20f:
+        if ((ops->difficulty ? ops->difficulty(ops->context) : 0) >= 3) return 2;
+        /* fall through */
+    case 500:
+        return villager_attacked(order, msg, arg, ops);
+    case 0x1f9: case 0x1fa:
+        if (order->task != msg->value) return 2;
+        stop_pass(msg, ops);
+        return 2;
+    case 0x1fb: case 0x202:
+        break;
+    default:
+        return base_cc(msg, arg, ops);
+    }
+    if (order->task == 0x265 || order->task == 0x261) {
+        int g261 = order->task == 0x261;
+        int32_t t = next_resource(order, msg, g261, ops);
+        if (t == -2) {
+            stop_pass(msg, ops);
+            return 2;
+        }
+        if (t != -1) {
+            int32_t r = g261 ? (ops->call_68 ? ops->call_68(ops->context, t, 1) : 0)
+                             : (ops->call_64_r ? ops->call_64_r(ops->context, t, 1) : 0);
+            if (r == 1) return 3;
+            stop_pass(msg, ops);
+        } else if (ops->owner_field_4 && ops->owner_field_4(ops->context) == 1) {
+            stop_pass(msg, ops);
+        } else if (g261 && msg->field_10 == 0x32 && ops->self && ops->move) {
+            AoeAiUnitViewRor me;
+            ops->self(ops->context, &me);
+            ops->move(ops->context, me.x <= 5.0f ? me.x + 2.5f : me.x - 2.5f,
+                      me.y <= 5.0f ? me.y + 2.5f : me.y - 2.5f, me.z);
+        }
+    } else if (order->task == 0x25a) {
+        int32_t t = ops->call_40_args ? ops->call_40_args(ops->context, order->field_38, 3, 0, -1)
+                                      : -1;
+        if (t == -1 && ops->call_40_args)
+            t = ops->call_40_args(ops->context, order->field_38 == 0x1b ? 3 : 0x1b, 3, 0, -1);
+        if (t != -1 && ops->unit_194 && ops->unit_194(ops->context, t) == 1) {
+            if (ops->call_78 && ops->call_78(ops->context, t, 1) == 1) return 3;
+        } else {
+            AoeAiUnitViewRor tv;
+            if (!ops->object || !ops->object(ops->context, order->target, &tv) ||
+                (ops->distance_to ? ops->distance_to(ops->context, order->target) : 0.0) > 1.0)
+                if (ops->call_90) ops->call_90(ops->context, order->x, order->y, order->z);
+        }
+    } else if (order->task == 0x25d) {
+        int32_t x, y;
+        if (ops->call_48 && ops->call_48(ops->context, &x, &y) == 1) {
+            if (ops->add_waypoint) ops->add_waypoint(ops->context, x, y);
+            if (ops->call_80 && ops->call_80(ops->context, x, y) != 0) return 3;
+        }
+        stop_pass(msg, ops);
+    }
+    if (msg->type == 0x202) return 2;
+    stop_pass(msg, ops);
+    return 2;
+}

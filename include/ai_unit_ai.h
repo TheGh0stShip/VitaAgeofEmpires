@@ -163,13 +163,33 @@ typedef struct {
     void (*set_dodged)(void *context);
     /* The +0x60 list's entry `i` (grown to hold it). */
     int32_t (*group_at)(void *context, int32_t i);
+    /* For the villager: an object through 0x00414f40 (its owner index
+       and class), vtable +0xc0 (a class's resource), +0x44 (resource, 0),
+       +0x40 with four values and 0, +0x64 / +0x68 / +0x78 (id, 1) with
+       their results, +0x90 (x, y, z, 1.0, 1), and the unit's +0xf4 and
+       +0x134 (byte). */
+    int (*obj_info)(void *context, int32_t id, int16_t *owner, int16_t *type_class);
+    int32_t (*call_c0)(void *context, int32_t value);
+    int32_t (*call_44)(void *context, int32_t kind);
+    int32_t (*call_40_args)(void *context, int32_t a, int32_t b, int32_t c, int32_t d);
+    int32_t (*call_64_r)(void *context, int32_t id, int32_t value);
+    int32_t (*call_68)(void *context, int32_t id, int32_t value);
+    int32_t (*call_78)(void *context, int32_t id, int32_t value);
+    void (*call_90)(void *context, float x, float y, float z);
+    double (*unit_f4)(void *context);
+    int (*unit_134)(void *context);
 } AoeAiUnitAiOpsRor;
 
 /* The unit AI's own order fields the overrides read: action (+0x28),
    target (+0x34). */
 typedef struct {
     int32_t action, target;
-    int32_t task;   /* +0x30 */
+    int32_t task;           /* +0x30 */
+    int32_t field_2c;       /* +0x2c, the order's priority */
+    int32_t field_38;       /* +0x38 */
+    int32_t field_5c;       /* +0x5c */
+    float x, y, z;          /* +0x3c..+0x44 */
+    uint8_t flag_130;       /* +0x130 */
 } AoeAiUnitAiOrderRor;
 
 /* A message to a unit AI: sender (+0), type (+8), value (+0xc). */
@@ -373,5 +393,32 @@ int32_t aoe_ai_unit_ai_5804_cc_ror(const AoeAiUnitAiOrderRor *order,
 int32_t aoe_ai_unit_ai_5564_cc_ror(const AoeAiUnitAiOrderRor *order,
                                    const AoeAiUnitAiMessageRor *msg, int32_t arg,
                                    const AoeAiUnitAiOpsRor *ops);
+/* 0x004e4710 (class 4, the villager, +0xcc):
+   - 0x20f: ignored (2) from difficulty 3; otherwise as 500.
+   - 500: +0x10 below 1 tells the owner 0x209 and runs the base's
+     0x00414eb0(arg), 4. A missing attacker gives 2. The owner hears 0x201
+     (a computer owner unless the attacker is gaia and our target; others
+     only for the first attacker), a new attacker is warned about and
+     listed, +0xec(1). Moving (0x2c6 with +0xf4 above 0), attacking (700),
+     hunting a gaia class-10 target (0x2c9 with +0x134 at 0xc) or
+     repairing (0x2ce) gives 2. A non-gaia attacker: unless gathering
+     (0x262) while moving, the action is re-sent, stopped and +0xa4(1); 3.
+     A gaia one is attacked back (+0x5c(attacker, 1)); a busy unit first
+     re-sends its action and takes 700 / priority 100 with +0x130 set; 3.
+   - 0x1f9 / 0x1fa: ignored unless the value is the task; then stop.
+   - 0x1fb / 0x202 by task: 0x265 and 0x261 look for another resource of
+     the same kind (+0x38, else +0x5c; through +0xc0 / +0x44 or +0x40,
+     0x261 asking for class 0x32 with distance 2 when +0x10 is 0x32) and
+     take it (+0x64 / +0x68 for 3); with none a computer's unit stops and
+     an 0x261 unit sent 0x32 steps 2.5 toward the middle (x, y below or
+     above 5); 0x25a looks for a building to work on (+0x40 with the
+     +0x38 class, else class 3 / 0x1b) that passes the +0x194 test and
+     takes it (+0x78 for 3), or heads back to +0x3c..+0x44 unless within
+     1 of the target; 0x25d takes a waypoint (+0x48) and heads there
+     (+0x80 for 3) or stops. Then 0x202 gives 2; others stop and pass on.
+   - Others go to the base. */
+int32_t aoe_ai_unit_ai_villager_cc_ror(AoeAiUnitAiOrderRor *order,
+                                       const AoeAiUnitAiMessageRor *msg, int32_t arg,
+                                       const AoeAiUnitAiOpsRor *ops);
 
 #endif

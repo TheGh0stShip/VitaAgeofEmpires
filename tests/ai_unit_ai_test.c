@@ -316,6 +316,53 @@ static void cc_5564_tests(void) {
            reiss == 5);
 }
 
+static int t_info(void *c, int32_t id, int16_t *owner, int16_t *cls) {
+    (void)c; *owner = (int16_t)(id == 46 ? 0 : 2); *cls = 10; return id != 99;
+}
+static int32_t t_c0(void *c, int32_t v) { (void)c; (void)v; return -1; }
+static int32_t t_40a(void *c, int32_t a, int32_t b, int32_t cc, int32_t d) {
+    (void)c; (void)a; (void)b; (void)cc; (void)d; return 88;
+}
+static int32_t c68_id = -1;
+static int32_t t_68(void *c, int32_t id, int32_t v) { (void)c; (void)v; c68_id = id; return 1; }
+
+static void villager_cc_tests(void) {
+    AoeAiUnitAiOpsRor o;
+    AoeAiUnitAiOrderRor ord = {-1, 46, 0x261};
+    AoeAiUnitAiMessageRor m = {45, 500, 0, 1};
+    memset(&o, 0, sizeof o);
+    o.obj_info = t_info;
+    o.owner_field_4 = pd_owner4;
+    o.reissue = t_reiss;
+    o.call_a4 = t_a4;
+    o.call_5c = t_5c;
+    o.base_cc = t_bcc;
+    o.clear_target = cc_clear;
+    /* A non-gaia attacker (45): re-send, 3. */
+    reiss = -1;
+    assert(aoe_ai_unit_ai_villager_cc_ror(&ord, &m, 1, &o) == 3 && reiss == -1);
+    /* A gaia attacker (46) while busy: fight back, action 700. */
+    m.sender = 46;
+    ord.action = 0x2bf;
+    assert(aoe_ai_unit_ai_villager_cc_ror(&ord, &m, 1, &o) == 3 && ord.action == 700 &&
+           ord.field_2c == 100 && ord.flag_130 == 1 && c5c_id == 46);
+    /* Already attacking: 2. */
+    assert(aoe_ai_unit_ai_villager_cc_ror(&ord, &m, 1, &o) == 2);
+    /* 0x1fb: a gatherer finds another resource. */
+    m.type = 0x1fb;
+    ord.field_38 = 7;
+    o.call_c0 = t_c0;
+    o.call_40_args = t_40a;
+    o.call_68 = t_68;
+    assert(aoe_ai_unit_ai_villager_cc_ror(&ord, &m, 1, &o) == 3 && c68_id == 88);
+    /* No source: stop. */
+    ord.field_38 = ord.field_5c = -1;
+    cc_cleared = 0;
+    assert(aoe_ai_unit_ai_villager_cc_ror(&ord, &m, 1, &o) == 2 && cc_cleared == 1);
+    m.type = 0x1fc;
+    assert(aoe_ai_unit_ai_villager_cc_ror(&ord, &m, 1, &o) == 1);
+}
+
 static void d4_5564_tests(void) {
     AoeAiUnitAiOpsRor o;
     AoeAiUnitAiOrderRor ord = {-1, -1};
@@ -384,6 +431,7 @@ int main(void) {
     priest_more_tests();
     attacked_tests();
     cc_5564_tests();
+    villager_cc_tests();
     AoeAiUnitAiRor ai;
     AoeAiUnitAiOpsRor ops;
     memset(&ops, 0, sizeof ops);

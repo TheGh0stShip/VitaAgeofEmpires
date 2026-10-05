@@ -2,6 +2,7 @@
    drawing. */
 #include "ui_input.h"
 #include "ui_list.h"
+#include "ui_scrollbar.h"
 #include "draw_system.h"
 
 #include <assert.h>
@@ -112,6 +113,30 @@ int main(void) {
     in.text.panel.vt->draw(&in.text.panel);
     assert(bits[50 * 200 + 25] == 0);
     aoe_ui_input_release_ror(&in);
+
+    /* The scrollbar: the frame bevel, then each part's bevel; a held
+       arrow draws inverted. */
+    {
+        static AoeUiScrollbarRor sb;
+        AoeUiRectRor r;
+        aoe_ui_scrollbar_init_ror(&sb, &sys);
+        assert(aoe_ui_scrollbar_setup_ror(&sb, &area, NULL, 100, 0, 20, 80, 0,
+                                          10, NULL, 10, 0));
+        aoe_ui_scrollbar_set_bevel_ror(&sb, 2, (const uint8_t[6]){1, 2, 3, 4, 5, 6});
+        sb.panel.active = 1;
+        memset(bits, 0, sizeof bits);
+        sb.panel.vt->draw(&sb.panel);
+        r = sb.back;
+        /* Unpressed: top/right in bevel[0], bottom/left in bevel[5]. */
+        assert(bits[r.top * 200 + r.left + 1] == 1 &&
+               bits[r.bottom * 200 + r.left] == 6);
+        sb.part = 1;
+        sb.repeating = 1;
+        sb.panel.vt->draw(&sb.panel);
+        assert(bits[r.top * 200 + r.left + 1] == 6 &&
+               bits[r.bottom * 200 + r.left] == 1);
+        aoe_ui_scrollbar_release_ror(&sb);
+    }
     puts("ui_draw_test: ok");
     return 0;
 }

@@ -1,5 +1,9 @@
 #include "ui_scrollbar.h"
 
+#include "draw_prims.h"
+#include "draw_system.h"
+#include "shape.h"
+
 #include <string.h>
 
 #define S(p) ((AoeUiScrollbarRor *)(p))
@@ -335,6 +339,138 @@ static int32_t no_key_action(AoeUiPanelRor *p, int32_t a, int32_t b,
     return 0;
 }
 
+/* ---- drawing (0x00467bb0) ---- */
+
+static void sb_shape(AoeUiScrollbarRor *s, int32_t frame, int32_t x,
+                     int32_t y) {
+    const AoeUiPlatformRor *pf = s->panel.system ? s->panel.system->platform : NULL;
+    if (pf && pf->draw_shape)
+        pf->draw_shape(pf->context, s->panel.area, s->picture, frame, x, y);
+}
+
+/* 0x00467f70: the background frame tiled over the panel. */
+static void sb_background(AoeUiScrollbarRor *s) {
+    AoeUiPanelRor *p = &s->panel;
+    int32_t x0 = 0, y0 = 0, x1 = -1, y1 = -1, x, y;
+    if (!s->picture || s->frames[0] == -1) return;
+    aoe_shape_bounds_ror(s->picture, s->frames[0], &x0, &y0, &x1, &y1);
+    for (y = 0; p->height >= 0 && y <= p->height; y += y1 - y0 + 1)
+        for (x = 0; p->width >= 0 && x <= p->width; x += x1 - x0 + 1)
+            sb_shape(s, s->frames[0], x + p->x, y + p->y);
+}
+
+/* 0x00468030: a part's picture frame centred in its rect (one further
+   frame and shifted when pressed; the surface stays clipped to the
+   rect), or the parent's background without a picture. */
+static void sb_part(AoeUiScrollbarRor *s, AoeDrawSurfaceRor *area,
+                    int32_t frame, int pressed, const AoeUiRectRor *r) {
+    if (s->picture && frame != -1) {
+        int32_t clip[4] = {r->left, r->top, r->right, r->bottom};
+        int32_t x0 = 0, y0 = 0, x1 = -1, y1 = -1;
+        int16_t x, y;
+        aoe_surface_clip_ror(area, clip);
+        aoe_shape_bounds_ror(s->picture, frame, &x0, &y0, &x1, &y1);
+        x = (int16_t)((int16_t)((r->right - r->left + 1) / 2) -
+                      (int16_t)((x1 + 1 - x0) / 2) - (int16_t)x0 +
+                      (int16_t)r->left);
+        y = (int16_t)((int16_t)((r->bottom - r->top + 1) / 2) -
+                      (int16_t)((y1 - y0 + 1) / 2) - (int16_t)y0 +
+                      (int16_t)r->top);
+        if (pressed) {
+            ++x;
+            --y;
+        }
+        sb_shape(s, frame + (pressed != 0), x, y);
+        return;
+    }
+    if (s->panel.parent) s->panel.parent->vt->draw_parent_rect(s->panel.parent, r);
+}
+
+/* 0x00467d60 (0x00467d30 from a rect): a bevel, inverted when pressed;
+   `button` only changes the plain (type 1) look. The frame is drawn as
+   pressed, button 0. */
+static void sb_bevel(AoeUiScrollbarRor *s, AoeShapeSurfaceRor *v, int button,
+                     int pressed, const AoeUiRectRor *r) {
+    const uint8_t *b = s->bevel;
+    int32_t l = r->left, t = r->top, rr = r->right, bt = r->bottom;
+    uint8_t c[6];
+    if (l == rr || t == bt) return;
+    if (!pressed) {
+        switch (s->bevel_type) {
+        case 1: {
+            uint8_t color = 0;
+            if (button) {
+                aoe_draw_vline_ror(v, rr, t + 1, bt - t, 0);
+                aoe_draw_hline_ror(v, l + 1, t, rr - l, 0);
+                color = 0xff;
+                bt = t - 1;
+            }
+            aoe_draw_rect_ror(v, l, t, rr - 1, bt, color);
+            break;
+        }
+        case 2:
+            aoe_draw_bevel1_ror(v, l, t, rr, bt, b[0], b[5]);
+            break;
+        case 3:
+            c[0] = b[0], c[1] = b[1], c[2] = b[4], c[3] = b[5];
+            aoe_draw_bevel2_ror(v, l, t, rr, bt, c);
+            break;
+        case 4:
+            aoe_draw_bevel3_ror(v, l, t, rr, bt, b);
+            break;
+        }
+        return;
+    }
+    switch (s->bevel_type) {
+    case 1:
+        if (button)
+            aoe_draw_rect_ror(v, l + 1, t + 1, rr, bt, 0xff);
+        else
+            aoe_draw_rect_ror(v, l, t, rr - 1, bt, 0xff);
+        break;
+    case 2:
+        aoe_draw_bevel1_ror(v, l, t, rr, bt, b[5], b[0]);
+        break;
+    case 3:
+        c[0] = b[5], c[1] = b[4], c[2] = b[1], c[3] = b[0];
+        aoe_draw_bevel2_ror(v, l, t, rr, bt, c);
+        break;
+    case 4:
+        c[0] = b[5], c[1] = b[4], c[2] = b[3], c[3] = b[2], c[4] = b[1],
+        c[5] = b[0];
+        aoe_draw_bevel3_ror(v, l, t, rr, bt, c);
+        break;
+    }
+}
+
+void aoe_ui_scrollbar_draw_slot_ror(AoeUiPanelRor *p) {
+    AoeUiScrollbarRor *s = (AoeUiScrollbarRor *)p;
+    AoeDrawSurfaceRor *area = p->area ? p->area->surface : NULL;
+    if (p->parent) p->parent->vt->draw_parent_rect(p->parent, &p->clip);
+    p->vt->begin_draw(p, 0);
+    if (area && aoe_surface_lock_ror(area, 1)) {
+        AoeShapeSurfaceRor *v = &area->view;
+        int down;
+        sb_background(s);
+        sb_bevel(s, v, 0, 1, &p->rect);
+        if (s->back.top != s->back.bottom && s->back.left != s->back.right) {
+            down = s->part == 1 && s->repeating;
+            sb_part(s, area, s->frames[1], down, &s->back);
+            sb_bevel(s, v, 1, down, &s->back);
+        }
+        if (s->forward.top != s->forward.bottom &&
+            s->forward.left != s->forward.right) {
+            down = s->part == 2 && s->repeating;
+            sb_part(s, area, s->frames[2], down, &s->forward);
+            sb_bevel(s, v, 1, down, &s->forward);
+        }
+        sb_part(s, area, s->frames[3], 0, &s->thumb);
+        sb_bevel(s, v, 1, 0, &s->thumb);
+        aoe_surface_unlock_ror(area);
+    }
+    p->vt->end_draw(p);
+}
+
 const AoeUiPanelVtblRor aoe_ui_scrollbar_vtable_ror = {
     destroy,
     aoe_ui_panel_setup_ror,
@@ -348,7 +484,7 @@ const AoeUiPanelVtblRor aoe_ui_scrollbar_vtable_ror = {
     aoe_ui_panel_redraw_overlaps_ror,
     aoe_ui_panel_begin_draw_ror,
     aoe_ui_panel_end_draw_ror,
-    aoe_ui_panel_draw_ror,
+    aoe_ui_scrollbar_draw_slot_ror,
     aoe_ui_panel_draw_rect_ror,
     aoe_ui_panel_draw_offset_ror,
     aoe_ui_panel_draw_parent_rect_ror,
@@ -455,7 +591,7 @@ const AoeUiPanelVtblRor aoe_ui_vscroll_vtable_ror = {
     aoe_ui_panel_redraw_overlaps_ror,
     aoe_ui_panel_begin_draw_ror,
     aoe_ui_panel_end_draw_ror,
-    aoe_ui_panel_draw_ror,
+    aoe_ui_scrollbar_draw_slot_ror,
     aoe_ui_panel_draw_rect_ror,
     aoe_ui_panel_draw_offset_ror,
     aoe_ui_panel_draw_parent_rect_ror,
@@ -507,7 +643,7 @@ const AoeUiPanelVtblRor aoe_ui_hscroll_vtable_ror = {
     aoe_ui_panel_redraw_overlaps_ror,
     aoe_ui_panel_begin_draw_ror,
     aoe_ui_panel_end_draw_ror,
-    aoe_ui_panel_draw_ror,
+    aoe_ui_scrollbar_draw_slot_ror,
     aoe_ui_panel_draw_rect_ror,
     aoe_ui_panel_draw_offset_ror,
     aoe_ui_panel_draw_parent_rect_ror,

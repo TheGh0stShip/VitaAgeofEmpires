@@ -138,7 +138,7 @@ static int32_t menu_action(AoeUiPanelRor *p, AoeUiPanelRor *from, int32_t code,
     case 5:
         aoe_ui_system_close_ror(s, "Menu Dialog");
         aoe_ui_system_show_named_ror(s, "Game Screen", 0);
-        if (ops && ops->open_options) ops->open_options(ops->context, parent);
+        if (ops && ops->open_game_settings) ops->open_game_settings(ops->context, parent);
         return 1;
     case 7:
         if (ops && ops->open_achievements)
@@ -150,13 +150,13 @@ static int32_t menu_action(AoeUiPanelRor *p, AoeUiPanelRor *from, int32_t code,
     case 10:
         aoe_ui_system_close_ror(s, "Menu Dialog");
         aoe_ui_system_show_named_ror(s, "Game Screen", 0);
-        if (ops && ops->open_diplomacy) ops->open_diplomacy(ops->context, parent);
+        if (ops && ops->open_about) ops->open_about(ops->context, parent);
         return 1;
     case 11:
         ask(ui, parent, 0xc1e, "RestartDialog");
         return 1;
     case 9:
-        if (ops && ops->open_mission) ops->open_mission(ops->context);
+        if (ops && ops->open_instructions) ops->open_instructions(ops->context);
         aoe_ui_system_show_named_ror(s, "Mission Dialog", 0);
         aoe_ui_system_close_ror(s, "Menu Dialog");
         return 1;

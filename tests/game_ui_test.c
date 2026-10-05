@@ -17,9 +17,18 @@ static int fonts(void *c, int32_t index, uintptr_t *font, int32_t *w, int32_t *h
 static int saves = -1, options, achievements, missions;
 static AoeUiPanelRor *options_parent;
 static void open_save(void *c, int32_t mode) { (void)c; saves = mode; }
-static void open_options(void *c, AoeUiPanelRor *p) { (void)c; ++options; options_parent = p; }
+static void open_game_settings(void *c, AoeUiPanelRor *p) { (void)c; ++options; options_parent = p; }
 static void open_ach(void *c, const char *t) { (void)c; if (strcmp(t, "S9886") == 0) ++achievements; }
-static void open_mission(void *c) { (void)c; ++missions; }
+static void open_instructions(void *c) { (void)c; ++missions; }
+static int quits, saves_ed, tests, news, opens;
+static void *test_target;
+static void ed_quit(void *c, AoeUiPanelRor *e) { (void)c; (void)e; ++quits; }
+static void ed_save(void *c, AoeUiPanelRor *e, int32_t a, int32_t b) { (void)c; (void)e; assert(a == 1 && b == 0); ++saves_ed; }
+static void *ed_test(void *c, AoeUiPanelRor *e) { (void)c; (void)e; return test_target; }
+static void run_test(void *c, void *s) { (void)c; assert(s == test_target); ++tests; }
+static void ed_save_current(void *c, AoeUiPanelRor *e) { (void)c; (void)e; ++saves_ed; }
+static void new_scenario(void *c) { (void)c; ++news; }
+static void open_open(void *c) { (void)c; ++opens; }
 static uint8_t state;
 static uint8_t player_state(void *c, void *p) { (void)c; (void)p; return state; }
 
@@ -53,9 +62,9 @@ int main(void) {
     sys.platform = &pf;
     ez_ops.font = fonts;
     ops.open_save_screen = open_save;
-    ops.open_options = open_options;
+    ops.open_game_settings = open_game_settings;
     ops.open_achievements = open_ach;
-    ops.open_mission = open_mission;
+    ops.open_instructions = open_instructions;
     ops.player_state = player_state;
     players[0] = players[1] = &dummy;
     game.has_world = 1;
@@ -130,6 +139,63 @@ int main(void) {
     m = open_menu(&ui, &screen->panel);
     assert(m->dialog.ez.panel.height == 300 && m->count == 7);
     aoe_ui_system_close_ror(&sys, "Menu Dialog");
+
+    /* The scenario editor's menu. */
+    {
+        AoeUiEzRor *editor = calloc(1, sizeof(*editor));
+        AoeScenarioMenuDialogRor *sm;
+        AoeUiPanelRor *sp;
+        ops.editor_quit = ed_quit;
+        ops.editor_save = ed_save;
+        ops.editor_test_scenario = ed_test;
+        ops.test_scenario = run_test;
+        ops.editor_save_current = ed_save_current;
+        ops.new_scenario = new_scenario;
+        ops.open_editor_open = open_open;
+        aoe_ui_ez_init_named_ror(editor, &sys, &ez_ops, "Scenario Editor Screen");
+        assert(aoe_ui_ez_setup_ror(editor, &area, NULL, NULL, -1, 1, 0, 0, 0, 0, 0));
+        sm = calloc(1, sizeof(*sm));
+        assert(aoe_scenario_menu_dialog_init_ror(sm, &ui, &editor->panel));
+        sp = &sm->dialog.ez.panel;
+        assert(sp->width == 460 && sp->height == 400 &&
+               sm->buttons[6]->panel.y - sp->y == 0x154 &&
+               sm->buttons[0]->panel.width == 400 && sm->buttons[6]->hotkey == 0x1b);
+        assert(strcmp(sm->buttons[1]->text1[0], "S9281") == 0);
+        sp->vt->action(sp, &sm->buttons[1]->panel, 1, 0, 0);
+        assert(saves_ed == 1 && !aoe_ui_system_find_ror(&sys, "Scenario Menu Dialog") &&
+               sys.screen == &editor->panel);
+        /* Test without a scenario only closes. */
+        sm = calloc(1, sizeof(*sm));
+        aoe_scenario_menu_dialog_init_ror(sm, &ui, &editor->panel);
+        sp = &sm->dialog.ez.panel;
+        sp->vt->action(sp, &sm->buttons[5]->panel, 1, 0, 0);
+        assert(tests == 0 && !aoe_ui_system_find_ror(&sys, "Scenario Menu Dialog"));
+        test_target = &dummy;
+        sm = calloc(1, sizeof(*sm));
+        aoe_scenario_menu_dialog_init_ror(sm, &ui, &editor->panel);
+        sp = &sm->dialog.ez.panel;
+        sp->vt->action(sp, &sm->buttons[5]->panel, 1, 0, 0);
+        assert(tests == 1);
+        /* "New Dialog" answers: Yes saves, then a new scenario. */
+        sm = calloc(1, sizeof(*sm));
+        aoe_scenario_menu_dialog_init_ror(sm, &ui, &editor->panel);
+        sp = &sm->dialog.ez.panel;
+        aoe_ui_ez_yes_no_cancel_dialog_ror(&sm->dialog.ez, "new?", "New Dialog", 300, 200);
+        {
+            AoeUiPanelRor *q = aoe_ui_system_find_ror(&sys, "New Dialog");
+            assert(sp->vt->action(sp, q, 0, 0, 0) == 1);
+        }
+        assert(saves_ed == 2 && news == 1 && !aoe_ui_system_find_ror(&sys, "New Dialog") &&
+               !aoe_ui_system_find_ror(&sys, "Scenario Menu Dialog"));
+        /* "Open Dialog" No: no save, the open screen. */
+        sm = calloc(1, sizeof(*sm));
+        aoe_scenario_menu_dialog_init_ror(sm, &ui, &editor->panel);
+        sp = &sm->dialog.ez.panel;
+        aoe_ui_ez_yes_no_cancel_dialog_ror(&sm->dialog.ez, "open?", "Open Dialog", 300, 200);
+        sp->vt->action(sp, aoe_ui_system_find_ror(&sys, "Open Dialog"), 1, 0, 0);
+        assert(saves_ed == 2 && opens == 1);
+        aoe_ui_system_close_ror(&sys, "Scenario Editor Screen");
+    }
     aoe_ui_system_close_ror(&sys, "Game Screen");
     free(sys.panels);
     return 0;

@@ -231,10 +231,10 @@ int aoe_game_ror_to_menu_ror(const char *screen, const AoeGameRorMenuOpsRor *ops
    once the world is gone or its +0x1d is 1); then the reset and an
    unlink to level 5 (0x004237c0). 0x00505f10 (+0x12c): with a comm
    object, leave and return to state 0; always 1. 0x00503060: leave; a
-   pending scenario test (+0xae8) returns to the editor (0x00500d80);
+   pending scenario test (+0xae8) returns to the editor;
    else a running or ended game (states 3..6) goes to state 0 and, with a
    world, the viewed player's victory (+0x80 1) or defeat video plays
-   (0x005003f0 kind 4 with the scenario's +0x15e8 / +0x16c8 name). */
+   (kind 4 with the scenario's +0x15e8 / +0x16c8 name). */
 typedef struct {
     void *context;
     int networked;
@@ -258,8 +258,8 @@ typedef struct {
     int has_world;                               /* +0x3f4 */
     int won;                                     /* viewed player +0x80 == 1 */
     void (*set_state)(void *context, int32_t state);
-    void (*back_to_editor)(void *context);       /* 0x00500d80 */
-    void (*world_ended)(void *context);          /* 0x0041bc50 */
+    void (*back_to_editor)(void *context);
+    void (*world_ended)(void *context);          /* world +0xb4 */
     void (*play_video)(void *context, int32_t kind, int won);
 } AoeGameRorEndOpsRor;
 int aoe_game_ror_quit_session_ror(const AoeGameRorEndOpsRor *ops);

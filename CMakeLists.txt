@@ -613,7 +613,8 @@ target_link_libraries(aoe_player_outcome_dispatch PUBLIC aoe_player_outcome)
 target_compile_options(aoe_player_outcome_dispatch PRIVATE -Wall -Wextra)
 
 # --- AI worker ---
-add_library(aoe_ai_ror STATIC src/ai_strategy.c src/ai_tactical.c)
+add_library(aoe_ai_ror STATIC src/ai_strategy.c src/ai_tactical.c
+            src/ai_info.c)
 target_include_directories(aoe_ai_ror PUBLIC include)
 target_link_libraries(aoe_ai_ror PUBLIC aoe_ai_build)
 target_compile_options(aoe_ai_ror PRIVATE -Wall -Wextra)
@@ -1416,7 +1417,7 @@ else()
   target_compile_options(player_outcome_dispatch_test PRIVATE -UNDEBUG)
   add_test(NAME original_outcome_dispatch COMMAND player_outcome_dispatch_test)
   # --- AI worker ---
-  foreach(ai_test ai_strategy ai_tactical)
+  foreach(ai_test ai_strategy ai_tactical ai_info)
     add_executable(${ai_test}_test tests/${ai_test}_test.c)
     target_link_libraries(${ai_test}_test PRIVATE aoe_ai_ror)
     target_compile_options(${ai_test}_test PRIVATE -UNDEBUG)

@@ -1,0 +1,271 @@
+#ifndef VITA_AOE_AI_INFO_H
+#define VITA_AOE_AI_INFO_H
+
+#include <stdint.h>
+
+#include "ai_strategy.h" /* AoeAiIntListRor */
+
+/* Patched Rise of Rome 1.0a computer-player information AI (vtable
+   0x00548b74; the computer player holds it at +0xcec): the members in
+   0x004bc230..0x004c6880 that keep its object memory, explored grid,
+   area marks and statistics. Only the state those members touch is kept
+   here, by original offset. The constructor, save and load live outside
+   this range. */
+
+/* A world object as the AI reads it: the ID (+4), its type's ID (+0x10)
+   and class (+0x14), the owner's index (owner +0x4a) and the owner's +4,
+   position (+0x38, +0x3c, +0x40), hit points (+0x30), +0x44, the state
+   byte (+0x48) and the type's maximum hit points (+0x26). */
+typedef struct {
+    int32_t id;
+    int16_t type_id, type_class;
+    int16_t owner;
+    int32_t owner_4;
+    float x, y, z;
+    float hp, field_44;
+    uint8_t state;
+    int16_t max_hp;
+} AoeAiObjectViewRor;
+
+/* One remembered object (0x24 bytes at +0x114): the ID (-1 free), type
+   ID, class, tile position, the owner index when seen, hit points, +0x10,
+   +0x14 and three floats (the unit's vtable +0x108 and +0x100 values and
+   its range, vtable +0x10c). */
+typedef struct {
+    int32_t id;             /* +0x00 */
+    int16_t type_id;        /* +0x04 */
+    int16_t type_class;     /* +0x06 */
+    uint8_t x, y, z;        /* +0x08..+0x0a */
+    uint8_t owner;          /* +0x0b */
+    uint16_t hp;            /* +0x0c */
+    int32_t field_10;       /* +0x10 */
+    uint8_t field_14;       /* +0x14 */
+    float field_18, field_1c, range; /* +0x18, +0x1c, +0x20 */
+} AoeAiInfoObjectRor;
+
+/* A mark (8 bytes at +0x1f8): ID, state byte, tile x and y. */
+typedef struct {
+    int32_t id;
+    uint8_t state, x, y, pad;
+} AoeAiInfoMarkRor;
+
+/* An area (0x18 bytes at +0x200): ID (-1 free), +4, the tile rectangle
+   (x0, y0, x1, y1), two player bytes (+9, +10), +0xc, +0xe, +0x10 (the
+   replacement age) and +0x14. */
+typedef struct {
+    int32_t id;
+    uint8_t field_4, x0, y0, x1, y1, player_9, player_a, pad_b;
+    uint16_t field_c;
+    uint8_t field_e, pad_f;
+    uint32_t age;
+    int32_t field_14;
+} AoeAiInfoAreaRor;
+
+/* A target candidate (20 bytes in the four lists at +0x4d0, counts
+   +0x4e0): ID, tile x and y, a pick counter (+6), +8, a wait byte (+0xc),
+   a gone flag (+0xd), +0xe and +0x10. */
+typedef struct {
+    int32_t id;
+    uint8_t x, y, picks, pad_7;
+    int32_t field_8;
+    uint8_t wait, gone, field_e, pad_f;
+    int32_t field_10;
+} AoeAiInfoTargetRor;
+
+enum { AOE_AI_INFO_STATS = 11, AOE_AI_INFO_HISTORY = 16000 };
+
+typedef struct {
+    AoeAiIntListRor list_f0;          /* +0xf0 */
+    int32_t map_width, map_height;    /* +0x104, +0x108 (-1 unknown) */
+    AoeAiInfoObjectRor *objects;      /* +0x114 */
+    int32_t object_count;             /* +0x110, 500 at first */
+    AoeAiIntListRor list_118, list_128, list_138; /* +0x118 .. +0x138 */
+    int32_t field_14c;                /* +0x14c */
+    AoeAiIntListRor list_190;         /* +0x190 */
+    AoeAiInfoMarkRor *marks;          /* +0x1f8 */
+    int32_t mark_count;               /* +0x1f4 */
+    AoeAiInfoAreaRor *areas;          /* +0x200 */
+    int32_t area_count;               /* +0x1fc */
+    int32_t field_204;                /* +0x204 */
+    uint8_t zone_flags[256];          /* +0x308 */
+    int32_t cells[4][4][3];           /* +0x408 */
+    AoeAiInfoTargetRor *targets[4];   /* +0x4d0 */
+    int32_t target_count[4];          /* +0x4e0 */
+    int32_t current_target[4];        /* +0x550 */
+    int32_t history[AOE_AI_INFO_HISTORY]; /* +0x564 */
+    int32_t stats[AOE_AI_INFO_STATS]; /* +0xff64 */
+} AoeAiInfoRor;
+
+/* The world and the owning computer player. */
+typedef struct {
+    void *context;
+    int16_t self;  /* the owner's index (player +0x4a) */
+    /* 0x0040bab0 on the player: the object, or 0. */
+    int (*object)(void *context, int32_t id, AoeAiObjectViewRor *out);
+    /* 0x005206d0: any world object by ID, or 0. */
+    int (*world_object)(void *context, int32_t id, AoeAiObjectViewRor *out);
+    /* 0x004aba60: the object's terrain zone. */
+    uint8_t (*zone)(void *context, int32_t id);
+    /* The explored grid at +0x158 (0x0043d6a0 / 0x0043d6d0). */
+    int (*grid_get)(void *context, int32_t x, int32_t y);
+    void (*grid_set)(void *context, int32_t x, int32_t y, int32_t value);
+    /* The world map (player +0x3c, +0x28): width (+8), height (+0xc) and
+       the tile byte +5 (row table +0x8d8c, 0x18-byte tiles). */
+    int32_t (*map_width)(void *context);
+    int32_t (*map_height)(void *context);
+    uint8_t (*tile_byte5)(void *context, int32_t x, int32_t y);
+    /* Player vtable +0x18 (stance 3 toward `player`) and +0x1c (self or
+       stance 0). */
+    int (*is_enemy)(void *context, int32_t player);
+    int (*is_ally)(void *context, int32_t player);
+    /* The tactical AI's strategic number (0x004d77d0). */
+    int32_t (*sn)(void *context, int32_t index);
+    /* World +0x11d (the player the statistics follow, 0xff for all) and
+       the setting read by 0x0041b750. */
+    uint8_t stats_player;
+    uint8_t settings_97d;
+} AoeAiInfoOpsRor;
+
+/* 0x004bc690: 1 when the object exists and its zone has no flag;
+   0x004bc6e0 sets the zone's flag. */
+int aoe_ai_info_zone_open_ror(const AoeAiInfoRor *info, int32_t id,
+                              const AoeAiInfoOpsRor *ops);
+void aoe_ai_info_set_zone_flag_ror(AoeAiInfoRor *info, int32_t id,
+                                   uint8_t value, const AoeAiInfoOpsRor *ops);
+/* 0x004bc720: inside the known map and the grid is not 0xff;
+   0x004bc770: clear the grid cell inside the map. */
+int aoe_ai_info_explored_ror(const AoeAiInfoRor *info, int32_t x, int32_t y,
+                             const AoeAiInfoOpsRor *ops);
+void aoe_ai_info_forget_tile_ror(const AoeAiInfoRor *info, int32_t x,
+                                 int32_t y, const AoeAiInfoOpsRor *ops);
+/* 0x004bc230: in the clamped rectangle, grid cells other than 1 become 2. */
+void aoe_ai_info_mark_rect_ror(const AoeAiInfoRor *info, int32_t x0,
+                               int32_t y0, int32_t x1, int32_t y1,
+                               const AoeAiInfoOpsRor *ops);
+/* 0x004bcc10: remembered objects still alive and now owned by `owner`
+   that were seen as `seen_owner` (-1 any). */
+int32_t aoe_ai_info_count_owned_ror(const AoeAiInfoRor *info,
+                                    int32_t seen_owner, int32_t owner,
+                                    const AoeAiInfoOpsRor *ops);
+/* 0x004bd250: one of the eight neighbours (from x-1, y-1 clockwise) on the
+   map has tile byte +5 & 0x1f equal to `value`. */
+int aoe_ai_info_neighbour_terrain_ror(int32_t x, int32_t y, uint32_t value,
+                                      const AoeAiInfoOpsRor *ops);
+/* 0x004bd300 / 0x004bd330: the map width / height, read once. */
+int32_t aoe_ai_info_map_width_ror(AoeAiInfoRor *info,
+                                  const AoeAiInfoOpsRor *ops);
+int32_t aoe_ai_info_map_height_ror(AoeAiInfoRor *info,
+                                   const AoeAiInfoOpsRor *ops);
+/* 0x004bd710: the remembered object with this ID (NULL for -1 or none). */
+AoeAiInfoObjectRor *aoe_ai_info_find_object_ror(const AoeAiInfoRor *info,
+                                                int32_t id);
+/* 0x004bd7e0: store an entry: overwrite the one with this ID, else take
+   the first free one; with none free the table doubles (new entries
+   free). A new object, when `seen` is given, number 201 is 1, the
+   statistics player is ours or 0xff, its owner index is positive, its
+   owner's +4 is 0 and setting 0x97d is 1, raises its statistics bucket
+   (0x004c65c0). NULL when the table cannot grow. */
+AoeAiInfoObjectRor *aoe_ai_info_store_object_ror(
+    AoeAiInfoRor *info, const AoeAiInfoObjectRor *entry,
+    const AoeAiObjectViewRor *seen, const AoeAiInfoOpsRor *ops);
+/* 0x004bd750: remember a seen object: ID, type ID and class, truncated
+   x, y, z, owner index, truncated hit points, 0, 0 and the three unit
+   values. 0 for no object. */
+AoeAiInfoObjectRor *aoe_ai_info_remember_ror(AoeAiInfoRor *info,
+                                             const AoeAiObjectViewRor *object,
+                                             float value_108,
+                                             float value_100, float range,
+                                             const AoeAiInfoOpsRor *ops);
+/* Class sets: 0x004be140 the units and buildings the AI tracks by ID
+   (0, 2, 3, 4, 6, 0xc, 0xd, 0x11, 0x12, 0x14..0x1c, 0x23, 0x24, 0x27),
+   0x004be1c0 the resource classes (5, 7, 8, 9, 0xf, 0x1f, 0x20, 0x21) and
+   0x004be100 any of those or the 0x004be200 set (1, 0x1e). */
+int aoe_ai_info_unit_class_ror(int32_t type_class);
+int aoe_ai_info_resource_class_ror(int32_t type_class);
+int aoe_ai_info_known_class_ror(int32_t type_class);
+/* 0x004be250: class 3 with type 0, 0xc, 0x2d, 0x31, 0x57, 0x65, 0x68 or
+   0x6d. */
+int aoe_ai_info_key_building_ror(int16_t type_class, int16_t type_id);
+/* 0x004c1ab0: +0x14c. 0x004c3cf0: set +0x204. 0x004c6550: the current
+   target of list `i` (0..3), else -1. */
+int32_t aoe_ai_info_field_14c_ror(const AoeAiInfoRor *info);
+void aoe_ai_info_set_field_204_ror(AoeAiInfoRor *info, int32_t value);
+int32_t aoe_ai_info_current_target_ror(const AoeAiInfoRor *info, int32_t i);
+/* 0x004c2d60: clamp a tile to the map; 1 when it moved (a negative
+   coordinate becomes 0 and, for y, returns 1 at once). */
+int aoe_ai_info_clamp_ror(const AoeAiInfoRor *info, int32_t tile[2]);
+/* 0x004c30c0: within squared distance 1 (mode 0) or 2 (mode 1); other
+   modes are always near. */
+int aoe_ai_info_tiles_near_ror(const int32_t a[2], const int32_t b[2],
+                               int32_t mode);
+/* 0x004c3110: the direction from a to b: with the same x, 5 when y does
+   not shrink, else 1; with the same y, 3 when x does not shrink, else 7;
+   otherwise, x shrinking gives 6 or 0 and x growing 4 or 2, for y not
+   shrinking or shrinking. */
+int32_t aoe_ai_info_direction_ror(const int32_t a[2], const int32_t b[2]);
+/* 0x004c34c0: the mark with this ID and tile takes the state, or with
+   state 3 is freed (ID -1, tile 0, state 3). 0x004c3550: the mark with
+   this ID and state 0. 0x004c3590: a mark with this ID and state 1 within
+   `range` of the tile on both axes. */
+void aoe_ai_info_set_mark_ror(AoeAiInfoRor *info, int32_t id, uint8_t x,
+                              uint8_t y, uint8_t state);
+AoeAiInfoMarkRor *aoe_ai_info_open_mark_ror(const AoeAiInfoRor *info,
+                                            int32_t id);
+int aoe_ai_info_mark_near_ror(const AoeAiInfoRor *info, int32_t id,
+                              uint8_t x, uint8_t y, int32_t range);
+/* 0x004c3660: record an area: a known map counts it in the 4x4 cell of
+   ((x0 + x1) * 4 / size) / 2 (the original uses the x sum for both axes;
+   above 4 becomes 3) as ours (+0x40c, player_a) or against us (+0x410,
+   player_9); then it fills the first free area, else the one with the
+   largest age, whose ID becomes the scan's end index. Returns the area
+   index or -1. The port skips the cell count past the 4x4 table (the
+   original writes beyond it). 0x004c3620 records a one-tile area. */
+int32_t aoe_ai_info_add_area_ror(AoeAiInfoRor *info, uint8_t field_4,
+                                 uint8_t x0, uint8_t y0, uint8_t x1,
+                                 uint8_t y1, uint8_t player_9,
+                                 uint8_t player_a, uint16_t field_c,
+                                 uint8_t field_e, uint32_t age,
+                                 int32_t field_14,
+                                 const AoeAiInfoOpsRor *ops);
+int32_t aoe_ai_info_add_tile_area_ror(AoeAiInfoRor *info, uint8_t field_4,
+                                      uint8_t x, uint8_t y,
+                                      uint8_t player_9, uint8_t player_a,
+                                      uint16_t field_c, uint8_t field_e,
+                                      uint32_t age, int32_t field_14,
+                                      const AoeAiInfoOpsRor *ops);
+/* 0x004c3ef0: remembered objects seen as `owner` (or, for -1, by an
+   enemy) within `radius` tiles of (x, y). */
+int32_t aoe_ai_info_count_near_ror(const AoeAiInfoRor *info, int32_t owner,
+                                   int32_t x, int32_t y, int32_t radius,
+                                   const AoeAiInfoOpsRor *ops);
+/* 0x004c3fb0: an area of kind `player_a` with +9 set has a corner within
+   `radius` of the object's truncated position. */
+int aoe_ai_info_area_near_ror(const AoeAiInfoRor *info, float x, float y,
+                              int32_t radius, uint32_t player_a);
+/* 0x004c4090: a remembered type 0x6d seen as an enemy within `radius`. */
+int aoe_ai_info_enemy_center_near_ror(const AoeAiInfoRor *info, float x,
+                                      float y, int32_t radius,
+                                      const AoeAiInfoOpsRor *ops);
+/* 0x004c4160: the nearest living (state below 3, hit points not 0)
+   remembered object of one of four type IDs, seen as an enemy, within
+   `radius`; its ID or -1. */
+int32_t aoe_ai_info_nearest_enemy_ror(const AoeAiInfoRor *info, float x,
+                                      float y, int32_t radius, int32_t t0,
+                                      int32_t t1, int32_t t2, int32_t t3,
+                                      const AoeAiInfoOpsRor *ops);
+/* 0x004c5560: the target with this ID in list `list` gets wait byte
+   `wait` (1), else 0. */
+int aoe_ai_info_set_target_wait_ror(AoeAiInfoRor *info, int32_t list,
+                                    int32_t id, uint8_t wait);
+/* 0x004c65c0: the statistics bucket of a unit: class 0x12 5, 0x1c 3,
+   0xd 4, 0xc 2, 0x23 7; type 0x49 0, 0x4b 1, 4/5/0x27 6, 0x29 10,
+   0x2e/0x19 9; class 0x16 8; else -1. */
+int32_t aoe_ai_info_stat_bucket_ror(int16_t type_class, int16_t type_id);
+/* 0x004c6570: 100 - ftol(statistic 0 / the sum of the history * 100). */
+int32_t aoe_ai_info_stat_share_ror(const AoeAiInfoRor *info);
+/* 0x004c6710: the largest and second-largest statistics buckets (ties
+   keep the first; -1 when none). */
+void aoe_ai_info_top_stats_ror(const AoeAiInfoRor *info, int32_t *first,
+                               int32_t *second);
+
+#endif

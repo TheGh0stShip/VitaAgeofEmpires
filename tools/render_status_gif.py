@@ -42,20 +42,25 @@ CAV_ATTACK = (210, 13)
 ARCHER_ATTACK = (204, 10)
 LEGION_DEAD = (396, 6)
 SWORD_DEAD = (371, 6)
+AXE_IDLE = (415, 8)
+LIGHT_CAV_ATTACK = (211, 13)
+ARCHER_DEAD = (368, 6)
 TOWER = 733          # RoR Roman guard tower (ror_graphics)
 ARROW, ARROW_SHADOW = 243, 710   # 37 stored angles, 5 degrees apart
 # Blue towers around the Wonder (ground points) and their targets: the
 # yellow troops (see VOLLEYS).
 TOWERS = [(200, 214), (340, 232), (532, 128), (472, 52)]
-# Shooters: towers fire from their platform (80 px up), the green archers
-# from the bow (22 px up). (x, y, launch height, target, first frame);
-# each shoots every 16 frames.
+# Shooters (x, y, launch height, target, first frame), each every 16
+# frames: towers from their platform, archers from the bow.
 VOLLEYS = [
-    (340, 232, 80, "axe_c", 2), (340, 232, 80, "axe_c", 10),
+    (340, 232, 80, "axe_c", 2), (340, 232, 80, "axe_b", 10),
     (200, 214, 80, "axe_c", 6),
-    (532, 128, 80, "axe_a", 0), (532, 128, 80, "axe_a", 8),
-    (472, 52, 80, "axe_a", 12), (472, 52, 80, "sword", 4),
-    (652, 66, 22, "sword", 3), (686, 88, 22, "sword", 11),
+    (532, 128, 80, "axe_a", 0), (532, 128, 80, "archer_a", 8),
+    (472, 52, 80, "axe_a", 12), (472, 52, 80, "cav", 4),
+    (505, 170, 22, "sword", 3), (500, 222, 22, "axe_c", 11),
+    # Yellow archers shoot back at the red line.
+    (676, 104, 22, "legion_a", 5), (688, 158, 22, "red_cav", 13),
+    (696, 212, 22, "legion_c", 1), (690, 264, 22, "red_cav", 9),
 ]
 # Stored angles 0..4 face S, SW, W, NW, N; mirrors give SE, E, NE.
 FACING = {"S": (0, False), "SW": (1, False), "W": (2, False),
@@ -122,35 +127,53 @@ def looped(t, per):
     return (t * cycles * per // FRAMES) % per
 
 
-TARGETS = {"axe_a": (584, 146), "sword": (640, 196), "axe_c": (560, 250)}
+TARGETS = {"axe_a": (600, 148), "sword": (590, 204), "axe_c": (582, 258),
+           "axe_b": (634, 184), "archer_a": (676, 104), "cav": (624, 92),
+           "legion_a": (566, 148), "red_cav": (556, 204), "legion_c": (548, 258)}
 
 
 def battle(t):
     """(animation, facing, step, player, x, y) for the skirmish at frame t."""
+    T = TARGETS
     units = [
-        # Corpses from earlier in the fight.
-        (LEGION_DEAD, "SE", 2, RED, 538, 196),
-        (SWORD_DEAD, "W", 3, YELLOW, 664, 266),
-        # A yellow axeman against a red legion.
-        (AXE_ATTACK, "E", looped(t, 15), YELLOW, 584, 146),
-        (LEGION_ATTACK, "W", looped(t + 5, 15), RED, 618, 146),
-        # Red heavy cavalry against a yellow swordsman.
-        (SWORD_ATTACK, "SE", looped(t + 9, 15), YELLOW, 640, 196),
-        (CAV_ATTACK, "NW", looped(t, 13), RED, 672, 214),
-        # Green archers loosing at the yellow line.
-        (ARCHER_ATTACK, "SW", looped(t, 10), GREEN, 652, 66),
-        (ARCHER_ATTACK, "SW", looped(t + 4, 10), GREEN, 686, 88),
+        # Fallen yellow troops before the line, and one red legionary.
+        (AXE_DEAD, "W", 5, YELLOW, 614, 122),
+        (SWORD_DEAD, "W", 4, YELLOW, 606, 232),
+        (ARCHER_DEAD, "SW", 5, YELLOW, 650, 262),
+        (AXE_DEAD, "NW", 5, YELLOW, 616, 270),
+        (LEGION_DEAD, "SE", 2, RED, 528, 182),
+        # The defenders: red legions and cavalry, green archers behind.
+        (LEGION_ATTACK, "E", looped(t + 5, 15), RED, *T["legion_a"]),
+        (CAV_ATTACK, "E", looped(t, 13), RED, *T["red_cav"]),
+        (ARCHER_ATTACK, "E", looped(t, 10), GREEN, 505, 170),
+        (ARCHER_ATTACK, "E", looped(t + 4, 10), GREEN, 500, 222),
+        # The yellow front line.
+        (AXE_ATTACK, "W", looped(t, 15), YELLOW, *T["axe_a"]),
+        (SWORD_ATTACK, "W", looped(t + 9, 15), YELLOW, *T["sword"]),
+        # The yellow host behind it.
+        (AXE_IDLE, "W", looped(t + 2, 8), YELLOW, *T["axe_b"]),
+        (AXE_IDLE, "W", looped(t + 5, 8), YELLOW, 640, 130),
+        (AXE_IDLE, "SW", looped(t + 1, 8), YELLOW, 652, 236),
+        (AXE_IDLE, "W", looped(t + 6, 8), YELLOW, 668, 186),
+        (AXE_IDLE, "W", looped(t + 3, 8), YELLOW, 700, 132),
+        (AXE_IDLE, "W", looped(t + 7, 8), YELLOW, 700, 238),
+        (SWORD_ATTACK, "SW", looped(t + 4, 15), YELLOW, 624, 156),
+        (LIGHT_CAV_ATTACK, "SW", looped(t + 3, 13), YELLOW, *T["cav"]),
+        (ARCHER_ATTACK, "W", looped(t + 1, 10), YELLOW, *T["archer_a"]),
+        (ARCHER_ATTACK, "W", looped(t + 6, 10), YELLOW, 688, 158),
+        (ARCHER_ATTACK, "W", looped(t + 3, 10), YELLOW, 696, 212),
+        (ARCHER_ATTACK, "W", looped(t + 8, 10), YELLOW, 690, 264),
     ]
-    # A second axeman falls halfway through the loop; the legion rests.
+    # A yellow axeman falls halfway through the loop; the legion rests.
     if t < 32:
-        units.append((AXE_ATTACK, "E", looped(t + 3, 15), YELLOW, 560, 250))
-        units.append((LEGION_ATTACK, "W", looped(t + 11, 15), RED, 594, 250))
+        units.append((AXE_ATTACK, "W", looped(t + 3, 15), YELLOW, *T["axe_c"]))
+        units.append((LEGION_ATTACK, "E", looped(t + 11, 15), RED, *T["legion_c"]))
     else:
         if t < 42:
-            units.append((AXE_DEATH, "E", t - 32, YELLOW, 560, 250))
+            units.append((AXE_DEATH, "W", t - 32, YELLOW, *T["axe_c"]))
         else:
-            units.append((AXE_DEAD, "E", min(5, (t - 42) // 4), YELLOW, 560, 250))
-        units.append((LEGION_IDLE, "W", looped(t, 7), RED, 594, 250))
+            units.append((AXE_DEAD, "W", min(5, (t - 42) // 4), YELLOW, *T["axe_c"]))
+        units.append((LEGION_IDLE, "E", looped(t, 7), RED, *T["legion_c"]))
     return units
 
 
@@ -257,15 +280,13 @@ def terrain_layer(sprites):
 def chrome(config, plan):
     """Header and footer around the scaled scene, as one RGB template."""
     sw, sh = SCENE_W * SCALE, SCENE_H * SCALE
-    total = sh + 104
+    total = sh + 152
     regular = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
     bold = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
     f = lambda path, size: ImageFont.truetype(path, size)
     image = Image.new("RGB", (sw, total), "#14251e")
     d = ImageDraw.Draw(image)
-    p = art.progress_value(plan["progress_percent"])
     stage = plan["construction_frame"]
-    percent = format(p.quantize(art.Decimal("0.01")).normalize(), "f")
     d.text((24, 11), config["labels"]["title"], font=f(bold, 20), fill="#e8d6a5")
     d.text((sw - 24, 14), "ORIGINAL ASSETS / ANIMATED STATUS ART", font=f(regular, 13),
            fill="#d6cdb9", anchor="ra")
@@ -274,15 +295,25 @@ def chrome(config, plan):
              f"EFFORT: {plan['effort'].upper()} / {len(plan['workers'])} BUILDERS")
     d.text((24, sh + 13), heading, font=f(bold, 18), fill="#e8d6a5")
     d.text((sw - 24, sh + 16), right, font=f(regular, 12), fill="#d6cdb9", anchor="ra")
-    d.text((24, sh + 50), percent + "%", font=f(bold, 24), fill="#f6e3a7")
     left, right_edge = 120, sw - 41
-    d.rectangle((left, sh + 45, right_edge, sh + 84), fill="#f3e5ba")
-    d.rectangle((left + 4, sh + 49, right_edge - 4, sh + 80), fill="#304c3c")
-    filled = int(p * (right_edge - left - 7) / 100)
-    if filled:
-        d.rectangle((left + 4, sh + 49, left + 3 + filled, sh + 80), fill="#f4b63e")
-    d.text((left + 4, sh + 89), config.get("coverage_note", "ESTIMATED FULL-PORT COMPLETION"),
-           font=f(regular, 10), fill="#d6cdb9")
+
+    def bar(value, top, height, colour, size, note):
+        p = art.progress_value(value)
+        text = format(p.quantize(art.Decimal("0.01")).normalize(), "f") + "%"
+        d.text((24, top + height // 2), text, font=f(bold, size), fill="#f6e3a7",
+               anchor="lm")
+        d.rectangle((left, top, right_edge, top + height), fill="#f3e5ba")
+        d.rectangle((left + 4, top + 4, right_edge - 4, top + height - 4), fill="#304c3c")
+        filled = int(p * (right_edge - left - 7) / 100)
+        if filled:
+            d.rectangle((left + 4, top + 4, left + 3 + filled, top + height - 4), fill=colour)
+        d.text((left + 4, top + height + 4), note, font=f(regular, 10), fill="#d6cdb9")
+
+    bar(plan["progress_percent"], sh + 45, 39, "#f4b63e", 24,
+        "ESTIMATED FULL-PORT COMPLETION")
+    if "coverage" in config:
+        value, note = config["coverage"]
+        bar(value, sh + 108, 22, "#8fb8d8", 16, note)
     return image
 
 
@@ -302,12 +333,11 @@ def main():
     output = Path(sys.argv[1]) if len(sys.argv) > 1 else \
         ROOT / "build/status_work/port-progress-animated.gif"
     config = json.loads((ROOT / "status/current.json").read_text())
-    # The bar, caption and Wonder stage follow measured translation
-    # coverage (functions), not the full-port estimate in current.json.
+    # The main bar and the Wonder stage show the full-port estimate in
+    # current.json; a second bar shows measured translation coverage.
     done, total, func_pct, byte_pct = coverage()
-    config["progress_percent"] = func_pct
-    config["coverage_note"] = (f"GAME CODE TRANSLATED: {done} / {total} FUNCTIONS "
-                               f"({byte_pct}% OF CODE BYTES)")
+    config["coverage"] = (func_pct, f"GAME CODE TRANSLATED: {done} / {total} FUNCTIONS "
+                                    f"({byte_pct}% OF CODE BYTES)")
     plan = art.render_plan(config)
     assets = {k: art.resolve(v) for k, v in config["assets"].items()}
     for p in [DECODER, *assets.values()]:

@@ -112,7 +112,8 @@ typedef struct {
     int32_t *drawn;
     void (*draw_slp)(void *context, AoeShapeSurfaceRor *dst,
                      const AoeShapeRor *s, int32_t frame, int32_t x,
-                     int32_t y, const uint8_t *table, int batched);
+                     int32_t y, const uint8_t *table, int batched,
+                     int mirrored);
 } AoeShapeDrawOpsRor;
 
 /* 0x0049fe00: draw frame `frame` with its hotspot at (x, y). Modes: 0
@@ -122,5 +123,23 @@ typedef struct {
 int aoe_shape_draw_ror(AoeShapeRor *s, AoeShapeSurfaceRor *dst, int32_t x,
                        int32_t y, int32_t frame, uint8_t mode,
                        const uint8_t *table, const AoeShapeDrawOpsRor *ops);
+
+/* Mirrored drawing 0x004a0e90: the box is flipped about x (x - max x ..
+   x - min x) and rows run leftwards from their right end; SLP frames
+   pass the mirrored point to the rasterizer. Its blitters: 0x004a1230
+   copy, 0x004a1300 colour table, 0x004a13f0 shadow (mode 1 / 2 with a
+   table), and the clipped 0x004a14f0, 0x004a17f0, 0x004a1b40. */
+int aoe_shape_draw_mirrored_ror(AoeShapeRor *s, AoeShapeSurfaceRor *dst,
+                                int32_t x, int32_t y, int32_t frame,
+                                uint8_t mode, const uint8_t *table,
+                                const AoeShapeDrawOpsRor *ops);
+int aoe_shape_blit_mirrored_ror(const AoeShapeRor *s, AoeShapeSurfaceRor *dst,
+                                int32_t x, int32_t y, const uint8_t *table,
+                                int32_t mode);
+int aoe_shape_blit_clipped_mirrored_ror(const AoeShapeRor *s,
+                                        AoeShapeSurfaceRor *dst, int32_t x,
+                                        int32_t y, int32_t cl, int32_t ct,
+                                        int32_t cr, int32_t cb,
+                                        const uint8_t *table, int32_t mode);
 
 #endif

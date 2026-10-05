@@ -154,6 +154,18 @@ int main(void) {
     surf.clip_left = 1; surf.clip_right = 3; surf.clip_top = 0;
     assert(aoe_shape_draw_ror(&s, &surf, 1, 1, 0, 0, NULL, NULL));
     assert(px[0] == 0x11 && px[1] == 0xb2 && px[4] == 0x11 && px[5] == 0xc3);
+    /* Mirrored: hotspot x 2 flips the box to 0..3; the literal pair lands
+       at 3 and 2, the fill at 3..1. */
+    memset(px, 0x11, sizeof(px));
+    surf.clip_left = 0; surf.clip_right = 3; surf.clip_top = 0; surf.clip_bottom = 3;
+    assert(aoe_shape_draw_mirrored_ror(&s, &surf, 2, 1, 0, 0, NULL, NULL));
+    assert(px[3] == 0xa1 && px[2] == 0xb2 && px[1] == 0x11 &&
+           px[7] == 0xc3 && px[5] == 0xc3 && px[4] == 0x11);
+    memset(px, 0x11, sizeof(px));
+    surf.clip_right = 2;
+    assert(aoe_shape_draw_mirrored_ror(&s, &surf, 2, 1, 0, 1, table, NULL));
+    assert(px[3] == 0x11 && px[2] == 2 && px[7] == 0x11 && px[6] == 3);
+    surf.clip_right = 3;
     /* Mode 3 draws nothing; a box wholly outside draws nothing. */
     assert(!aoe_shape_draw_ror(&s, &surf, 1, 1, 0, 3, table, NULL));
     assert(!aoe_shape_draw_ror(&s, &surf, 40, 40, 0, 0, NULL, NULL));

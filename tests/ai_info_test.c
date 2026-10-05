@@ -624,6 +624,12 @@ static int finder_template(void *c, int32_t t) { (void)c; return t == 1; }
 static uint32_t finder_clock;
 static uint32_t finder_now(void *c) { (void)c; return finder_clock; }
 static int32_t finder_sn(void *c, int32_t i) { (void)c; return i == 0x49 ? 2 : i == 0x4a ? 5 : 0; }
+static uint8_t shore_vision(void *c, int32_t x, int32_t y) { (void)c; (void)x; (void)y; return 0xf; }
+static int32_t shore_w(void *c) { (void)c; return 12; }
+static uint8_t shore_tile(void *c, int32_t x, int32_t y) { (void)c; (void)y; return x >= 6 ? 2 : 1; }
+static uint8_t shore_zone(void *c, int32_t x, int32_t y) { (void)c; (void)x; (void)y; return 3; }
+static int32_t shore_zone_size(void *c, int32_t z) { (void)c; return z == 3 ? 50 : 0; }
+static int32_t shore_sn(void *c, int32_t i) { (void)c; return i == 0x70 ? 10 : 0; }
 static void site_tests(void) {
     /* 0x004c1ef0 the site grid for mode 3 (a 20 x 20 map). */
     static AoeAiInfoRor info;
@@ -712,6 +718,36 @@ static void site_tests(void) {
         assert(made->plan.x == 5.5f && made->plan.y == 5.5f);
         aoe_ai_con_item_release_ror(made);
         free(made);
+    }
+    {
+        /* 0x004bcca0 / 0x004b9f80: the land tile next to water nearest the
+           origin. */
+        static AoeAiInfoRor si;
+        static AoeAiConPlanRor plan;
+        AoeAiInfoOpsRor so;
+        AoeAiPlanItemRor want;
+        AoeAiConItemRor *dock;
+        memset(&so, 0, sizeof so);
+        so.vision = shore_vision;
+        so.map_width = so.map_height = shore_w;
+        so.tile_byte5 = shore_tile;
+        so.map_zone = shore_zone;
+        so.zone_size = shore_zone_size;
+        so.sn = shore_sn;
+        aoe_ai_con_plan_init_ror(&plan, 1, NULL);
+        plan.origin_x = 2.0f;
+        plan.origin_y = 4.0f;
+        aoe_ai_plan_item_init_ror(&want);
+        want.type = 0x2d;
+        want.size_x = want.size_y = 1.5f;
+        snprintf(want.name, sizeof want.name, "Dock");
+        dock = aoe_ai_ror_plan_add_shore_ror(&plan, &si, &want, &so);
+        /* Land at x 5 borders water at x 6; (5, 4) is nearest (2, 4). */
+        assert(dock && dock->plan.x == 5.5f && dock->plan.y == 4.5f && dock->plan.z == 0.0f);
+        assert(plan.placed_count == 1 && plan.placed.next == dock && plan.field_310 == 0);
+        so.zone_size = NULL;
+        assert(!aoe_ai_ror_plan_add_shore_ror(&plan, &si, &want, &so) && plan.field_310 == 5);
+        aoe_ai_con_plan_release_ror(&plan);
     }
     aoe_value_grid_free_ror(&g);
 }

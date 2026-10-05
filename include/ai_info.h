@@ -215,6 +215,10 @@ typedef struct {
     int (*rand)(void *context);
     uint32_t (*now_ms)(void *context);
     uint32_t time_slice;
+    /* The tile count of a zone (0x00521770) in the zone map of our
+       villagers' terrain (template 19's +0x66 through 0x00521b50; the
+       same map `map_zone` reads). */
+    int32_t (*zone_size)(void *context, int32_t zone);
 } AoeAiInfoOpsRor;
 
 /* 0x004bc690: 1 when the object exists and its zone has no flag;
@@ -647,5 +651,30 @@ AoeAiConItemRor *aoe_ai_info_find_site_ror(AoeAiInfoRor *info, struct AoeValueGr
                                            int32_t min, int32_t max, int32_t x, int32_t y,
                                            AoeAiSiteSearchRor *search, uint32_t start,
                                            int *found, const AoeAiInfoOpsRor *ops);
+
+/* 0x004bcca0(item, x, y, terrain, value): a shore-side site near
+   (x, y) for `item` (its RoR plan's 0x004b9f80 asks for terrain 1 and
+   neighbour terrain 2): every interior tile (1 .. size - 3) that the
+   player has seen, whose terrain (tile byte 5 & 0x1f) matches unless -1,
+   whose zone has at least number 0x70 tiles, with a neighbour of terrain
+   `value` (0x004bd250) and no placed plan item (0x0040a6e0 on the
+   construction plan) is scored by its squared distance, plus 1000 per
+   dock in its zone (counted once per zone) and 100000 / the distance to
+   the nearest dock; the lowest wins, a later tile replacing the best
+   only when it beats it by more than a jitter of rand() % 50. The new
+   item stands at the tile + 0.5 at height 0 with the item's sizes, type
+   and name; NULL when no tile qualifies. */
+AoeAiConItemRor *aoe_ai_info_shore_site_ror(AoeAiInfoRor *info, AoeAiConPlanRor *plan,
+                                            const AoeAiPlanItemRor *item, float x, float y,
+                                            int32_t terrain, uint32_t value,
+                                            const AoeAiInfoOpsRor *ops);
+
+/* 0x004b9f80 (the RoR plan, its owner's information AI at +0x314 +
+   0xcec): a shore site for `item` near the plan's origin (terrain 1,
+   neighbour terrain 2) appended to the placed list (+0x178, count
+   +0x174), +0x310 0; none sets +0x310 to 5 and gives NULL. */
+AoeAiConItemRor *aoe_ai_ror_plan_add_shore_ror(AoeAiConPlanRor *plan, AoeAiInfoRor *info,
+                                               const AoeAiPlanItemRor *item,
+                                               const AoeAiInfoOpsRor *ops);
 
 #endif

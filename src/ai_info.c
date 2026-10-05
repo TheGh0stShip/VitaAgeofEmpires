@@ -1875,3 +1875,71 @@ AoeAiConItemRor *aoe_ai_info_find_site_ror(AoeAiInfoRor *info, AoeValueGridRor *
         return made;
     }
 }
+
+AoeAiConItemRor *aoe_ai_info_shore_site_ror(AoeAiInfoRor *info, AoeAiConPlanRor *plan,
+                                            const AoeAiPlanItemRor *item, float ox, float oy,
+                                            int32_t terrain, uint32_t value,
+                                            const AoeAiInfoOpsRor *ops) {
+    uint8_t docks[256];
+    int32_t w, h, x, y, bx = -1, by = -1, jitter;
+    float best = -1.0f;
+    AoeAiConItemRor *made;
+    memset(docks, 0xff, sizeof docks);
+    if (!ops->map_width || !ops->map_height) return NULL;
+    w = ops->map_width(ops->context);
+    h = ops->map_height(ops->context);
+    jitter = ops->rand ? ops->rand(ops->context) % 50 : 0;
+    for (x = 1; x < w - 2; ++x)
+        for (y = 1; y < h - 2; ++y) {
+            uint8_t zone;
+            float score;
+            int32_t near;
+            if (!ops->vision || !ops->vision(ops->context, x, y)) continue;
+            if (x + 1 > w - 1 || y + 1 > h - 1) continue;
+            if (terrain != -1 &&
+                (!ops->tile_byte5 || (int32_t)(ops->tile_byte5(ops->context, x, y) & 0x1f) != terrain))
+                continue;
+            zone = ops->map_zone ? ops->map_zone(ops->context, x, y) : 0;
+            if (!ops->zone_size || ops->zone_size(ops->context, zone) < (ops->sn ? ops->sn(ops->context, 0x70) : 0))
+                continue;
+            if (!aoe_ai_info_neighbour_terrain_ror(x, y, value, ops)) continue;
+            if (plan && aoe_ai_con_plan_placed_at_ror(plan, (float)x + 0.5f, (float)y + 0.5f)) continue;
+            {
+                float dx = (float)x - ox, dy = (float)y - oy;
+                score = dx * dx + dy * dy;
+            }
+            if (docks[zone] == 0xff) docks[zone] = (uint8_t)aoe_ai_info_docks_in_zone_ror(info, zone, ops);
+            if (docks[zone]) score = (float)(docks[zone] * 1000) + score;
+            near = aoe_ai_info_nearest_dock_ror(info, x, y, ops);
+            if (near != -1) score = (float)(100000 / near) + score;
+            if (bx != -1 && (float)jitter + best <= score) continue;
+            bx = x;
+            by = y;
+            best = score;
+        }
+    if (bx == -1) return NULL;
+    made = malloc(sizeof *made);
+    if (!made) return NULL;
+    aoe_ai_con_item_init_ror(made);
+    aoe_ai_con_item_set_ror(made, (float)bx + 0.5f, (float)by + 0.5f, 0.0f, item->size_x,
+                            item->size_y, item->size_z, item->type, item->name);
+    return made;
+}
+
+AoeAiConItemRor *aoe_ai_ror_plan_add_shore_ror(AoeAiConPlanRor *plan, AoeAiInfoRor *info,
+                                               const AoeAiPlanItemRor *item,
+                                               const AoeAiInfoOpsRor *ops) {
+    AoeAiConItemRor *it =
+        aoe_ai_info_shore_site_ror(info, plan, item, plan->origin_x, plan->origin_y, 1, 2, ops);
+    if (!it) {
+        plan->field_310 = 5;
+        return NULL;
+    }
+    it->next = &plan->placed;
+    it->prev = plan->placed.prev;
+    plan->placed.prev->next = it;
+    plan->placed.prev = it;
+    plan->placed_count++;
+    plan->field_310 = 0;
+    return it;
+}

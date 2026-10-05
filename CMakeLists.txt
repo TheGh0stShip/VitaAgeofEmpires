@@ -566,6 +566,10 @@ add_library(aoe_map_shore STATIC src/map_shore.c)
 target_include_directories(aoe_map_shore PUBLIC include)
 target_compile_options(aoe_map_shore PRIVATE -Wall -Wextra)
 
+add_library(aoe_unit_class STATIC src/unit_class.c)
+target_include_directories(aoe_unit_class PUBLIC include)
+target_compile_options(aoe_unit_class PRIVATE -Wall -Wextra)
+
 add_library(aoe_ui_panel STATIC src/ui_panel.c src/ui_button.c
             src/ui_text.c
             src/ui_scrollbar.c
@@ -1084,6 +1088,10 @@ else()
   target_link_libraries(pathfinder_search_test PRIVATE aoe_pathfinder)
   target_compile_options(pathfinder_search_test PRIVATE -UNDEBUG)
   add_test(NAME original_ror_pathfinder_search COMMAND pathfinder_search_test)
+  add_executable(unit_class_test tests/unit_class_test.c)
+  target_link_libraries(unit_class_test PRIVATE aoe_unit_class)
+  target_compile_options(unit_class_test PRIVATE -UNDEBUG)
+  add_test(NAME original_ror_unit_class COMMAND unit_class_test)
   add_executable(unit_path_test tests/unit_path_test.c)
   target_link_libraries(unit_path_test PRIVATE aoe_pathfinder)
   target_compile_options(unit_path_test PRIVATE -UNDEBUG)

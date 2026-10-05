@@ -42,3 +42,15 @@ int aoe_unit_can_pay_repair_ror(const AoeLiveUnit *unit,
     float max = (float)t->hit_points;
     return check(context, t->id, (max - unit->core.hit_points) / max) != 0;
 }
+
+void aoe_unit_notice_from_ror(AoeLiveUnit *unit, AoeLiveUnit *other, int32_t a, int32_t b,
+                              int32_t c, uint8_t *count_188,
+                              void (*notice)(void *context, AoeLiveUnit *unit, AoeLiveUnit *other,
+                                             int32_t a, int32_t b, int32_t c, int32_t d),
+                              void *context) {
+    if (other == unit) return;
+    notice(context, unit, other, a, b, c, 0);
+    ++*count_188;
+}
+
+int32_t aoe_unit_field_16c_ror(const int32_t *field_16c) { return *field_16c; }

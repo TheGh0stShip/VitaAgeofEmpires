@@ -8,6 +8,10 @@
 #include "effects_io.h"
 #include <stdlib.h>
 
+static int notices;
+static void notice_fn(void *c, AoeLiveUnit *u, AoeLiveUnit *o, int32_t a, int32_t b, int32_t cc, int32_t d) {
+    (void)c; (void)u; (void)o; (void)a; (void)b; (void)cc; assert(d == 0); ++notices;
+}
 static void root_state(void *c, AoeLiveUnit *u, uint8_t st) { (void)u; (void)st; ++((int *)c)[0]; }
 static void special_state(void *c, AoeLiveUnit *u) { (void)u; ++((int *)c)[1]; }
 static int pay_check(void *c, int16_t id, float f) { (void)c; return id == 12 && f == 0.25f; }
@@ -53,6 +57,16 @@ static void unit_defaults(void) {
         u.core.hit_points = 0.0f;
         assert(!aoe_unit_can_pay_repair_ror(&u, pay_check, NULL));
         u.core.unit_template = (const DatUnit *)&u;
+    }
+    {
+        static AoeLiveUnit other;
+        uint8_t n = 0;
+        int32_t v = 77;
+        aoe_unit_notice_from_ror(&u, &u, 1, 2, 3, &n, notice_fn, NULL);
+        assert(n == 0 && notices == 0);
+        aoe_unit_notice_from_ror(&u, &other, 1, 2, 3, &n, notice_fn, NULL);
+        assert(n == 1 && notices == 1);
+        assert(aoe_unit_field_16c_ror(&v) == 77);
     }
     aoe_unit_set_byte_86_ror(&u, 9);
     assert(aoe_unit_byte_86_ror(&u) == 9);

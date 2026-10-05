@@ -44,6 +44,16 @@ uint8_t aoe_unit_default_ff_ror(void);
    object list (NULL when out of memory). */
 AoeObjectUpdateList *aoe_unit_new_list_ror(void);
 
+/* Action unit +0x98 0x00405d70: a notice from another unit goes to
+   +0x1f8(other, a, b, c, 0) and counts in the +0x188 byte; one from the
+   unit itself is ignored. +0x1c8 0x00405a30: the +0x16c value. */
+void aoe_unit_notice_from_ror(AoeLiveUnit *unit, AoeLiveUnit *other, int32_t a, int32_t b,
+                              int32_t c, uint8_t *count_188,
+                              void (*notice)(void *context, AoeLiveUnit *unit, AoeLiveUnit *other,
+                                             int32_t a, int32_t b, int32_t c, int32_t d),
+                              void *context);
+int32_t aoe_unit_field_16c_ror(const int32_t *field_16c);
+
 /* Base unit vtable 0x00542e14 +0x78 0x004aac90: turn the facing byte
    (+0x35) by `delta`, wrapped into the graphic's angle count (+0x10's
    +0x60). Vtable 0x0054a264 +0x11c 0x004b0010: true

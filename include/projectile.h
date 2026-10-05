@@ -102,4 +102,18 @@ int aoe_projectile_overlaps_ror(const AoeLiveUnit *projectile,
 int aoe_projectile_update_ror(AoeProjectileRor *p,
                               const AoeProjectileOps *ops);
 
+/* The hit list 0x00449280 collects (0x14-byte nodes, newest first):
+   0x004ab640 empties the head, 0x004ab680 pushes (unit, two values, a
+   flag), 0x004ab650 frees every node. */
+typedef struct AoeHitNodeRor {
+    void *unit;                 /* +0x00 */
+    float a, b;                 /* +0x04, +0x08 */
+    uint8_t flag;               /* +0x0c */
+    struct AoeHitNodeRor *next; /* +0x10 */
+} AoeHitNodeRor;
+
+void aoe_hit_list_init_ror(AoeHitNodeRor **head);
+int aoe_hit_list_push_ror(AoeHitNodeRor **head, void *unit, float a, float b, uint8_t flag);
+void aoe_hit_list_free_ror(AoeHitNodeRor **head);
+
 #endif

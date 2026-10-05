@@ -38,4 +38,9 @@ float aoe_unit_rotation_ror(const AoeLiveUnit *unit);
 const DatUnit *aoe_unit_template_ror(const AoeLiveUnit *unit);
 uint8_t aoe_unit_default_ff_ror(void);
 
+/* Action unit vtable 0x00542748 (and every subclass) +0xe8 0x004ab6c0
+   reads and +0xec 0x004ab6d0 writes the +0x86 byte. */
+uint8_t aoe_unit_byte_86_ror(const AoeLiveUnit *unit);
+void aoe_unit_set_byte_86_ror(AoeLiveUnit *unit, uint8_t value);
+
 #endif

@@ -72,6 +72,7 @@ typedef struct AoeLiveUnit {
         uint32_t last_mask;             /* +0xa0 */
         uint32_t hidden_players;        /* +0xa4 */
     } doppel;
+    uint8_t byte_86; /* live +0x86, read and written through +0xe8 / +0xec */
 } AoeLiveUnit;
 
 /* Source-backed tail of the RoR type-20/25 update predicate at 0x00415820.

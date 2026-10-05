@@ -205,5 +205,16 @@ int main(void) {
            aoe_projectile_overlaps_ror(&proj, &foe, 0.25f));
     proj.core.position.z40 = 2.2f; /* above the 2.0-high target + 0.1 */
     assert(!aoe_projectile_overlaps_ror(&proj, &foe, 1.0f));
+    {
+        AoeHitNodeRor *h;
+        int u1, u2;
+        aoe_hit_list_init_ror(&h);
+        assert(h == NULL);
+        assert(aoe_hit_list_push_ror(&h, &u1, 1.0f, 2.0f, 0));
+        assert(aoe_hit_list_push_ror(&h, &u2, 3.0f, 4.0f, 1));
+        assert(h->unit == &u2 && h->flag == 1 && h->next->unit == &u1 && h->next->b == 2.0f);
+        aoe_hit_list_free_ror(&h);
+        assert(h == NULL);
+    }
     return 0;
 }

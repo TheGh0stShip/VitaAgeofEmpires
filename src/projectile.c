@@ -1,5 +1,7 @@
 #include "projectile.h"
 
+#include <stdlib.h>
+
 #include <math.h>
 #include <string.h>
 
@@ -293,4 +295,26 @@ int aoe_projectile_update_ror(AoeProjectileRor *p,
         if (!aoe_projectile_set_state_ror(p, 1, ops)) return -1;
     }
     return 0;
+}
+
+void aoe_hit_list_init_ror(AoeHitNodeRor **head) { *head = NULL; }
+
+int aoe_hit_list_push_ror(AoeHitNodeRor **head, void *unit, float a, float b, uint8_t flag) {
+    AoeHitNodeRor *n = calloc(1, sizeof *n);
+    if (!n) return 0;
+    n->next = *head;
+    n->unit = unit;
+    n->a = a;
+    n->b = b;
+    n->flag = flag;
+    *head = n;
+    return 1;
+}
+
+void aoe_hit_list_free_ror(AoeHitNodeRor **head) {
+    while (*head) {
+        AoeHitNodeRor *next = (*head)->next;
+        free(*head);
+        *head = next;
+    }
 }

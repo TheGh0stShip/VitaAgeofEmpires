@@ -255,3 +255,16 @@ int32_t aoe_value_grid_score_ror(const AoeValueGridRor *g,
         }
     return score;
 }
+
+int aoe_value_grids_static_init_ror(AoeValueGridRor *big, AoeValueGridRor *a, AoeValueGridRor *b) {
+    int ok = aoe_value_grid_init_ror(big, 0xfe, 0xfe, 0);
+    ok &= aoe_value_grid_init_ror(a, 0x32, 0x32, 0);
+    ok &= aoe_value_grid_init_ror(b, 0x32, 0x32, 0);
+    return ok;
+}
+
+void aoe_value_grids_static_free_ror(AoeValueGridRor *big, AoeValueGridRor *a, AoeValueGridRor *b) {
+    aoe_value_grid_free_ror(b);
+    aoe_value_grid_free_ror(a);
+    aoe_value_grid_free_ror(big);
+}

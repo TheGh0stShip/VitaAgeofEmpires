@@ -12,3 +12,5 @@ float aoe_unit_animation_rate_ror(const AoeLiveUnit *unit) { return unit->animat
 float aoe_unit_rotation_ror(const AoeLiveUnit *unit) { return unit->core.scenario_rotation; }
 const DatUnit *aoe_unit_template_ror(const AoeLiveUnit *unit) { return unit->core.unit_template; }
 uint8_t aoe_unit_default_ff_ror(void) { return 0xff; }
+uint8_t aoe_unit_byte_86_ror(const AoeLiveUnit *unit) { return unit->byte_86; }
+void aoe_unit_set_byte_86_ror(AoeLiveUnit *unit, uint8_t value) { unit->byte_86 = value; }

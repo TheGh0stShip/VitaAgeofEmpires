@@ -1,3 +1,4 @@
+#include <assert.h>
 #include "value_grid.h"
 
 #include <stdio.h>
@@ -118,5 +119,12 @@ int main(void) {
         return 1;
     }
     puts("value_grid_test: ok");
+    {
+        AoeValueGridRor big, a, b;
+        assert(aoe_value_grids_static_init_ror(&big, &a, &b));
+        assert(big.width == 254 && big.height == 254 && a.width == 50 && b.height == 50);
+        assert(aoe_value_grid_get_ror(&big, 253, 253) == 0 && aoe_value_grid_get_ror(&b, 49, 0) == 0);
+        aoe_value_grids_static_free_ror(&big, &a, &b);
+    }
     return 0;
 }

@@ -118,8 +118,7 @@ untranslated; `0x00520c60` (world refresh) is still an explicit callback.
 `command_dispatch` now reproduces the `0x0042a180` routing (jump table
 `0x0042a230`, opcode 7 via processor vtable `0x00543498` slot `+0x00` =
 `0x0042ad40`) and reports routed-but-unbound opcodes rather than dropping
-them. See `docs/RELATED_PROJECTS.md` for the 2026-10-03 upstream survey and
-work-reduction plan.
+them.
 Opcode 7 (tribute) is translated with its exact `__ftol` reporting. The
 derived tribe router `0x004e83e0` is modelled by
 `aoe_command_dispatch_tribe_ror`: one CRT `rand()` step per command, an

@@ -23,7 +23,7 @@ The objective is a faithful, native PS Vita port of *Age of Empires I*, with Ris
 
 ## Validation/tooling milestones
 
-- [x] Audit the supplied DeepSeek helper-code bundle rather than importing it wholesale.
+- [x] Provenance audit (`docs/PROVENANCE.md`, `tools/provenance_audit.py`): no reliance on other reconstructions or format libraries; every format re-derived from the executables.
 - [x] Add focused synthetic format regressions for DRS, SLP, raw-DEFLATE DAT, and RIFF/WAV parsing.
 - [x] Run binary-parser regressions under AddressSanitizer and UndefinedBehaviorSanitizer in CI.
 - [ ] Define a canonical pointer-free command/replay representation once the command surface is reconstructed far enough.
@@ -65,5 +65,5 @@ The objective is a faithful, native PS Vita port of *Age of Empires I*, with Ris
 - Patched Rise of Rome 1.0a: 5,850 functions exported, zero failures; 31,652 call sites, 4,537 unresolved; 7,528 decoded instruction bytes outside function bodies in 555 islands.
 - Both images have zero undefined bytes in initialized executable sections; this does not prove complete function discovery or resolved dynamic control flow.
 - The host reconstruction can compose populated scenes from user-supplied original campaign/DAT/DRS data, but this is not an interactive game.
-- The DeepSeek tooling audit was merged: incorrect replacement DRS/SLP/DAT/simulation proposals were rejected, useful WAV/validation work was rewritten to match the existing project, and both normal host CI and parser ASan/UBSan CI pass.
+- The provenance audit (2026-10-06) removed the remaining reliance on outside format references and generated helper code; see `docs/PROVENANCE.md`.
 - There is no playable port. A non-playable tech-demo VPK (`docs/VITA_DEMO.md`) runs the reconstructed runtime, world update and renderer on user-supplied data; it is verified in Vita3K only, not yet on hardware.

@@ -5,6 +5,13 @@
 #include <stdint.h>
 #include <stdio.h>
 
+/* A resource archive as the executable registers it (patched RoR 1.0a
+   0x0046afc0): a 0x40-byte header whose +0x2c holds the group name
+   ("tribe") it compares, the table count at +0x38 and the first data
+   offset at +0x3c, then 12-byte table records (type, index offset,
+   count) and 12-byte entries (ID, offset, size); lookups search the
+   registered archives in order (0x0046b280). */
+
 typedef struct {
     uint32_t type;
     uint32_t id;
@@ -30,7 +37,7 @@ uint32_t drs_type(const char text[4]);
 int drs_open(DrsArchive *archive, const char *path);
 void drs_close(DrsArchive *archive);
 const DrsEntry *drs_find(const DrsArchive *archive, uint32_t type, uint32_t id);
-/* Empiresx.exe 0x0046c450: search registered archives in append order and
+/* Patched RoR 1.0a 0x0046b280 (disc 0x0046c450): search registered archives in append order and
    return the first matching type/ID. Pass expansion archives before base. */
 int drs_find_first(DrsArchive *const *archives, size_t count,
                    uint32_t type, uint32_t id, DrsMatch *match);

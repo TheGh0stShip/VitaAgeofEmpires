@@ -1,3 +1,10 @@
+/* The tech table as the executable reads it (patched RoR 1.0a 0x004e9c60):
+   a 16-bit count, then per tech the four prerequisites, three costs (type,
+   amount, paid byte), the required count, the research location (+0x28),
+   the name and description string IDs (+0x2a, +0x2c), the research time
+   (+0x1e), effect (+0x20), type (+0x22), icon (+0x24), button byte
+   (+0x26), the help, tree-text and hotkey string IDs (+0x30, +0x34,
+   +0x38) and a 16-bit-length name. */
 #include "dat.h"
 
 #include <stdlib.h>

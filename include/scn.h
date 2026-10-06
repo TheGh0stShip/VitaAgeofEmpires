@@ -68,9 +68,14 @@ enum { SCN_TEXT_DESCRIPTION = 0, SCN_TEXT_MESSAGE = 1, SCN_TEXT_FILE = 6, SCN_TE
 
 typedef struct {
     char version[5];
-    int32_t save_type;
+    /* The file's first four bytes, then the scenario record that follows
+       its 32-bit length (0x00417670 reads both and skips the record raw,
+       0x0046b780; the record readers 0x00474ae0 and 0x00506770): its
+       version, time stamp, text (the instructions), whether the scenario
+       has conditions and its active player count. */
+    int32_t record_version;
     uint32_t last_save_time;
-    uint32_t victory_type;
+    uint32_t has_conditions;
     uint32_t player_count;
     uint32_t next_unit_id;
     float player_data_version;

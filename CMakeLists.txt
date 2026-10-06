@@ -14,9 +14,6 @@ add_library(aoe_palette STATIC src/palette.c)
 target_include_directories(aoe_palette PUBLIC include)
 target_compile_options(aoe_palette PRIVATE -Wall -Wextra)
 
-add_library(aoe_wav STATIC src/wav.c)
-target_include_directories(aoe_wav PUBLIC include)
-target_compile_options(aoe_wav PRIVATE -Wall -Wextra)
 
 find_package(ZLIB REQUIRED)
 
@@ -827,6 +824,11 @@ else()
   enable_testing()
   find_package(Python3 QUIET COMPONENTS Interpreter)
   if(Python3_Interpreter_FOUND)
+    # docs/PROVENANCE.md: no tracked file names or relies on other
+    # reconstructions or format libraries.
+    add_test(NAME provenance_no_outside_references
+      COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/provenance_audit.py
+      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
     add_test(NAME status_art_construction_rules
       COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/status_art_test.py)
   endif()
@@ -835,7 +837,7 @@ else()
   add_executable(slp_tool tools/slp_tool.c)
   target_link_libraries(slp_tool PRIVATE aoe_drs aoe_slp aoe_palette)
   add_executable(wav_tool tools/wav_tool.c)
-  target_link_libraries(wav_tool PRIVATE aoe_wav aoe_drs)
+  target_link_libraries(wav_tool PRIVATE aoe_wav_stream aoe_drs)
   if(Python3_Interpreter_FOUND)
     add_custom_target(status_art_plan
       COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/render_status_art.py --plan
@@ -1167,10 +1169,6 @@ else()
   target_link_libraries(dat_load_test PRIVATE aoe_dat)
   target_compile_options(dat_load_test PRIVATE -UNDEBUG)
   add_test(NAME dat_raw_deflate_boundary COMMAND dat_load_test)
-  add_executable(wav_test tests/wav_test.c)
-  target_link_libraries(wav_test PRIVATE aoe_wav)
-  target_compile_options(wav_test PRIVATE -UNDEBUG)
-  add_test(NAME wav_riff_parser COMMAND wav_test)
   add_executable(world_clock_test tests/world_clock_test.c)
   target_link_libraries(world_clock_test PRIVATE aoe_world_clock)
   target_compile_options(world_clock_test PRIVATE -UNDEBUG)

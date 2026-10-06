@@ -11,8 +11,8 @@ enum {
     SLP_COLOR = 1,
     SLP_PLAYER = 2,
     SLP_SHADOW = 3,
-    SLP_OUTLINE1 = 4,
-    SLP_OUTLINE2 = 5
+    SLP_OUTLINE1 = 4,           /* 0x1e / 0x2e: drawn in the outline colour */
+    SLP_OUTLINE2 = 5            /* not produced by this game's rasterizer */
 };
 
 typedef struct {

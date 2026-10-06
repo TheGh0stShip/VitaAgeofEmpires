@@ -20,8 +20,12 @@ typedef struct {
     CpxScenario *scenarios;
 } CpxArchive;
 
-/* Original Rise of Rome 1.00 campaign container. Scenario files are
-   embedded verbatim at the offsets recorded in its 0x208-byte table. */
+/* Original Rise of Rome 1.00 campaign container, as the campaign loader
+   reads it (0x0041c2d0, translated in campaign_progress.c): a 0x108-byte
+   header ("1.00", the title, the scenario count at +0x104), then a
+   0x208-byte entry per scenario (data size, data offset, name, file name
+   at +0x107); the scenario's stream is the slice at that offset
+   (0x0041c700). Scenario files are embedded verbatim. */
 int cpx_open(CpxArchive *archive, const char *path);
 void cpx_close(CpxArchive *archive);
 int cpx_extract(CpxArchive *archive, uint32_t index, const char *path);

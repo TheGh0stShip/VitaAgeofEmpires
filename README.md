@@ -22,9 +22,8 @@ The status illustration below is a reproducible estimate of the **full port**, n
 - [Build and test](#build-and-test) — get the host regression suite running.
 - [Project map](#project-map) — find runtime code, tests, reverse-engineering evidence, and generated exports.
 - [Architecture](docs/ARCHITECTURE.md) — understand how the source, tests, binary evidence, and GenieVita boundary fit together.
-- [Related projects](docs/RELATED_PROJECTS.md) — clean-room Genie/AoE reconstruction research and boundaries.
 - [Documentation guide](docs/README.md) — browse the technical notes by topic.
-- [DeepSeek tool audit](docs/DEEPSEEK_TOOL_AUDIT.md) — disposition of the supplied helper code and the corrections integrated from it.
+- [Provenance](docs/PROVENANCE.md) — where each part of the code comes from, the evidence it rests on, and what is third-party.
 - [Roadmap](TODO.md) — milestones and current blockers.
 - [Resume notes](docs/RESUME.md) — detailed handoff for continuing the work.
 
@@ -54,7 +53,7 @@ Vita cross-compilation requires [VitaSDK](https://github.com/vitasdk/vita-toolch
 | docs/reversing.md | Detailed behavioral evidence, addresses, and open questions |
 | docs/PATCH_REVISIONS.md | Exact patched executable revisions, hashes, and coverage caveats |
 | docs/DECOMPILATION_EXPORTS.md | Contents and regeneration of checked-in Ghidra reference exports |
-| docs/DEEPSEEK_TOOL_AUDIT.md | Audit of externally generated helper-code proposals and what was accepted/rejected |
+| docs/PROVENANCE.md | Provenance audit: sources, evidence classes, third-party code and tools |
 | docs/RESUME.md, TODO.md | Handoff notes and project roadmap |
 | status/ | Configurable Wonder construction illustration and reproducible recipe |
 | build/decompile/ | Checked-in pseudocode/reference exports; not original source code |

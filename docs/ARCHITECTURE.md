@@ -32,7 +32,7 @@ tools/ contains host utilities for inspecting data/assets/audio, composing sourc
 
 The parser regression surface includes synthetic DRS, SLP, raw-DEFLATE DAT, and RIFF/WAV fixtures. A focused CI job runs those binary parsers under AddressSanitizer and UndefinedBehaviorSanitizer.
 
-See [Decompilation exports](DECOMPILATION_EXPORTS.md), [Patch revisions](PATCH_REVISIONS.md), and [DeepSeek tool audit](DEEPSEEK_TOOL_AUDIT.md).
+See [Decompilation exports](DECOMPILATION_EXPORTS.md), [Patch revisions](PATCH_REVISIONS.md), and [Provenance](PROVENANCE.md).
 
 ## VitaAgeofEmpires versus GenieVita
 

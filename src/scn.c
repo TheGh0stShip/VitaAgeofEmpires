@@ -416,9 +416,9 @@ int scn_load_map(const char *path, uint8_t terrain_count, ScnMap *map) {
     if (!header || fread(header, 1, header_size, file) != header_size) goto done;
     instructions_size = le32(header + 8);
     if (instructions_size != header_size - 20) goto done;
-    map->save_type = (int32_t)le32(header);
+    map->record_version = (int32_t)le32(header);
     map->last_save_time = le32(header + 4);
-    map->victory_type = le32(header + 12 + instructions_size);
+    map->has_conditions = le32(header + 12 + instructions_size);
     map->player_count = le32(header + 16 + instructions_size);
     if (map->player_count < 1 || map->player_count > 16) goto done;
     map->instructions = malloc((size_t)instructions_size + 1);

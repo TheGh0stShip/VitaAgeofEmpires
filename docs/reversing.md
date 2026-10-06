@@ -116,8 +116,17 @@ successfully decoded every frame in this installation's SLP archives:
 | `Terrain.drs` | 4 | 90 | 0 |
 
 `Interfac.drs` type `"anib"`, ID 50500, is a JASC 256-color palette. The
-first rendered graphic (ID 0) is tree artwork. The command layout was checked
-against both the game data and the [openage SLP format reference](https://github.com/SFTtech/openage/blob/master/doc/media/slp-files.md).
+first rendered graphic (ID 0) is tree artwork. The SLP layout comes from the
+executable's own readers: the shape loader keeps 32-byte frame records from
++0x20 (0x0049f5f0); the size (0x0049fa00), bounds (0x0049fac0), pixel test
+(0x0049fb90) and draw (0x0049fe00) read the command table (+0x00), outline
+table (+0x04), width (+0x10), height (+0x14) and hotspot (+0x18/+0x1c); the
+frame count is +0x04 of the file (0x0049fa90). The row commands are those of
+the hand-written sprite rasterizer in the `THIS_COD` section (0x005409a0, its
+loop 0x005410a0 and jump tables 0x0053f440 / 0x0053f4c0, with 0x00541b60 for
+0x4e); `src/slp.c` documents each. Under those rules all 742,629 drawn rows
+of the 16,718 frames in the installed archives end exactly at the right
+edge; the archives use none of the extended (0x?e) forms.
 
 The original executable's detailed SLP pixel drawing routine and palette
 transform behavior still need further tracing; the current renderer is a
@@ -168,10 +177,13 @@ ends at `0x16618`; the first is `Arrow`, graphic ID 0, SLP 243, and the last
 is `ZCarFight`, graphic ID 846, SLP 713. `dat_parse_graphics` exposes the
 metadata and nested records. The former browser resolved SLP previews to their
 graphic names using this table. The original executable's exact playback and
-animation behavior remains to be traced. The layout was cross-checked against
-the [openage graphic schema](https://github.com/SFTtech/openage/blob/master/openage/convert/value_object/read/media/datfile/graphic.py)
-and [genieutils graphic reader](https://github.com/Tapsa/genieutils/blob/master/src/dat/Graphic.cpp),
-then validated against this installed DAT's sequential IDs and final offset.
+animation behavior remains to be traced. The record layout is the
+executable's: the graphic reader 0x004a4c40 and writer 0x004a5220 read and
+write the 21-byte name, 13-byte file, SLP ID and the following fields in the
+order `dat_parse_graphics` uses, then the 16-byte deltas (whose graphic,
+x and y offsets the bounds code 0x004a5d60 reads at +4, +8 and +0xa) and
+three attack-sound pairs per angle; validated against this installed DAT's
+sequential IDs and final offset.
 Of 710 distinct nonnegative SLP IDs in these records, 681 occur in
 `graphics.drs`; 29 do not occur in any of the four graphics-bearing archives.
 Some are named unused-looking variants, while 41 records use SLP ID 0 and
@@ -190,8 +202,15 @@ unit placement entries. `dat_parse_terrains` exposes these fields and checks
 the enabled count. The four nonnegative direct terrain SLP IDs (15000–15003)
 all exist in `Terrain.drs`; other terrain types appear to derive their art
 through replacement/border relationships, which still need executable tracing.
-The record layout was checked against the installed DAT and the
-[openage terrain schema](https://github.com/SFTtech/openage/blob/master/openage/convert/value_object/read/media/datfile/terrain.py).
+The record layout is the executable's: the map object reads one raw
+0x8dd0-byte image (0x00443ce0) with the 32 terrain records of 0x198 bytes
+at +0x8c, the 16 border records after them and the tile geometry at
++0x8d8c (the terrain count +0x8d90 and the tile sizes +0x8d96..+0x8d9e that
+the view reads); the map's text loader 0x00446bb0 (its format string at
+0x00557864) names the record fields it fills: enabled +0, name +2, file
++0x0f, SLP +0x1c, sound +0x24, the colour and passability bytes
++0x28..+0x2e, the animation fields +0x2f..+0x38, nineteen elevation-frame
+triples, +0xb8..+0xbc and the borders from +0xbe.
 
 ## Original terrain artwork
 
@@ -609,9 +628,11 @@ with a next-unit ID and player-data version (1.15 in these files). It later
 contains a map: 32-bit width and height followed by width × height triples
 of terrain ID, elevation, and a zero byte. Observed map sizes are 120²,
 144², and 200²; each terrain ID is below this DAT's terrain count of 23.
-The layout was cross-checked against the
-[genieutils scenario reader](https://github.com/Tapsa/genieutils/blob/master/src/script/ScnFile.cpp)
-and [map reader](https://github.com/Tapsa/genieutils/blob/master/src/script/scn/MapDescription.cpp).
+The file layout is the executable's: 0x00417670 reads the four-byte
+version and the 32-bit length, skips that many bytes raw (0x0046b780) and
+reads the rest through the stream's decompressor (0x0046b800); the skipped
+bytes are the scenario record (0x00474ae0 / 0x00506770: version, time
+stamp, text, has-conditions, player count).
 
 `src/scn.c` reads the header and decompresses the body portably. For body
 version `1.15`, it now traverses the original pre-map record layout directly,

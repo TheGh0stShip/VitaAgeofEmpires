@@ -1,5 +1,5 @@
 #include "drs.h"
-#include "wav.h"
+#include "wav_stream.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -41,18 +41,23 @@ static int parse_id(const char *text, uint32_t *id) {
     return 1;
 }
 
+/* Through the game's own reader (0x0043a6f0 open, 0x0043a8a0 the data
+   chunk). */
 static int show(const uint8_t *bytes, size_t size) {
-    AoeWavView wav;
-    if (!aoe_wav_parse(bytes, size, &wav)) {
-        fprintf(stderr, "invalid or unsupported RIFF/WAVE structure\n");
+    AoeWavFileRor wav;
+    uint32_t r = aoe_wav_open_ror(&wav, bytes, size);
+    if (r == 0) r = aoe_wav_find_data_ror(&wav);
+    if (r != 0) {
+        fprintf(stderr, "not read by the game's WAV reader (0x%x)\n", (unsigned)r);
         return 0;
     }
     printf("format tag: %u\nchannels: %u\nsample rate: %u\n"
            "byte rate: %u\nblock align: %u\nbits/sample: %u\n"
-           "data bytes: %u\ndirect PCM layout: %s\n",
-           wav.format_tag, wav.channels, wav.sample_rate, wav.byte_rate,
-           wav.block_align, wav.bits_per_sample, wav.data_size,
-           aoe_wav_pcm_supported(&wav) ? "yes" : "no");
+           "extra format bytes: %u\ndata bytes: %u\n",
+           wav.format.format_tag, wav.format.channels,
+           (unsigned)wav.format.samples_per_sec, (unsigned)wav.format.avg_bytes_per_sec,
+           wav.format.block_align, wav.format.bits_per_sample, wav.format.extra_size,
+           (unsigned)wav.chunk_size);
     return 1;
 }
 

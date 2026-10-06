@@ -3,7 +3,6 @@
 | Document | Use it for |
 |---|---|
 | [Architecture](ARCHITECTURE.md) | What is implemented, where code lives, and how the repository fits together |
-| [Related projects](RELATED_PROJECTS.md) | Clean-room survey of Genie/AoE reconstructions and lessons used here |
 | [Resume notes](RESUME.md) | Current handoff, verified recent work, and the most useful next actions |
 | [Roadmap](../TODO.md) | Project-level milestones and known blockers |
 | [Reversing notebook](reversing.md) | Detailed behavioral evidence, addresses, hypotheses, and outstanding dependencies |
@@ -12,7 +11,7 @@
 | [Vita build update](BUILDING_UPDATE.md) | Current Vita build configuration and one detailed reconstructed subsystem |
 | [Vita tech demo](VITA_DEMO.md) | Building, installing and running the on-console demo of the reconstruction |
 | [Training action](TRAIN_ACTION.md) | Evidence and implementation notes for the training action lifecycle |
-| [DeepSeek tool audit](DEEPSEEK_TOOL_AUDIT.md) | Audit disposition, corrected format assumptions, and regression coverage for the supplied helper code |
+| [Provenance](PROVENANCE.md) | Where each part of the code comes from, its evidence, third-party code and tools |
 | [Vita ABI and test lanes](VITA_ABI.md) | Verified VitaSDK data model (signed char, small enums, 64-bit long double) and the ARMv7/VitaSDK CI lanes |
 | [Random-map generation](RANDOM_MAP.md) | Generator classes and entry points, retained DAT records, and the disassembly blocker |
 | [Wonder status art](../status/README.md) | Reproducible configuration and rendering of the progress illustration |

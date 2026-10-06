@@ -16,6 +16,18 @@ static int available(size_t size, size_t offset, size_t amount) {
     return offset <= size && amount <= size - offset;
 }
 
+/* The SLP layout as the executable reads it (patched RoR 1.0a): the
+   shape loader keeps the frame records at +0x20 (0x0049f5f0); each record
+   is 0x20 bytes: +0x00 the row command-offset table, +0x04 the row
+   outline table, +0x10 width, +0x14 height, +0x18 / +0x1c the hotspot
+   (the size 0x0049fa00, the bounds 0x0049fac0, the pixel test 0x0049fb90
+   and the draw 0x0049fe00, which passes them to the rasterizer
+   0x005409a0). The frame count is the 32-bit value at +0x04 (0x0049fa90).
+   An outline entry is two 16-bit edges (left, right); a row whose left
+   edge has bit 15 set (0x8000) is not drawn (the rasterizer's
+   `test eax, 0x8000`). The executable does not check the version text;
+   every SLP in the installed archives starts with "2.0N", which this
+   reader requires. */
 int slp_frame_count(const uint8_t *data, size_t size, uint32_t *count) {
     uint32_t n;
     if (!data || !count || !available(size, 0, 32) ||
@@ -244,6 +256,86 @@ static int emit(SlpFrame *frame, uint32_t y, uint32_t *x, uint32_t end,
     return 1;
 }
 
+/* A run length from a command byte: the 12-bit form (low nibble 2 / 3)
+   keeps the byte's high nibble above the next byte (0x00541100 /
+   0x0054114b: shl ecx, 4 then mov cl, [esi]); the counted forms (6, 7, 0xa,
+   0xb) take the high nibble or, when it is 0, the next byte. 0 when the
+   data ends. */
+static int long_count(const uint8_t *data, size_t size, size_t *pos, uint8_t op,
+                      uint32_t *n) {
+    if (!available(size, *pos, 1)) return 0;
+    *n = ((uint32_t)(op & 0xf0) << 4) | data[(*pos)++];
+    return 1;
+}
+static int nibble_count(const uint8_t *data, size_t size, size_t *pos, uint8_t op,
+                        uint32_t *n) {
+    *n = op >> 4;
+    if (*n) return 1;
+    if (!available(size, *pos, 1)) return 0;
+    *n = data[(*pos)++];
+    return 1;
+}
+
+/* 0x00541b60 (for 0x4e): the pixel count of the command at `pos`, which
+   is consumed without drawing. Its table (0x00540600 / 0x00540640) gives
+   0 for an end-of-row byte and for the extended forms other than 0x1e
+   (1) and 0x2e (the next byte), whose entries are int3 traps. */
+static int skipped_command(const uint8_t *data, size_t size, size_t *pos, uint32_t *n) {
+    uint8_t op;
+    if (!available(size, *pos, 1)) return 0;
+    op = data[(*pos)++];
+    switch (op & 15) {
+    case 0: case 4: case 8: case 12:
+        *n = op >> 2;
+        if (!available(size, *pos, *n)) return 0;
+        *pos += *n;
+        return 1;
+    case 1: case 5: case 9: case 13: *n = op >> 2; return 1;
+    case 2:
+        if (!long_count(data, size, pos, op, n) || !available(size, *pos, *n)) return 0;
+        *pos += *n;
+        return 1;
+    case 3: return long_count(data, size, pos, op, n);
+    case 6:
+        if (!nibble_count(data, size, pos, op, n) || !available(size, *pos, *n)) return 0;
+        *pos += *n;
+        return 1;
+    case 7: case 10:
+        if (!nibble_count(data, size, pos, op, n) || !available(size, *pos, 1)) return 0;
+        ++*pos;
+        return 1;
+    case 11: return nibble_count(data, size, pos, op, n);
+    case 14:
+        if (op == 0x1e) { *n = 1; return 1; }
+        if (op == 0x2e) {
+            if (!available(size, *pos, 1)) return 0;
+            *n = data[(*pos)++];
+            return 1;
+        }
+        return 0;   /* an int3 entry in the original */
+    default:
+        *n = 0;     /* 0x?f */
+        return 1;
+    }
+}
+
+/* One row as the sprite rasterizer (0x005409a0, its command loop
+   0x005410a0 dispatching on the low nibble through 0x0053f440) reads it:
+     0, 4, 8, 0xc  colours, count = byte >> 2, then that many indices
+     1, 5, 9, 0xd  transparent, count = byte >> 2 (no further byte)
+     2 / 3         colours / transparent, the 12-bit count (long_count)
+     6             player colours, counted, then that many indices
+     7             one index repeated, counted
+     0xa           one player-colour index repeated, counted
+     0xb           shadow, counted (no index)
+     0xe           by the high nibble (0x0053f4c0): 0x1e one outline pixel,
+                   0x2e outline pixels (count in the next byte), 0x3e
+                   nothing, 0x4e the next command's pixels left
+                   transparent (0x00541b60); the others are int3 traps
+     0xf           end of the row.
+   The installed archives use none of the 0xe forms and no transparent run
+   of count 0 (all 742,629 drawn rows of the 16,718 frames end exactly at
+   width - right edge under these rules). */
 static int decode_row(const uint8_t *data, size_t size, size_t pos,
                       SlpFrame *frame, uint32_t y, uint32_t left,
                       uint32_t right) {
@@ -253,59 +345,76 @@ static int decode_row(const uint8_t *data, size_t size, size_t pos,
     for (size_t commands = 0; commands < size && pos < size; ++commands) {
         uint8_t op = data[pos++];
         uint32_t n = 0;
-        uint8_t kind = SLP_COLOR;
-        int fill = 0;
-
-        if (op == 0x0f) return x == end;
-        if ((op & 3) == 0 || (op & 3) == 1) {
+        switch (op & 15) {
+        case 15:
+            return x == end;
+        case 0: case 4: case 8: case 12:
             n = op >> 2;
-            kind = (op & 3) == 1 ? SLP_TRANSPARENT : SLP_COLOR;
-            if (kind == SLP_TRANSPARENT && !n) {
+            if (!available(size, pos, n) || !emit(frame, y, &x, end, n, SLP_COLOR, data + pos))
+                return 0;
+            pos += n;
+            break;
+        case 1: case 5: case 9: case 13:
+            if (!emit(frame, y, &x, end, op >> 2, SLP_TRANSPARENT, NULL)) return 0;
+            break;
+        case 2:
+            if (!long_count(data, size, &pos, op, &n) || !available(size, pos, n) ||
+                !emit(frame, y, &x, end, n, SLP_COLOR, data + pos))
+                return 0;
+            pos += n;
+            break;
+        case 3:
+            if (!long_count(data, size, &pos, op, &n) ||
+                !emit(frame, y, &x, end, n, SLP_TRANSPARENT, NULL))
+                return 0;
+            break;
+        case 6:
+            if (!nibble_count(data, size, &pos, op, &n) || !available(size, pos, n) ||
+                !emit(frame, y, &x, end, n, SLP_PLAYER, data + pos))
+                return 0;
+            pos += n;
+            break;
+        case 7: case 10: {
+            uint8_t kind = (op & 15) == 7 ? SLP_COLOR : SLP_PLAYER;
+            if (!nibble_count(data, size, &pos, op, &n) || !available(size, pos, 1) ||
+                n > end - x)
+                return 0;
+            for (uint32_t i = 0; i < n; ++i) {
+                SlpPixel *p = &frame->pixels[(size_t)y * frame->width + x + i];
+                p->kind = kind;
+                p->index = data[pos];
+            }
+            x += n;
+            ++pos;
+            break;
+        }
+        case 11:
+            if (!nibble_count(data, size, &pos, op, &n) ||
+                !emit(frame, y, &x, end, n, SLP_SHADOW, NULL))
+                return 0;
+            break;
+        default:   /* 0xe */
+            switch (op >> 4) {
+            case 1:
+                if (!emit(frame, y, &x, end, 1, SLP_OUTLINE1, NULL)) return 0;
+                break;
+            case 2:
                 if (!available(size, pos, 1)) return 0;
                 n = data[pos++];
+                if (!emit(frame, y, &x, end, n, SLP_OUTLINE1, NULL)) return 0;
+                break;
+            case 3:
+                break;
+            case 4:
+                if (!skipped_command(data, size, &pos, &n) ||
+                    !emit(frame, y, &x, end, n, SLP_TRANSPARENT, NULL))
+                    return 0;
+                break;
+            default:
+                return 0;   /* an int3 entry in the original */
             }
-        } else if ((op & 15) == 2 || (op & 15) == 3) {
-            if (!available(size, pos, 1)) return 0;
-            n = ((uint32_t)(op & 0xf0) << 4) | data[pos++];
-            kind = (op & 15) == 3 ? SLP_TRANSPARENT : SLP_COLOR;
-        } else if ((op & 15) == 6 || (op & 15) == 7 ||
-                   (op & 15) == 10 || (op & 15) == 11) {
-            n = op >> 4;
-            if (!n) {
-                if (!available(size, pos, 1)) return 0;
-                n = data[pos++];
-            }
-            kind = (op & 15) == 6 || (op & 15) == 10 ? SLP_PLAYER :
-                   (op & 15) == 11 ? SLP_SHADOW : SLP_COLOR;
-            fill = (op & 15) == 7 || (op & 15) == 10;
-        } else if ((op & 15) == 14) {
-            if (op == 0x0e || op == 0x1e || op == 0x2e || op == 0x3e)
-                continue; /* Direction / palette transform metadata. */
-            if (op == 0x4e || op == 0x6e) n = 1;
-            else if (op == 0x5e || op == 0x7e) {
-                if (!available(size, pos, 1)) return 0;
-                n = data[pos++];
-            } else return 0;
-            kind = op == 0x4e || op == 0x5e ? SLP_OUTLINE1 : SLP_OUTLINE2;
-        } else return 0;
-
-        if (n > end - x) return 0;
-        if (kind == SLP_COLOR || kind == SLP_PLAYER) {
-            if (fill) {
-                if (!available(size, pos, 1)) return 0;
-                uint8_t value = data[pos++];
-                for (uint32_t i = 0; i < n; ++i) {
-                    SlpPixel *p = &frame->pixels[(size_t)y * frame->width + x + i];
-                    p->kind = kind;
-                    p->index = value;
-                }
-                x += n;
-            } else {
-                if (!available(size, pos, n) ||
-                    !emit(frame, y, &x, end, n, kind, data + pos)) return 0;
-                pos += n;
-            }
-        } else if (!emit(frame, y, &x, end, n, kind, NULL)) return 0;
+            break;
+        }
     }
     return 0;
 }

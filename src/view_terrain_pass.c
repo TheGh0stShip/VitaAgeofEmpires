@@ -327,3 +327,156 @@ int aoe_game_view_draw_tile_ror(const AoeViewTileDrawOpsRor *o, const AoeViewTil
     o->mark_dirty(o->context, x, (int16_t)(y + 1));
     return result;
 }
+
+/* ---- 0x005118c0 ---- */
+#define WSTEP(id, x, y, a, b, c) o->step(o->context, (id), (int32_t)(x), (int32_t)(y), (int32_t)(a), (int32_t)(b), (int32_t)(c))
+
+static int walk_fogged(const AoeViewTerrainPassRor *v, uint8_t fog) {
+    if (fog == AOE_VIEW_FOG_VISIBLE) return 0;
+    if (fog == AOE_VIEW_FOG_EXPLORED && !v->fog_edges) return 0;
+    return 1;
+}
+
+uint8_t aoe_main_view_walk_ror(AoeViewTerrainPassRor *v, const AoeViewWalkOpsRor *o, uint8_t mode,
+                               uint8_t min_kind, const int16_t *point, void *arg, void **result,
+                               float *out_x, float *out_y, int16_t *out_sx, int16_t *out_sy) {
+    int pick = mode == '(' || mode == ')' || mode == '*' || mode == '+' || mode == ',' || mode == '<';
+    int objects = mode == ')' || mode == '*' || mode == '+' || mode == ',';
+    int draw_mode = mode == 10 || mode == 0x1e || mode == 0x1f || mode == 0x20 || mode == 0x15 ||
+                    mode == 11 || mode == 14;
+    uint8_t res = '2', phase = 4;
+    int32_t target_x = 0, target_y = 0, area[4] = {0, 0, 0, 0};
+    void *preferred = NULL, *best = NULL;
+    int32_t sx0 = v->scroll_x, sy = v->scroll_y, tx0 = v->start_x, ty0 = v->start_y;
+    int32_t cols0 = v->cols + 4, cols = cols0, rows = (v->rows + 6) * 2, r, c;
+    v->mode = mode;
+    v->min_kind = min_kind;
+    if (mode == 10 && v->count_terrains) o->terrains_uncounted(o->context);
+    WSTEP(AOE_VW_EXPLORED_QUERY, 0, 0, 0, 0, 0);
+    if (pick) {
+        if (mode == '<') { target_x = (int32_t)*out_x; target_y = (int32_t)*out_y; }
+        *out_x = 0.0f; *out_y = 0.0f; *out_sx = 0; *out_sy = 0;
+        if (objects) preferred = *result;
+        *result = NULL;
+    }
+    if (mode == 14 && !o->area(o->context, area)) return 0;
+    for (r = 0; r < rows; ++r) {
+        int32_t sx = sx0, tx = tx0, ty = ty0;
+        for (c = 0; c < cols; ++c, sx += v->tile_w, ++tx, ++ty) {
+            int on_map = tx >= 0 && tx < v->map_w && ty >= 0 && ty < v->map_h, off, proceed;
+            uint8_t fog = 0, shape = 0, elev = 0;
+            AoeViewTileRor t;
+            void *tile = NULL;
+            int32_t ty_screen;
+            int16_t w, h;
+            if (on_map) {
+                o->tile(o->context, tx, ty, &t);
+                fog = o->fog_value(o->context, tx, ty);
+                if (!v->has_visibility || v->reveal_all) {
+                    if (fog == 0) fog = AOE_VIEW_FOG_EXPLORED;
+                } else if (mode == 0x1e || mode == 0x1f) {
+                    fog = AOE_VIEW_FOG_VISIBLE;
+                }
+                if ((mode == 11 && t.fog_9 == t.last_fog) ||
+                    (fog != AOE_VIEW_FOG_VISIBLE && fog != AOE_VIEW_FOG_EXPLORED))
+                    fog = 0;
+                proceed = fog != 0 || mode == 14 || mode == '(' || mode == '<' || mode == '*';
+            } else {
+                proceed = mode == '(' || mode == '*';
+            }
+            if (!proceed) continue;
+            if (on_map) {
+                tile = o->tile_ref(o->context, tx, ty);
+                shape = t.shape;
+                elev = t.terrain >> 5;
+            }
+            ty_screen = sy - elev * v->elevation_step;
+            switch (shape) {
+            case 2: case 6: case 8: case 10: case 0xe: case 0xf: case 0x10:
+                ty_screen -= v->elevation_step;
+                break;
+            default:
+                break;
+            }
+            o->shape_size(o->context, shape, &w, &h);
+            if (sx > v->clip[2] || ty_screen > v->clip[3]) off = 1;
+            else if (w + sx <= v->clip[0] || h + ty_screen <= v->clip[1]) off = 1;
+            else if (mode == 14 && (tx < area[0] || tx > area[2] || ty < area[1] || ty > area[3])) off = 1;
+            else off = 0;
+            if (draw_mode) {
+                if (!off && (mode == 10 || mode == 11 || mode == 14)) {
+                    uint8_t terrain = t.terrain & 0x1f;
+                    int16_t repl = o->terrain_replacement(o->context, terrain);
+                    if (repl != -1) terrain = (uint8_t)repl;
+                    if (mode == 10 && v->count_terrains && (int16_t)terrain < v->terrain_count)
+                        o->terrain_counted(o->context, terrain);
+                    if (mode == 11) {
+                        t.last_fog = t.fog_9;
+                        o->tile_store(o->context, tx, ty, &t);
+                    }
+                }
+                if ((fog == AOE_VIEW_FOG_VISIBLE || fog == AOE_VIEW_FOG_EXPLORED) &&
+                    (mode == 0x1e || mode == 0x1f || mode == 0x20 || mode == 0x15)) {
+                    int fogged = walk_fogged(v, fog);
+                    int id = mode == 0x1e ? AOE_VW_OBJECTS_1E : mode == 0x1f ? AOE_VW_OBJECTS_1F
+                             : mode == 0x20 ? AOE_VW_OBJECTS_20 : AOE_VW_OBJECTS_15;
+                    WSTEP(id, tx, ty, sx, sy, fogged | ((fog == AOE_VIEW_FOG_EXPLORED && v->fog_edges) ? 2 : 0));
+                }
+                continue;
+            }
+            if ((fog == AOE_VIEW_FOG_VISIBLE || fog == AOE_VIEW_FOG_EXPLORED) && objects) {
+                void *obj = o->pick_object(o->context, tile, sx, sy, tx, ty, point, arg, out_sx, out_sy,
+                                           preferred, walk_fogged(v, fog));
+                if (obj) {
+                    if (mode == ',') res = '4';
+                    else {
+                        int take;
+                        if (preferred && obj == preferred && res == '4') { *result = best; return '4'; }
+                        if (!best) take = 1;
+                        else if (o->object_kind(o->context, obj) >= o->object_kind(o->context, best)) take = 1;
+                        else take = best == preferred && obj != preferred;
+                        if (take) {
+                            o->object_point(o->context, obj, out_x, out_y);
+                            best = obj;
+                            res = '4';
+                        }
+                    }
+                }
+            }
+            if (mode == '(' || (mode == '*' && res == '2')) {
+                if (o->terrain_hit(o->context, tile, sx, ty_screen, tx, ty, point)) {
+                    if (tile) {
+                        o->elevation_point(o->context, point[0] - sx, point[2] - ty_screen, tile, out_x, out_y);
+                        *out_x += (float)tx;
+                        *out_y += (float)ty;
+                    } else {
+                        *out_x = (float)tx;
+                        *out_y = (float)ty;
+                    }
+                    *out_sx = (int16_t)sx;
+                    *out_sy = (int16_t)ty_screen;
+                    res = '3';
+                    *result = tile;
+                }
+            } else if (mode == '<' && tx == target_x && ty == target_y) {
+                *out_x = (float)tx;
+                *out_y = (float)ty;
+                *out_sx = (int16_t)sx;
+                *out_sy = (int16_t)ty_screen;
+                *result = tile;
+                return '3';
+            }
+        }
+        if (phase == 1 && cols == cols0) phase = 2;
+        switch (phase) {
+        case 1: ++cols; sx0 -= v->half_w; --tx0; break;
+        case 2: --cols; sx0 += v->half_w; ++ty0; break;
+        case 3: phase = 4; sx0 -= v->half_w; --tx0; break;
+        default: sx0 += v->half_w; ++ty0; phase = 3; break;
+        }
+        sy += v->half_h;
+    }
+    if (mode == 10) WSTEP(AOE_VW_D0_RESET, 0, 0, 0, 0, 0);
+    if ((mode == ')' || mode == '*' || mode == '+') && res == '4') *result = best;
+    return res;
+}

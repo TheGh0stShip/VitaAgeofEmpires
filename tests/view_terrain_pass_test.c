@@ -70,6 +70,59 @@ static void blit(void *c, int32_t sx, int32_t sy, const void *s, int32_t f, uint
 static void dirty(void *c, int16_t x, int16_t y) { (void)c; add("dirty(%d,%d) ", x, y); }
 static AoeViewTileDrawOpsRor tops = {NULL, 8, te, ts, be, bs, bpe, bdt, bf, bfs, tf, 0, 7, tvis, 1, 2, &sync_e, &sync_v, blit, dirty, 3};
 
+/* 0x005118c0 recorder: a 4 x 3 map, tiles 10 wide, half 5 x 4, step 3. */
+static uint8_t fogv[3][4];
+static void wstep(void *c, int id, int32_t x, int32_t y, int32_t a, int32_t b, int32_t d) { (void)c; add("w%d(%d,%d,%d,%d,%d) ", id, (int)x, (int)y, (int)a, (int)b, (int)d); }
+static void *tile_ref(void *c, int32_t x, int32_t y) { (void)c; return &tiles[y][x]; }
+static uint8_t fog_value(void *c, int32_t x, int32_t y) { (void)c; return fogv[y][x]; }
+static void shape_size(void *c, uint8_t s, int16_t *w, int16_t *h) { (void)c; *w = 10; *h = (int16_t)(10 + s); }
+static int area_q(void *c, int32_t out[4]) { (void)c; out[0] = 1; out[1] = 0; out[2] = 2; out[3] = 1; return 1; }
+static int objs[4][4]; /* kind per tile; 0 none */
+static void *pick_object(void *c, void *tile, int32_t sx, int32_t sy, int32_t x, int32_t y, const int16_t *pt, void *arg, int16_t *osx, int16_t *osy, void *pref, int fogged) {
+    (void)c; (void)tile; (void)pt; (void)arg; add("pk(%d,%d,%d,%d,%d,%d) ", (int)x, (int)y, (int)sx, (int)sy, pref ? 1 : 0, fogged);
+    if (!objs[y][x]) return NULL; *osx = (int16_t)sx; *osy = (int16_t)sy; return &objs[y][x]; }
+static uint8_t object_kind(void *c, void *obj) { (void)c; return (uint8_t)*(int *)obj; }
+static void object_point(void *c, void *obj, float *x, float *y) { (void)c; *x = (float)*(int *)obj; *y = 0.5f; }
+static int terrain_hit(void *c, void *tile, int32_t sx, int32_t sy, int32_t x, int32_t y, const int16_t *pt) { (void)c; (void)tile; (void)sy; (void)x; (void)y; return pt[0] >= sx && pt[0] < sx + 10; }
+static void elevation_point(void *c, int32_t dx, int32_t dy, void *tile, float *x, float *y) { (void)c; (void)tile; *x = dx / 10.0f; *y = dy / 10.0f; }
+static AoeViewWalkOpsRor wops = {NULL, wstep, tile, tile_store, tile_ref, fog_value, shape_size, repl, counted, uncounted, area_q, pick_object, object_kind, object_point, terrain_hit, elevation_point};
+
+static void walk_tests(void) {
+    AoeViewTerrainPassRor v;
+    void *res; float ox = 0, oy = 0; int16_t osx = 0, osy = 0, pt[3] = {25, 0, 7};
+    int x, y;
+    memset(&v, 0, sizeof v); reset_map();
+    for (y = 0; y < 3; ++y) for (x = 0; x < 4; ++x) fogv[y][x] = 0x0f;
+    v.start_x = 0; v.start_y = 0; v.cols = -2; v.rows = -5; /* 2 tiles per row, 2 rows */
+    v.map_w = 4; v.map_h = 3; v.terrain_count = 8; v.fog_edges = 1; v.has_visibility = 1;
+    v.tile_w = 10; v.half_w = 5; v.half_h = 4; v.elevation_step = 3; v.scroll_x = 20; v.scroll_y = 8;
+    v.clip[0] = -100; v.clip[1] = -100; v.clip[2] = 100; v.clip[3] = 100; v.count_terrains = 1;
+    /* Mode 10 counts the terrains of the walked tiles (0, 0), (1, 1), then row 1 from (0, 1): (0, 1), (1, 2); (1, 1) is fogged out and skipped. */
+    fogv[1][1] = 0; lg[0] = '\0';
+    assert(aoe_main_view_walk_ror(&v, &wops, 10, 2, pt, NULL, &res, &ox, &oy, &osx, &osy) == '2' && v.mode == 10 && v.min_kind == 2);
+    assert(strcmp(lg, "uncnt w0(0,0,0,0,0) cnt0 cnt0 cnt1 w1(0,0,0,0,0) ") == 0);
+    /* Mode 0x1e draws the objects of every visible tile at the screen position (the fogged tile forced visible). */
+    lg[0] = '\0';
+    assert(aoe_main_view_walk_ror(&v, &wops, 0x1e, 0, pt, NULL, &res, &ox, &oy, &osx, &osy) == '2');
+    assert(strcmp(lg, "w0(0,0,0,0,0) w2(0,0,20,8,0) w2(1,1,30,8,0) w2(0,1,25,12,0) w2(1,2,35,12,0) ") == 0);
+    /* '(' picks the terrain under x = 25: tile (1, 1) at sx 30 misses, (0, 1) at 25 hits (elevation shape 1: y - 3). */
+    tiles[1][0].terrain = 1 << 5; lg[0] = '\0'; res = (void *)1;
+    assert(aoe_main_view_walk_ror(&v, &wops, '(', 0, pt, NULL, &res, &ox, &oy, &osx, &osy) == '3');
+    assert(res == &tiles[1][0] && osx == 25 && osy == 9 && ox == 0.0f && oy == 1.0f + (7 - 9) / 10.0f);
+    /* ')' picks the object of the highest kind; the preferred object met again returns at once. */
+    objs[0][0] = 2; objs[1][1] = 3; objs[2][1] = 1; fogv[1][1] = 0x80; lg[0] = '\0'; res = NULL;
+    assert(aoe_main_view_walk_ror(&v, &wops, ')', 0, pt, NULL, &res, &ox, &oy, &osx, &osy) == '4' && res == &objs[1][1] && ox == 3.0f);
+    assert(strcmp(lg, "w0(0,0,0,0,0) pk(0,0,20,8,0,0) pk(1,1,30,8,0,1) pk(0,1,25,12,0,0) pk(1,2,35,12,0,0) ") == 0);
+    res = &objs[2][1]; lg[0] = '\0';
+    assert(aoe_main_view_walk_ror(&v, &wops, ')', 0, pt, NULL, &res, &ox, &oy, &osx, &osy) == '4' && res == &objs[1][1]);
+    assert(strcmp(lg, "w0(0,0,0,0,0) pk(0,0,20,8,1,0) pk(1,1,30,8,1,1) pk(0,1,25,12,1,0) pk(1,2,35,12,1,0) ") == 0);
+    /* '<' finds the tile at the given map point; mode 14 keeps to the area. */
+    ox = 1.0f; oy = 2.0f; lg[0] = '\0';
+    assert(aoe_main_view_walk_ror(&v, &wops, '<', 0, pt, NULL, &res, &ox, &oy, &osx, &osy) == '3' && res == &tiles[2][1] && osx == 35 && osy == 12 - 2 * 3);
+    lg[0] = '\0';
+    assert(aoe_main_view_walk_ror(&v, &wops, 14, 0, pt, NULL, &res, &ox, &oy, &osx, &osy) == '2' && strcmp(lg, "w0(0,0,0,0,0) ") == 0);
+}
+
 int main(void) {
     AoeViewTerrainPassRor v;
     AoeViewMarkRor m1, m2;
@@ -115,5 +168,6 @@ int main(void) {
     assert(aoe_game_view_draw_tile_ror(&tops, &t, 1, 100, 50, 1, 1, 0x80, 0, 1) == 1 && sync_e == 1 && sync_v == 0 && strcmp(lg, "tf1 blit(100,50,T,4,80,0,0,1) blit(100,50,B,11,80,0,0,1) blit(100,50,B,13,80,0,0,1) blit(100,50,B,14,80,0,0,1) dirty(0,1) dirty(1,2) ") == 0);
     lg[0] = '\0'; t.border = 0; t.flags = 0x40;
     assert(aoe_game_view_draw_tile_ror(&tops, &t, 1, 100, 50, 2, 2, 0, 1, 1) == 1 && strcmp(lg, "tf1 blit(100,50,T,4,0,40,1,1) dirty(1,2) ") == 0);
+    walk_tests();
     return 0;
 }

@@ -37,7 +37,9 @@ typedef struct {
     int has_visibility;            /* player (+0x100) +0x38 != 0 */
     uint32_t explored_mask, visible_mask; /* player +0xd4, +0xd8 */
     int32_t origin_x, origin_y;    /* +0x130, +0x134 */
-    int16_t tile_w, half_h;        /* +0x108, +0x10e */
+    int16_t tile_w, half_w, half_h, elevation_step; /* +0x108, +0x10c, +0x10e, +0x110 */
+    int16_t scroll_x, scroll_y;    /* +0x126, +0x128 */
+    uint8_t min_kind;              /* +0x141 (written by the walk) */
     int32_t clip[4];               /* +0x8c, +0x90, +0x94, +0x98 (left, top, right, bottom) */
     int count_terrains;            /* +0xf8 */
     uint8_t incremental;           /* +0x142 */
@@ -189,5 +191,62 @@ typedef struct {
 int aoe_game_view_draw_tile_ror(const AoeViewTileDrawOpsRor *o, const AoeViewTileRor *t,
                                 uint8_t terrain, int16_t sx, int16_t sy, int16_t x, int16_t y,
                                 uint8_t fog, int a, int b);
+
+
+/* ---- 0x005118c0: the view's generic tile walk (draw and pick modes) ---- */
+enum { /* AoeViewWalkOpsRor.step ids */
+    AOE_VW_EXPLORED_QUERY,  /* 0x0045ebc0 on the player's +0x58 list (result unused) */
+    AOE_VW_D0_RESET,        /* every terrain's +0xd0 byte = 0 (mode 10, at the end) */
+    /* The tile's object list (+0x0c) drawn into +0xf4 at (a = sx, b = sy), c = fogged:
+       0x1e / 0x1f: 0x00451160(.., 1 / 10, fogged) twice, the target's +0xd0 first +0x17c with
+       0x007c0458 = 1 then +0x178 with 0 (restored to its +0xcc); 0x20: 0x00451160(.., 0, fogged)
+       and 0x15: 0x004511e0(.., fogged), both with 0x007c0458 set only for a fogged (0x80) tile
+       of a map with fog edges, cleared after. */
+    AOE_VW_OBJECTS_1E, AOE_VW_OBJECTS_1F, AOE_VW_OBJECTS_20, AOE_VW_OBJECTS_15
+};
+typedef struct {
+    void *context;
+    void (*step)(void *context, int id, int32_t x, int32_t y, int32_t a, int32_t b, int32_t c);
+    void (*tile)(void *context, int32_t x, int32_t y, AoeViewTileRor *t);
+    void (*tile_store)(void *context, int32_t x, int32_t y, const AoeViewTileRor *t);
+    void *(*tile_ref)(void *context, int32_t x, int32_t y);          /* the tile's address */
+    uint8_t (*fog_value)(void *context, int32_t x, int32_t y);       /* 0x00517670 */
+    void (*shape_size)(void *context, uint8_t shape, int16_t *w, int16_t *h); /* map +0x18 / +0x1a + shape * 6 */
+    int16_t (*terrain_replacement)(void *context, uint8_t terrain);
+    void (*terrain_counted)(void *context, uint8_t terrain);          /* +0xd1 += 1 */
+    void (*terrains_uncounted)(void *context);                        /* +0xd1 = 0 */
+    int (*area)(void *context, int32_t out[4]);                       /* 0x00510070(x0, y0, x1, y1, 1) */
+    /* 0x005152f0(tile, sx, sy, x, y, point, arg, out_sx, out_sy, preferred, fogged). */
+    void *(*pick_object)(void *context, void *tile, int32_t sx, int32_t sy, int32_t x, int32_t y,
+                         const int16_t *point, void *arg, int16_t *out_sx, int16_t *out_sy,
+                         void *preferred, int fogged);
+    uint8_t (*object_kind)(void *context, void *object);              /* template (+0x08) +0x8d */
+    void (*object_point)(void *context, void *object, float *x, float *y); /* +0x38, +0x3c */
+    int (*terrain_hit)(void *context, void *tile, int32_t sx, int32_t sy, int32_t x, int32_t y,
+                       const int16_t *point);                         /* 0x005151d0 */
+    void (*elevation_point)(void *context, int32_t dx, int32_t dy, void *tile, float *x,
+                            float *y);                                /* 0x00447ab0 */
+} AoeViewWalkOpsRor;
+/* 0x005118c0(mode, min_kind, point, arg, result, out_x, out_y, out_sx,
+   out_sy) on the view state `v` (the same fields as the terrain pass plus
+   the scroll +0x126 / +0x128 and the half sizes). Modes: 10 counts the
+   terrains (and clears their +0xd0 after), 11 copies each visible tile's
+   +0x09 to +0x07, 14 limits the walk to the 0x00510070 area, 0x1e /
+   0x1f / 0x20 / 0x15 draw tile objects, '(' picks the terrain under
+   `point` ('3': the tile and its map point, the elevation taken into
+   account), '<' the tile at the truncated *out_x / *out_y ('3'), ')' /
+   '*' / '+' / ',' pick objects ('4'; ',' adds every hit; '*' falls back
+   to the terrain while nothing was found; the best object is the one of
+   the highest kind, a lower kind only replacing a best that is the
+   preferred one by another object; meeting the preferred object again
+   returns it at once). The walk covers (+0x116 + 4) tiles of
+   (+0x118 + 6) * 2 rows alternately stepping y and x back; tiles are
+   clipped against the panel rectangle (and, in mode 14, the area). Off
+   the map only '(' and '*' continue with no tile; a fogged-out tile
+   continues only in modes 14, '(', '<', '*'. Returns '2' when nothing
+   was hit. */
+uint8_t aoe_main_view_walk_ror(AoeViewTerrainPassRor *v, const AoeViewWalkOpsRor *o, uint8_t mode,
+                               uint8_t min_kind, const int16_t *point, void *arg, void **result,
+                               float *out_x, float *out_y, int16_t *out_sx, int16_t *out_sy);
 
 #endif

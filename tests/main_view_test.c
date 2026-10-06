@@ -1181,6 +1181,37 @@ static void game_view_default_tests(void) {
     assert(g0 == 0 && g1 == 0);
     free(v.timers);
 }
+
+static char ec_log[256]; static int ec_n, ec_point = 1, ec_cmd = 1, ec_objcmd = 1, ec_repair = 1; static int32_t ec_obj = 9;
+static int32_t ec_base(void *c, int32_t x, int32_t y, int32_t a, int32_t b) { (void)c; (void)x; (void)y; (void)a; (void)b; ec_n += snprintf(ec_log + ec_n, sizeof ec_log - (size_t)ec_n, "base "); return 7; }
+static int ec_pointf(void *c, int32_t x, int32_t y, int32_t *px, int32_t *py) { (void)c; *px = x / 2; *py = y / 2; return ec_point; }
+static void ec_clamp(void *c, int32_t *px, int32_t *py) { (void)c; if (*px > 50) *px = 50; (void)py; }
+static int ec_c6d(void *c, int32_t px, int32_t py) { (void)c; ec_n += snprintf(ec_log + ec_n, sizeof ec_log - (size_t)ec_n, "6d(%d,%d) ", (int)px, (int)py); return ec_cmd; }
+static int ec_c6f(void *c, int32_t px, int32_t py) { (void)c; ec_n += snprintf(ec_log + ec_n, sizeof ec_log - (size_t)ec_n, "6f(%d,%d) ", (int)px, (int)py); return ec_cmd; }
+static int ec_objc(void *c, int32_t x, int32_t y, int32_t code) { (void)c; (void)x; (void)y; ec_n += snprintf(ec_log + ec_n, sizeof ec_log - (size_t)ec_n, "oc%x ", (unsigned)code); return ec_objcmd; }
+static int32_t ec_objat(void *c, int32_t x, int32_t y) { (void)c; (void)x; (void)y; return ec_obj; }
+static int ec_repairf(void *c, int32_t id) { (void)c; (void)id; return ec_repair; }
+static void ec_step(void *c, int32_t id, int32_t a, int32_t b) { (void)c; ec_n += snprintf(ec_log + ec_n, sizeof ec_log - (size_t)ec_n, "%d(%d,%d) ", (int)id, (int)a, (int)b); }
+static void edit_click_tests(void) {
+    AoeViewEditClickOpsRor o = {NULL, 4, 100, 0, 1, 10, 20, ec_base, ec_pointf, ec_clamp, ec_c6d, ec_c6f, ec_objc, ec_objat, ec_repairf, ec_step};
+    assert(aoe_view_edit_click_ror(&o, 200, 30, 0, 0) == 1 && strcmp(ec_log, "1(0,0) 6d(50,15) 2(0,0) 3(210,50) 4(0,0) 8(0,0) ") == 0);
+    ec_n = 0; ec_cmd = 0; o.edit_mode = 0x69;
+    assert(aoe_view_edit_click_ror(&o, 20, 30, 0, 0) == 1 && strcmp(ec_log, "1(0,0) 6f(10,15) 5(0,0) 8(0,0) ") == 0);
+    ec_n = 0; o.edit_mode = 0x66;
+    assert(aoe_view_edit_click_ror(&o, 20, 30, 0, 0) == 1 && strcmp(ec_log, "1(0,0) oc69 8(0,0) ") == 0);
+    ec_n = 0; o.edit_mode = 0x68;
+    assert(aoe_view_edit_click_ror(&o, 20, 30, 0, 0) == 1 && strcmp(ec_log, "1(0,0) 6(9,0) 7(0,0) 4(0,0) 8(0,0) ") == 0);
+    ec_n = 0; ec_repair = 0;
+    assert(aoe_view_edit_click_ror(&o, 20, 30, 0, 0) == 1 && strcmp(ec_log, "1(0,0) 5(0,0) 8(0,0) ") == 0);
+    ec_n = 0; o.mode_ec = 3;
+    assert(aoe_view_edit_click_ror(&o, 20, 30, 0, 0) == 1 && strcmp(ec_log, "1(0,0) ") == 0);
+    ec_n = 0; o.edit_mode = 5;
+    assert(aoe_view_edit_click_ror(&o, 20, 30, 0, 0) == 7 && strcmp(ec_log, "base ") == 0);
+    ec_n = 0; o.edit_mode = 100; o.comm_value = 1;
+    assert(aoe_view_edit_click_ror(&o, 20, 30, 0, 0) == 7);
+    o.game_state = 2;
+    assert(aoe_view_edit_click_ror(&o, 20, 30, 0, 0) == 0);
+}
 int main(void)
 {
     AoeMainViewRor v;
@@ -1369,5 +1400,6 @@ int main(void)
     test_right_click();
     test_queue_scroll();
     game_view_default_tests();
+    edit_click_tests();
     return 0;
 }

@@ -299,4 +299,23 @@ int aoe_scenario_editor_new_scenario_ror(const AoeScenarioEditorNewOpsRor *o, in
                                          int32_t arg, int16_t size_a, int16_t size_b,
                                          int with_status);
 
+
+/* 0x00496a40: the editor screen's control pointers cleared before they
+   are built: +0x47c, +0x4c4..+0x5bc, +0x5c4..+0x610, +0x618..+0x660,
+   the 16-bit +0x664, +0x668..+0x850 and +0x894 (+0x5c0, +0x614 and
+   +0x854..+0x890 are left alone). */
+typedef struct {
+    void *ptr_47c;
+    void *group_4c4[(0x5c0 - 0x4c4) / 4];
+    void *kept_5c0;
+    void *group_5c4[(0x614 - 0x5c4) / 4];
+    void *kept_614;
+    void *group_618[(0x664 - 0x618) / 4];
+    int16_t field_664, pad_666;
+    void *group_668[(0x854 - 0x668) / 4];
+    void *kept_854[(0x894 - 0x854) / 4];
+    void *ptr_894;
+} AoeScenarioEditorControlsRor;
+void aoe_scenario_editor_clear_controls_ror(AoeScenarioEditorControlsRor *c);
+
 #endif

@@ -768,4 +768,49 @@ typedef struct {
    dirty view updates the window. */
 void aoe_game_screen_idle_tick_ror(AoeGameScreenIdleRor *s, const AoeGameScreenIdleOpsRor *o);
 
+
+/* 0x00480fe0 (+0xb8: from, code, a, b). With a sender: the +0x57c panel,
+   when it is not the sender and its +0x6c is set, may take it (its +0xb8
+   non-zero gives 1). Codes 1 / 4 from one of the 17 buttons (+0x4c8..)
+   run the command dispatcher (0x00481410(a, b, code == 4)); code 1 from
+   the +0x4c4 panel the player change (0x00481f70). Then the current
+   return name (0x00454170): "RestartDialog", "QuitGameDialog",
+   "CloseProgramDialog", "ResignDialog" or "QuitAndLoadDialog" shows
+   "Game Screen" and removes that dialog; code 0 then restarts
+   (0x00500fb0), leaves (0x00503060), closes the window (0x00419930),
+   resigns (+0x730 = 1 and the viewed player's +0xd4 with our comm slot
+   0x00423c10) or opens a new "Load Saved Game Screen" (0x00485c90),
+   each returning 1; a cancelled close clears 0x007c0338. Any known
+   dialog then resumes a settings pause (0x0041b750 == 1 with game +0xa00
+   clear: 0x00419a60(0, 0)) and gives 1. Anything else goes to the easy
+   panel's 0x00457e50. */
+enum {
+    AOE_GS_ACT_RESTART = 1,   /* 0x00500fb0 */
+    AOE_GS_ACT_LEAVE,         /* 0x00503060 */
+    AOE_GS_ACT_CLOSE,         /* 0x00419930 */
+    AOE_GS_ACT_RESIGN,        /* player +0xd4(0x00423c10(0)) */
+    AOE_GS_ACT_LOAD_SCREEN,   /* new 0x00485c90, shown */
+    AOE_GS_ACT_SHOW_GAME_SCREEN,
+    AOE_GS_ACT_RESUME,        /* 0x00419a60(0, 0) */
+    AOE_GS_ACT_COMMAND,       /* 0x00481410(a, b, arg) */
+    AOE_GS_ACT_PLAYER_CHANGED /* 0x00481f70 */
+};
+typedef struct {
+    void *context;
+    void *overlay;            /* +0x57c */
+    int overlay_active;       /* its +0x6c */
+    int32_t (*overlay_action)(void *context, void *from, int32_t code, int32_t a, int32_t b);
+    void *buttons[17];        /* +0x4c8.. */
+    void *panel_4c4;
+    const char *(*return_name)(void *context);      /* 0x00454170 */
+    void (*remove_screen)(void *context, const char *name);
+    int settings_paused, game_a00;                 /* 0x0041b750 == 1, game +0xa00 */
+    int32_t *global_7c0338;
+    int32_t *field_730;
+    void (*step)(void *context, int32_t id, int32_t a, int32_t b, int32_t c);
+    int32_t (*base_action)(void *context, void *from, int32_t code, int32_t a, int32_t b); /* 0x00457e50 */
+} AoeGameScreenActionOpsRor;
+int32_t aoe_game_screen_action_ror(const AoeGameScreenActionOpsRor *o, void *from, int32_t code,
+                                   int32_t a, int32_t b);
+
 #endif

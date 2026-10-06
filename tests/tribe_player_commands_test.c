@@ -434,6 +434,30 @@ static void place_start_tests(void) {
     aoe_tribe_player_place_start_ror(&o);
     assert(st_n == 0);
 }
+
+static const char *sl_state(void *c) { (void)c; return "Task Civs"; }
+static const char *sl_rname(void *c, int32_t i) { (void)c; return i == 0 ? "Food" : i == 1 ? "Wood" : i == 2 ? "Stone" : "Gold"; }
+static int32_t sl_need(void *c, int32_t i) { (void)c; return 10 + i; }
+static int32_t sl_diff(void *c, int32_t i) { (void)c; return -i; }
+static int32_t sl_gact(void *c, int32_t i) { (void)c; return 2 * i; }
+static int32_t sl_gdes(void *c, int32_t i) { (void)c; return 3 * i; }
+static int32_t sl_number(void *c, int32_t id) { (void)c; return id; }
+static int32_t sl_dip(void *c, int32_t p, int32_t k) { (void)c; return p * 10 + k; }
+static void status_line_tests(void) {
+    char out[256];
+    AoeTribeStatusOpsRor o = {NULL, 1, 2, 1, 3, 40, 41, sl_state, "bl.ai", "cp.ai", "C", "N", "L", 4, 9, sl_rname, sl_need, sl_diff, sl_gact, sl_gdes, 7, 8, 9, sl_number, sl_dip, "sn.per", 1};
+    assert(strcmp(aoe_tribe_player_status_line_ror(&o, 1, out), "Build List:bl.ai, City Plan:cp.ai, BuildAI(C=C, N=N, L=L, 4/9).") == 0);
+    assert(strcmp(aoe_tribe_player_status_line_ror(&o, 2, out), "NeedRes: Food=10, Wood=11, Stone=12, Gold=13, ResDiff: Food=0, Wood=-1, Stone=-2, Gold=-3.") == 0);
+    assert(strcmp(aoe_tribe_player_status_line_ror(&o, 3, out), "Gat(Act/Des): Food=(0/0), Wood=(2/3), Stone=(4/6), Gold=(6/9).  #Civs=7, #Sol=8, #Boats=9.") == 0);
+    assert(strcmp(aoe_tribe_player_status_line_ror(&o, 4, out), "Pers (Spec/BL): Food=(117/156), Wood=(120/157), Gold=(118/159), Stone=(119/158).") == 0);
+    assert(strcmp(aoe_tribe_player_status_line_ror(&o, 5, out), "Dip: P1(10/11/12), P2(20/21/22), P3(30/31/32), P4(40/41/42), P5(50/51/52), P6(60/61/62), P7(70/71/72), P8(80/81/82).") == 0);
+    assert(strcmp(aoe_tribe_player_status_line_ror(&o, 6, out), "Per: sn.per, AttEnab=1, AttDly=1 Min, ConCP=3, CurCP=2, AveUAms= 40, LastUAms= 41, UA=Task Civs.") == 0);
+    assert(strcmp(aoe_tribe_player_status_line_ror(&o, 7, out), "Invalid status line number.") == 0);
+    o.has_ai = 0;
+    assert(strcmp(aoe_tribe_player_status_line_ror(&o, 1, out), "ConCP=3, CurCP=2, AveUAms= 40, LastUAms= 41, UA=Task Civs.") == 0);
+    o.current_player = -1;
+    assert(strcmp(aoe_tribe_player_status_line_ror(&o, 1, out), "Invalid currentUpdateComputerPlayer...") == 0);
+}
 int main(void) {
     AoeTribePlayerOpsRor ops = {0, 2, collect, template_state, ack_b, ack_u, selected, object_type, object_class, queue};
     /* Build: villagers (min 4, class 4), template 118 acknowledges, 0x66. */
@@ -572,5 +596,6 @@ int main(void) {
     train_and_dump_tests();
     cursor_command_tests();
     place_start_tests();
+    status_line_tests();
     return 0;
 }

@@ -1203,4 +1203,48 @@ typedef struct {
 void aoe_game_view_construct_default_ror(AoeGameViewDefaultsRor *v,
                                          const AoeGameViewDefaultOpsRor *ops);
 
+
+/* 0x005094d0 (game view, +0x?: x, y, a, b): 0 outside game modes 4..7;
+   with a comm value (0x004199c0) the base handler (0x00519ed0). Else by
+   the game's edit mode (+0x1b4), each first releasing the capture
+   (0x00453db0) and giving 1 when the view's +0xec byte is not 1 or 2:
+   100 / 0x69: the map point under (x, y) (0x51a650(0x28, 0, x, y, &pt,
+   0, 1) == '3'), kept on the map (0x0051b070), given to the command
+   0x004f1350 / 0x004f1580; success rewinds the kind-2 timers
+   (0x0051b0f0(2)), marks the point (0x00516050 at +0x130 + x, +0x134 + y
+   with 0, 0xf, 0, 2, 0x7d) and redraws (+0x20(1)); 0x65 / 0x66 / 0x67:
+   the object command +0x104(x, y, 0, 0x68 / 0x69 / 7); 0x68: the object
+   under the point (0x51aa10(x, y, 0, -1)) repaired (0x004f1450) flashes
+   (0x0050f970(id, 1500, 2, 2)), the marks are freed (0x00515fb0) and the
+   view redraws. A failure plays the refusal (0x0041c120(3)). Then the
+   game's +0x10(0, 0); 1. Any other mode goes to the base handler. */
+enum {
+    AOE_VIEW_CLICK_RELEASE = 1, /* 0x00453db0 */
+    AOE_VIEW_CLICK_REWIND,      /* 0x0051b0f0(2) */
+    AOE_VIEW_CLICK_MARK,        /* 0x00516050(..., a, b, ...) */
+    AOE_VIEW_CLICK_REDRAW,      /* +0x20(1) */
+    AOE_VIEW_CLICK_REFUSE,      /* 0x0041c120(3) */
+    AOE_VIEW_CLICK_FLASH,       /* 0x0050f970(a, 1500, 2, 2) */
+    AOE_VIEW_CLICK_FREE_MARKS,  /* 0x00515fb0 */
+    AOE_VIEW_CLICK_GAME_10      /* game +0x10(0, 0) */
+};
+typedef struct {
+    void *context;
+    int32_t game_state, edit_mode;  /* game +0x1b0, +0x1b4 */
+    int32_t comm_value;             /* 0x004199c0 */
+    uint8_t mode_ec;                /* view +0xec */
+    int32_t origin_x, origin_y;     /* +0x130, +0x134 */
+    int32_t (*base_click)(void *context, int32_t x, int32_t y, int32_t a, int32_t b);
+    int (*point_at)(void *context, int32_t x, int32_t y, int32_t *px, int32_t *py); /* 0x51a650 == '3' */
+    void (*clamp)(void *context, int32_t *px, int32_t *py);                        /* 0x0051b070 */
+    int (*command_6d)(void *context, int32_t px, int32_t py);                      /* 0x004f1350 */
+    int (*command_6f)(void *context, int32_t px, int32_t py);                      /* 0x004f1580 */
+    int (*object_command)(void *context, int32_t x, int32_t y, int32_t code);      /* +0x104 */
+    int32_t (*object_at)(void *context, int32_t x, int32_t y);                     /* 0x51aa10; -1 none */
+    int (*repair)(void *context, int32_t id);                                      /* 0x004f1450 */
+    void (*step)(void *context, int32_t id, int32_t a, int32_t b);
+} AoeViewEditClickOpsRor;
+int32_t aoe_view_edit_click_ror(const AoeViewEditClickOpsRor *o, int32_t x, int32_t y, int32_t a,
+                                int32_t b);
+
 #endif

@@ -1167,3 +1167,55 @@ tail:
         if (o->view_dirty) o->step(o->context, AOE_GS_IDLE_UPDATE_WINDOW, 0);
     }
 }
+
+/* 0x00480fe0 */
+int32_t aoe_game_screen_action_ror(const AoeGameScreenActionOpsRor *o, void *from, int32_t code,
+                                   int32_t a, int32_t b) {
+    if (from) {
+        const char *name;
+        int i, known = 0;
+        if (from != o->overlay && o->overlay_active &&
+            o->overlay_action(o->context, from, code, a, b))
+            return 1;
+        if (code == 1 || code == 4) {
+            for (i = 0; i < 17; ++i)
+                if (from == o->buttons[i]) {
+                    o->step(o->context, AOE_GS_ACT_COMMAND, a, b, code == 4);
+                    return 1;
+                }
+        }
+        if (from == o->panel_4c4 && code == 1) {
+            o->step(o->context, AOE_GS_ACT_PLAYER_CHANGED, 0, 0, 0);
+            return 1;
+        }
+        name = o->return_name(o->context);
+        if (name) {
+            static const char *const dialogs[5] = {"RestartDialog", "QuitGameDialog",
+                                                    "CloseProgramDialog", "ResignDialog",
+                                                    "QuitAndLoadDialog"};
+            for (i = 0; i < 5; ++i) {
+                if (strcmp(name, dialogs[i]) != 0) continue;
+                known = 1;
+                o->step(o->context, AOE_GS_ACT_SHOW_GAME_SCREEN, 0, 0, 0);
+                o->remove_screen(o->context, dialogs[i]);
+                if (code == 0) {
+                    switch (i) {
+                    case 0: o->step(o->context, AOE_GS_ACT_RESTART, 0, 0, 0); break;
+                    case 1: o->step(o->context, AOE_GS_ACT_LEAVE, 0, 0, 0); break;
+                    case 2: o->step(o->context, AOE_GS_ACT_CLOSE, 0, 0, 0); break;
+                    case 3: *o->field_730 = 1; o->step(o->context, AOE_GS_ACT_RESIGN, 0, 0, 0); break;
+                    default: o->step(o->context, AOE_GS_ACT_LOAD_SCREEN, 0, 0, 0); break;
+                    }
+                    return 1;
+                }
+                if (i == 2) *o->global_7c0338 = 0;
+                break;
+            }
+            if (known) {
+                if (o->settings_paused && !o->game_a00) o->step(o->context, AOE_GS_ACT_RESUME, 0, 0, 0);
+                return 1;
+            }
+        }
+    }
+    return o->base_action(o->context, from, code, a, b);
+}

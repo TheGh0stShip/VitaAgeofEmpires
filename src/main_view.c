@@ -1692,3 +1692,46 @@ void aoe_game_view_construct_default_ror(AoeGameViewDefaultsRor *v,
     if (ops->globals[0]) *ops->globals[0] = 0;
     if (ops->globals[1]) *ops->globals[1] = 0;
 }
+
+/* 0x005094d0 */
+int32_t aoe_view_edit_click_ror(const AoeViewEditClickOpsRor *o, int32_t x, int32_t y, int32_t a,
+                                int32_t b) {
+    int32_t px, py, id;
+    int ok = 0;
+    if (o->game_state < 4 || o->game_state > 7) return 0;
+    if (o->comm_value) return o->base_click(o->context, x, y, a, b);
+    switch (o->edit_mode) {
+    case 100: case 0x65: case 0x66: case 0x67: case 0x68: case 0x69: break;
+    default: return o->base_click(o->context, x, y, a, b);
+    }
+    o->step(o->context, AOE_VIEW_CLICK_RELEASE, 0, 0);
+    if (o->mode_ec != 1 && o->mode_ec != 2) return 1;
+    switch (o->edit_mode) {
+    case 100: case 0x69:
+        if (o->point_at(o->context, x, y, &px, &py)) {
+            o->clamp(o->context, &px, &py);
+            ok = o->edit_mode == 100 ? o->command_6d(o->context, px, py) : o->command_6f(o->context, px, py);
+            if (ok) {
+                o->step(o->context, AOE_VIEW_CLICK_REWIND, 0, 0);
+                o->step(o->context, AOE_VIEW_CLICK_MARK, o->origin_x + x, o->origin_y + y);
+                o->step(o->context, AOE_VIEW_CLICK_REDRAW, 0, 0);
+            }
+        }
+        break;
+    case 0x65: ok = o->object_command(o->context, x, y, 0x68); break;
+    case 0x66: ok = o->object_command(o->context, x, y, 0x69); break;
+    case 0x67: ok = o->object_command(o->context, x, y, 7); break;
+    default:
+        id = o->object_at(o->context, x, y);
+        if (id != -1 && o->repair(o->context, id)) {
+            ok = 1;
+            o->step(o->context, AOE_VIEW_CLICK_FLASH, id, 0);
+            o->step(o->context, AOE_VIEW_CLICK_FREE_MARKS, 0, 0);
+            o->step(o->context, AOE_VIEW_CLICK_REDRAW, 0, 0);
+        }
+        break;
+    }
+    if (!ok) o->step(o->context, AOE_VIEW_CLICK_REFUSE, 0, 0);
+    o->step(o->context, AOE_VIEW_CLICK_GAME_10, 0, 0);
+    return 1;
+}

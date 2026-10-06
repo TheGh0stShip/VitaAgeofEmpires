@@ -319,6 +319,16 @@ static void new_scenario_tests(void) {
     ns_world = 0; ns_ensure_ok = 0;
     assert(aoe_scenario_editor_new_scenario_ror(&o, 1, 0, 1, 1, 1) == 0 && ns_closed == 1);
 }
+
+static void clear_controls_tests(void) {
+    AoeScenarioEditorControlsRor c; size_t i; const unsigned char *b = (const unsigned char *)&c;
+    memset(&c, 0xee, sizeof c);
+    aoe_scenario_editor_clear_controls_ror(&c);
+    assert(c.ptr_47c == NULL && c.ptr_894 == NULL && c.field_664 == 0 && c.group_4c4[0] == NULL && c.group_4c4[62] == NULL && c.group_668[122] == NULL);
+    assert(c.kept_5c0 != NULL && c.kept_614 != NULL && c.kept_854[0] != NULL && c.kept_854[15] != NULL);
+    for (i = 0; i < sizeof c.group_5c4; ++i) assert(((const unsigned char *)c.group_5c4)[i] == 0);
+    (void)b;
+}
 int main(void) {
     AoeUiPlatformRor pf = {0};
     static AoeUiSystemRor sys;
@@ -904,5 +914,6 @@ int main(void) {
     editor_release_tests();
     editor_key_tests();
     new_scenario_tests();
+    clear_controls_tests();
     return 0;
 }

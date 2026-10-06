@@ -580,6 +580,35 @@ static void idle_tick_tests(void) {
     aoe_game_screen_idle_tick_ror(&s, &o);
     assert(strcmp(it_log, "update ") == 0);
 }
+
+static char ac_log[256]; static int ac_n; static const char *ac_name; static int32_t ac_overlay_ret;
+static int32_t ac_overlay(void *c, void *f, int32_t code, int32_t a, int32_t b) { (void)c; (void)f; (void)code; (void)a; (void)b; ac_n += snprintf(ac_log + ac_n, sizeof ac_log - (size_t)ac_n, "ov "); return ac_overlay_ret; }
+static const char *ac_namef(void *c) { (void)c; return ac_name; }
+static void ac_remove(void *c, const char *n) { (void)c; ac_n += snprintf(ac_log + ac_n, sizeof ac_log - (size_t)ac_n, "rm(%s) ", n); }
+static void ac_step(void *c, int32_t id, int32_t a, int32_t b, int32_t d) { (void)c; ac_n += snprintf(ac_log + ac_n, sizeof ac_log - (size_t)ac_n, "%d(%d,%d,%d) ", (int)id, (int)a, (int)b, (int)d); }
+static int32_t ac_base(void *c, void *f, int32_t code, int32_t a, int32_t b) { (void)c; (void)f; (void)code; (void)a; (void)b; ac_n += snprintf(ac_log + ac_n, sizeof ac_log - (size_t)ac_n, "base "); return 42; }
+static void action_tests(void) {
+    int32_t g = 5, f730 = 0; int i;
+    AoeGameScreenActionOpsRor o = {NULL, (void *)1, 1, ac_overlay, {0}, (void *)2, ac_namef, ac_remove, 1, 0, &g, &f730, ac_step, ac_base};
+    for (i = 0; i < 17; ++i) o.buttons[i] = (void *)(intptr_t)(100 + i);
+    assert(aoe_game_screen_action_ror(&o, NULL, 1, 0, 0) == 42 && strcmp(ac_log, "base ") == 0);
+    ac_n = 0; ac_overlay_ret = 1;
+    assert(aoe_game_screen_action_ror(&o, (void *)3, 1, 0, 0) == 1 && strcmp(ac_log, "ov ") == 0);
+    ac_n = 0; ac_overlay_ret = 0;
+    assert(aoe_game_screen_action_ror(&o, o.buttons[16], 4, 7, 8) == 1 && strcmp(ac_log, "ov 8(7,8,1) ") == 0);
+    ac_n = 0;
+    assert(aoe_game_screen_action_ror(&o, (void *)2, 1, 0, 0) == 1 && strcmp(ac_log, "ov 9(0,0,0) ") == 0);
+    ac_n = 0; ac_name = "ResignDialog";
+    assert(aoe_game_screen_action_ror(&o, (void *)2, 0, 0, 0) == 1 && strcmp(ac_log, "ov 6(0,0,0) rm(ResignDialog) 4(0,0,0) ") == 0 && f730 == 1);
+    ac_n = 0; ac_name = "CloseProgramDialog";
+    assert(aoe_game_screen_action_ror(&o, (void *)2, 2, 0, 0) == 1 && strcmp(ac_log, "ov 6(0,0,0) rm(CloseProgramDialog) 7(0,0,0) ") == 0 && g == 0);
+    ac_n = 0; ac_name = "QuitAndLoadDialog"; o.game_a00 = 1;
+    assert(aoe_game_screen_action_ror(&o, (void *)2, 2, 0, 0) == 1 && strcmp(ac_log, "ov 6(0,0,0) rm(QuitAndLoadDialog) ") == 0);
+    ac_n = 0;
+    assert(aoe_game_screen_action_ror(&o, (void *)2, 0, 0, 0) == 1 && strcmp(ac_log, "ov 6(0,0,0) rm(QuitAndLoadDialog) 5(0,0,0) ") == 0);
+    ac_n = 0; ac_name = "Help Dialog";
+    assert(aoe_game_screen_action_ror(&o, (void *)2, 0, 0, 0) == 42 && strcmp(ac_log, "ov base ") == 0);
+}
 int main(void) {
     AoeGameScreenRor s;
     AoeGameScreenButtonRor b;
@@ -953,5 +982,6 @@ int main(void) {
     help_text_tests();
     draw_tests();
     idle_tick_tests();
+    action_tests();
     return 0;
 }

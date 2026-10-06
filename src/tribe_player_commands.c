@@ -758,3 +758,63 @@ void aoe_tribe_player_place_start_ror(const AoeTribeStartOpsRor *o) {
         }
     }
 }
+
+/* 0x004f2160 */
+const char *aoe_tribe_player_status_line_ror(const AoeTribeStatusOpsRor *o, int32_t line, char out[256]) {
+    int i, n;
+    if (!o->has_ai) {
+        if (o->current_player == -1 || !o->current_present)
+            return "Invalid currentUpdateComputerPlayer...";
+        snprintf(out, 256, "ConCP=%d, CurCP=%d, AveUAms=%3d, LastUAms=%3d, UA=%s.", o->world_11d,
+                 (int)o->current_player, (int)o->cur_ave_ms, (int)o->cur_last_ms, o->state_name(o->context));
+        return out;
+    }
+    switch (line) {
+    case 1:
+        snprintf(out, 256, "Build List:%.40s, City Plan:%.40s, BuildAI(C=%.30s, N=%.30s, L=%.30s, %d/%d).",
+                 o->build_list, o->city_plan, o->build_c, o->build_n, o->build_l,
+                 (int)o->build_current, (int)o->build_count);
+        return out;
+    case 2:
+        n = snprintf(out, 256, "NeedRes:");
+        for (i = 0; i < 4; ++i)
+            n += snprintf(out + n, 256 - (size_t)n, " %s=%d%s", o->resource_name(o->context, i),
+                          (int)o->need(o->context, i), i == 3 ? "," : ",");
+        n += snprintf(out + n, 256 - (size_t)n, " ResDiff:");
+        for (i = 0; i < 4; ++i)
+            n += snprintf(out + n, 256 - (size_t)n, " %s=%d%s", o->resource_name(o->context, i),
+                          (int)o->diff(o->context, i), i == 3 ? "." : ",");
+        return out;
+    case 3:
+        n = snprintf(out, 256, "Gat(Act/Des):");
+        for (i = 0; i < 4; ++i)
+            n += snprintf(out + n, 256 - (size_t)n, " %s=(%d/%d)%s", o->resource_name(o->context, i),
+                          (int)o->gather_actual(o->context, i), (int)o->gather_desired(o->context, i),
+                          i == 3 ? "." : ",");
+        snprintf(out + n, 256 - (size_t)n, "  #Civs=%d, #Sol=%d, #Boats=%d.", (int)o->civs,
+                 (int)o->soldiers, (int)o->boats);
+        return out;
+    case 4:
+        snprintf(out, 256, "Pers (Spec/BL): Food=(%d/%d), Wood=(%d/%d), Gold=(%d/%d), Stone=(%d/%d).",
+                 (int)o->number(o->context, 0x75), (int)o->number(o->context, 0x9c),
+                 (int)o->number(o->context, 0x78), (int)o->number(o->context, 0x9d),
+                 (int)o->number(o->context, 0x76), (int)o->number(o->context, 0x9f),
+                 (int)o->number(o->context, 0x77), (int)o->number(o->context, 0x9e));
+        return out;
+    case 5:
+        n = snprintf(out, 256, "Dip:");
+        for (i = 1; i <= 8; ++i)
+            n += snprintf(out + n, 256 - (size_t)n, " P%d(%d/%d/%d)%s", i,
+                          (int)o->diplomacy(o->context, i, 0), (int)o->diplomacy(o->context, i, 1),
+                          (int)o->diplomacy(o->context, i, 2), i == 8 ? "." : ",");
+        return out;
+    case 6:
+        snprintf(out, 256,
+                 "Per: %.60s, AttEnab=%d, AttDly=%d Min, ConCP=%d, CurCP=%d, AveUAms=%3d, LastUAms=%3d, UA=%.40s.",
+                 o->sn_file, (int)o->attack_enabled, (int)(o->number(o->context, 0x68) / 60), o->world_11d,
+                 (int)o->current_player, (int)o->cur_ave_ms, (int)o->cur_last_ms, o->state_name(o->context));
+        return out;
+    default:
+        return "Invalid status line number.";
+    }
+}

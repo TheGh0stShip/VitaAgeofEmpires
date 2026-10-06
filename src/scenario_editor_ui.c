@@ -476,3 +476,14 @@ int aoe_scenario_editor_new_scenario_ror(const AoeScenarioEditorNewOpsRor *o, in
     }
     return ok;
 }
+
+/* 0x00496a40 */
+void aoe_scenario_editor_clear_controls_ror(AoeScenarioEditorControlsRor *c) {
+    c->ptr_47c = NULL;
+    memset(c->group_4c4, 0, sizeof c->group_4c4);
+    memset(c->group_5c4, 0, sizeof c->group_5c4);
+    memset(c->group_618, 0, sizeof c->group_618);
+    c->field_664 = 0;
+    memset(c->group_668, 0, sizeof c->group_668);
+    c->ptr_894 = NULL;
+}

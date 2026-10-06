@@ -566,4 +566,47 @@ typedef struct {
 } AoeTribeStartOpsRor;
 void aoe_tribe_player_place_start_ror(const AoeTribeStartOpsRor *o);
 
+
+/* 0x004f2160 (+0x1c8, line): a computer player's debug status line into
+   its +0x240 + 0x100 * line buffer (`out`, 256 bytes), or a constant.
+   Without an AI (+0x23c): the world's current update player (+0xfc, a
+   present player) gives "ConCP=%d, CurCP=%d, AveUAms=%3d, LastUAms=%3d,
+   UA=%s." (world byte +0x11d, +0xfc, that AI's +0x1246c, +0x12468 and
+   state name 0x004d0880), else "Invalid currentUpdateComputerPlayer...".
+   1: "Build List:%s, City Plan:%s, BuildAI(C=%s, N=%s, L=%s, %d/%d)."
+   (0x00408cf0, 0x0040a280, 0x00408fd0, 0x00408fe0, 0x00408fc0, 0x00408fb0,
+   0x00408ce0). 2: "NeedRes: %s=%d, ... ResDiff: %s=%d, ..." for 0..3
+   (resource name 0x004c8d10 of 0x004d7740(i), 0x004e2f30(i); then
+   0x004d7760(i)). 3: "Gat(Act/Des): %s=(%d/%d), ...  #Civs=%d, #Sol=%d,
+   #Boats=%d." (name, 0x004e2f60, 0x004e2fb0 for 0..3; 0x004d76c0,
+   0x004d7710, 0x004d7730). 4: "Pers (Spec/BL): Food=(%d/%d), Wood=(%d/%d),
+   Gold=(%d/%d), Stone=(%d/%d)." (strategic numbers 0x75 / 0x9c, 0x78 /
+   0x9d, 0x76 / 0x9f, 0x77 / 0x9e via 0x004d77d0). 5: "Dip: P1(%d/%d/%d),
+   ... P8(...)." (0x0040a9a0(p, 0..2)). 6: "Per: %s, AttEnab=%d, AttDly=%d
+   Min, ConCP=%d, ..., UA=%s." (0x004cbfe0, AI +0x12284, number 0x68 / 60,
+   then as line 0 for the current update player). Others: "Invalid status
+   line number." */
+typedef struct {
+    void *context;
+    int has_ai;                 /* +0x23c */
+    int32_t current_player;     /* world +0xfc (-1 none) */
+    int current_present;        /* its slot is non-NULL */
+    uint8_t world_11d;
+    int32_t cur_ave_ms, cur_last_ms; /* current AI +0x1246c, +0x12468 */
+    const char *(*state_name)(void *context);  /* 0x004d0880 of the current AI */
+    const char *build_list, *city_plan, *build_c, *build_n, *build_l; /* 0x00408cf0, 0x0040a280, 0x00408fd0, 0x00408fe0, 0x00408fc0 */
+    int32_t build_current, build_count;        /* 0x00408fb0, 0x00408ce0 */
+    const char *(*resource_name)(void *context, int32_t i);       /* 0x004c8d10(0x004d7740(i)) */
+    int32_t (*need)(void *context, int32_t i);                     /* 0x004e2f30 */
+    int32_t (*diff)(void *context, int32_t i);                     /* 0x004d7760 */
+    int32_t (*gather_actual)(void *context, int32_t i);            /* 0x004e2f60 */
+    int32_t (*gather_desired)(void *context, int32_t i);           /* 0x004e2fb0 */
+    int32_t civs, soldiers, boats;                                 /* 0x004d76c0, 0x004d7710, 0x004d7730 */
+    int32_t (*number)(void *context, int32_t id);                  /* 0x004d77d0 */
+    int32_t (*diplomacy)(void *context, int32_t player, int32_t kind); /* 0x0040a9a0 */
+    const char *sn_file;                                           /* 0x004cbfe0 */
+    int32_t attack_enabled;                                        /* AI +0x12284 */
+} AoeTribeStatusOpsRor;
+const char *aoe_tribe_player_status_line_ror(const AoeTribeStatusOpsRor *o, int32_t line, char out[256]);
+
 #endif

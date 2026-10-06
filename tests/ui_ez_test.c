@@ -380,6 +380,44 @@ static void editor_layout_tests(void) {
     aoe_scenario_editor_layout_ror(&o);
     assert(el_modes == 21 && el_m4c8.refs[0] == 0x640);
 }
+
+static int eb_counts[24], eb_fail_kind = -1, eb_fail_at = -1, eb_calls; static char eb_last[128]; static int32_t eb_7a0 = 5;
+static int eb_note(int kind, const char *fmt, ...) { va_list ap; va_start(ap, fmt); vsnprintf(eb_last, sizeof eb_last, fmt, ap); va_end(ap); ++eb_counts[kind]; ++eb_calls; return !(kind == eb_fail_kind && eb_calls >= eb_fail_at); }
+static int eb_button(void *c, int p, uint16_t off, int32_t id, int32_t f) { (void)c; return eb_note(AOE_EB_BUTTON_ID, "button(%d,%x,%x,%d)", p, off, (unsigned)id, (int)f); }
+static int eb_text(void *c, uint16_t off, int32_t id) { (void)c; return eb_note(AOE_EB_TEXT_ID, "text(%x,%x)", off, (unsigned)id); }
+static int eb_textstr(void *c, uint16_t off, const char *t) { (void)c; return eb_note(AOE_EB_TEXT_STR, "textstr(%x,%s)", off, t); }
+static int eb_edit(void *c, uint16_t off, const char *t, int32_t l, int32_t f, int32_t a, int32_t b) { (void)c; return eb_note(AOE_EB_EDIT, "edit(%x,%s,%d,%d,%d,%d)", off, t, (int)l, (int)f, (int)a, (int)b); }
+static int eb_radio(void *c, uint16_t off) { (void)c; return eb_note(AOE_EB_RADIO, "radio(%x)", off); }
+static int eb_check(void *c, uint16_t off) { (void)c; return eb_note(AOE_EB_CHECK, "check(%x)", off); }
+static int eb_dd(void *c, uint16_t off) { (void)c; return eb_note(AOE_EB_DROPDOWN, "dd(%x)", off); }
+static int eb_b4(void *c, uint16_t off, const char *a, const char *b, const char *d, const char *e) { (void)c; return eb_note(AOE_EB_BUTTON4, "b4(%x,%s,%s,%s,%s)", off, a, b, d, e); }
+static int eb_list(void *c, int p, uint16_t off, uint16_t bar) { (void)c; return eb_note(AOE_EB_LIST, "list(%d,%x,%x)", p, off, bar); }
+static int eb_tsize(void *c, uint16_t off, int32_t id) { (void)c; return eb_note(AOE_EB_TEXT_SIZE, "tsize(%x,%x)", off, (unsigned)id); }
+static void eb_help(void *c, uint16_t off, int32_t a, int32_t b) { (void)c; eb_note(AOE_EB_HELP, "help(%x,%x,%d)", off, (unsigned)a, (int)b); }
+static void eb_group(void *c, uint16_t off, int32_t n, int show) { (void)c; eb_note(AOE_EB_GROUP, "group(%x,%d,%d)", off, (int)n, show); }
+static void eb_sel(void *c, uint16_t off) { (void)c; eb_note(AOE_EB_SELECT_FIRST, "sel(%x)", off); }
+static void eb_lclear(void *c, uint16_t off) { (void)c; eb_note(AOE_EB_LIST_CLEAR, "lclear(%x)", off); }
+static void eb_ladd(void *c, uint16_t off, const char *t, int32_t v) { (void)c; eb_note(AOE_EB_LIST_ADD, "ladd(%x,%s,%d)", off, t, (int)v); }
+static void eb_laddid(void *c, uint16_t off, int32_t id, int32_t v) { (void)c; eb_note(AOE_EB_LIST_ADD_ID, "laddid(%x,%x,%d)", off, (unsigned)id, (int)v); }
+static int eb_shape(void *c, uint16_t off, const char *n, int32_t id) { (void)c; return eb_note(AOE_EB_SHAPE, "shape(%x,%s,%x)", off, n, (unsigned)id); }
+static int eb_obj(void *c, uint16_t off) { (void)c; return eb_note(AOE_EB_OBJECT_PANEL, "obj(%x)", off); }
+static void eb_ages(void *c, uint16_t off) { (void)c; eb_note(AOE_EB_AGES, "ages(%x)", off); }
+static void eb_front(void *c, int32_t a) { (void)c; eb_note(AOE_EB_FRONT, "front(%d)", (int)a); }
+static void build_tests(void) {
+    AoeEditorBuildOpsRor o = {NULL, eb_button, eb_text, eb_textstr, eb_edit, eb_radio, eb_check, eb_dd, eb_b4, eb_list, eb_tsize, eb_help, eb_group, eb_sel, eb_lclear, eb_ladd, eb_laddid, eb_shape, eb_obj, eb_ages, eb_front, &eb_7a0};
+    int n; const AoeEditorBuildStepRor *st = aoe_scenario_editor_build_steps_ror(&n);
+    assert(st[0].kind == AOE_EB_BUTTON_ID && st[0].offset == 0x4d8 && st[0].a == 0x271a && st[1].kind == AOE_EB_HELP && st[1].a == 0x76c0);
+    assert(aoe_scenario_editor_build_ror(&o) == 1 && eb_7a0 == 0 && strcmp(eb_last, "text(8a4,29d0)") == 0);
+    /* As in the original: 90 texts from ids, 16 buttons from ids, 51 radios, 31 check boxes, 27 dropdowns, 13 edits, 14 + 7 list entries, 151 help ids, 12 four-label buttons, 6 shapes, 3 lists. */
+    assert(eb_counts[AOE_EB_TEXT_ID] == 90 && eb_counts[AOE_EB_BUTTON_ID] == 16 && eb_counts[AOE_EB_RADIO] == 51 && eb_counts[AOE_EB_CHECK] == 31 && eb_counts[AOE_EB_DROPDOWN] == 27 && eb_counts[AOE_EB_EDIT] == 13 && eb_counts[AOE_EB_LIST_ADD] == 14 && eb_counts[AOE_EB_LIST_ADD_ID] == 7 && eb_counts[AOE_EB_HELP] == 151 && eb_counts[AOE_EB_BUTTON4] == 12 && eb_counts[AOE_EB_SHAPE] == 6 && eb_counts[AOE_EB_LIST] == 3 && eb_counts[AOE_EB_TEXT_STR] == 9);
+    /* A failing creation before the tail fails (0); in the tail it only stops (-1). */
+    memset(eb_counts, 0, sizeof eb_counts); eb_calls = 0; eb_fail_kind = AOE_EB_DROPDOWN; eb_fail_at = 1;
+    assert(aoe_scenario_editor_build_ror(&o) == 0 && strcmp(eb_last, "dd(528)") == 0);
+    eb_calls = 0; eb_fail_kind = AOE_EB_TEXT_ID; eb_fail_at = 100000;
+    assert(aoe_scenario_editor_build_ror(&o) == 1);
+    eb_calls = 0; eb_fail_at = 0; eb_fail_kind = -2;
+    { int k = 0; for (k = 0; k < n; ++k) if (st[k].kind == AOE_EB_TAIL) break; assert(k < n && st[k + 1].kind == AOE_EB_TEXT_ID && st[k + 1].offset == 0x898); }
+}
 int main(void) {
     AoeUiPlatformRor pf = {0};
     static AoeUiSystemRor sys;
@@ -968,5 +1006,6 @@ int main(void) {
     clear_controls_tests();
     dropdown_tests();
     editor_layout_tests();
+    build_tests();
     return 0;
 }

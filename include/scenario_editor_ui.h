@@ -402,4 +402,68 @@ typedef struct {
    +0x8b0, +0x908 columns from x 0x96 step 0x1f. */
 void aoe_scenario_editor_layout_ror(const AoeEditorLayoutOpsRor *o);
 
+
+/* ---- 0x00496de0: the editor's control construction ---- */
+enum {
+    AOE_EB_BUTTON_ID,   /* 0x00490230(parent, &control, a = string id, b = flag) */
+    AOE_EB_TEXT_ID,     /* 0x00490350(tools, &control, a = string id) */
+    AOE_EB_TEXT_STR,    /* 0x004903a0(tools, &control, text) */
+    AOE_EB_TEXT_NUM,    /* 0x004903a0 with "%d" of a */
+    AOE_EB_EDIT,        /* 0x004903f0(tools, &control, text, a = limit, b = format, c, d = IME) */
+    AOE_EB_RADIO,       /* 0x0049a560 */
+    AOE_EB_CHECK,       /* 0x0049a4d0 */
+    AOE_EB_DROPDOWN,    /* 0x00490450 (aoe_scenario_editor_open_dropdown_ror) */
+    AOE_EB_BUTTON4,     /* 0x00490280 with "%d", "<%d>", "%d*", "<%d*>" of a */
+    AOE_EB_LIST,        /* 0x00490d50(parent, &list at offset, &scrollbar at a) */
+    AOE_EB_TEXT_SIZE,   /* 0x004564a0 on +0x4c8: string a over the screen size */
+    AOE_EB_HELP,        /* 0x004542c0(a, b) on the control */
+    AOE_EB_GROUP,       /* 0x0045eea0(control, a) on a consecutive controls (b: each shown) */
+    AOE_EB_SELECT_FIRST,/* 0x0045f280 */
+    AOE_EB_LIST_CLEAR,  /* 0x00461f10 */
+    AOE_EB_LIST_ADD,    /* 0x00461da0(text, a) */
+    AOE_EB_LIST_ADD_ID, /* 0x00461dd0(a, b) */
+    AOE_EB_SHAPE,       /* 0x0049f5f0(text, a) into the offset, checked with 0x0049f9e0 */
+    AOE_EB_OBJECT_PANEL,/* 0x004a42a0 with font record 10 and the shapes, hidden */
+    AOE_EB_AGES,        /* 0x0049a2c0(0) */
+    AOE_EB_FRONT,       /* 0x00453f40(a, 0) */
+    AOE_EB_CLEAR_7A0,   /* +0x7a0 = 0 */
+    AOE_EB_TAIL         /* from here a failure leaves +0xd8 alone */
+};
+typedef struct {
+    uint8_t kind, parent;   /* parent: 0 the screen, 1 the tools panel (+0x4d4) */
+    uint16_t offset;
+    int32_t a, b, c, d;
+    const char *text;
+} AoeEditorBuildStepRor;
+typedef struct {
+    void *context;
+    int (*button_id)(void *context, int parent, uint16_t off, int32_t id, int32_t flag);
+    int (*text_id)(void *context, uint16_t off, int32_t id);
+    int (*text_str)(void *context, uint16_t off, const char *text);
+    int (*edit)(void *context, uint16_t off, const char *text, int32_t limit, int32_t format, int32_t ime1, int32_t ime2);
+    int (*radio)(void *context, uint16_t off);
+    int (*check)(void *context, uint16_t off);
+    int (*dropdown)(void *context, uint16_t off);
+    int (*button4)(void *context, uint16_t off, const char *t1, const char *t2, const char *t3, const char *t4);
+    int (*list)(void *context, int parent, uint16_t off, uint16_t bar);
+    int (*text_size)(void *context, uint16_t off, int32_t id);
+    void (*help)(void *context, uint16_t off, int32_t a, int32_t b);
+    void (*radio_group)(void *context, uint16_t off, int32_t n, int show);
+    void (*select_first)(void *context, uint16_t off);
+    void (*list_clear)(void *context, uint16_t off);
+    void (*list_add)(void *context, uint16_t off, const char *text, int32_t v);
+    void (*list_add_id)(void *context, uint16_t off, int32_t id, int32_t v);
+    int (*shape)(void *context, uint16_t off, const char *name, int32_t id);
+    int (*object_panel)(void *context, uint16_t off);
+    void (*ages)(void *context, uint16_t off);
+    void (*front)(void *context, int32_t a);
+    int32_t *field_7a0;
+} AoeEditorBuildOpsRor;
+/* The step table (scenario_editor_ui.c) and its length. */
+const AoeEditorBuildStepRor *aoe_scenario_editor_build_steps_ror(int *count);
+/* 0x00496de0: the steps in order. A failing creation before the tail
+   sets +0xd8 (0 returned); a failing tail text just stops (-1); 1 when
+   every control was made. */
+int aoe_scenario_editor_build_ror(const AoeEditorBuildOpsRor *o);
+
 #endif

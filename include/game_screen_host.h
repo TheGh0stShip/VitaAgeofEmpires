@@ -7,6 +7,7 @@
 #include "game_screen.h"
 #include "game_ui.h"
 #include "game_minimap.h"
+#include "info_panel.h"
 #include "resource_panel.h"
 
 /* The port's "Game Screen": the panel the game start (0x503a70)
@@ -20,9 +21,9 @@
    arrow keys or the pointer at a screen edge. The viewed player's
    interface (0x004816d0) loads its style's bar shape, which the
    translated draw (0x00484110) paints behind the view. The resource bar
-   (0x004f7c00) and the minimap (0x005085a0) are the translated panels
-   over the world; the object panel and command buttons are not
-   assembled yet. Keys: Escape (0x00484900) clears the selection, F10
+   (0x004f7c00), the minimap (0x005085a0) and the object panel
+   (0x004f83d0) are the translated panels over the world; the command
+   buttons are not assembled yet. Keys: Escape (0x00484900) clears the selection, F10
    (0x004850b0) opens the Menu Dialog; the dialogs' answers go through
    the screen's action (0x00480fe0). Leaving a game returns to the Main
    Menu (the original plays the end video and shows the Achievements
@@ -40,6 +41,10 @@ typedef struct {
     int32_t field_730;                /* +0x730: resigned */
     AoeResourcePanelRor *resources;   /* +0x4c0 */
     AoeGameMinimapRor *map;           /* +0x4bc */
+    AoeInfoPanelRor *object_panel;    /* +0x4c4 */
+    AoeInfoPanelOpsRor object_ops;
+    void *unit_icons;                 /* AOE_GSC_SHAPE 0: "btnunit.shp" */
+    void *building_icons[5];          /* AOE_GSC_SHAPE 3 + i: "btnbldg%d.shp" */
     uint32_t map_time;                /* +0x5c4 */
     AoeDiamondMapOpsRor map_ops;
     AoeGameMinimapOpsRor map_game_ops;

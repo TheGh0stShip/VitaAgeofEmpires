@@ -639,7 +639,8 @@ add_library(aoe_ui_director STATIC src/ui_director.c src/ui_director_game.c src/
 target_include_directories(aoe_ui_director PUBLIC include)
 target_compile_options(aoe_ui_director PRIVATE -Wall -Wextra)
 target_link_libraries(aoe_ui_director PUBLIC aoe_ui_host aoe_game_ui aoe_scenario_info aoe_scn
-  aoe_campaign_progress aoe_deflate_writer aoe_port_registry aoe_demo_app ZLIB::ZLIB)
+  aoe_campaign_progress aoe_deflate_writer aoe_port_registry aoe_demo_app aoe_game_ror_flow
+  ZLIB::ZLIB)
 
 add_library(aoe_shell_app STATIC src/shell_app.c)
 target_include_directories(aoe_shell_app PUBLIC include)

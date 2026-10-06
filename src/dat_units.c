@@ -82,6 +82,7 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
     if (!p) return 0;
     unit->placement_mode = p[0];
     unit->placement_overlap_mode = p[1];
+    unit->icon = (int16_t)at16(p + 2); /* +0x4c */
     unit->hide_in_editor = p[4];
     unit->enabled = p[7];
     p = take(cursor, 8); /* placement-side and placement-terrain pairs */

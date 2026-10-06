@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "diamond_map.h"
+#include "info_panel.h"
 
 /* Portable tech-demo application: loads user-supplied original Rise of Rome
    data from a root directory, builds the reconstructed scenario runtime,
@@ -118,6 +119,16 @@ int aoe_demo_selection(const AoeDemo *demo, AoeLiveUnit **out, int max);
    step 0x00405f20 (task selection: gather, attack or move). Returns the
    number ordered. */
 int aoe_demo_order(AoeDemo *demo, int32_t sx, int32_t sy);
+/* What the object panel (0x004f83d0) reads of a unit (AoeInfoObjectRor:
+   the template's fields by offset, the owner's colour, number and
+   civilisation, the stat slots +0x230..+0x248 of the type 50 classes);
+   construction, production queues, garrisons and the head action are
+   not read yet. 0 for no unit. A world player as an identity (the
+   object panel's and minimap's player handle), NULL for none. */
+int aoe_demo_info_object(AoeDemo *demo, const AoeLiveUnit *unit, AoeInfoObjectRor *out);
+const void *aoe_demo_world_player(AoeDemo *demo, int player);
+/* A world player's civilisation (player +0x109), 0 for none. */
+uint8_t aoe_demo_player_civ(AoeDemo *demo, const void *player);
 /* The camera (map tile coordinates). */
 void aoe_demo_camera(const AoeDemo *demo, float *x, float *y);
 /* The DAT's terrain count (scn_load_map's `terrain_count`). */

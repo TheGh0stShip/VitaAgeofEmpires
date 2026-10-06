@@ -40,8 +40,13 @@ typedef struct {
     const void *contents_first; /* +0x24 -> +0x04 */
     int16_t contents_count;     /* +0x24 -> +0x08 */
     uint8_t has_action;         /* 0x004065f0: the action list is not empty */
-    /* Virtuals +0x230 (attack), +0x234 (armour), +0x248 (pierce armour):
-       the value and the base; +0x238 (range) and +0x23c floats. */
+    /* Virtuals +0x230 into `attack`, +0x234 into `armor`, +0x248 into
+       `pierce`: the value and the shown base; +0x238 (range) and +0x23c
+       floats. The names follow the slots: the type 70 / 80 classes
+       answer +0x230 with the melee armour (0x004aee00, class 4 of the
+       armour list) and +0x234 with the attack (0x00426a80, the largest
+       attack amount), and the draw shows `armor` with item icon 7 and
+       `attack` with icon 8 accordingly. */
     int16_t attack, attack_base;
     int16_t armor, armor_base;
     int16_t pierce, pierce_base;

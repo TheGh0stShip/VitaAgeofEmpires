@@ -1,10 +1,12 @@
 /* The port's Game Screen (integration support; see game_screen_host.h). */
 #include "game_screen_host.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "draw_system.h"
+#include "game_ror_flow.h"
 #include "ui_ez_slots.h"
 
 #define GS(p) ((AoeGameScreenHostRor *)(p))
@@ -39,6 +41,17 @@ static void free_shape(AoeGameScreenHostRor *s, void *shape) {
 static void gs_destroy(AoeUiPanelRor *p) {
     AoeGameScreenHostRor *s = GS(p);
     int i;
+    if (s->object_panel) {
+        s->object_panel->panel.vt->destroy(&s->object_panel->panel);
+        free(s->object_panel);
+        s->object_panel = NULL;
+    }
+    free_shape(s, s->unit_icons);
+    s->unit_icons = NULL;
+    for (i = 0; i < 5; ++i) {
+        free_shape(s, s->building_icons[i]);
+        s->building_icons[i] = NULL;
+    }
     if (s->map) {
         s->map->map.panel.vt->destroy(&s->map->map.panel);
         free(s->map);
@@ -535,6 +548,123 @@ static int32_t gs_action(AoeUiPanelRor *p, AoeUiPanelRor *from, int32_t code, in
     return aoe_game_screen_action_ror(&o, from, code, a, b);
 }
 
+/* The object panel's calls (0x004f83d0's), over the world. */
+static void *op_selected(void *c, const void *player) {
+    AoeLiveUnit *u = NULL;
+    (void)player;
+    return aoe_demo_selection(GS(c)->world, &u, 1) ? u : NULL;
+}
+static int op_read(void *c, void *object, AoeInfoObjectRor *out) {
+    return aoe_demo_info_object(GS(c)->world, object, out);
+}
+static float op_attribute(void *c, const void *player, int index) {
+    int16_t n = 0;
+    const float *v = NULL;
+    int i;
+    for (i = 0; i < 9; ++i)
+        if (aoe_demo_world_player(GS(c)->world, i) == player) break;
+    if (i == 9 || !aoe_demo_player_attributes(GS(c)->world, i, &n, &v) || index < 0 || index >= n)
+        return 0.0f;
+    return v[index];
+}
+static uint8_t op_civ(void *c, const void *player) { return aoe_demo_player_civ(GS(c)->world, player); }
+static int op_nearest(void *c, const void *player, int16_t cls, float x, float y, uint8_t state,
+                      void *unit, float *ox, float *oy) {
+    (void)c; (void)player; (void)cls; (void)x; (void)y; (void)state; (void)unit; (void)ox; (void)oy;
+    return 0;
+}
+static int op_zero(void *c) { (void)c; return 0; }
+static char *op_load_string(void *c, int32_t id, char *buf, int32_t len) {
+    aoe_ui_string_ror(GS(c)->ez.panel.system, id, buf, len);
+    return buf;
+}
+static char *op_base_format(void *c, int32_t kind, int32_t index, int32_t sub, char *buf,
+                            int32_t len) {
+    (void)c; (void)kind; (void)index; (void)sub;
+    if (len > 0) buf[0] = '\0';
+    return buf;
+}
+/* The game's +0x28 formatter (0x004ff580), kind 0x69: a civilisation. */
+static void op_civ_name(void *c, uint8_t civ, char *out, int size) {
+    GameRorFlowStringOps ops = {c, op_load_string, op_base_format};
+    game_ror_flow_format_message(&ops, 0x69, civ, 0, out, size);
+}
+static void op_string(void *c, int32_t id, char *out, int size) {
+    aoe_ui_string_ror(GS(c)->ez.panel.system, id, out, size);
+}
+/* A frame onto the area; `remap` >= 0 draws the player-colour run
+   (0x10..0x17) in the owner's run starting there (the original passes the
+   owner's colour table, 0x0049fe00 mode 1). */
+static void op_draw_shape(void *c, AoeUiAreaRor *area, void *shape, int32_t frame, int32_t x,
+                          int32_t y, int32_t remap) {
+    AoeGameScreenHostRor *s = GS(c);
+    const AoeUiEzOpsRor *ez = s->ui->ez_ops;
+    AoeDrawSurfaceRor *d = area ? area->surface : NULL;
+    uint8_t table[256];
+    int i;
+    if (!shape || !d || !ez || !ez->shape_ops || !aoe_surface_lock_ror(d, 1)) return;
+    for (i = 0; i < 256; ++i) table[i] = (uint8_t)i;
+    if (remap >= 0)
+        for (i = 0; i < 8; ++i) table[0x10 + i] = (uint8_t)(remap + i);
+    aoe_shape_draw_ror(shape, &d->view, x, y, frame, remap >= 0 ? 1 : 0, remap >= 0 ? table : NULL,
+                       ez->shape_ops);
+    aoe_surface_unlock_ror(d);
+}
+static int32_t op_frames(void *c, void *shape) {
+    (void)c;
+    return shape ? aoe_shape_count_ror(shape) : 0;
+}
+static void *op_load_shape(void *c, const char *file, int32_t id) { return st_load(c, file, id); }
+static void op_free_shape(void *c, void *shape) { free_shape(GS(c), shape); }
+
+/* AOE_GSC_SHAPE (0, 3 + i) and AOE_GSC_OBJECT_PANEL: 0x004f83d0 with font
+   record 7, the unit and building pictures and the viewed player, help
+   0x19bb8 / 0x265ac, at the layout's place for +0x4c4 (5, 0x169, 0x7f,
+   0x72). */
+static int make_object_panel(AoeGameScreenHostRor *s) {
+    const AoeUiEzOpsRor *ez = s->ui->ez_ops;
+    AoeInfoPanelOpsRor *o = &s->object_ops;
+    AoeInfoPanelRor *panel;
+    uintptr_t font = 0;
+    int32_t fw = 0, fh = 0, i;
+    char name[32];
+    s->unit_icons = st_load(s, "btnunit.shp", 0xc62a);
+    for (i = 0; i < 5; ++i) {
+        snprintf(name, sizeof name, "btnbldg%d.shp", (int)i);
+        s->building_icons[i] = st_load(s, name, i == 4 ? 0xcf0d : 0xc610 + i);
+    }
+    memset(o, 0, sizeof *o);
+    o->context = s;
+    o->selected = op_selected;
+    o->read = op_read;
+    o->attribute = op_attribute;
+    o->civilization = op_civ;
+    o->nearest = op_nearest;
+    o->multiplayer = op_zero;
+    o->civ_name = op_civ_name;
+    o->string = op_string;
+    o->show_ids = op_zero;
+    o->draw_shape = op_draw_shape;
+    o->shape_frames = op_frames;
+    o->load_shape = op_load_shape;
+    o->free_shape = op_free_shape;
+    if (ez && ez->font) ez->font(ez->context, 7, &font, &fw, &fh);
+    panel = calloc(1, sizeof *panel);
+    if (!panel) return 0;
+    if (!aoe_info_panel_init_ror(panel, s->ez.panel.system, o, s->ez.panel.area, &s->ez.panel, font,
+                                 fw, fh, s->unit_icons, s->building_icons,
+                                 aoe_demo_world_player(s->world, 1))) {
+        panel->panel.vt->destroy(&panel->panel);
+        free(panel);
+        return 0;
+    }
+    s->object_panel = panel;
+    panel->panel.help_id = 0x19bb8;
+    panel->panel.help_page = 0x265ac;
+    panel->panel.vt->set_fixed_position(&panel->panel, 5, 0x169, 0x7f, 0x72);
+    return 1;
+}
+
 static AoeUiEzVtblRor vtable = {
     AOE_UI_EZ_SLOTS_MD(gs_destroy, gs_draw, gs_idle, aoe_ui_panel_handle_paint_ror,
                        gs_key_action, aoe_ui_panel_zero_ror, gs_action,
@@ -576,7 +706,7 @@ int aoe_game_screen_host_init_ror(AoeGameScreenHostRor *s, AoeGameUiRor *ui, Aoe
     s->style = -1;
     s->game_state = 4;
     screen_ops(s);
-    if (!make_resources(s) || !make_minimap(s)) return 0;
+    if (!make_resources(s) || !make_minimap(s) || !make_object_panel(s)) return 0;
     restyle(s);
     render_view(s);
     return 1;

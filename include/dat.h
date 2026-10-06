@@ -343,6 +343,7 @@ typedef struct {
     int16_t hit_points;
     uint16_t language_name_id; /* original template +0x0c (loader 0x004413b0) */
     uint8_t garrison_capacity;  /* original template +0x2c */
+    int16_t icon;           /* template +0x4c: the object panel's picture */
     uint8_t hide_in_editor; /* template +0x4e */
     uint8_t enabled;        /* template +0x52 (effect type 2, 0x00443130) */
     uint8_t placement_mode; /* original template +0x4a */

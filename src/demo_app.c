@@ -1,6 +1,7 @@
 #include "demo_app.h"
 
 #include "color_table.h"
+#include "combat.h"
 #include "cpx.h"
 #include "live_unit_sprite_backend.h"
 #include "palette.h"
@@ -975,6 +976,71 @@ void aoe_demo_minimap_ops(AoeDemo *demo, AoeDiamondMapOpsRor *o,
     o->view_size = mm_view_size;
     o->view_tiles = mm_view_tiles;
     o->edit_mode = mm_edit_mode;
+}
+
+const void *aoe_demo_world_player(AoeDemo *demo, int player) {
+    return mm_player(demo, player);
+}
+
+uint8_t aoe_demo_player_civ(AoeDemo *demo, const void *player) {
+    int i = demo ? mm_player_index(demo, player) : -1;
+    return i < 0 ? 0 : (uint8_t)demo->runtime.players[i].civilization_id;
+}
+
+int aoe_demo_info_object(AoeDemo *demo, const AoeLiveUnit *u, AoeInfoObjectRor *o) {
+    const DatUnit *t;
+    int owner;
+    if (!demo || !demo->loaded || !mm_listed(u)) return 0;
+    t = u->core.unit_template;
+    owner = u->runtime_owner_index;
+    memset(o, 0, sizeof *o);
+    o->owner = owner >= 0 && owner < AOE_SCENARIO_RUNTIME_PLAYERS ? &demo->runtime.players[owner] : NULL;
+    o->id = u->core.unit_id;
+    o->template_id = t;
+    o->type = t->type;
+    o->object_class = t->id;
+    o->name_id = (int16_t)t->language_name_id;
+    o->name = t->name;
+    o->max_hp = t->hit_points;
+    o->template_28 = t->line_of_sight;
+    o->capacity = t->garrison_capacity;
+    o->icon = t->icon;
+    o->panel_kind = t->field_8f;
+    o->building_icon_base = (int16_t)t->building_angle;
+    o->hp = u->core.hit_points;
+    o->x = u->core.position.x38;
+    o->y = u->core.position.y3c;
+    o->amount = u->core.storage.carried_amount;
+    o->object_state = u->core.state;
+    o->resource_type = u->core.storage.carried_resource_type;
+    o->build_percent = 100;
+    o->action_type = 0;
+    if (t->type >= 50) {
+        uint16_t i;
+        /* +0x230 0x004aee00, +0x234 0x00426a80, +0x238 0x00426ae0,
+           +0x23c 0x00426b10, +0x248 0x004aee70. */
+        aoe_combat_melee_armor_readout_ror(t, &o->attack, &o->attack_base);
+        o->armor = 0;
+        for (i = 0; i < t->attack_count; ++i)
+            if (o->armor < t->attacks[i].amount) o->armor = t->attacks[i].amount;
+        o->armor_base = t->displayed_attack;
+        o->range = t->max_range;
+        o->range_base = t->displayed_range;
+        o->stat_23c = t->reload_time;
+        o->stat_23c_base = t->displayed_reload_time;
+        aoe_combat_pierce_armor_readout_ror(t, &o->pierce, &o->pierce_base);
+    }
+    if (owner >= 0 && owner < AOE_SCENARIO_RUNTIME_PLAYERS) {
+        const AoeScenarioRuntimePlayerRor *p = &demo->runtime.players[owner];
+        uint32_t civ = p->civilization_id;
+        o->owner_has_color = 1;
+        o->owner_color = demo->resolver.colors[owner];
+        o->owner_number = (int16_t)owner;
+        o->owner_civ = (uint8_t)civ;
+        o->icon_set = civ < demo->civs.count ? demo->civs.civs[civ].icon_set : 0;
+        o->owner_attribute_9 = p->resources.count > 9 ? p->resources.values[9] : 0.0f;
+    }
+    return 1;
 }
 
 void aoe_demo_camera(const AoeDemo *demo, float *x, float *y) {

@@ -581,4 +581,64 @@ typedef struct {
 } AoeGameRorStartFileOpsRor;
 int32_t aoe_game_ror_start_file_ror(const AoeGameRorStartFileOpsRor *o, const char *name);
 
+
+/* 0x005046e0: the game starts. "Game Screen" shown (0x00451be0(name,
+   0)), "Status Screen" and "Multiplayer" removed, "game started" logged
+   with a stamp (0x004fdea0). Then four unstamped log lines: "    random
+   game=%d, randommap=%d, mapsize=%s, maptype=%s" (+0x30, +0x34, the map
+   size string 0x2973 + size for 0..5 and the type string 0x296a + type
+   for 0..6, else 0x2804); "    resources=%s, age=%s, victory=%s,
+   difficulty=%s" (resources: "DeathMatch" with option 0xae5, else the
+   level 0 "Default", 1 "Low", 2 "Medium", 3 "High"; age 0 "Default", 2
+   "Stone", 3 "Tool", 4 "Bronze", 5 "Iron"; victory 0 "Default", 7
+   "Time(%d)" and 8 "Score(%d)" of +0xa90, 9 "Standard"; the difficulty
+   string 0x2bd0 + byte 0x993; unknown values "Unknown"); "    fulltech=%d,
+   revealmap=%d" (bytes 0x985, 0xad9); "    numplayers=%d" (the world's
+   count - 1) followed by ", players=" and each slot 1..count-1's byte
+   0xac4 as "%d", ", teams=" and each one's byte 0x994 - 1, ", civs=" and
+   each one's byte 0xa94 as "%d ". Then the music (+0x64) by its kind
+   (+0x104): 1 CD tracks 5..14 looped (0x004502a0(5, 14, 1, 0, 0)), 2 the
+   track +0x248 (0x004502a0(1, track, 1, 0, 0)), 3 stopped (0x00450870);
+   +0xc1c cleared. The timing reset (0x00417310), state 4 (vtable +0xc),
+   a settings pause (0x0041b750 == 1) resumed (0x00419a60(0, 0)), +0x9fc
+   cleared, the chat's lines dropped (0x0041ca10) and the viewed player
+   (world +0x7c) flagged (0x0041ca50(player, 1)); with a pointer (+0x1c0),
+   the app active (+0x18) and the window not iconic the system cursor is
+   centred (0x0044a7d0); the wait cursor released (0x0041bdc0). */
+typedef struct {
+    void *context;
+    int32_t random_game, random_map;   /* +0x30, +0x34 */
+    int32_t map_size, map_type;        /* 0x00505260, 0x00505310 */
+    int32_t victory, victory_value;    /* 0x00505370, 0x00505380 */
+    uint8_t death_match;               /* 0x005054e0 */
+    int32_t resource_level, starting_age; /* 0x005054b0, 0x005054c0 */
+    uint8_t difficulty;                /* 0x0041b990 */
+    uint8_t full_tech, reveal_map;     /* 0x0041b7c0, 0x005054a0 */
+    int16_t player_count;              /* world +0x3c */
+    int16_t viewed_player;             /* world +0x7c */
+    uint8_t (*slot_ac4)(void *context, int i);  /* 0x00505410 */
+    uint8_t (*slot_994)(void *context, int i);  /* 0x0041b9b0 */
+    uint8_t (*slot_a94)(void *context, int i);  /* 0x005053b0 */
+    int32_t music_kind;                /* +0x64 -> +0x104; 0 for no music */
+    int32_t music_track;               /* +0x64 -> +0x248 */
+    int32_t *menu_music_held;          /* +0xc1c */
+    int32_t *field_9fc;                /* +0x9fc */
+    int settings_paused;               /* 0x0041b750 == 1 */
+    int can_centre_cursor;             /* +0x1c0, +0x18 and not IsIconic */
+    void (*show_screen)(void *context, const char *name);
+    void (*remove_screen)(void *context, const char *name);
+    void (*log)(void *context, const char *text, int stamped);
+    void (*string)(void *context, int32_t id, char *out, int size); /* +0x20 */
+    void (*music_tracks)(void *context, int32_t first, int32_t last); /* 0x004502a0(f, l, 1, 0, 0) */
+    void (*music_stop)(void *context);                           /* 0x00450870 */
+    void (*timing_reset)(void *context);                         /* 0x00417310 */
+    void (*set_state)(void *context, int32_t state);             /* vtable +0xc */
+    void (*resume)(void *context);                               /* 0x00419a60(0, 0) */
+    void (*chat_drop)(void *context);                            /* 0x0041ca10 */
+    void (*chat_recipient)(void *context, int32_t player);       /* 0x0041ca50(player, 1) */
+    void (*centre_cursor)(void *context);                        /* 0x0044a7d0 */
+    void (*cursor_release)(void *context);                       /* 0x0041bdc0 */
+} AoeGameRorStartOpsRor;
+void aoe_game_ror_start_game_ror(const AoeGameRorStartOpsRor *o);
+
 #endif

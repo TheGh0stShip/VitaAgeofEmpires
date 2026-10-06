@@ -330,6 +330,53 @@ static void test_object_path(void) {
     assert(op_collected == 2);
 }
 
+
+typedef struct {
+    int lookups, counts[2], finds[2], second_find_fails;
+    AoeMovementRor *m;
+    AoeZoneMapRor *map;
+    AoeLiveUnit *objects[2];
+    AoePathRequestRor req[2];
+    uint8_t alt_during[2];
+} ViaEnv;
+static AoeLiveUnit *rv_resolve(void *c, int32_t id) { ViaEnv *e = c; return id == 20 ? e->objects[0] : id == 21 ? e->objects[1] : NULL; }
+static int32_t rv_index(void *c, AoeLiveUnit *u) { (void)u; ++((ViaEnv *)c)->lookups; return 2; }
+static const AoeZoneMapRor *rv_map(void *c, int32_t i) { return i == 2 ? ((ViaEnv *)c)->map : NULL; }
+static void rv_count(void *c, int second) { ++((ViaEnv *)c)->counts[second]; }
+static int32_t rv_find(void *c, int second, const AoePathRequestRor *r) {
+    ViaEnv *e = c; int n = e->finds[0] + e->finds[1];
+    ++e->finds[second];
+    if (n < 2) { e->req[n] = *r; e->alt_during[n] = e->m->use_alternate_path; }
+    if (n == 0) { e->m->alternate_path.points[0].x = 2.6f; e->m->alternate_path.points[0].y = 0.2f; e->m->alternate_path.count = 1; return 1; }
+    return e->second_find_fails ? 0 : 1;
+}
+static void test_reach_via(void) {
+    uint8_t zones[6] = {1, 1, 2, 2, 1, 1};
+    AoeZoneMapRor map; AoeLiveUnit unit, via, goal; AoeMovementRor m; ViaEnv e; AoePathWaypointRor pts[2];
+    AoeMovementReachViaOps ops = {0}; int32_t index = -1; uint32_t bits;
+    memset(&map, 0, sizeof map); map.width = 6; map.height = 1; map.zones = zones;
+    memset(&unit, 0, sizeof unit); memset(&via, 0, sizeof via); memset(&goal, 0, sizeof goal);
+    memset(&m, 0, sizeof m); memset(&e, 0, sizeof e); memset(pts, 0, sizeof pts);
+    m.alternate_path.points = pts; m.alternate_path.capacity = 2;
+    e.m = &m; e.map = &map; e.objects[0] = &via; e.objects[1] = &goal;
+    ops.context = &e; ops.resolve = rv_resolve; ops.zone_index = rv_index; ops.zone_map = rv_map; ops.count_search = rv_count; ops.find = rv_find;
+    unit.core.position.x38 = 0.75f; via.core.position.x38 = 4.5f; goal.core.position.x38 = 5.5f;
+    assert(aoe_movement_reach_via_ror(&unit, &m, &index, 20, 21, 1.5f, 1, 1, 7, 2500, &ops) == 1);
+    assert(index == 2 && e.lookups == 1 && e.counts[1] == 1 && e.counts[0] == 0 && e.finds[1] == 2);
+    assert(e.req[0].x1 == 0 && e.req[0].x2 == 4 && e.req[0].target_id == 20 && e.req[0].argument_30 == 1 && e.req[0].budget_limited == 1 && e.req[0].query_filter == 7 && e.req[0].budget_base == 2500 && e.req[0].range == 1.5f && e.req[0].mode == 1 && e.req[0].check_occupancy == 1 && e.req[0].step == 1);
+    memcpy(&bits, &e.req[0].query_radius, sizeof bits); assert(bits == 1u);
+    assert(e.req[1].x1 == 2 && e.req[1].y1 == 0 && e.req[1].x2 == 5 && e.req[1].target_id == 21 && e.req[1].argument_30 == 0);
+    assert(e.alt_during[0] == 1 && e.alt_during[1] == 1 && m.use_alternate_path == 0);
+    /* The via object in zone 2 with no zone-1 tile within 0.5: refused before any search. */
+    via.core.position.x38 = 3.5f;
+    assert(aoe_movement_reach_via_ror(&unit, &m, &index, 20, 21, 0.5f, 0, 0, -1, -1, &ops) == 0 && e.finds[0] == 0 && e.lookups == 1);
+    assert(aoe_movement_reach_via_ror(&unit, &m, &index, 20, 21, 1.0f, 0, 0, -1, -1, &ops) == 1 && e.counts[0] == 1 && e.finds[0] == 2);
+    e.second_find_fails = 1;
+    assert(aoe_movement_reach_via_ror(&unit, &m, &index, 20, 21, 1.0f, 0, 0, -1, -1, &ops) == 0 && m.use_alternate_path == 0);
+    assert(aoe_movement_reach_via_ror(&unit, &m, &index, 20, 99, 1.0f, 0, 0, -1, -1, &ops) == 0 && e.finds[0] == 3);
+    index = 9;
+    assert(aoe_movement_reach_via_ror(&unit, &m, &index, 20, 21, 1.0f, 0, 0, -1, -1, &ops) == 0 && e.finds[0] == 3);
+}
 int main(void) {
     test_zone_path();
     test_object_path();
@@ -503,5 +550,6 @@ int main(void) {
         }
         aoe_movement_waypoint_free_ror(&w);
     }
+    test_reach_via();
     return 0;
 }

@@ -318,6 +318,45 @@ static void start_file_tests(void) {
     sf_n = 0; sf_world_ok = 0; sf_back = "Single Player Menu";
     assert(aoe_game_ror_start_file_ror(&o, "x.scn") == 0 && strcmp(sf_log, "cur1 st44d ensure show(Single Player Menu) rm(Status Screen) cur0 ") == 0);
 }
+
+static char sg_log[2048]; static int sg_n;
+static void sg_add(const char *fmt, ...) { va_list ap; va_start(ap, fmt); sg_n += vsnprintf(sg_log + sg_n, sizeof sg_log - (size_t)sg_n, fmt, ap); va_end(ap); }
+static uint8_t sg_ac4(void *c, int i) { (void)c; return (uint8_t)(10 + i); }
+static uint8_t sg_994(void *c, int i) { (void)c; return (uint8_t)(2 + i); }
+static uint8_t sg_a94(void *c, int i) { (void)c; return (uint8_t)(5 + i); }
+static void sg_show(void *c, const char *n) { (void)c; sg_add("show(%s) ", n); }
+static void sg_remove(void *c, const char *n) { (void)c; sg_add("rm(%s) ", n); }
+static void sg_logf(void *c, const char *t, int s) { (void)c; sg_add("log%d[%s] ", s, t); }
+static void sg_string(void *c, int32_t id, char *o, int n) { (void)c; snprintf(o, (size_t)n, "S%x", (unsigned)id); }
+static void sg_tracks(void *c, int32_t a, int32_t b) { (void)c; sg_add("music(%d,%d) ", (int)a, (int)b); }
+static void sg_stop(void *c) { (void)c; sg_add("stop "); }
+static void sg_timing(void *c) { (void)c; sg_add("timing "); }
+static void sg_state(void *c, int32_t s) { (void)c; sg_add("state%d ", (int)s); }
+static void sg_resume(void *c) { (void)c; sg_add("resume "); }
+static void sg_drop(void *c) { (void)c; sg_add("drop "); }
+static void sg_recip(void *c, int32_t p) { (void)c; sg_add("recip%d ", (int)p); }
+static void sg_centre(void *c) { (void)c; sg_add("centre "); }
+static void sg_release(void *c) { (void)c; sg_add("release "); }
+static void start_game_tests(void) {
+    int32_t held = 1, f9fc = 3;
+    AoeGameRorStartOpsRor o = {NULL, 1, 0, 2, 4, 7, 1500, 0, 2, 3, 1, 1, 0, 3, 2, sg_ac4, sg_994, sg_a94, 2, 9, &held, &f9fc, 1, 1,
+                               sg_show, sg_remove, sg_logf, sg_string, sg_tracks, sg_stop, sg_timing, sg_state, sg_resume, sg_drop, sg_recip, sg_centre, sg_release};
+    aoe_game_ror_start_game_ror(&o);
+    assert(strcmp(sg_log, "show(Game Screen) rm(Status Screen) rm(Multiplayer) log1[game started] "
+                          "log0[    randomgame=1, randommap=0, mapsize=S2975, maptype=S296e] "
+                          "log0[    resources=Medium, age=Tool, victory=Time(1500), difficulty=S2bd1] "
+                          "log0[    fulltech=1, revealmap=0] "
+                          "log0[    numplayers=2, players=1011, teams=12, civs=5 6 ] "
+                          "music(1,9) timing state4 resume drop recip2 centre release ") == 0);
+    assert(held == 0 && f9fc == 0);
+    sg_n = 0; held = 1; o.map_size = 9; o.map_type = -1; o.victory = 8; o.death_match = 1; o.starting_age = 7; o.music_kind = 3; o.settings_paused = 0; o.can_centre_cursor = 0; o.player_count = 1;
+    aoe_game_ror_start_game_ror(&o);
+    assert(strstr(sg_log, "mapsize=S2804, maptype=S2804] ") && strstr(sg_log, "resources=DeathMatch, age=Unknown, victory=Score(1500),") &&
+           strstr(sg_log, "numplayers=0, players=, teams=, civs=] stop timing state4 drop recip2 release ") && held == 0);
+    sg_n = 0; held = 1; o.music_kind = 0; o.victory = 9; o.death_match = 0; o.resource_level = 7;
+    aoe_game_ror_start_game_ror(&o);
+    assert(strstr(sg_log, "resources=Unknown, age=Unknown, victory=Standard,") && strstr(sg_log, "civs=] timing ") && held == 1);
+}
 int main(void) {
     char coded[64];
     AoeGameRorCommandOpsRor cops = {NULL, ns, sp, bc};
@@ -519,5 +558,6 @@ int main(void) {
     play_video_tests();
     idle_tests();
     start_file_tests();
+    start_game_tests();
     return 0;
 }

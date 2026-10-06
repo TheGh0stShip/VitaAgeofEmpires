@@ -387,4 +387,34 @@ int32_t aoe_movement_object_path_alt_ror(AoeLiveUnit *unit, AoeMovementRor *m,
                                          AoeMovementCollectFn collect,
                                          const AoeMovementZonePathOps *ops);
 
+
+typedef struct {
+    void *context;
+    AoeLiveUnit *(*resolve)(void *context, int32_t id);          /* 0x005206d0 */
+    int32_t (*zone_index)(void *context, AoeLiveUnit *unit);     /* 0x00521b50 */
+    const AoeZoneMapRor *(*zone_map)(void *context, int32_t index); /* 0x00521c60 */
+    /* Pathfinder 0x00583bc8 (`second`) or 0x006a1cc0: the search counter
+       0x0045a4e0 and the search 0x00458930 (its 0/1 result). */
+    void (*count_search)(void *context, int second);
+    int32_t (*find)(void *context, int second, const AoePathRequestRor *request);
+} AoeMovementReachViaOps;
+
+/* 0x0044de30 (via_id, goal_id, range, budget_limited, second, query_filter,
+   budget_base): a path through object `via_id` to object `goal_id`. Both
+   must resolve. The unit's zone map index (+0x7c) is looked up while -1;
+   no map gives 0. When the via object's tile lies in another zone than
+   the unit's and 0x00521640(unit tile, via tile, range) finds none of
+   the unit's zone within range, 0. Otherwise with +0x154 set the chosen
+   pathfinder counts a search and runs unit tile -> via tile (`range`,
+   `via_id`, mode 1, `budget_limited`, argument 1, occupancy, step 1, the
+   float argument the integer 1, `query_filter`, `budget_base`); a failure
+   clears +0x154 and gives 0; else a second search runs from the alternate
+   path's last waypoint (0x00458420, ftol) to the goal's tile with
+   `goal_id` and argument 0; +0x154 is cleared and that result returned.
+   -1 for missing dependencies (host-only). */
+int32_t aoe_movement_reach_via_ror(AoeLiveUnit *unit, AoeMovementRor *m, int32_t *zone_index,
+                                   int32_t via_id, int32_t goal_id, float range,
+                                   int32_t budget_limited, int second, int32_t query_filter,
+                                   int32_t budget_base, const AoeMovementReachViaOps *ops);
+
 #endif

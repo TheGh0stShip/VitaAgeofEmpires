@@ -1192,3 +1192,71 @@ int32_t aoe_movement_object_path_alt_ror(AoeLiveUnit *unit, AoeMovementRor *m,
     m->use_alternate_path = 0;
     return r;
 }
+
+/* 0x0044de30 */
+int32_t aoe_movement_reach_via_ror(AoeLiveUnit *unit, AoeMovementRor *m, int32_t *zone_index,
+                                   int32_t via_id, int32_t goal_id, float range,
+                                   int32_t budget_limited, int second, int32_t query_filter,
+                                   int32_t budget_base, const AoeMovementReachViaOps *ops) {
+    AoeLiveUnit *via, *goal;
+    const AoeZoneMapRor *map;
+    const AoePathWaypointRor *last;
+    AoePathRequestRor req;
+    uint32_t bits = 1u;
+    int32_t ux, uy, vx, vy, r;
+    if (!unit || !m || !zone_index || !ops || !ops->resolve || !ops->zone_index ||
+        !ops->zone_map || !ops->count_search || !ops->find)
+        return -1;
+    via = ops->resolve(ops->context, via_id);
+    goal = ops->resolve(ops->context, goal_id);
+    if (!via || !goal) return 0;
+    if (*zone_index == -1) *zone_index = ops->zone_index(ops->context, unit);
+    map = ops->zone_map(ops->context, *zone_index);
+    if (!map) return 0;
+    ux = aoe_ftol32(unit->core.position.x38);
+    uy = aoe_ftol32(unit->core.position.y3c);
+    vx = aoe_ftol32(via->core.position.x38);
+    vy = aoe_ftol32(via->core.position.y3c);
+    if (!map->zones || ux < 0 || uy < 0 || ux >= map->width || uy >= map->height || vx < 0 ||
+        vy < 0 || vx >= map->width || vy >= map->height)
+        return -1;
+    if (aoe_zone_at_ror(map, vx, vy) != aoe_zone_at_ror(map, ux, uy) &&
+        !aoe_zone_near_tile_ror(map, ux, uy, vx, vy, range))
+        return 0;
+    m->use_alternate_path = 1;
+    ops->count_search(ops->context, second);
+    memset(&req, 0, sizeof(req));
+    req.x1 = ux;
+    req.y1 = uy;
+    req.x2 = vx;
+    req.y2 = vy;
+    req.unit = unit;
+    req.range = range;
+    req.target_id = via_id;
+    req.mode = 1;
+    req.budget_limited = budget_limited;
+    req.argument_30 = 1;
+    req.check_occupancy = 1;
+    req.step = 1;
+    memcpy(&req.query_radius, &bits, sizeof(bits));
+    req.query_filter = query_filter;
+    req.budget_base = budget_base;
+    if (!ops->find(ops->context, second, &req)) {
+        m->use_alternate_path = 0;
+        return 0;
+    }
+    last = aoe_unit_path_last_ror(&m->alternate_path);
+    if (!last) {
+        m->use_alternate_path = 0;
+        return -1;
+    }
+    req.x1 = aoe_ftol32(last->x);
+    req.y1 = aoe_ftol32(last->y);
+    req.x2 = aoe_ftol32(goal->core.position.x38);
+    req.y2 = aoe_ftol32(goal->core.position.y3c);
+    req.target_id = goal_id;
+    req.argument_30 = 0;
+    r = ops->find(ops->context, second, &req);
+    m->use_alternate_path = 0;
+    return r;
+}

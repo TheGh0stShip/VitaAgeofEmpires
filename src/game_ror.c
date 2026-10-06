@@ -872,3 +872,70 @@ int32_t aoe_game_ror_start_file_ror(const AoeGameRorStartFileOpsRor *o, const ch
     o->cursor(o->context, 0);
     return 0;
 }
+
+/* 0x005046e0 */
+void aoe_game_ror_start_game_ror(const AoeGameRorStartOpsRor *o) {
+    char line[0x3f4], size[0x14], type[0x14], victory[0x100], res[0x100], age[0x100], diff[0x100];
+    const char *s;
+    int i, n;
+    size_t len;
+    o->show_screen(o->context, "Game Screen");
+    o->remove_screen(o->context, "Status Screen");
+    o->remove_screen(o->context, "Multiplayer");
+    o->log(o->context, "game started", 1);
+    type[0] = '\0';
+    o->string(o->context, o->map_type >= 0 && o->map_type <= 6 ? 0x296a + o->map_type : 0x2804,
+              type, sizeof type);
+    size[0] = '\0';
+    o->string(o->context, o->map_size >= 0 && o->map_size <= 5 ? 0x2973 + o->map_size : 0x2804,
+              size, sizeof size);
+    snprintf(line, sizeof line, "    randomgame=%d, randommap=%d, mapsize=%s, maptype=%s",
+             (int)o->random_game, (int)o->random_map, size, type);
+    o->log(o->context, line, 0);
+    switch (o->victory) {
+    case 0: snprintf(victory, sizeof victory, "Default"); break;
+    case 7: snprintf(victory, sizeof victory, "Time(%d)", (int)o->victory_value); break;
+    case 8: snprintf(victory, sizeof victory, "Score(%d)", (int)o->victory_value); break;
+    case 9: snprintf(victory, sizeof victory, "Standard"); break;
+    default: snprintf(victory, sizeof victory, "Unknown"); break;
+    }
+    if (o->death_match) s = "DeathMatch";
+    else s = o->resource_level == 0 ? "Default" : o->resource_level == 1 ? "Low"
+           : o->resource_level == 2 ? "Medium" : o->resource_level == 3 ? "High" : "Unknown";
+    snprintf(res, sizeof res, "%s", s);
+    s = o->starting_age == 0 ? "Default" : o->starting_age == 2 ? "Stone" : o->starting_age == 3 ? "Tool"
+      : o->starting_age == 4 ? "Bronze" : o->starting_age == 5 ? "Iron" : "Unknown";
+    snprintf(age, sizeof age, "%s", s);
+    snprintf(diff, sizeof diff, "Unknown");
+    o->string(o->context, 0x2bd0 + o->difficulty, diff, sizeof diff);
+    snprintf(line, sizeof line, "    resources=%.200s, age=%.200s, victory=%.200s, difficulty=%.200s", res, age,
+             victory, diff);
+    o->log(o->context, line, 0);
+    snprintf(line, sizeof line, "    fulltech=%d, revealmap=%d", o->full_tech, o->reveal_map);
+    o->log(o->context, line, 0);
+    n = o->player_count;
+    len = (size_t)snprintf(line, sizeof line, "    numplayers=%d, players=", n - 1);
+    for (i = 1; i < n && len < sizeof line; ++i)
+        len += (size_t)snprintf(line + len, sizeof line - len, "%d", o->slot_ac4(o->context, i - 1));
+    if (len < sizeof line) len += (size_t)snprintf(line + len, sizeof line - len, ", teams=");
+    for (i = 1; i < n && len < sizeof line; ++i)
+        len += (size_t)snprintf(line + len, sizeof line - len, "%d", o->slot_994(o->context, i - 1) - 1);
+    if (len < sizeof line) len += (size_t)snprintf(line + len, sizeof line - len, ", civs=");
+    for (i = 1; i < n && len < sizeof line; ++i)
+        len += (size_t)snprintf(line + len, sizeof line - len, "%d ", o->slot_a94(o->context, i - 1));
+    o->log(o->context, line, 0);
+    if (o->music_kind) {
+        if (o->music_kind == 1) o->music_tracks(o->context, 5, 0xe);
+        else if (o->music_kind == 2) o->music_tracks(o->context, 1, o->music_track);
+        else if (o->music_kind == 3) o->music_stop(o->context);
+        *o->menu_music_held = 0;
+    }
+    o->timing_reset(o->context);
+    o->set_state(o->context, 4);
+    if (o->settings_paused) o->resume(o->context);
+    *o->field_9fc = 0;
+    o->chat_drop(o->context);
+    o->chat_recipient(o->context, o->viewed_player);
+    if (o->can_centre_cursor) o->centre_cursor(o->context);
+    o->cursor_release(o->context);
+}

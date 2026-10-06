@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "demo_app.h"
+#include "game_screen.h"
 #include "game_ui.h"
 
 /* The port's "Game Screen": the panel the game start (0x503a70)
@@ -14,11 +15,18 @@
    world view at the layout's rectangle for the screen size (0x0047f000:
    (0, 0x14, 640, 0x14e) at 640x480) drawn by the reconstructed scene
    renderer, the world advanced on idle, and the view scrolled by the
-   arrow keys or the pointer at a screen edge. The bars, the minimap and
-   the command buttons are not assembled yet. */
+   arrow keys or the pointer at a screen edge. The viewed player's
+   interface (0x004816d0) loads its style's bar shape, which the
+   translated draw (0x00484110) paints behind the view. The panels on the
+   bars (resources, minimap, object panel, command buttons) are not
+   assembled yet. */
 typedef struct {
     AoeUiEzRor ez;
     AoeGameUiRor *ui;
+    AoeGameScreenRor screen;      /* the translated screen's state */
+    void *shapes[AOE_GSP_SHAPES]; /* +0x478..+0x48c */
+    void *page_picture;           /* +0x4ac */
+    int32_t style, style_width;   /* +0x714, +0x718 */
     AoeDemo *world;               /* the director's; not owned */
     int32_t view_x, view_y, view_w, view_h;
     uint8_t *pixels;              /* view_w x view_h */

@@ -714,6 +714,15 @@ int aoe_demo_load_file(AoeDemo *demo, const char *path, const char *name) {
     return load_path(demo, path, name ? name : path);
 }
 
+int aoe_demo_player_icon_set(const AoeDemo *demo, int player, uint8_t *icon_set) {
+    uint32_t civ;
+    if (!demo || !demo->loaded || player < 0 || player >= demo->runtime.player_count) return 0;
+    civ = demo->runtime.players[player].civilization_id;
+    if (civ >= demo->civs.count) return 0;
+    *icon_set = demo->civs.civs[civ].icon_set;
+    return 1;
+}
+
 uint8_t aoe_demo_terrain_count(const AoeDemo *demo) {
     return demo ? (uint8_t)demo->intro.terrain_count : 0;
 }

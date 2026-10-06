@@ -871,6 +871,89 @@ typedef struct {
 int32_t aoe_game_screen_layout_ror(const AoeGameScreenLayoutOpsRor *o);
 
 
+/* ---- 0x004816d0: the viewed player's interface ---- */
+/* Shapes kept by the screen (+0x478..+0x48c). */
+enum {
+    AOE_GSP_GAME,             /* +0x478 "game{a,b,c}%d.shp": the bars, drawn by 0x00484110 */
+    AOE_GSP_BORDER_A,         /* +0x47c "btnbrda%d.shp": buttons 0..11's border */
+    AOE_GSP_OTHER,            /* +0x480 "btnoth%d.shp" */
+    AOE_GSP_BORDER_B,         /* +0x484 "btnbrdb%d.shp": buttons 12..16's border */
+    AOE_GSP_BORDER_C,         /* +0x488 "btnbrdc%d.shp" */
+    AOE_GSP_LARGE,            /* +0x48c (made elsewhere) */
+    AOE_GSP_SHAPES
+};
+typedef struct {
+    void *context;
+    int32_t width, height;           /* +0x14, +0x18 */
+    int32_t *style, *style_width;    /* +0x714, +0x718: the last style and width */
+    int16_t player_id;               /* the viewed player (0x00419b70) +0x4a */
+    uint8_t player_style;            /* its +0x54: the civilisation's +0x28 */
+    int16_t frame_4b0, frame_4b2, frame_4b4;
+    /* The view (+0x4b8, 0x0050ffa0), diamond map (+0x4bc, 0x0042cbb0),
+       resource panel (+0x4c0, 0x004f81d0) and object panel (+0x4c4,
+       0x004f86f0) told the viewed player; the edit mode change
+       0x00481690(game +0x1b4, game +0x1b4); 0x00481f70; the age title
+       0x00482040. */
+    void (*player_to_panels)(void *context);
+    void (*mode_changed)(void *context);
+    void (*store_player)(void *context);
+    void (*age)(void *context);
+    /* The screen's easy-panel settings: info (0x004553f0), popup info
+       (0x004559f0), button pictures (0x00455a50), bevel colours
+       (0x00455950, kept at +0x320..+0x325). */
+    void (*set_info)(void *context, const char *name, int32_t id);
+    void (*set_popup)(void *context, const char *name, int32_t id);
+    void (*set_button_pictures)(void *context, const char *name, int32_t id);
+    void (*set_bevel_colors)(void *context, const uint8_t colors[6]);
+    /* A button panel by screen offset: its bevel (0x0045f350(type, the six
+       colours)), state picture (0x0045ef60(state, picture, frame)), state
+       ID (0x0045f410) and text colours (0x0045f210(state, a, b)); button i
+       (0..16, +0x4c8 + 4 i)'s border shape (+0x2c4). A text panel's
+       colours: +0x4c0 0x004f7cf0, +0x580 0x00469070 (colour, shadow). */
+    void (*button_bevel)(void *context, uint16_t offset, int32_t type, const uint8_t colors[6]);
+    void (*button_picture)(void *context, uint16_t offset, int32_t state, void *picture,
+                           int16_t frame);
+    int32_t (*button_id)(void *context, uint16_t offset);
+    void (*button_text_colors)(void *context, uint16_t offset, int32_t state, uint32_t a,
+                               uint32_t b);
+    void (*button_border)(void *context, int32_t i, void *shape);
+    void (*text_colors)(void *context, uint16_t offset, uint32_t color, uint32_t shadow);
+    /* A shape (0x20-byte object, 0x0049f5f0(name, id); NULL when it is not
+       made) and its release (0x0049f840 and delete). */
+    void *(*load_shape)(void *context, const char *name, int32_t id);
+    void (*free_shape)(void *context, void *shape);
+    void (*rebuild_buttons)(void *context);     /* 0x004822a0 */
+    void (*redraw)(void *context);              /* vtable +0x20(1) */
+} AoeGameScreenStyleOpsRor;
+
+/* 0x004816d0 (the layout's notify, with the player twice; `ret 8`): the
+   viewed player handed to the view, map, resource and object panels, the
+   edit mode change, 0x00481f70 and the age title. For a player other than
+   0 whose style (+0x54) or the screen width changed since the last call:
+   style s (above 4: 0) gives the info "dlg6_%d" and popup info (s 4:
+   0xcf08, else 0xc356 + s), the button pictures "btn6_%d" (0xcf0c, else
+   0xc5ad + s), the bevel colours (by s: 0 7e 6d 6f 6f ee 38, 1 72 73 74 74
+   b7 b8, 2 b9 77 78 78 78 79, 3 8a ed ee ee 38 95, 4 73 74 75 75 76 77)
+   and those colours to the buttons +0x4f8, +0x4fc, +0x500 (type 3), +0x504
+   and +0x508 (type 4). The shapes are replaced in turn: +0x47c
+   "btnbrda%d.shp" (0xcf0e, else 0xc619 + s), +0x480 "btnoth%d.shp"
+   (0xcf11, 0xc625 + s), +0x484 "btnbrdb%d.shp" (0xcf0f, 0xc61d + s),
+   +0x488 "btnbrdc%d.shp" (0xcf10, 0xc63b + s) and +0x478, by the screen
+   size, "gamea%d.shp" below 800 x 600 (0xcf12, 0xc62d + s), "gameb%d.shp"
+   below 1024 x 768 (0xcf13, 0xc631 + s), else "gamec%d.shp" (0xcf14,
+   0xc635 + s). Buttons 0..11 take +0x47c as their border, 12..16 +0x484;
+   +0x4ac becomes +0x480 below 800 x 600, else +0x48c, and is the picture
+   of +0x4dc (frame +0x4b0) and of +0x4f4 (frame +0x4b4 when its state ID
+   is 6, else +0x4b2). Styles 2..4 give the text panels +0x4c0 and +0x580
+   white with a black shadow and the buttons +0x4f8..+0x508 state colours
+   (0, 0xffffff, 0); styles 0 and 1 black on white and (0, 0, 0xffffff).
+   Then (for every player) the buttons are rebuilt and the screen
+   redrawn. (The decompiler's switch on the unclamped byte and its
+   argument order for 0x0045f210 do not match the instructions; this
+   follows the instructions.) */
+void aoe_game_screen_style_ror(const AoeGameScreenStyleOpsRor *o, void *shapes[AOE_GSP_SHAPES],
+                                void **page_picture);
+
 /* ---- 0x004822a0: the command buttons rebuilt ---- */
 
 /* A train or research entry as a button: its slot byte, picture frame,

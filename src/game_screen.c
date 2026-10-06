@@ -1524,3 +1524,76 @@ int aoe_game_screen_construct_ror(AoeGameScreenDefaultsRor *d, const AoeGameScre
     memcpy(d->cycle_rgb, cycle, sizeof cycle);
     return 1;
 }
+
+/* 0x004816d0 */
+static void *gsp_replace(const AoeGameScreenStyleOpsRor *o, void **slot, const char *pattern,
+                         int32_t style, int32_t id) {
+    char name[0x104];
+    if (*slot) o->free_shape(o->context, *slot);
+    snprintf(name, sizeof name, pattern, (int)style);
+    *slot = o->load_shape(o->context, name, id);
+    return *slot;
+}
+
+void aoe_game_screen_style_ror(const AoeGameScreenStyleOpsRor *o, void *shapes[AOE_GSP_SHAPES],
+                                void **page_picture) {
+    static const uint8_t bevels[5][6] = {
+        {0x7e, 0x6d, 0x6f, 0x6f, 0xee, 0x38}, {0x72, 0x73, 0x74, 0x74, 0xb7, 0xb8},
+        {0xb9, 0x77, 0x78, 0x78, 0x78, 0x79}, {0x8a, 0xed, 0xee, 0xee, 0x38, 0x95},
+        {0x73, 0x74, 0x75, 0x75, 0x76, 0x77}};
+    static const uint16_t bevelled[5] = {0x4f8, 0x4fc, 0x500, 0x504, 0x508};
+    char name[0x104];
+    int32_t s, id, i;
+    uint32_t a, b;
+    o->player_to_panels(o->context);
+    o->mode_changed(o->context);
+    o->store_player(o->context);
+    o->age(o->context);
+    if (o->player_id != 0 &&
+        ((int32_t)o->player_style != *o->style || o->width != *o->style_width)) {
+        *o->style = o->player_style;
+        *o->style_width = o->width;
+        s = o->player_style < 5 ? o->player_style : 0;
+        snprintf(name, sizeof name, "dlg6_%d", (int)s);
+        id = s == 4 ? 0xcf08 : 0xc356 + s;
+        o->set_info(o->context, name, id);
+        o->set_popup(o->context, name, id);
+        snprintf(name, sizeof name, "btn6_%d", (int)s);
+        o->set_button_pictures(o->context, name, s == 4 ? 0xcf0c : 0xc5ad + s);
+        o->set_bevel_colors(o->context, bevels[s]);
+        for (i = 0; i < 5; ++i)
+            o->button_bevel(o->context, bevelled[i], i < 3 ? 3 : 4, bevels[s]);
+        gsp_replace(o, &shapes[AOE_GSP_BORDER_A], "btnbrda%d.shp", s, s == 4 ? 0xcf0e : 0xc619 + s);
+        gsp_replace(o, &shapes[AOE_GSP_OTHER], "btnoth%d.shp", s, s == 4 ? 0xcf11 : 0xc625 + s);
+        gsp_replace(o, &shapes[AOE_GSP_BORDER_B], "btnbrdb%d.shp", s, s == 4 ? 0xcf0f : 0xc61d + s);
+        gsp_replace(o, &shapes[AOE_GSP_BORDER_C], "btnbrdc%d.shp", s, s == 4 ? 0xcf10 : 0xc63b + s);
+        if (o->width >= 0x400 && o->height >= 0x300)
+            gsp_replace(o, &shapes[AOE_GSP_GAME], "gamec%d.shp", s, s == 4 ? 0xcf14 : 0xc635 + s);
+        else if (o->width >= 800 && o->height >= 600)
+            gsp_replace(o, &shapes[AOE_GSP_GAME], "gameb%d.shp", s, s == 4 ? 0xcf13 : 0xc631 + s);
+        else
+            gsp_replace(o, &shapes[AOE_GSP_GAME], "gamea%d.shp", s, s == 4 ? 0xcf12 : 0xc62d + s);
+        for (i = 0; i < 17; ++i)
+            o->button_border(o->context, i,
+                             i < 12 ? shapes[AOE_GSP_BORDER_A] : shapes[AOE_GSP_BORDER_B]);
+        *page_picture = (o->width >= 800 && o->height >= 600) ? shapes[AOE_GSP_LARGE]
+                                                              : shapes[AOE_GSP_OTHER];
+        o->button_picture(o->context, 0x4dc, 0, *page_picture, o->frame_4b0);
+        o->button_picture(o->context, 0x4f4, 0, *page_picture,
+                          o->button_id(o->context, 0x4f4) == 6 ? o->frame_4b4 : o->frame_4b2);
+        if (s == 2 || s == 3 || s == 4) {
+            o->text_colors(o->context, 0x4c0, 0xffffff, 0);
+            o->text_colors(o->context, 0x580, 0xffffff, 0);
+            a = 0xffffff;
+            b = 0;
+        } else {
+            o->text_colors(o->context, 0x4c0, 0, 0xffffff);
+            o->text_colors(o->context, 0x580, 0, 0xffffff);
+            a = 0;
+            b = 0xffffff;
+        }
+        for (i = 0; i < 5; ++i) o->button_text_colors(o->context, bevelled[i], 0, a, b);
+    }
+    o->rebuild_buttons(o->context);
+    o->redraw(o->context);
+}

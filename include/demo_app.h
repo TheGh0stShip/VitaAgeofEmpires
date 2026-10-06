@@ -70,6 +70,9 @@ int aoe_demo_load_file(AoeDemo *demo, const char *path, const char *name);
    it for a player with units: on its type-0x6d (town center) object, else
    its first unit (in the runtime's unit order). 0 when it has none. */
 int aoe_demo_view_player_start(AoeDemo *demo, int player);
+/* A player's civilisation's interface style (the civilisation's +0x28,
+   kept as the player's +0x54). 0 when there is no such player. */
+int aoe_demo_player_icon_set(const AoeDemo *demo, int player, uint8_t *icon_set);
 /* The DAT's terrain count (scn_load_map's `terrain_count`). */
 uint8_t aoe_demo_terrain_count(const AoeDemo *demo);
 

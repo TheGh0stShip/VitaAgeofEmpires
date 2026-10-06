@@ -124,15 +124,15 @@ int main(void) {
     center.core.unit_id = 3;
     center.runtime_owner_index = 1;
     center_t.id = 100;
-    task.resource_in = 0;
-    task.resource_multiplier = -1;
-    task.resource_out = -1;
-    task.work_value1 = 4.0f;
-    task.work_range = 0.25f;
-    task.moving_graphic = 1;
-    task.proceeding_graphic = 2;
-    task.carrying_graphic = 4;
-    task.gathering_sound = 7;
+    task.carry_resource = 0;
+    task.rate_attribute = -1;
+    task.deposit_resource = -1;
+    task.work_amount = 4.0f;
+    task.action_range = 0.25f;
+    task.approach_graphic = 1;
+    task.action_graphic = 2;
+    task.carry_graphic = 4;
+    task.action_sound = 7;
     task.deposit_sound = -1;
 
     /* Construction records the target's position and template ID;

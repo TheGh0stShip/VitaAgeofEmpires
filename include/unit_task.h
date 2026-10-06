@@ -42,9 +42,9 @@ int aoe_unit_task_allowed_ror(const DatUnitTask *task,
                               const AoeUnitTaskOps *ops, int *allowed);
 
 /* 0x004e7dc0. With a target, four passes each return the first allowed
-   task matching: (state-0 target) unbuilt_target == 1; target_unit ==
+   task matching: (state-0 target) unbuilt_target == 1; target_template ==
    target template id; target_class == target unit_class; (target state
-   < 3 and target template field_8c) enable_targeting. Then, unless x or y
+   < 3 and target template field_8c) any_flagged_target. Then, unless x or y
    is -1.0 or NaN, the point (__ftol truncated to 16 bits) inside the map
    returns the first task whose target_terrain equals the terrain byte (no
    predicate). Otherwise *task = NULL. Returns 0 for missing dependencies
@@ -57,7 +57,7 @@ int aoe_unit_task_select_base_ror(const AoeLiveUnit *actor,
 /* 0x00508010, the tribe "smart order":
    1. Drop-off: an actor carrying a resource (type != -1, amount > 0) of
       class 4 or 21, ordered onto its own owner's live (state 2) storage
-      building, gets the first task whose resource_in equals the carried
+      building, gets the first task whose carry_resource equals the carried
       type and whose action is 5, 0x6e or 0x6f. Class 4 accepts building
       IDs 109/103 for resources 1, 2, 3, 15, 17 and 109/68 for resource 16;
       class 21 accepts 45 for resources 9 and 17.

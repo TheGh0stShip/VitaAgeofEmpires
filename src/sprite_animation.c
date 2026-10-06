@@ -40,21 +40,21 @@ int aoe_sprite_animation_tick(AoeSpriteAnimationState *state,
     int16_t steps = (int16_t)quotient; /* x87 conversion truncates toward zero. */
     next.elapsed -= (float)steps * next.period;
 
-    if (speed > 0.0f || graphic->speed_multiplier == 0.0f) {
+    if (speed > 0.0f || graphic->reference_speed == 0.0f) {
         next.frame = (int16_t)(next.frame + (steps & 0xff));
         if (next.frame >= graphic->frame_count)
             next.looped = 1;
     }
-    if (graphic->speed_multiplier == 0.0f || speed == 0.0f)
+    if (graphic->reference_speed == 0.0f || speed == 0.0f)
         next.period = graphic->frame_duration;
     else
-        next.period = graphic->frame_duration * graphic->speed_multiplier / speed;
+        next.period = graphic->frame_duration * graphic->reference_speed / speed;
     if (next.period < 0.001f)
         next.period = 0.001f;
 
     if (next.looped) {
-        if (graphic->replay_delay > 0.0f && next.run_state != 2) {
-            next.period = graphic->replay_delay -
+        if (graphic->loop_delay > 0.0f && next.run_state != 2) {
+            next.period = graphic->loop_delay -
                 (float)(next.frame - graphic->frame_count) *
                 graphic->frame_duration;
             next.run_state = 2;

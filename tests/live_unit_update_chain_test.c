@@ -140,7 +140,7 @@ int main(void) {
                    .standing_graphic = 0, .walking_graphic = -1,
                    .default_task_id = -1};
     DatGraphic graphic = {.present = 1, .frame_count = 4, .angle_count = 1,
-                          .frame_duration = 1.0f, .sequence_type = 1};
+                          .frame_duration = 1.0f, .sequence_flags = 1};
     DatGraphics graphics = {.count = 1, .present_count = 1,
                             .graphics = &graphic};
     DatMapGeometry geometry = {.tile_half_width = 32,

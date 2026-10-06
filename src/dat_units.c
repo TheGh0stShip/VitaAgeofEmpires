@@ -75,8 +75,8 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
     unit->unit_class = (int16_t)u16(cursor);
     unit->standing_graphic = (int16_t)u16(cursor);
     unit->dying_graphic = (int16_t)u16(cursor);
-    unit->undead_graphic = (int16_t)u16(cursor);
-    unit->undead_mode = u8(cursor);
+    unit->state6_graphic = (int16_t)u16(cursor);
+    unit->state6_mode = u8(cursor);
     unit->hit_points = (int16_t)u16(cursor);
     unit->line_of_sight = f32(cursor);
     unit->garrison_capacity = u8(cursor); /* template +0x2c */
@@ -176,7 +176,7 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
     }
     if (unit->type >= 40) {
         unit->default_task_id = (int16_t)u16(cursor);
-        unit->search_radius = f32(cursor);
+        unit->field_e0 = f32(cursor);
         unit->work_rate = f32(cursor);
         unit->drop_sites[0] = (int16_t)u16(cursor); /* template +0xe8 */
         unit->drop_sites[1] = (int16_t)u16(cursor); /* template +0xea */
@@ -195,32 +195,32 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
             DatUnitTask *task = &unit->tasks[i];
             p = take(cursor, 59);
             if (!p) return 0;
-            task->task_type = (int16_t)at16(p);
+            task->field_00 = (int16_t)at16(p);
             task->id = (int16_t)at16(p + 2);
-            task->is_default = p[4];
+            task->field_04 = p[4];
             task->action_type = (int16_t)at16(p + 5);
             task->target_class = (int16_t)at16(p + 7);
-            task->target_unit = (int16_t)at16(p + 9);
+            task->target_template = (int16_t)at16(p + 9);
             task->target_terrain = (int16_t)at16(p + 11);
-            task->resource_in = (int16_t)at16(p + 13);
-            task->resource_multiplier = (int16_t)at16(p + 15);
-            task->resource_out = (int16_t)at16(p + 17);
-            task->work_value1 = atfloat(p + 21);
-            task->work_value2 = atfloat(p + 25);
-            task->work_range = atfloat(p + 29);
-            task->auto_search = p[33];
-            task->search_wait = atfloat(p + 34);
-            task->enable_targeting = p[38];
+            task->carry_resource = (int16_t)at16(p + 13);
+            task->rate_attribute = (int16_t)at16(p + 15);
+            task->deposit_resource = (int16_t)at16(p + 17);
+            task->work_amount = atfloat(p + 21);
+            task->work_timer = atfloat(p + 25);
+            task->action_range = atfloat(p + 29);
+            task->field_28 = p[33];
+            task->field_2c = atfloat(p + 34);
+            task->any_flagged_target = p[38];
             task->field_30 = (int16_t)at16(p + 40);
             task->field_32 = (int16_t)at16(p + 42);
             task->owner_mode = p[44];
             task->requires_carried_resource = p[45];
             task->unbuilt_target = p[46];
-            task->moving_graphic = (int16_t)at16(p + 47);
-            task->proceeding_graphic = (int16_t)at16(p + 49);
-            task->working_graphic = (int16_t)at16(p + 51);
-            task->carrying_graphic = (int16_t)at16(p + 53);
-            task->gathering_sound = (int16_t)at16(p + 55);
+            task->approach_graphic = (int16_t)at16(p + 47);
+            task->action_graphic = (int16_t)at16(p + 49);
+            task->work_graphic = (int16_t)at16(p + 51);
+            task->carry_graphic = (int16_t)at16(p + 53);
+            task->action_sound = (int16_t)at16(p + 55);
             task->deposit_sound = (int16_t)at16(p + 57);
         }
     }
@@ -248,14 +248,14 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
             unit->armors[i].class_id = (int16_t)u16(cursor);
             unit->armors[i].amount = (int16_t)u16(cursor);
         }
-        unit->terrain_defense_bonus = (int16_t)u16(cursor);
+        unit->terrain_table = (int16_t)u16(cursor);
         unit->max_range = f32(cursor);
         unit->blast_width = f32(cursor);
         unit->reload_time = f32(cursor);
         unit->projectile_unit_id = (int16_t)u16(cursor);
         unit->accuracy_percent = (int16_t)u16(cursor);
         take(cursor, 1); /* break-off combat */
-        unit->frame_delay = (int16_t)u16(cursor);
+        unit->fire_frame = (int16_t)u16(cursor);
         /* Graphic displacement XYZ: projectile spawn offsets, original
            template +0x12c/+0x130/+0x134 (0x00426520). */
         for (unsigned i = 0; i < 3; ++i)
@@ -291,13 +291,13 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
     if (unit->type == 80) {
         unit->construction_graphic = (int16_t)u16(cursor);
         unit->building_adjacent_mode = u8(cursor);
-        unit->building_angle = u16(cursor);
+        unit->building_frame = u16(cursor);
         unit->disappears_when_built = u8(cursor);
         unit->stack_unit_id = (int16_t)u16(cursor);
         unit->foundation_terrain = (int16_t)u16(cursor);
-        unit->old_terrain = (int16_t)u16(cursor);
+        unit->field_176 = (int16_t)u16(cursor);
         unit->building_research_id = (int16_t)u16(cursor);
-        unit->completion_sound = (int16_t)u16(cursor);
+        unit->sound_164 = (int16_t)u16(cursor);
     }
     return cursor->valid;
 }

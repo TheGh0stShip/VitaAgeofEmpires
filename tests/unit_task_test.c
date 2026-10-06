@@ -61,28 +61,28 @@ int main(void) {
     memset(&ship, 0, sizeof(ship)); memset(&transport, 0, sizeof(transport));
 
     /* Villager tasks: gather wood (class 15 target), deposit wood (action
-       5, resource_in 1), build (0x65), repair (0x6a, class -1), hunt with
+       5, carry_resource 1), build (0x65), repair (0x6a, class -1), hunt with
        a carried-resource requirement, terrain task for terrain 2, an
-       enable_targeting attack, and repair ships (class 22). */
+       any_flagged_target attack, and repair ships (class 22). */
     villager_tasks[0] = (DatUnitTask){.action_type = 5, .target_class = 15,
-                                      .target_unit = -1, .owner_mode = 3};
-    villager_tasks[1] = (DatUnitTask){.action_type = 5, .resource_in = 1,
-                                      .target_class = -1, .target_unit = -1};
+                                      .target_template = -1, .owner_mode = 3};
+    villager_tasks[1] = (DatUnitTask){.action_type = 5, .carry_resource = 1,
+                                      .target_class = -1, .target_template = -1};
     villager_tasks[2] = (DatUnitTask){.action_type = 0x65, .target_class = -1,
-                                      .target_unit = -1, .unbuilt_target = 1,
+                                      .target_template = -1, .unbuilt_target = 1,
                                       .owner_mode = 1};
     villager_tasks[3] = (DatUnitTask){.action_type = 0x6a, .target_class = -1,
-                                      .target_unit = -1};
+                                      .target_template = -1};
     villager_tasks[4] = (DatUnitTask){.action_type = 5, .target_class = 11,
-                                      .target_unit = -1,
+                                      .target_template = -1,
                                       .requires_carried_resource = 1};
     villager_tasks[5] = (DatUnitTask){.action_type = 1, .target_class = -1,
-                                      .target_unit = -1, .target_terrain = 2};
+                                      .target_template = -1, .target_terrain = 2};
     villager_tasks[6] = (DatUnitTask){.action_type = 7, .target_class = -1,
-                                      .target_unit = -1, .enable_targeting = 1,
+                                      .target_template = -1, .any_flagged_target = 1,
                                       .owner_mode = 5};
     villager_tasks[7] = (DatUnitTask){.action_type = 0x6a, .target_class = 22,
-                                      .target_unit = -1};
+                                      .target_template = -1};
     villager.type = 70; villager.unit_class = 4; villager.hit_points = 25;
     villager.tasks = villager_tasks; villager.task_count = 8;
     priest_tasks[0] = (DatUnitTask){.action_type = 0x68, .target_terrain = -1};
@@ -90,7 +90,7 @@ int main(void) {
     priest.type = 70; priest.unit_class = 18; priest.hit_points = 25;
     priest.tasks = priest_tasks; priest.task_count = 2;
     soldier_tasks[0] = (DatUnitTask){.action_type = 7, .target_class = -1,
-                                     .target_unit = -1, .enable_targeting = 1,
+                                     .target_template = -1, .any_flagged_target = 1,
                                      .owner_mode = 2, .target_terrain = -1};
     soldier.type = 70; soldier.unit_class = 6; soldier.hit_points = 40;
     soldier.field_8c = 1;
@@ -153,7 +153,7 @@ int main(void) {
     assert(aoe_unit_task_select_base_ror(v, dr, -1, -1, &ops, &task) &&
            task == &villager_tasks[4]);
     /* Mode 5 against gaia needs actor field_8c: villager lacks it, so the
-       enable_targeting pass finds nothing for a hostile-free gaia deer. */
+       any_flagged_target pass finds nothing for a hostile-free gaia deer. */
     dr->core.storage.carried_resource_type = -1;
     villager.task_count = 7; /* hide ship repair; keeps indices stable */
     assert(aoe_unit_task_allowed_ror(&villager_tasks[6], v, dr, &ops,

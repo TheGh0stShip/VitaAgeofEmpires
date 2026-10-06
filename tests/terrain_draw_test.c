@@ -93,7 +93,7 @@ int main(void) {
     assert(plan.layers[0].kind == TERRAIN_DRAW_BORDER &&
            plan.layers[0].slot == 1 && plan.layers[0].frame == 7);
 
-    border_records[1].draw_terrain = 1;
+    border_records[1].draw_base = 1;
     assert(terrain_build_draw_plan(&terrains, &borders, &terrain_art,
                                    &border_art, 2, 0, 0x11, 2, 1, &plan));
     assert(plan.layer_count == 2);

@@ -173,7 +173,7 @@ int aoe_movement_update_ror(AoeLiveUnit *unit, AoeMovementRor *movement,
 void aoe_movement_snap_angle_ror(float *angle, int32_t facets);
 
 typedef struct {
-    float speed_multiplier; /* sprite +0x64 */
+    float reference_speed; /* sprite +0x64 */
     int16_t facets;         /* sprite +0x60 */
     uint8_t flags;          /* sprite +0x70; bit 1 selects facet frames */
 } AoeMovementSpriteRor;

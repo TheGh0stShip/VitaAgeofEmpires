@@ -56,15 +56,15 @@ int main(void) {
         &trace, 0, object_owner, object_id, remove_object, blocked, create
     };
     tiles[3].terrain_id = 1;
-    terrain[0].terrain_units_used_count = 1;
-    terrain[0].terrain_unit_ids[0] = 10;
-    terrain[1].terrain_units_used_count = 2;
-    terrain[1].terrain_unit_ids[0] = 20;
-    terrain[1].terrain_unit_density[0] = 2000;
-    terrain[1].terrain_placement_flags[0] = 1;
-    terrain[1].terrain_unit_ids[1] = 21;
-    terrain[1].terrain_unit_density[1] = 500;
-    terrain[1].terrain_placement_flags[1] = 0;
+    terrain[0].object_count = 1;
+    terrain[0].object_ids[0] = 10;
+    terrain[1].object_count = 2;
+    terrain[1].object_ids[0] = 20;
+    terrain[1].object_amounts[0] = 2000;
+    terrain[1].object_modes[0] = 1;
+    terrain[1].object_ids[1] = 21;
+    terrain[1].object_amounts[1] = 500;
+    terrain[1].object_modes[1] = 0;
     assert(aoe_object_update_list_attach(&objects[3], &keep_owner, &attached));
     assert(aoe_object_update_list_attach(&objects[3], &keep_id, &attached));
     assert(aoe_object_update_list_attach(&objects[3], &remove, &attached));

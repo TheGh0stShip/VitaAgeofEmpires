@@ -94,9 +94,9 @@ int main(void) {
     bird_t.walking_graphic = 1;
     bird.core.unit_template = &bird_t;
     bird.graphic.current_graphic = G_CUR;
-    task.moving_graphic = 1;
-    task.proceeding_graphic = 2;
-    task.work_range = 0.5f;
+    task.approach_graphic = 1;
+    task.action_graphic = 2;
+    task.action_range = 0.5f;
 
     /* Fly: lifted to z 6, then 3 picks rand x 100 / 32767 for x and y. */
     assert(aoe_fly_action_init_ror(&a, &bird, &task, -1, -1, -1));

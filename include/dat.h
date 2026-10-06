@@ -69,17 +69,24 @@ typedef struct DatGraphic {
     char name[22];
     char filename[14];
     int32_t slp_id;
-    uint8_t layer;
-    int16_t player_color;
+    uint8_t layer;           /* +0x29 */
+    int16_t player_color;    /* +0x2a */
     int16_t coordinates[4];
     int16_t sound_id;
     uint16_t frame_count;
     uint16_t angle_count;
-    float speed_multiplier;
+    /* Reader 0x004a4c40 places the record at runtime offsets: +0x5e frame
+       count, +0x60 angle count, then +0x64 the speed the frame time is
+       given for (the animation 0x00415eb0 scales the frame time by it
+       over the unit's speed; 0 fixes it), +0x68 the frame time, +0x6c the
+       pause after each loop, +0x70 the sequence flags (bit 0 animated,
+       bit 2 random start, bit 3 stop on the last frame), +0x74 the
+       mirroring limit (frame selection 0x004a5520). */
+    float reference_speed;
     float frame_duration;
-    float replay_delay;
-    uint8_t sequence_type;
-    uint8_t mirror_mode;
+    float loop_delay;
+    uint8_t sequence_flags;
+    uint8_t mirror_limit;
     /* RoR runtime +0x14 (record byte 38): the SLP may be loaded on use. */
     uint8_t slp_loadable;
     /* RoR runtime +0x2c (record byte 43): selection test, 0 none, 1 SLP
@@ -110,30 +117,34 @@ typedef struct {
     int16_t frame_start; /* First SLP frame for this shape/pattern. */
 } DatTerrainFrame;
 
+/* Terrain record: the map object's 0x198-byte terrain entries at map
+   +0x8c, read raw as part of the 0x8dd0-byte map image (0x00443ce0) and
+   written field by field by the map's text loader 0x00446bb0. Offsets are
+   the record's. field_XX marks an offset no translated function reads. */
 typedef struct {
-    uint8_t enabled;
-    uint8_t random;
-    char name[14];
-    char filename[14];
-    int32_t slp_id;
-    uint32_t shape_pointer_placeholder;
-    int32_t sound_id;
-    uint8_t map_colors[5];
-    int8_t passable_terrain;
-    int8_t impassable_terrain;
-    uint8_t animated;
-    int16_t animation_frame_count;
-    int16_t pause_frame_count;
-    float animation_interval;
-    float animation_pause;
-    DatTerrainFrame elevation_frames[19];
-    int16_t replacement_id;
-    int16_t frame_grid[2]; /* Rows, columns; renderer uses their low bytes. */
-    int16_t borders[32];
-    int16_t terrain_unit_ids[30];
-    int16_t terrain_unit_density[30];
-    uint8_t terrain_placement_flags[30];
-    uint16_t terrain_units_used_count;
+    uint8_t enabled;               /* +0x00 */
+    uint8_t field_01;
+    char name[14];                 /* +0x02 */
+    char filename[14];             /* +0x0f */
+    int32_t slp_id;                /* +0x1c */
+    uint32_t shape_pointer_placeholder; /* +0x20 */
+    int32_t sound_id;              /* +0x24 */
+    uint8_t map_colors[5];         /* +0x28..+0x2c, the diamond map */
+    int8_t field_2d, field_2e;
+    uint8_t field_2f;
+    int16_t field_30, field_32;
+    float field_34, field_38;
+    DatTerrainFrame elevation_frames[19]; /* +0x46, per elevation shape */
+    int16_t replacement_id;        /* +0xb8 */
+    int16_t frame_grid[2]; /* +0xba: rows, columns; renderer uses their low bytes. */
+    int16_t borders[32];           /* +0xbe, the border between terrains */
+    /* +0xfe / +0x13a / +0x176 / +0x194: the objects the terrain change
+       0x004481b0 places on a converted tile: IDs, amounts, placement
+       modes and their count. */
+    int16_t object_ids[30];
+    int16_t object_amounts[30];
+    uint8_t object_modes[30];
+    uint16_t object_count;
 } DatTerrain;
 
 typedef struct {
@@ -145,28 +156,29 @@ typedef struct {
     size_t next_offset;
 } DatTerrains;
 
+/* Border record: the map object's 0x5a0-byte border entries, read raw
+   with the map image (0x00443ce0). */
 typedef struct {
-    uint8_t enabled;
-    uint8_t random;
+    uint8_t enabled;               /* +0x00 */
+    uint8_t field_01;
     char name[14];
     char filename[14];
-    int32_t slp_id;
+    int32_t slp_id;                /* +0x1c */
     uint32_t shape_pointer_placeholder;
     int32_t sound_id;
     uint8_t map_colors[3];
-    uint8_t animated;
-    int16_t animation_frame_count;
-    int16_t pause_frame_count;
-    float animation_interval;
-    float animation_pause;
-    int16_t frame;
-    int16_t draw_frame;
-    float animation_last;
-    uint8_t frame_changed;
-    uint8_t drawn;
-    DatTerrainFrame frames[19][12];
-    int16_t draw_terrain;
-    int16_t underlay_terrain;
+    uint8_t field_2b;
+    int16_t field_2c, field_2e;
+    float field_30, field_34;
+    int16_t field_38, field_3a;
+    float field_3c;
+    uint8_t field_40, field_41;
+    DatTerrainFrame frames[19][12]; /* +0x42 */
+    /* +0x59a: draw the base terrain under the border (tile draw
+       0x00514c10); +0x59c the terrain a border tile counts as for
+       movement (0x0044ead0); +0x59e the pattern set. */
+    int16_t draw_base;
+    int16_t base_terrain;
     int16_t border_style;
 } DatBorder;
 
@@ -308,22 +320,51 @@ typedef struct {
     uint8_t apply_mode;
 } DatDamageGraphic;
 
+/* Unit task (59 file bytes), named by the runtime task's offsets in
+   patched RoR 1.0a: loader 0x004e74f0 reads the file record into a
+   0x4c-byte task, and the task selectors 0x004e7dc0 / 0x004e7f90 and the
+   actions cited below read it. field_XX marks an offset no translated
+   function reads. */
 typedef struct {
-    int16_t task_type, id, action_type;
-    int16_t target_class, target_unit, target_terrain;
-    int16_t resource_in, resource_multiplier, resource_out;
-    float work_value1, work_value2, work_range, search_wait;
-    int16_t moving_graphic, proceeding_graphic, working_graphic;
-    int16_t carrying_graphic, gathering_sound, deposit_sound;
-    uint8_t is_default, auto_search, enable_targeting;
-    /* Runtime task +0x10/+0x11/+0x12 (file bytes 44..46), read by patched
-       RoR 1.0a 0x004e7f90/0x004e7dc0: owner-relationship mode 1..5, "target
-       must carry a resource", and "applies to a state-0 target". */
+    int16_t field_00;        /* +0x00 */
+    int16_t id;              /* +0x02 */
+    uint8_t field_04;        /* +0x04 */
+    int16_t action_type;     /* +0x06: the action made (aoe_action_route_ror) */
+    int16_t target_class;    /* +0x08 */
+    int16_t target_template; /* +0x0a: the target's template ID */
+    /* +0x0c: the selectors' fourth pass takes the task when any target
+       qualifies through template +0x8c (0x004e7dc0). */
+    uint8_t any_flagged_target;
+    int16_t target_terrain;  /* +0x0e */
+    /* +0x10/+0x11/+0x12, read by 0x004e7f90/0x004e7dc0: owner-relationship
+       mode 1..5, "target must carry a resource", and "applies to a state-0
+       target". */
     uint8_t owner_mode, requires_carried_resource, unbuilt_target;
-    /* Runtime task +0x30/+0x32 (file bytes 40..43, loader 0x004e75cb).
-       The farm action 0x004047d0 credits its production straight to the
-       owner when +0x30 is nonzero. */
+    /* +0x14: the resource carried while working (gather 0x004b4030). */
+    int16_t carry_resource;
+    /* +0x16: the player attribute scaling the work rate, -1 none
+       (0x00403738 / 0x004b3c5d). */
+    int16_t rate_attribute;
+    /* +0x18: the resource credited on deposit (0x0044b9a0). */
+    int16_t deposit_resource;
+    /* +0x1c: work per second against the target (gather 0x00403738, heal
+       0x004b30c3, repair 0x004b5bb0, convert 0x004b2461). */
+    float work_amount;
+    float work_timer;        /* +0x20: the conversion timer (0x004b1cb0 action) */
+    /* +0x24: the range the action works within (0x0040250e / 0x00402884,
+       heal 0x004b30c3). */
+    float action_range;
+    uint8_t field_28;        /* +0x28 */
+    float field_2c;          /* +0x2c */
+    /* +0x30/+0x32 (file bytes 40..43, loader 0x004e75cb). The farm action
+       0x004047d0 credits its production straight to the owner when +0x30
+       is nonzero. */
     int16_t field_30, field_32;
+    /* +0x34 approach, +0x38 action, +0x3c work and +0x40 carrying
+       graphics (heal 0x004b2c00, gather 0x004b4030, trade 0x00403b00);
+       +0x44 the action sound and +0x48 the deposit sound. */
+    int16_t approach_graphic, action_graphic, work_graphic, carry_graphic;
+    int16_t action_sound, deposit_sound;
 } DatUnitTask;
 
 typedef struct {
@@ -335,8 +376,11 @@ typedef struct {
     int16_t walking_graphic;   /* template +0xbc (type >= 30) */
     int16_t walking_graphic2;  /* template +0xc0 */
     int16_t dying_graphic;
-    int16_t undead_graphic; /* original template +0x20 */
-    uint8_t undead_mode;    /* original template +0x24 */
+    /* Template +0x20 / +0x24: an emptied corpse (state 3/5) with +0x24 set
+       enters state 6 showing +0x20; otherwise it goes to state 7 and is
+       cleaned up (live_unit_factory.c). */
+    int16_t state6_graphic;
+    uint8_t state6_mode;
     /* Original template +0x48: the corpse spawned by terminal cleanup
        0x0044b910 / 0x004a9450 (-1 for none). */
     int16_t dead_unit_id;
@@ -397,15 +441,19 @@ typedef struct {
     DatUnitStorage storage[3];
     int16_t default_task_id;
     uint8_t task_swap_group; /* original template +0xec (type >= 40) */
-    float search_radius, work_rate; /* work rate: template +0xe4 */
+    float field_e0, work_rate; /* template +0xe0, +0xe4 */
     int16_t drop_sites[2];          /* type >= 40, template +0xe8/+0xea */
     uint16_t task_count;
     DatUnitTask *tasks;
     uint8_t base_armor;
     uint16_t attack_count, armor_count;
     DatUnitAttackArmor *attacks, *armors;
-    int16_t terrain_defense_bonus, projectile_unit_id, accuracy_percent;
-    int16_t frame_delay, attack_graphic;
+    /* Type 50 (loader 0x0043f0c0): +0x110 the row of the world's terrain
+       multiplier table (damage 0x00426910); +0x124 the projectile; +0x126
+       the hit percentage; +0x12a the frame that fires; +0xfc the attack
+       graphic. */
+    int16_t terrain_table, projectile_unit_id, accuracy_percent;
+    int16_t fire_frame, attack_graphic;
     /* Original template +0x114, +0x118, +0x120 and +0x138. */
     float max_range, blast_width, reload_time, min_range;
     float projectile_offset[3]; /* +0x12c/+0x130/+0x134 */
@@ -414,6 +462,9 @@ typedef struct {
        and arc +0x150. */
     uint8_t projectile_flight_mode, projectile_lead, projectile_hit_mode;
     float projectile_arc;
+    /* +0x13c / +0x13e / +0x140 / +0x144: before 7.04 the loader derives
+       them as the largest armor, the largest attack, +0x114 and +0x120
+       (0x0043f0c0); the panels show them. */
     int16_t displayed_melee_armor, displayed_attack;
     float displayed_range, displayed_reload_time;
     DatUnitCost costs[3];
@@ -421,13 +472,15 @@ typedef struct {
     int8_t button_id;
     int16_t construction_graphic; /* type 80, original template +0x168 */
     uint8_t building_adjacent_mode; /* type 80, original template +0x16c */
-    uint16_t building_angle;      /* type 80, original template +0x16e */
+    /* Type 80 (loader 0x004ec310), template +0x16e: the building's facet
+       when placed and the base of its age picture (attribute 17). */
+    uint16_t building_frame;
     uint8_t disappears_when_built; /* type 80, original template +0x170 */
     int16_t stack_unit_id;        /* type 80, original template +0x172 */
     int16_t foundation_terrain;   /* type 80, original template +0x174 */
-    int16_t old_terrain;          /* type 80, original template +0x176 */
+    int16_t field_176;            /* type 80, original template +0x176 */
     int16_t building_research_id; /* type 80, original template +0x178 */
-    int16_t completion_sound;     /* type 80, original template +0x17a */
+    int16_t sound_164;            /* type 80, template +0x164 (a sound) */
 } DatUnit;
 
 typedef struct {

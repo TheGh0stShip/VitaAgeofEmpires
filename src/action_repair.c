@@ -196,17 +196,17 @@ int aoe_repair_action_set_state_ror(AoeRepairActionRor *a, uint8_t state,
         if (a->base.target) copy_target_position(a);
         if (!o->start_move(c, a, a->base.target,
                            u->core.unit_template->max_range,
-                           o->graphic(c, a->task->moving_graphic), 0))
+                           o->graphic(c, a->task->approach_graphic), 0))
             return aoe_repair_action_set_state_ror(a, 0x0d, o);
         return 1;
     case 6:
         if (a->base.target) copy_target_position(a);
-        show(a, o, a->task->moving_graphic);
+        show(a, o, a->task->approach_graphic);
         return 1;
     case 7:
-        show(a, o, a->task->proceeding_graphic);
-        if (a->task->gathering_sound >= 0)
-            o->play_sound(c, a->task->gathering_sound);
+        show(a, o, a->task->action_graphic);
+        if (a->task->action_sound >= 0)
+            o->play_sound(c, a->task->action_sound);
         return 1;
     case 0x0a:
         show(a, o, u->core.unit_template->standing_graphic);
@@ -219,7 +219,7 @@ int aoe_repair_action_set_state_ror(AoeRepairActionRor *a, uint8_t state,
         return 1;
     case 0x0b:
         if (!o->start_move(c, a, NULL, 0.0f,
-                           o->graphic(c, a->task->moving_graphic), 1))
+                           o->graphic(c, a->task->approach_graphic), 1))
             return aoe_repair_action_set_state_ror(a, 0x0d, o);
         return 1;
     default:
@@ -279,7 +279,7 @@ static int work(AoeRepairActionRor *a, const AoeRepairActionOps *o) {
         /* fld tick; fmul work rate; fmul task work value; fstp */
         float amount = (float)((double)o->tick_seconds(c) *
                                u->core.unit_template->work_rate *
-                               a->task->work_value1);
+                               a->task->work_amount);
         switch (o->repair(c, t, amount)) {
         case 1:
             return aoe_repair_action_set_state_ror(a, 1, o);

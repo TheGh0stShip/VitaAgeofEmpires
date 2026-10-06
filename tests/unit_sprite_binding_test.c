@@ -5,7 +5,7 @@
 static void run_edition(AoePlayerEdition edition) {
     DatGraphic standing = {.present = 1, .frame_count = 1};
     DatGraphic walking = {.present = 1, .frame_count = 4,
-                          .sequence_type = 1, .frame_duration = 0.5f};
+                          .sequence_flags = 1, .frame_duration = 0.5f};
     DatGraphic invalid = {.present = 0};
     AoeRng rng;
     aoe_rng_seed(&rng, 1);

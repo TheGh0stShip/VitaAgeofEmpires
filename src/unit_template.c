@@ -271,7 +271,7 @@ int aoe_template_load_ror(AoeTemplateRor *t, uint8_t type, AoeOutcomeStream *s, 
         int16_t a, b;
         t->type = 0x28;
         t->default_task = g16(s);
-        t->search_radius = gf(s);
+        t->field_e0 = gf(s);
         t->work_rate = gf(s);
         t->drop_site[0] = g16(s);
         t->drop_site[1] = g16(s);
@@ -490,7 +490,7 @@ int aoe_template_text_ror(AoeTemplateRor *t, uint8_t type, FILE *f, void **sprit
     {
         int16_t ec = 0, a = -1, b = -1, f8 = 0;
         t->type = 0x28;
-        if (fscanf(f, "%f %f %hd %hd %hd %hd %hd %hd", &t->search_radius, &t->work_rate,
+        if (fscanf(f, "%f %f %hd %hd %hd %hd %hd %hd", &t->field_e0, &t->work_rate,
                    &t->drop_site[0], &t->drop_site[1], &ec, &a, &b, &f8) == EOF)
             a = b = -1;
         t->field_ec = (uint8_t)ec;
@@ -662,7 +662,7 @@ void aoe_template_save_ror(const AoeTemplateRor *t, AoeOutcomeStream *s,
     if (t->type == 0x1e) return;
     /* 40 */
     p16(s, t->default_task);
-    aoe_stream_put_f32(s, t->search_radius);
+    aoe_stream_put_f32(s, t->field_e0);
     aoe_stream_put_f32(s, t->work_rate);
     p16(s, t->drop_site[0]);
     p16(s, t->drop_site[1]);

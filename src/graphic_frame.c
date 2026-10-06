@@ -16,7 +16,7 @@ int aoe_graphic_select_frame(const DatGraphic *graphic,
         frame = 0;
     AoeGraphicFrame selected = {0};
     uint16_t count = graphic->angle_count;
-    uint8_t mirror = graphic->mirror_mode;
+    uint8_t mirror = graphic->mirror_limit;
     int64_t index;
     if (mirror && count == 2) {
         selected.slp_frame = (uint32_t)frame;

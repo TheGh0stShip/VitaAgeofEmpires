@@ -111,7 +111,7 @@ static void t50_attribute(DatUnit *t, AoeAttributeOp op, uint8_t a,
         case 16:
             t->projectile_unit_id = (int16_t)(uint8_t)aoe_ftol32(v);
             return;
-        case 18: t->terrain_defense_bonus = w16(aoe_ftol32(v)); return;
+        case 18: t->terrain_table = w16(aoe_ftol32(v)); return;
         default: break;
         }
         break;
@@ -132,7 +132,7 @@ static void t50_attribute(DatUnit *t, AoeAttributeOp op, uint8_t a,
             t->projectile_unit_id =
                 w16(t->projectile_unit_id + aoe_ftol32(v));
             return;
-        case 18: t->terrain_defense_bonus = w16(aoe_ftol32(v)); return;
+        case 18: t->terrain_table = w16(aoe_ftol32(v)); return;
         default: break;
         }
         break;
@@ -154,7 +154,7 @@ static void t50_attribute(DatUnit *t, AoeAttributeOp op, uint8_t a,
             t->projectile_unit_id =
                 w16(aoe_ftol32((double)t->projectile_unit_id * v));
             return;
-        case 18: t->terrain_defense_bonus = w16(aoe_ftol32(v)); return;
+        case 18: t->terrain_table = w16(aoe_ftol32(v)); return;
         default: break;
         }
         break;
@@ -202,11 +202,11 @@ static void t70_attribute(DatUnit *t, AoeAttributeOp op, uint8_t a,
 static void t80_attribute(DatUnit *t, AoeAttributeOp op, uint8_t a,
                           float v) {
     if (a == 17 && op == AOE_ATTRIBUTE_SET) {
-        t->building_angle = (uint16_t)aoe_ftol32(v);
+        t->building_frame = (uint16_t)aoe_ftol32(v);
         return;
     }
     if (a == 17 && op == AOE_ATTRIBUTE_ADD) {
-        t->building_angle = (uint16_t)(t->building_angle + aoe_ftol32(v));
+        t->building_frame = (uint16_t)(t->building_frame + aoe_ftol32(v));
         return;
     }
     t70_attribute(t, op, a, v);
@@ -292,8 +292,8 @@ int aoe_template_upgrade_copy_ror(DatUnit *slot, DatUnit *src) {
     slot->unit_class = src->unit_class;
     slot->standing_graphic = src->standing_graphic;
     slot->dying_graphic = src->dying_graphic;
-    slot->undead_graphic = src->undead_graphic;
-    slot->undead_mode = src->undead_mode;
+    slot->state6_graphic = src->state6_graphic;
+    slot->state6_mode = src->state6_mode;
     slot->hit_points = src->hit_points;
     slot->line_of_sight = src->line_of_sight;
     slot->garrison_capacity = src->garrison_capacity;
@@ -353,7 +353,7 @@ int aoe_template_upgrade_copy_ror(DatUnit *slot, DatUnit *src) {
     }
     if (level >= 4) {                    /* 0x0043e6f0: not +0xd8 tasks */
         slot->default_task_id = src->default_task_id;
-        slot->search_radius = src->search_radius;
+        slot->field_e0 = src->field_e0;
         slot->work_rate = src->work_rate;
         memcpy(slot->drop_sites, src->drop_sites, sizeof(slot->drop_sites));
         slot->task_swap_group = src->task_swap_group;
@@ -365,14 +365,14 @@ int aoe_template_upgrade_copy_ror(DatUnit *slot, DatUnit *src) {
         slot->attacks = attacks;
         slot->armor_count = src->armor_count;
         slot->armors = armors;
-        slot->terrain_defense_bonus = src->terrain_defense_bonus;
+        slot->terrain_table = src->terrain_table;
         slot->max_range = src->max_range;
         slot->blast_width = src->blast_width;
         slot->blast_level = src->blast_level;
         slot->reload_time = src->reload_time;
         slot->projectile_unit_id = src->projectile_unit_id;
         slot->accuracy_percent = src->accuracy_percent;
-        slot->frame_delay = src->frame_delay;
+        slot->fire_frame = src->fire_frame;
         memcpy(slot->projectile_offset, src->projectile_offset,
                sizeof(slot->projectile_offset));
         slot->min_range = src->min_range;
@@ -397,7 +397,7 @@ int aoe_template_upgrade_copy_ror(DatUnit *slot, DatUnit *src) {
     if (level >= 8) {                                         /* 0x004ec4f0 */
         slot->construction_graphic = src->construction_graphic;
         slot->building_adjacent_mode = src->building_adjacent_mode;
-        slot->building_angle = src->building_angle;
+        slot->building_frame = src->building_frame;
         slot->disappears_when_built = src->disappears_when_built;
         slot->stack_unit_id = src->stack_unit_id;
         slot->foundation_terrain = src->foundation_terrain;
@@ -515,8 +515,8 @@ static int root_upgrade(AoeLiveUnit *u, const DatUnit *n,
         next = graphic_of(o, n->standing_graphic);
     else if (cur == graphic_of(o, t->dying_graphic))
         next = graphic_of(o, n->dying_graphic);
-    else if (cur == graphic_of(o, t->undead_graphic))
-        next = graphic_of(o, n->undead_graphic);
+    else if (cur == graphic_of(o, t->state6_graphic))
+        next = graphic_of(o, n->state6_graphic);
     u->core.hit_points = (float)((double)n->hit_points * ratio);
     if (next && !o->select_graphic(o->context, u, next)) return 0;
     if (u->core.state == 2) {

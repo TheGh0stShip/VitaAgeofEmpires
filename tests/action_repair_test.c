@@ -242,10 +242,10 @@ int main(void) {
     boat.runtime_owner_index = 1;
     boat.core.position.x38 = 10.5f;
     boat.core.position.y3c = 6.5f;
-    task.work_value1 = 1.0f;
-    task.moving_graphic = 1;
-    task.proceeding_graphic = 2;
-    task.gathering_sound = 5;
+    task.work_amount = 1.0f;
+    task.approach_graphic = 1;
+    task.action_graphic = 2;
+    task.action_sound = 5;
 
     work_math();
     line_search(&o);

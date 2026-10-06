@@ -44,8 +44,8 @@ static int change_root(AoeLiveUnit *u, int16_t to,
         g = o->graphic(o->context, n->standing_graphic);
     else if (cur == o->graphic(o->context, t->dying_graphic))
         g = o->graphic(o->context, n->dying_graphic);
-    else if (cur == o->graphic(o->context, t->undead_graphic))
-        g = o->graphic(o->context, n->undead_graphic);
+    else if (cur == o->graphic(o->context, t->state6_graphic))
+        g = o->graphic(o->context, n->state6_graphic);
     else
         g = o->graphic(o->context, n->standing_graphic);
     if (g) o->select_graphic(o->context, u, g);

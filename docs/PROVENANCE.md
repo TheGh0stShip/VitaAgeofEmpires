@@ -101,17 +101,24 @@ engine's source.
 
 ## Open items
 
-1. **DAT field vocabulary.** Of the 355 fields in `include/dat.h`, 240 carry
-   no executable offset in their comment. Most are generic (`count`, `name`,
-   `width`), but some names follow the vocabulary other format tools use
-   rather than anything the executable shows, for example `resource_in`,
-   `resource_out`, `work_value1`, `work_value2`, `search_wait`,
-   `enable_targeting`, `proceeding_graphic`, `carrying_graphic`,
-   `accuracy_percent`, `terrain_defense_bonus`, `speed_multiplier`,
-   `replay_delay`, `sequence_type`, `mirror_mode`, `underlay_terrain`.
-   Each should be renamed to the meaning its executable use shows, with the
-   offset and the function that uses it, or to a neutral offset name
-   (`field_0x14c`) where no use is translated yet.
+1. **DAT field vocabulary.** On 2026-10-06 the DAT structures in
+   `include/dat.h` were checked against the executable's loaders (task
+   0x004e74f0, unit classes 0x004413b0 / 0x0043f0c0 / 0x004ec310 and the
+   others listed in `unit_template.h`, graphics 0x004a4c40, the map image
+   0x00443ce0 / 0x00446bb0). Fields named after other format tools were
+   renamed to what their translated use shows, with the offset and the
+   function in the header (for example the task's `carry_resource`,
+   `rate_attribute`, `deposit_resource`, `work_amount`, `action_range`,
+   `approach_graphic`; the unit's `terrain_table`, `fire_frame`,
+   `building_frame`, `state6_graphic`; the graphic's `reference_speed`,
+   `loop_delay`, `sequence_flags`, `mirror_limit`; the terrain's
+   `object_ids` / `object_amounts`; the border's `draw_base` and
+   `base_terrain`). Fields no translated function reads now carry neutral
+   offset names (`field_2c`, `field_176`, `sound_164`, ...). Generic
+   names that match their use (`hit_points`, `line_of_sight`, `train_time`)
+   were kept. Still to check the same way: the effect command
+   (`target_unit` is a unit, a resource or an attribute by command type),
+   the tech record and the sound record.
 2. **Background knowledge.** The assistant that wrote much of this code has
    general knowledge of Genie-engine formats from its training, which cannot
    be separated out. Where a layout mattered it was confirmed against the

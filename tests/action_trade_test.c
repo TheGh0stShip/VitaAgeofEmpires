@@ -98,9 +98,9 @@ int main(void) {
     home.runtime_owner_index = 1;
     home.core.position.x38 = 10.0f;
     home.core.position.y3c = 10.0f;
-    task.work_range = 1.0f;
-    task.resource_in = -1;
-    task.gathering_sound = task.deposit_sound = -1;
+    task.action_range = 1.0f;
+    task.carry_resource = -1;
+    task.action_sound = task.deposit_sound = -1;
 
     /* Carried type 7 becomes wood (1); sail, face (a dock, template 45,
        counts even when empty), load. */

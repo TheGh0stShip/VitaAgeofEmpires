@@ -8,9 +8,9 @@
    These correspond to graphic +0x5e, +0x64, +0x68, +0x6c, +0x70. */
 typedef struct {
     int16_t frame_count;
-    float speed_multiplier;
+    float reference_speed;
     float frame_duration;
-    float replay_delay;
+    float loop_delay;
     uint8_t sequence_flags;
 } AoeSpriteAnimationGraphic;
 

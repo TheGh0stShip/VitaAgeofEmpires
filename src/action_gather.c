@@ -87,21 +87,21 @@ static int set_target(AoeGatherActionRor *a, AoeLiveUnit *t,
    The hunting action's move-graphic slot 0x004b4030 is the same code. */
 static int carrying(const AoeGatherActionRor *a) {
     const AoeLiveUnit *u = a->base.unit;
-    int16_t in = a->task->resource_in;
+    int16_t in = a->task->carry_resource;
     return in != -1 && u->core.storage.carried_resource_type == in &&
            aoe_ftol32(u->core.storage.carried_amount) > 0;
 }
 static const void *move_graphic(AoeGatherActionRor *a,
                                 const AoeGatherActionOps *o) {
     const void *g = carrying(a) ? o->graphic(o->move.context,
-                                             a->task->carrying_graphic)
+                                             a->task->carry_graphic)
                                 : NULL;
-    return g ? g : o->graphic(o->move.context, a->task->moving_graphic);
+    return g ? g : o->graphic(o->move.context, a->task->approach_graphic);
 }
 static const void *idle_graphic(AoeGatherActionRor *a,
                                 const AoeGatherActionOps *o) {
     const void *g = carrying(a) ? o->graphic(o->move.context,
-                                             a->task->carrying_graphic)
+                                             a->task->carry_graphic)
                                 : NULL;
     return g ? g
              : o->graphic(o->move.context,
@@ -208,7 +208,7 @@ int aoe_gather_action_set_state_ror(AoeGatherActionRor *a, uint8_t state,
         a->base.x = a->base.target->core.position.x38;
         a->base.y = a->base.target->core.position.y3c;
         a->base.z = a->base.target->core.position.z40;
-        if (!o->start_move(c, a, a->base.target, a->task->work_range,
+        if (!o->start_move(c, a, a->base.target, a->task->action_range,
                            move_graphic(a, o), 0))
             return failed(a, o);
         return 1;
@@ -218,11 +218,11 @@ int aoe_gather_action_set_state_ror(AoeGatherActionRor *a, uint8_t state,
         return 1;
     case 7:
         a->timer = 0.0f;
-        if (u->core.storage.carried_resource_type != a->task->resource_in)
-            aoe_unit_set_carried_ror(u, a->task->resource_in, 0.0f);
-        show(a, o, o->graphic(c, a->task->proceeding_graphic));
-        if (a->task->gathering_sound >= 0)
-            o->play_sound(c, a->task->gathering_sound);
+        if (u->core.storage.carried_resource_type != a->task->carry_resource)
+            aoe_unit_set_carried_ror(u, a->task->carry_resource, 0.0f);
+        show(a, o, o->graphic(c, a->task->action_graphic));
+        if (a->task->action_sound >= 0)
+            o->play_sound(c, a->task->action_sound);
         return 1;
     case 8:
         if (u->core.storage.carried_amount > 0.0f) {
@@ -240,7 +240,7 @@ int aoe_gather_action_set_state_ror(AoeGatherActionRor *a, uint8_t state,
                 notice(a, o, 0x203, 0x261, 0);
                 return failed(a, o);
             }
-            if (!o->start_move(c, a, a->drop_site, a->task->work_range,
+            if (!o->start_move(c, a, a->drop_site, a->task->action_range,
                                move_graphic(a, o), 0))
                 return failed(a, o);
             return 1;
@@ -256,7 +256,7 @@ int aoe_gather_action_set_state_ror(AoeGatherActionRor *a, uint8_t state,
         return aoe_gather_action_set_state_ror(a, 3, o);
     case 0x0b: case 0x0f:
         a->timer = 0.0f;
-        if (!o->start_move(c, a, NULL, a->task->work_range,
+        if (!o->start_move(c, a, NULL, a->task->action_range,
                            move_graphic(a, o), 1))
             return failed(a, o);
         return 1;
@@ -270,8 +270,8 @@ int aoe_gather_action_activate_ror(AoeGatherActionRor *a, int arg,
     AoeLiveUnit *u;
     if (!a || !a->base.unit || !a->task || !ops_ok(o)) return 0;
     u = a->base.unit;
-    if (u->core.storage.carried_resource_type != a->task->resource_in)
-        aoe_unit_set_carried_ror(u, a->task->resource_in, 0.0f);
+    if (u->core.storage.carried_resource_type != a->task->carry_resource)
+        aoe_unit_set_carried_ror(u, a->task->carry_resource, 0.0f);
     if (!arg || !a->base.target)
         return aoe_gather_action_set_state_ror(a, 3, o);
     if (own_drop_site_with_load(a, a->base.target)) {
@@ -348,11 +348,11 @@ static int work(AoeGatherActionRor *a, const AoeGatherActionOps *o) {
         amount = t->core.storage.carried_amount;
     else
         amount = (double)o->tick_seconds(c) * ut->work_rate *
-                 a->task->work_value1;
+                 a->task->work_amount;
     if (amount > t->core.storage.carried_amount)
         amount = t->core.storage.carried_amount;
-    mult = a->task->resource_multiplier != -1
-               ? o->player_attribute(c, u, a->task->resource_multiplier)
+    mult = a->task->rate_attribute != -1
+               ? o->player_attribute(c, u, a->task->rate_attribute)
                : 1.0;
     cap_f = (float)((double)ut->resource_capacity * mult);
     cap = cap_f;
@@ -390,7 +390,7 @@ static int arrive(AoeGatherActionRor *a, const AoeGatherActionOps *o) {
     }
     if (a->task->deposit_sound >= 0)
         o->play_sound(c, a->task->deposit_sound);
-    type = a->task->resource_out;
+    type = a->task->deposit_resource;
     if (type == -1) type = u->core.storage.carried_resource_type;
     o->deposit(c, u, type, u->core.storage.carried_amount, 1);
     aoe_unit_set_carried_ror(u, -1, 0.0f);
@@ -601,7 +601,7 @@ int aoe_hunt_action_set_state_ror(AoeGatherActionRor *a, uint8_t state,
         a->base.y = t->core.position.y3c;
         a->base.z = t->core.position.z40;
         if (t->core.state <= 2) return hunt_state(a, 0x0c, o);
-        if (!o->start_move(c, a, t, a->task->work_range, move_graphic(a, o),
+        if (!o->start_move(c, a, t, a->task->action_range, move_graphic(a, o),
                            0))
             return hunt_state(a, 0x0d, o);
         return 1;
@@ -611,11 +611,11 @@ int aoe_hunt_action_set_state_ror(AoeGatherActionRor *a, uint8_t state,
         return 1;
     case 7:
         a->timer = 0.0f;
-        if (u->core.storage.carried_resource_type != a->task->resource_in)
-            aoe_unit_set_carried_ror(u, a->task->resource_in, 0.0f);
-        show(a, o, o->graphic(c, a->task->working_graphic));
-        if (a->task->gathering_sound >= 0)
-            o->play_sound(c, a->task->gathering_sound);
+        if (u->core.storage.carried_resource_type != a->task->carry_resource)
+            aoe_unit_set_carried_ror(u, a->task->carry_resource, 0.0f);
+        show(a, o, o->graphic(c, a->task->work_graphic));
+        if (a->task->action_sound >= 0)
+            o->play_sound(c, a->task->action_sound);
         return 1;
     case 8:
         if (u->core.storage.carried_amount > 0.0f) {
@@ -635,7 +635,7 @@ int aoe_hunt_action_set_state_ror(AoeGatherActionRor *a, uint8_t state,
                 hunt_notice(a, o, 0x203, 0);
                 return hunt_rest(a, o);
             }
-            if (!o->start_move(c, a, a->drop_site, a->task->work_range,
+            if (!o->start_move(c, a, a->drop_site, a->task->action_range,
                                move_graphic(a, o), 0))
                 return hunt_state(a, 0x0d, o);
             return 1;
@@ -646,15 +646,15 @@ int aoe_hunt_action_set_state_ror(AoeGatherActionRor *a, uint8_t state,
         return hunt_state(a, 3, o);
     case 0x0b: case 0x0f:
         a->timer = 0.0f;
-        if (!o->start_move(c, a, NULL, a->task->work_range,
+        if (!o->start_move(c, a, NULL, a->task->action_range,
                            move_graphic(a, o), 1))
             return hunt_state(a, 0x0d, o);
         return 1;
     case 0x0c:
         a->timer = 0.0f;
         if (!o->start_attack(c, a, move_graphic(a, o),
-                             o->graphic(c, a->task->proceeding_graphic),
-                             a->task->work_range))
+                             o->graphic(c, a->task->action_graphic),
+                             a->task->action_range))
             return hunt_state(a, 0x0d, o);
         return 1;
     default:
@@ -705,11 +705,11 @@ static int hunt_work(AoeGatherActionRor *a, const AoeGatherActionOps *o) {
         amount = t->core.storage.carried_amount;
     else
         amount = (double)o->tick_seconds(c) * ut->work_rate *
-                 a->task->work_value1;
+                 a->task->work_amount;
     if (amount > t->core.storage.carried_amount)
         amount = t->core.storage.carried_amount;
-    mult = a->task->resource_multiplier != -1
-               ? o->player_attribute(c, u, a->task->resource_multiplier)
+    mult = a->task->rate_attribute != -1
+               ? o->player_attribute(c, u, a->task->rate_attribute)
                : 1.0;
     cap_f = (float)((double)ut->resource_capacity * mult);
     gained_f = (float)(mult * amount);
@@ -741,7 +741,7 @@ static int hunt_arrive(AoeGatherActionRor *a, const AoeGatherActionOps *o) {
     }
     if (a->task->deposit_sound >= 0)
         o->play_sound(c, a->task->deposit_sound);
-    type = a->task->resource_out;
+    type = a->task->deposit_resource;
     if (type == -1) type = u->core.storage.carried_resource_type;
     o->deposit(c, u, type, u->core.storage.carried_amount, 0);
     aoe_unit_set_carried_ror(u, -1, 0.0f);

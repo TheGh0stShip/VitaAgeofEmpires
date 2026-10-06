@@ -18,7 +18,7 @@ float aoe_combat_reload_ror(const DatUnit *attacker_template);
    attack list. Each attack's armor is the last matching armor class entry
    (template +0x102/+0x104), else base_armor (+0x100); the term
    (amount - armor) * terrain_multiplier * multiplier counts only when
-   positive. `terrain_multiplier` is world +0x54[terrain_defense_bonus]
+   positive. `terrain_multiplier` is world +0x54[terrain_table]
    [terrain under the target] when that table index is >= 0 and the unit
    has a tile, else 1.0. */
 double aoe_combat_damage_ror(const DatUnit *target_template,

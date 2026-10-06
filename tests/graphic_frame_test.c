@@ -11,7 +11,7 @@ static void synthetic(void) {
     AoeGraphicFrame result = {99, 99};
     assert(aoe_graphic_select_frame(&graphic, 4, 2, &result));
     assert(result.slp_frame == 14 && result.mirror_horizontal == 0);
-    graphic.mirror_mode = 5;
+    graphic.mirror_limit = 5;
     assert(aoe_graphic_select_frame(&graphic, 0, 2, &result));
     assert(result.slp_frame == 8 && result.mirror_horizontal == 1);
     assert(aoe_graphic_select_frame(&graphic, 2, 1, &result));
@@ -19,7 +19,7 @@ static void synthetic(void) {
     assert(aoe_graphic_select_frame(&graphic, 6, 0, &result));
     assert(result.slp_frame == 12 && result.mirror_horizontal == 1);
     graphic.angle_count = 2;
-    graphic.mirror_mode = 1;
+    graphic.mirror_limit = 1;
     assert(aoe_graphic_select_frame(&graphic, 1, 2, &result));
     assert(result.slp_frame == 2 && result.mirror_horizontal == 1);
     assert(aoe_graphic_select_frame(&graphic, 0, 99, &result));
@@ -166,7 +166,7 @@ static void union_bounds(void) {
     assert(aoe_graphic_union_part_bounds_ror(&g, 2, 5, 1, 2, fb, NULL, &x0, &y0, &x1, &y1));
     assert(bounds_frame == 6 && x0 == -3 && y0 == -28 && x1 == 11 && y1 == 4);
     /* mirrored angle negates and swaps x */
-    g.mirror_mode = 1;
+    g.mirror_limit = 1;
     x0 = y0 = x1 = y1 = 0;
     assert(aoe_graphic_union_part_bounds_ror(&g, 7, 1, 0, 0, fb, NULL, &x0, &y0, &x1, &y1));
     assert(x0 == -10 && x1 == 4 && y0 == -30 && y1 == 2);
@@ -264,14 +264,14 @@ static void slp_tests(void) {
     assert(aoe_graphic_pixel_test_slp_ror(&ops, &g, 2, -1, 0, 1)); /* frame 1 = count: kept, selects 0 */
     assert(aoe_graphic_pixel_test_slp_ror(&ops, &g, -1, -1, 0, 5)); /* past count: 0 */
     /* mirrored (two angles with mirror: angle 1 is frame 0 flipped): x negated */
-    g.mirror_mode = 1; g.angle_count = 2;
+    g.mirror_limit = 1; g.angle_count = 2;
     assert(aoe_graphic_pixel_test_slp_ror(&ops, &g, 1, -1, 1, 0));
     assert(!aoe_graphic_pixel_test_slp_ror(&ops, &g, -1, -1, 1, 0));
     /* mode 2: the box -2..3 x -1..0, mirrored -3..2 */
     g.selection_mode = 2;
     assert(aoe_graphic_pixel_test_slp_ror(&ops, &g, -3, 0, 1, 0));
     assert(!aoe_graphic_pixel_test_slp_ror(&ops, &g, 3, 0, 1, 0));
-    g.mirror_mode = 0; g.angle_count = 8;
+    g.mirror_limit = 0; g.angle_count = 8;
     assert(aoe_graphic_pixel_test_slp_ror(&ops, &g, 3, 0, 0, 0));
     assert(!aoe_graphic_pixel_test_slp_ror(&ops, &g, -3, 0, 0, 0));
     assert(!aoe_graphic_pixel_test_slp_ror(&ops, &g, 0, 1, 0, 0));

@@ -39,8 +39,8 @@ int main(void) {
                             destroy};
     DatUnit farm = {.present = 1, .type = 80, .id = 50, .work_rate = 2.0f,
                     .resource_capacity = 15};
-    DatUnitTask task = {.action_type = 0x15, .resource_in = 16,
-                        .work_value1 = 1.5f};
+    DatUnitTask task = {.action_type = 0x15, .carry_resource = 16,
+                        .work_amount = 1.5f};
     AoeLiveUnit u;
     AoeFarmActionRor a;
     uint8_t r = 9;

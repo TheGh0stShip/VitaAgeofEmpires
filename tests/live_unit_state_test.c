@@ -158,7 +158,7 @@ int main(void) {
     definition.type = 30;
     /* 0x0044c7b0: facet = (rotation - pi/4) * angles / 2pi + 0.5, wrapped
        by +angles below zero, truncated. */
-    DatGraphic animated = {.sequence_type = 2, .frame_count = 8,
+    DatGraphic animated = {.sequence_flags = 2, .frame_count = 8,
                            .angle_count = 8};
     assert(aoe_live_unit_low_state_ror(&unit, &animated, 1.25f));
     assert(unit.scenario_rotation == 1.25f && unit.scenario_frame == 1);
@@ -177,7 +177,7 @@ int main(void) {
     assert(aoe_live_unit_low_state_ror(&unit, &animated, 4.0f) &&
            unit.scenario_frame == 0);
     animated.angle_count = 8;
-    animated.sequence_type = 0;
+    animated.sequence_flags = 0;
     assert(aoe_live_unit_low_state_ror(&unit, &animated, 7.0f));
     assert(unit.scenario_frame == 0);
     definition.type = 99;

@@ -97,9 +97,9 @@ static float unit_speed(void *context, AoeLiveUnit *unit) {
     const DatGraphic *g = sprite_of(unit);
     (void)context;
     if (!unit->core.unit_template) return 0.0f;
-    if (g && g->speed_multiplier > 0.0f)
+    if (g && g->reference_speed > 0.0f)
         return (float)((double)unit->core.unit_template->speed *
-                       g->speed_multiplier);
+                       g->reference_speed);
     return unit->core.unit_template->speed;
 }
 
@@ -129,7 +129,7 @@ static int16_t overlay_terrain(void *context, uint8_t overlay) {
     AoeWorldMotionRor *m = context;
     const DatBorders *b = m->runtime->terrain_borders;
     if (!b || overlay >= b->count) return -1;
-    return b->borders[overlay].underlay_terrain;
+    return b->borders[overlay].base_terrain;
 }
 
 static int32_t lift(void *context, AoeLiveUnit *unit) {
@@ -360,9 +360,9 @@ static const AoeMovementSpriteRor *sprite(void *context, AoeLiveUnit *unit) {
     const DatGraphic *g = sprite_of(unit);
     (void)context;
     if (!g) return NULL;
-    info.speed_multiplier = g->speed_multiplier;
+    info.reference_speed = g->reference_speed;
     info.facets = (int16_t)g->angle_count;
-    info.flags = g->sequence_type;
+    info.flags = g->sequence_flags;
     return &info;
 }
 static float tick_seconds(void *context) {

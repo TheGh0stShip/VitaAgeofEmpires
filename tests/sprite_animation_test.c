@@ -48,7 +48,7 @@ static void test_speed_and_inactive(void) {
     assert(aoe_sprite_animation_tick(&state, &graphic, 1.0f, 1.0f));
     assert(state.frame == 4 && state.frame_changed == 0);
     graphic.frame_duration = 0.0f;
-    graphic.speed_multiplier = 0.0f;
+    graphic.reference_speed = 0.0f;
     graphic.sequence_flags = 1;
     assert(aoe_sprite_animation_tick(&state, &graphic, 0.5f, 1.0f));
     assert(state.period == 0.001f);

@@ -15,7 +15,7 @@ static void synthetic(void) {
     assert(aoe_sprite_instance_tick(&sprite, 2.0f, 1.0f));
     assert(sprite.animation.frame == 0);
 
-    graphic.sequence_type = 1;
+    graphic.sequence_flags = 1;
     assert(aoe_sprite_instance_init(&sprite, &graphic, NULL, 0, 0));
     assert(sprite.kind == 2 && sprite.animation.period == 0.5f);
     assert(sprite.animation.run_state == 1);
@@ -26,7 +26,7 @@ static void synthetic(void) {
     assert(aoe_sprite_instance_frame(&sprite, 2, &selected));
     assert(selected.slp_frame == 9 && selected.mirror_horizontal == 0);
 
-    graphic.sequence_type = 5;
+    graphic.sequence_flags = 5;
     AoeRng rng;
     aoe_rng_seed(&rng, 1);
     /* memcpy, not assignment: assignment leaves padding unspecified. */
@@ -46,7 +46,7 @@ static void synthetic(void) {
     assert(sprite.animation.frame == 0 && sprite.animation.period == 0.001f);
     graphic.frame_count = 4;
     assert(!aoe_sprite_instance_init(&sprite, &graphic, &rng, 0, 0));
-    graphic.sequence_type = 1;
+    graphic.sequence_flags = 1;
     assert(aoe_sprite_instance_init(&sprite, &graphic, NULL, 0, 0));
     assert(sprite.animation.period == 0.001f);
 }
@@ -71,9 +71,9 @@ static int real_dat(const char *path) {
             if (!aoe_sprite_instance_init(&sprite, graphic, &rng, 0, 0)) {
                 fprintf(stderr, "%s: unsupported graphic %u (%s), flags %u, "
                         "frames %u, duration %g, replay %g\n",
-                        path, i, graphic->name, graphic->sequence_type,
+                        path, i, graphic->name, graphic->sequence_flags,
                         graphic->frame_count, graphic->frame_duration,
-                        graphic->replay_delay);
+                        graphic->loop_delay);
                 ++invalid_count;
                 continue;
             }

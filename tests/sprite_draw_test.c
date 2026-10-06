@@ -384,7 +384,7 @@ static int real_draw(const char *dat_path, DrsArchive *const *archives,
     for (uint16_t i = 0; i < graphics.count; ++i) {
         const DatGraphic *graphic = &graphics.graphics[i];
         if (!graphic->present || !graphic->frame_count ||
-            !graphic->angle_count || graphic->mirror_mode ||
+            !graphic->angle_count || graphic->mirror_limit ||
             graphic->slp_id < 0) continue;
         AoeGraphicFrame selected;
         SlpFrame frame = {0};

@@ -172,9 +172,9 @@ int main(void) {
     villager.unit_class = builder.unit_class = 4;
     villager.task_swap_group = builder.task_swap_group = 1;
     villager_tasks[0] = (DatUnitTask){.action_type = 5, .target_class = 15,
-                                      .target_unit = -1, .target_terrain = -1};
+                                      .target_template = -1, .target_terrain = -1};
     builder_tasks[0] = (DatUnitTask){.action_type = 0x65, .target_class = -1,
-                                     .target_unit = -1, .target_terrain = -1,
+                                     .target_template = -1, .target_terrain = -1,
                                      .unbuilt_target = 1};
     villager.tasks = villager_tasks; villager.task_count = 1;
     builder.tasks = builder_tasks; builder.task_count = 1;

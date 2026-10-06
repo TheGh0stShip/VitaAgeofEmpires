@@ -18,7 +18,7 @@ int main(void) {
     const AoeSpriteInstance *w2;
 
     table[1] = (DatGraphic){.present = 1, .frame_count = 1};
-    table[2] = (DatGraphic){.present = 1, .frame_count = 4, .sequence_type = 1,
+    table[2] = (DatGraphic){.present = 1, .frame_count = 4, .sequence_flags = 1,
                             .frame_duration = 0.5f};
     aoe_rng_seed(&rng, 1);
     assert(aoe_sprite_runtime_init(&a, &rng, NULL, NULL, NULL));

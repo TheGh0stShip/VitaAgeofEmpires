@@ -77,9 +77,9 @@ static int pass(const DatUnit *a, const AoeLiveUnit *actor,
         int match = 0, allowed;
         switch (kind) {
         case MATCH_UNBUILT: match = candidate->unbuilt_target == 1; break;
-        case MATCH_UNIT: match = candidate->target_unit == t->id; break;
+        case MATCH_UNIT: match = candidate->target_template == t->id; break;
         case MATCH_CLASS: match = candidate->target_class == t->unit_class; break;
-        case MATCH_TARGETING: match = candidate->enable_targeting != 0; break;
+        case MATCH_TARGETING: match = candidate->any_flagged_target != 0; break;
         }
         if (!match) continue;
         if (!aoe_unit_task_allowed_ror(candidate, actor, target, ops,
@@ -179,7 +179,7 @@ int aoe_unit_task_select_tribe_with_ror(const DatUnit *list,
             target_owner == actor_owner)
             for (uint16_t i = 0; i < list->task_count; ++i) {
                 const DatUnitTask *c = &list->tasks[i];
-                if (c->resource_in == carried &&
+                if (c->carry_resource == carried &&
                     (c->action_type == 5 || c->action_type == 0x6e ||
                      c->action_type == 0x6f)) {
                     *task = c;

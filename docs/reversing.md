@@ -411,7 +411,7 @@ the tile drawer. `terrain_resolve_draw_id` reproduces this single-step rule:
 the real beach ID 2 draws through desert ID 6, and forest ID 10 through
 grass ID 0 in both DATs. The drawer `0x00516710` (base `0x004ba930`) first
 checks the selected terrain's enabled/art state. For an available style-0
-border, it uses the border record's `draw_terrain` byte at offset `+0x59a`
+border, it uses the border record's `draw_base` byte at offset `+0x59a`
 to decide whether the base terrain is drawn before the border; all installed
 style-0 borders set it to zero. Style-1 borders retain the base and draw
 component frames in mask-bit order 1, 4, 8, 2 (frame patterns 1, 3, 2, 4).
@@ -1247,7 +1247,7 @@ as `aoe_unit_order_ror`:
   `0x00406264/0x00406230`.
 - **Attack arguments.** The attack constructors take task range and
   template `min_range` (`+0x138`), `projectile_unit_id` (`+0x124`) and
-  `frame_delay` (`+0x12a`).
+  `fire_frame` (`+0x12a`).
 
 The move fallback `+0x9c` = `0x00405db0` has three steps:
 - It ignores a self-target, and it stops when the head action's `+0x30`
@@ -1460,7 +1460,7 @@ lifted before each move and restored after.
   - Border records sit at map `+0x338c` with stride 0x5a0 (the drawing code
     reads byte `+0x338c` and short `+0x392a` per border). The pathfinder's
     `+0x3928` short is therefore border offset `+0x59c`, the last-but-one
-    short (`underlay_terrain`). That field name is inferred from the record
+    short (`base_terrain`). That field name is inferred from the record
     layout.
   - Terrain passability and the terrain speed multiplier both read the DAT
     terrain restriction row of template `+0x66`.
@@ -2663,7 +2663,7 @@ a substitute for the preceding action, movement, or combat work.
 Graphic frame selection before drawing is RoR `0x004a6d10` and base
 `0x004b2e60`. It uses runtime graphic frame count `+0x5e`, angle count
 `+0x60`, and mirror byte `+0x74`; these correspond to the parsed DAT
-`frame_count`, `angle_count`, and `mirror_mode`. Without mirroring, the SLP
+`frame_count`, `angle_count`, and `mirror_limit`. Without mirroring, the SLP
 index is `angle × frame_count + animation_frame`. Mirrored graphics use
 the original quarter-angle offset and reverse angle mapping, with a special
 two-angle case that shares one stored frame and mirrors the second angle.
@@ -2900,7 +2900,7 @@ virtual `+0xb8`; otherwise template float `+0x80` decays the amount by world
 delta and clamps it to zero. State 7 sets state 8. State 8 returns 1, or 2
 when template byte `+0xa4` is nonzero. The template reader at disc
 `0x00441fa0` proves the corresponding serialized fields, now retained as
-`DatUnit.undead_graphic`, `undead_mode`, `decay_rate`, and `dying_sound`.
+`DatUnit.state6_graphic`, `state6_mode`, `decay_rate`, and `dying_sound`.
 Class virtuals and sound delivery remain mandatory callback boundaries.
 `aoe_live_unit_update_predicate_ror` composes these branches in their original
 order. `aoe_live_unit_player_update_step_ror` installs it in the translated

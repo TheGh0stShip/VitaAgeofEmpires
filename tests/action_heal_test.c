@@ -95,11 +95,11 @@ int main(void) {
     boat.core.unit_template = &b_t;
     boat.core.unit_id = 5;
     boat.core.state = 2;
-    task.work_value1 = 1.0f;
-    task.work_range = 2.0f;
-    task.moving_graphic = 1;
-    task.proceeding_graphic = 2;
-    task.gathering_sound = -1;
+    task.work_amount = 1.0f;
+    task.action_range = 2.0f;
+    task.approach_graphic = 1;
+    task.action_graphic = 2;
+    task.action_sound = -1;
 
     /* Walk (range 0.4, quiet after push), face, heal 1 per update; resource
        56 at or below 0.1 is ignored. */

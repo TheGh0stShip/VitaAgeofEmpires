@@ -70,7 +70,7 @@ int aoe_artifact_action_init_point_ror(AoeArtifactActionRor *a,
 static int walk(AoeArtifactActionRor *a, const AoeObjectActionOps *o) {
     void *c = o->move.context;
     o->sub_clear(c, &a->base);
-    if (!o->start_move(c, &a->base, o->graphic(c, a->task->moving_graphic)))
+    if (!o->start_move(c, &a->base, o->graphic(c, a->task->approach_graphic)))
         return 1;
     return aoe_artifact_action_set_state_ror(a, 6, o);
 }

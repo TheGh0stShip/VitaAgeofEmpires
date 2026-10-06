@@ -532,8 +532,8 @@ void aoe_movement_update_facet_ror(AoeLiveUnit *unit, const AoeMovementRor *m,
 /* 0x0044ce0c / 0x0044d9db: template speed scaled by a positive sprite
    speed multiplier. */
 static float base_speed(const DatUnit *tmpl, const AoeMovementSpriteRor *sp) {
-    if (sp && sp->speed_multiplier > 0.0f)
-        return (float)((double)tmpl->speed * sp->speed_multiplier);
+    if (sp && sp->reference_speed > 0.0f)
+        return (float)((double)tmpl->speed * sp->reference_speed);
     return tmpl->speed;
 }
 

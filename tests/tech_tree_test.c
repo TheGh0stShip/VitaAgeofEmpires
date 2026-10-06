@@ -113,7 +113,7 @@ int main(void) {
         assert(u->base_armor == 88);
         /* Attribute 18 add/multiply store. */
         assert(aoe_template_attribute_ror(u, AOE_ATTRIBUTE_MUL, 18, 3.0f));
-        assert(u->terrain_defense_bonus == 3);
+        assert(u->terrain_table == 3);
         /* Tribe 100: deductible costs; 101: the rest and storage. */
         assert(aoe_template_attribute_ror(u, AOE_ATTRIBUTE_MUL, 100, 0.5f));
         assert(u->costs[0].amount == 20 && u->costs[1].amount == 1);

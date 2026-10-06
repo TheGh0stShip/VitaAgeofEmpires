@@ -15,9 +15,9 @@ static void invalidate(void *context) {
 
 int main(void) {
     DatGraphic standing = {.present = 1, .frame_count = 1,
-                           .layer = 0, .sequence_type = 0};
+                           .layer = 0, .sequence_flags = 0};
     DatGraphic walking = {.present = 1, .frame_count = 4,
-                          .layer = 1, .sequence_type = 1,
+                          .layer = 1, .sequence_flags = 1,
                           .frame_duration = 0.5f};
     AoeRng rng;
     aoe_rng_seed(&rng, 1);

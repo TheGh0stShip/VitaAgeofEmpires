@@ -46,21 +46,21 @@ static void set_home(AoeTradeActionRor *a, AoeLiveUnit *site,
 /* 0x00403b00 / 0x00403b30. */
 static int carrying(const AoeTradeActionRor *a) {
     const AoeLiveUnit *u = a->base.unit;
-    int16_t in = a->task->resource_in;
+    int16_t in = a->task->carry_resource;
     return in != -1 && u->core.storage.carried_resource_type == in &&
            aoe_ftol32(u->core.storage.carried_amount) > 0;
 }
 static const void *move_graphic(AoeTradeActionRor *a,
                                 const AoeTradeActionOps *o) {
     const void *g = carrying(a) ? o->graphic(o->move.context,
-                                             a->task->carrying_graphic)
+                                             a->task->carry_graphic)
                                 : NULL;
-    return g ? g : o->graphic(o->move.context, a->task->moving_graphic);
+    return g ? g : o->graphic(o->move.context, a->task->approach_graphic);
 }
 static const void *idle_graphic(AoeTradeActionRor *a,
                                 const AoeTradeActionOps *o) {
     const void *g = carrying(a) ? o->graphic(o->move.context,
-                                             a->task->carrying_graphic)
+                                             a->task->carry_graphic)
                                 : NULL;
     return g ? g
              : o->graphic(o->move.context,
@@ -153,7 +153,7 @@ int aoe_trade_action_set_state_ror(AoeTradeActionRor *a, uint8_t state,
     case 4:
         if (!t) return aoe_trade_action_set_state_ror(a, 0x0d, o);
         follow(a);
-        if (!o->start_move(c, &a->base, t, a->task->work_range,
+        if (!o->start_move(c, &a->base, t, a->task->action_range,
                            move_graphic(a, o), 0))
             return aoe_trade_action_set_state_ror(a, 0x0d, o);
         return 1;
@@ -161,9 +161,9 @@ int aoe_trade_action_set_state_ror(AoeTradeActionRor *a, uint8_t state,
         show(a, o, move_graphic(a, o));
         return 1;
     case 7:
-        show(a, o, o->graphic(c, a->task->proceeding_graphic));
-        if (a->task->gathering_sound >= 0)
-            o->play_sound(c, a->task->gathering_sound);
+        show(a, o, o->graphic(c, a->task->action_graphic));
+        if (a->task->action_sound >= 0)
+            o->play_sound(c, a->task->action_sound);
         if (t) {
             a->origin_x = t->core.position.x38;
             a->origin_y = t->core.position.y3c;

@@ -102,8 +102,8 @@ int main(void) {
         assert(civilizations.civs[0].units[0].unit_class == 3);
         assert(civilizations.civs[0].units[0].standing_graphic == 413);
         assert(civilizations.civs[0].units[0].dying_graphic == 414);
-        assert(civilizations.civs[0].units[0].undead_graphic == 415);
-        assert(civilizations.civs[0].units[0].undead_mode == 1);
+        assert(civilizations.civs[0].units[0].state6_graphic == 415);
+        assert(civilizations.civs[0].units[0].state6_mode == 1);
         assert(civilizations.civs[0].units[0].elevation_mode == 1);
         assert(civilizations.civs[0].units[0].decay_rate == 0.5f);
         assert(civilizations.civs[0].units[0].selection_sound == 50);
@@ -177,7 +177,7 @@ int main(void) {
         unit = dat_find_unit(&civilizations, 0, 0);
         assert(unit && unit->type == 80 && unit->unit_class == 4);
         assert(unit->task_count == 1 && unit->tasks[0].action_type == 101);
-        assert(unit->tasks[0].work_range == 2.5f);
+        assert(unit->tasks[0].action_range == 2.5f);
         assert(unit->attack_count == 1 && unit->attacks[0].class_id == 4);
         assert(unit->attacks[0].amount == 7);
         assert(unit->armor_count == 1 && unit->armors[0].amount == 2);
@@ -185,10 +185,10 @@ int main(void) {
         assert(unit->costs[0].amount == 50 && unit->costs[0].paid == 1);
         assert(unit->train_time == 20);
         assert(unit->construction_graphic == 600);
-        assert(unit->building_adjacent_mode == 3 && unit->building_angle == 7);
+        assert(unit->building_adjacent_mode == 3 && unit->building_frame == 7);
         assert(unit->disappears_when_built == 1 && unit->stack_unit_id == 42);
-        assert(unit->foundation_terrain == 9 && unit->old_terrain == 10);
-        assert(unit->building_research_id == 77 && unit->completion_sound == 88);
+        assert(unit->foundation_terrain == 9 && unit->field_176 == 10);
+        assert(unit->building_research_id == 77 && unit->sound_164 == 88);
         dat_free_civilizations(&civilizations);
         civ_blob.size--;
         assert(!dat_parse_civilizations(&civ_blob, &before_civs,

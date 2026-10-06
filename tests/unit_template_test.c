@@ -182,7 +182,7 @@ int main(void) {
         assert(back.damage_count == 1 && back.damage[0].sprite == sprites[6]);
         assert(back.sound_3c == sounds[3] && back.sound_44 == sounds[1]);
         assert(back.speed == 1.4f && back.sprite_bc == sprites[4] && back.rotation == 0.5f);
-        assert(back.search_radius == 7.0f && back.sound_f0 == sounds[1] && back.default_task == 2);
+        assert(back.field_e0 == 7.0f && back.sound_f0 == sounds[1] && back.default_task == 2);
         assert(back.sprite_fc == sprites[7] && back.field_100 == 4 && back.attacks[0].amount == 4);
         assert(back.max_attack == 4 && back.max_armor == 1 && back.field_140 == 1.5f);
         assert(back.recycle == 0);

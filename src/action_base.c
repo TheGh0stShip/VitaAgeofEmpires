@@ -65,8 +65,8 @@ int aoe_fly_action_set_state_ror(AoeBaseActionRor *a, uint8_t st,
         return 1;
     }
     a->timer = (float)(scaled(o, 10) + 5);
-    g = o->graphic(c, st == 4 ? a->task->moving_graphic
-                              : a->task->proceeding_graphic);
+    g = o->graphic(c, st == 4 ? a->task->approach_graphic
+                              : a->task->action_graphic);
     show(a, o, g ? g : standing(a, o));
     return 1;
 }
@@ -99,7 +99,7 @@ int aoe_fly_action_update_ror(AoeBaseActionRor *a, const AoeBaseActionOps *o,
         a->base.x = (float)scaled(o, o->map_width(c));
         a->base.y = (float)scaled(o, o->map_height(c));
         a->base.z = u->core.position.z40;
-        if (!o->start_move(c, &a->base, a->task->work_range,
+        if (!o->start_move(c, &a->base, a->task->action_range,
                            u->graphic.current_graphic, -1))
             return aoe_fly_action_set_state_ror(a, 3, o);
         return aoe_fly_action_set_state_ror(a, 4, o);
@@ -192,8 +192,8 @@ int aoe_enter_action_set_state_ror(AoeBaseActionRor *a, uint8_t st,
         show(a, o, standing(a, o));
         return 1;
     case 4:
-        if (!o->start_move(c, &a->base, a->task->work_range,
-                           o->graphic(c, a->task->moving_graphic), 0))
+        if (!o->start_move(c, &a->base, a->task->action_range,
+                           o->graphic(c, a->task->approach_graphic), 0))
             return aoe_enter_action_set_state_ror(a, 0x0d, o);
         return 1;
     default:
@@ -212,7 +212,7 @@ static int try_enter(AoeBaseActionRor *a, const AoeBaseActionOps *o,
     void *c = o->move.context;
     *entered = 0;
     if (!(o->distance(c, a->base.unit, a->base.target) - 1.0 <=
-          (double)a->task->work_range))
+          (double)a->task->action_range))
         return 1;
     *entered = 1;
     (void)o->enter(c, a->base.unit, a->base.target);
@@ -343,7 +343,7 @@ int aoe_explore_action_set_state_ror(AoeBaseActionRor *a, uint8_t st,
         show(a, o, standing(a, o));
         return 1;
     case 0x0b: {
-        const void *g = a->task ? o->graphic(c, a->task->moving_graphic)
+        const void *g = a->task ? o->graphic(c, a->task->approach_graphic)
                                 : NULL;
         if (!g)
             g = o->graphic(c, a->base.unit->core.unit_template->walking_graphic);
@@ -436,7 +436,7 @@ int aoe_transport_action_set_state_ror(AoeBaseActionRor *a, uint8_t st,
         return 1;
     }
     if (st == 4 || st == 0x0b) {
-        const void *g = a->task ? o->graphic(c, a->task->moving_graphic)
+        const void *g = a->task ? o->graphic(c, a->task->approach_graphic)
                                 : standing(a, o);
         if (!o->start_move(c, &a->base, 0.3f, g, 0))
             return aoe_transport_action_set_state_ror(a, 2, o);

@@ -88,21 +88,21 @@ int aoe_heal_action_set_state_ror(AoeHealActionRor *a, uint8_t state,
     case 4:
         if (a->base.target) follow(a);
         if (!o->start_move(c, &a->base, a->base.target, 0.4f,
-                           o->graphic(c, a->task->moving_graphic), 0))
+                           o->graphic(c, a->task->approach_graphic), 0))
             return aoe_heal_action_set_state_ror(a, 0x0d, o);
         return 1;
     case 6:
         if (a->base.target) follow(a);
-        show(a, o, a->task->moving_graphic);
+        show(a, o, a->task->approach_graphic);
         return 1;
     case 7:
-        show(a, o, a->task->proceeding_graphic);
-        if (a->task->gathering_sound >= 0)
-            o->play_sound(c, a->task->gathering_sound);
+        show(a, o, a->task->action_graphic);
+        if (a->task->action_sound >= 0)
+            o->play_sound(c, a->task->action_sound);
         return 1;
     case 0x0b:
         if (!o->start_move(c, &a->base, NULL, 0.0f,
-                           o->graphic(c, a->task->moving_graphic), 1))
+                           o->graphic(c, a->task->approach_graphic), 1))
             return aoe_heal_action_set_state_ror(a, 0x0d, o);
         return 1;
     default:
@@ -147,7 +147,7 @@ static int work(AoeHealActionRor *a, const AoeHealActionOps *o) {
         a->base.y == t->core.position.y3c) {
         float amount = (float)((double)o->tick_seconds(c) *
                                u->core.unit_template->work_rate *
-                               a->task->work_value1);
+                               a->task->work_amount);
         float rate = o->heal_rate(c, u);
         if (!((double)rate <= (double)0.1f)) amount = amount * rate;
         switch (o->heal(c, t, amount)) {
@@ -161,7 +161,7 @@ static int work(AoeHealActionRor *a, const AoeHealActionOps *o) {
         }
     }
     d = o->distance(c, u, t);
-    if (d <= (double)a->task->work_range || d <= 0.5) {
+    if (d <= (double)a->task->action_range || d <= 0.5) {
         follow(a);
         return 1;
     }

@@ -244,11 +244,11 @@ int dat_parse_graphics(const DatBlob *blob, const DatSounds *sounds,
         uint8_t attack_sound_used = item[56];
         graphic->frame_count = le16(item + 57);
         graphic->angle_count = le16(item + 59);
-        graphic->speed_multiplier = lefloat(item + 61);
+        graphic->reference_speed = lefloat(item + 61);
         graphic->frame_duration = lefloat(item + 65);
-        graphic->replay_delay = lefloat(item + 69);
-        graphic->sequence_type = item[73];
-        graphic->mirror_mode = item[76];
+        graphic->loop_delay = lefloat(item + 69);
+        graphic->sequence_flags = item[73];
+        graphic->mirror_limit = item[76];
         offset += 77;
         if (graphic->delta_count > 256 || graphic->angle_count > 256 ||
             attack_sound_used > 1 || graphic->delta_count > (blob->size - offset) / 16)
@@ -340,7 +340,7 @@ int dat_parse_terrains(const DatBlob *blob, const DatIntro *intro,
         const uint8_t *item = blob->bytes + offset + (size_t)i * TERRAIN_SIZE;
         DatTerrain *terrain = &terrains->terrains[i];
         terrain->enabled = item[0];
-        terrain->random = item[1];
+        terrain->field_01 = item[1];
         if (terrain->enabled > 1 || (terrain->enabled &&
             (!memchr(item + 2, 0, 13) || !memchr(item + 15, 0, 13))))
             goto fail;
@@ -350,13 +350,13 @@ int dat_parse_terrains(const DatBlob *blob, const DatIntro *intro,
         terrain->shape_pointer_placeholder = le32(item + 32);
         terrain->sound_id = (int32_t)le32(item + 36);
         memcpy(terrain->map_colors, item + 40, 5);
-        terrain->passable_terrain = (int8_t)item[45];
-        terrain->impassable_terrain = (int8_t)item[46];
-        terrain->animated = item[47];
-        terrain->animation_frame_count = (int16_t)le16(item + 48);
-        terrain->pause_frame_count = (int16_t)le16(item + 50);
-        terrain->animation_interval = lefloat(item + 52);
-        terrain->animation_pause = lefloat(item + 56);
+        terrain->field_2d = (int8_t)item[45];
+        terrain->field_2e = (int8_t)item[46];
+        terrain->field_2f = item[47];
+        terrain->field_30 = (int16_t)le16(item + 48);
+        terrain->field_32 = (int16_t)le16(item + 50);
+        terrain->field_34 = lefloat(item + 52);
+        terrain->field_38 = lefloat(item + 56);
         for (unsigned j = 0; j < 19; ++j) {
             const uint8_t *frame = item + 70 + j * 6;
             terrain->elevation_frames[j].frame_count = (int16_t)le16(frame);
@@ -369,12 +369,12 @@ int dat_parse_terrains(const DatBlob *blob, const DatIntro *intro,
         for (unsigned j = 0; j < 32; ++j)
             terrain->borders[j] = (int16_t)le16(item + 190 + j * 2);
         for (unsigned j = 0; j < 30; ++j) {
-            terrain->terrain_unit_ids[j] = (int16_t)le16(item + 254 + j * 2);
-            terrain->terrain_unit_density[j] = (int16_t)le16(item + 314 + j * 2);
-            terrain->terrain_placement_flags[j] = item[374 + j];
+            terrain->object_ids[j] = (int16_t)le16(item + 254 + j * 2);
+            terrain->object_amounts[j] = (int16_t)le16(item + 314 + j * 2);
+            terrain->object_modes[j] = item[374 + j];
         }
-        terrain->terrain_units_used_count = le16(item + 404);
-        if (terrain->terrain_units_used_count > 30) goto fail;
+        terrain->object_count = le16(item + 404);
+        if (terrain->object_count > 30) goto fail;
         terrains->enabled_count += terrain->enabled;
     }
     if (terrains->enabled_count != intro->terrain_count) goto fail;
@@ -409,7 +409,7 @@ int dat_parse_borders(const DatBlob *blob, const DatTerrains *terrains,
         const uint8_t *item = blob->bytes + offset + (size_t)i * BORDER_SIZE;
         DatBorder *border = &borders->borders[i];
         border->enabled = item[0];
-        border->random = item[1];
+        border->field_01 = item[1];
         /* Names may occupy all 13 bytes (e.g. Grass/desert2). */
         if (border->enabled > 1) goto fail;
         memcpy(border->name, item + 2, 13);
@@ -418,16 +418,16 @@ int dat_parse_borders(const DatBlob *blob, const DatTerrains *terrains,
         border->shape_pointer_placeholder = le32(item + 32);
         border->sound_id = (int32_t)le32(item + 36);
         memcpy(border->map_colors, item + 40, 3);
-        border->animated = item[43];
-        border->animation_frame_count = (int16_t)le16(item + 44);
-        border->pause_frame_count = (int16_t)le16(item + 46);
-        border->animation_interval = lefloat(item + 48);
-        border->animation_pause = lefloat(item + 52);
-        border->frame = (int16_t)le16(item + 56);
-        border->draw_frame = (int16_t)le16(item + 58);
-        border->animation_last = lefloat(item + 60);
-        border->frame_changed = item[64];
-        border->drawn = item[65];
+        border->field_2b = item[43];
+        border->field_2c = (int16_t)le16(item + 44);
+        border->field_2e = (int16_t)le16(item + 46);
+        border->field_30 = lefloat(item + 48);
+        border->field_34 = lefloat(item + 52);
+        border->field_38 = (int16_t)le16(item + 56);
+        border->field_3a = (int16_t)le16(item + 58);
+        border->field_3c = lefloat(item + 60);
+        border->field_40 = item[64];
+        border->field_41 = item[65];
         for (unsigned shape = 0; shape < 19; ++shape)
             for (unsigned variant = 0; variant < 12; ++variant) {
                 const uint8_t *frame = item + 66 + (shape * 12 + variant) * 6;
@@ -436,8 +436,8 @@ int dat_parse_borders(const DatBlob *blob, const DatTerrains *terrains,
                 out->angle_count = (int16_t)le16(frame + 2);
                 out->frame_start = (int16_t)le16(frame + 4);
             }
-        border->draw_terrain = (int16_t)le16(item + 1434);
-        border->underlay_terrain = (int16_t)le16(item + 1436);
+        border->draw_base = (int16_t)le16(item + 1434);
+        border->base_terrain = (int16_t)le16(item + 1436);
         border->border_style = (int16_t)le16(item + 1438);
         borders->enabled_count += border->enabled;
     }

@@ -480,11 +480,11 @@ int aoe_live_unit_update_normal_state_ror(
         if (unit->core.storage.carried_resource_type == -1 ||
             unit->core.storage.carried_amount <= ops->comparison_epsilon) {
             if (!ops->set_state) return 0;
-            if (definition->undead_mode) {
+            if (definition->state6_mode) {
                 if (!ops->select_graphic) return 0;
                 if (!ops->set_state(ops->context, unit, 6) ||
                     !ops->select_graphic(ops->context, unit,
-                                         definition->undead_graphic)) return 0;
+                                         definition->state6_graphic)) return 0;
             } else {
                 if (!ops->terminal_cleanup) return 0;
                 if (!ops->set_state(ops->context, unit, 7) ||
@@ -938,7 +938,7 @@ int aoe_live_unit_bind_building_update_ror(
     memset(queue_actions,0,sizeof(*queue_actions));
     building->unit_template=unit_template;
     building->state=unit->core.state;
-    building->angle=(uint8_t)unit_template->building_angle;
+    building->angle=(uint8_t)unit_template->building_frame;
     building->graphic_angles=graphic ? (int16_t)graphic->angle_count : 0;
     building->build_time=unit_template->train_time;
     building->queue_enabled=1;
@@ -1099,7 +1099,7 @@ int aoe_live_unit_building_completion_visual_ror(
         !ops->select_graphic(ops->context,unit,
                              unit_template->standing_graphic))
         return 0;
-    unit->building_update->angle=(uint8_t)unit_template->building_angle;
+    unit->building_update->angle=(uint8_t)unit_template->building_frame;
     if (unit_template->building_adjacent_mode)
         ops->complete_adjacent(ops->context,unit);
     return 1;
@@ -1998,7 +1998,7 @@ int aoe_live_unit_building_foundation_ror(
     }
     b->elapsed_build_time = 0.0f;
     unit->core.hit_points = 1.0f;
-    unit->core.scenario_frame = (uint8_t)t->building_angle;
+    unit->core.scenario_frame = (uint8_t)t->building_frame;
     b->angle = unit->core.scenario_frame;
     return 1;
 }

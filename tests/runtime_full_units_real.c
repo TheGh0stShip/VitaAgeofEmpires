@@ -73,8 +73,8 @@ int main(int argc, char **argv) {
                                    (uint32_t)tile_x]].frame_count <= 0)
             continue;
         for (uint16_t j = 0;
-             j < terrains.terrains[0].terrain_units_used_count; ++j)
-            if (terrains.terrains[0].terrain_unit_ids[j] ==
+             j < terrains.terrains[0].object_count; ++j)
+            if (terrains.terrains[0].object_ids[j] ==
                 candidate->core.unit_template->id) {
                 terrain_removed = candidate;
                 break;
@@ -204,7 +204,7 @@ int main(int argc, char **argv) {
     AoeTerrainTransitionOps terrain_ops;
     float terrain_x = 0.0f, terrain_y = 0.0f;
     int terrain_found = 0;
-    int16_t terrain_spawn_id = terrains.terrains[0].terrain_unit_ids[0];
+    int16_t terrain_spawn_id = terrains.terrains[0].object_ids[0];
     if (!aoe_scenario_runtime_terrain_transition_ops_ror(
             &runtime, &terrain_ops)) goto done;
     for (uint32_t py = 0; py < runtime.map.height && !terrain_found; ++py)

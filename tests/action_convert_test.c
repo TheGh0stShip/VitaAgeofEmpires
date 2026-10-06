@@ -131,11 +131,11 @@ int main(void) {
     tc.core.unit_id = 5;
     tc.core.state = 2;
     tc.runtime_owner_index = 2;
-    task.work_value1 = 0.3f;
-    task.work_value2 = 3.0f;
-    task.moving_graphic = 1;
-    task.proceeding_graphic = 2;
-    task.gathering_sound = -1;
+    task.work_amount = 0.3f;
+    task.work_timer = 3.0f;
+    task.approach_graphic = 1;
+    task.action_graphic = 2;
+    task.action_sound = -1;
 
     /* Faith below 100: fail (13) with event 0x76. */
     assert(aoe_convert_action_init_target_ror(&a, &priest, &task, &man,

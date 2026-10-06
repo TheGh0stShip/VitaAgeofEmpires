@@ -6,7 +6,7 @@
 int main(void) {
     char name0[] = "Tree";
     char name2[] = "Town Center";
-    DatUnitTask tasks[] = {{.task_type = 11, .work_value1 = 2.5f}};
+    DatUnitTask tasks[] = {{.field_00 = 11, .work_amount = 2.5f}};
     DatUnitAttackArmor attacks[] = {{.class_id = 4, .amount = 12}};
     DatUnitAttackArmor armors[] = {{.class_id = 3, .amount = 5}};
     DatUnit units[3] = {
@@ -35,13 +35,13 @@ int main(void) {
     assert(!strcmp(tree->name, "Tree") && !strcmp(building->name, "Town Center"));
     name0[0] = 'F';
     name2[0] = 'B';
-    tasks[0].task_type = 99;
+    tasks[0].field_00 = 99;
     attacks[0].amount = 99;
     armors[0].amount = 99;
     units[2].hit_points = 1;
     assert(!strcmp(tree->name, "Tree"));
     assert(!strcmp(building->name, "Town Center"));
-    assert(building->tasks[0].task_type == 11 &&
+    assert(building->tasks[0].field_00 == 11 &&
            building->attacks[0].amount == 12 &&
            building->armors[0].amount == 5 && building->hit_points == 400);
     assert(!aoe_player_templates_clone_civ(&civ, &player));

@@ -78,7 +78,7 @@ typedef struct AoeTemplateRor {
     /* 40 */
     void *tasks;                        /* +0xd8 */
     int16_t default_task;               /* +0xdc */
-    float search_radius, work_rate;     /* +0xe0, +0xe4 */
+    float field_e0, work_rate;          /* +0xe0, +0xe4 */
     int16_t drop_site[2];               /* +0xe8, +0xea */
     uint8_t field_ec;
     void *sound_f0, *sound_f4;

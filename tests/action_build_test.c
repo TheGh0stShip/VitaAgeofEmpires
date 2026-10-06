@@ -95,11 +95,11 @@ int main(void) {
     s_t.id = 70;
     s_t.hit_points = 100;
     s_t.size[0] = s_t.size[1] = 1.0f;
-    task.work_value1 = 2.0f;
-    task.work_range = 0.3f;
-    task.moving_graphic = 1;
-    task.proceeding_graphic = 2;
-    task.gathering_sound = 5;
+    task.work_amount = 2.0f;
+    task.action_range = 0.3f;
+    task.approach_graphic = 1;
+    task.action_graphic = 2;
+    task.action_sound = 5;
 
     /* Another player's foundation is not taken as the target. */
     site.runtime_owner_index = 2;

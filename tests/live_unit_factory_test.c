@@ -499,8 +499,8 @@ int main(void) {
     assert(live.core.storage.carried_amount == 7.0f &&
            update_trace.count == 0);
 
-    unit.undead_mode = 1;
-    unit.undead_graphic = 9;
+    unit.state6_mode = 1;
+    unit.state6_graphic = 9;
     live.core.state = 5;
     live.core.storage.carried_amount = 0.0f;
     assert(aoe_live_unit_update_normal_state_ror(
@@ -510,7 +510,7 @@ int main(void) {
            update_trace.graphic_id == 9);
 
     memset(&update_trace, 0, sizeof(update_trace));
-    unit.undead_mode = 0;
+    unit.state6_mode = 0;
     live.core.state = 3;
     live.core.storage.carried_resource_type = -1;
     assert(aoe_live_unit_update_normal_state_ror(
@@ -682,7 +682,7 @@ int main(void) {
     unit.hit_points = 25;
     unit.state_notify_mode = 0;
     unit.state_effect_mode = 0;
-    graphic.sequence_type = 3; /* angle-sequenced and animated */
+    graphic.sequence_flags = 3; /* angle-sequenced and animated */
     graphic.frame_count = 4;
     assert(aoe_live_unit_construct_ror(&live, &unit, &graphics,
                                         &resource_state, &world, &owner,
@@ -787,7 +787,7 @@ int main(void) {
     aoe_live_unit_destroy_ror(&live,&owner,&world,&vision);
 
     /* Setter state 2 completion prefix preserves RNG and visual ordering. */
-    unit.train_time=50; unit.building_angle=7;
+    unit.train_time=50; unit.building_frame=7;
     unit.building_adjacent_mode=1; unit.disappears_when_built=0;
     unit.size[0]=1.5f; unit.size[1]=0.75f;
     unit.stack_unit_id=42; unit.foundation_terrain=9;

@@ -358,9 +358,9 @@ static int can_attack(void *c, AoeLiveUnit *u, AoeLiveUnit *t, float x,
     if (!g)
         return aoe_movement_face_ror(u, m, NULL, x, y, w->world_ms,
                                      &s->last_turn);
-    sp.speed_multiplier = g->speed_multiplier;
+    sp.reference_speed = g->reference_speed;
     sp.facets = (int16_t)g->angle_count;
-    sp.flags = g->sequence_type;
+    sp.flags = g->sequence_flags;
     return aoe_movement_face_ror(u, m, &sp, x, y, w->world_ms,
                                  &s->last_turn);
 }
@@ -415,7 +415,7 @@ static int16_t sprite_frames(void *c, AoeLiveUnit *u) {
 static uint8_t sprite_flags(void *c, AoeLiveUnit *u) {
     const DatGraphic *g = u->graphic.current_graphic;
     (void)c;
-    return g ? g->sequence_type : 0;
+    return g ? g->sequence_flags : 0;
 }
 
 /* Combat hit callbacks. */
@@ -563,7 +563,7 @@ static void capture_launcher(void *c, AoeLiveUnit *p, AoeLiveUnit *l) {
     }
     copy->blast_width = lt->blast_width;
     copy->blast_level = lt->blast_level;
-    copy->terrain_defense_bonus = lt->terrain_defense_bonus;
+    copy->terrain_table = lt->terrain_table;
     f->captured = copy;
     f->original = p->core.unit_template;
     p->core.unit_template = copy;
@@ -580,8 +580,8 @@ static void set_facing(void *c, AoeLiveUnit *p, float angle) {
     if (!m) return;
     m->facing = angle; /* +0xb4 = 0x0044be40 */
     if (g) {
-        AoeMovementSpriteRor sp = {g->speed_multiplier,
-                                   (int16_t)g->angle_count, g->sequence_type};
+        AoeMovementSpriteRor sp = {g->reference_speed,
+                                   (int16_t)g->angle_count, g->sequence_flags};
         aoe_movement_update_facet_ror(p, m, &sp);
     }
 }
@@ -863,13 +863,13 @@ int aoe_world_combat_attack_ror(AoeWorldCombatRor *c, AoeLiveUnit *attacker,
     for (uint16_t i = 0; i < t->task_count && !task; ++i)
         if (t->tasks[i].action_type == 7) task = &t->tasks[i];
     if (task) {
-        p.move_graphic = graphic_by_id(c, task->moving_graphic);
-        p.attack_graphic = graphic_by_id(c, task->proceeding_graphic);
-        p.range = task->work_range;
+        p.move_graphic = graphic_by_id(c, task->approach_graphic);
+        p.attack_graphic = graphic_by_id(c, task->action_graphic);
+        p.range = task->action_range;
     }
     p.min_range = t->min_range;
     p.projectile_id = t->projectile_unit_id;
-    p.fire_frame = t->frame_delay;
+    p.fire_frame = t->fire_frame;
     d.move_graphic = graphic_by_id(c, t->walking_graphic);
     d.attack_graphic = graphic_by_id(c, t->attack_graphic);
     d.idle_graphic = graphic_by_id(c, t->standing_graphic);
@@ -1447,13 +1447,13 @@ static int attack_params(AoeWorldCombatRor *c, const DatUnit *t,
     memset(p, 0, sizeof(*p));
     memset(d, 0, sizeof(*d));
     if (task) {
-        p->move_graphic = graphic_by_id(c, task->moving_graphic);
-        p->attack_graphic = graphic_by_id(c, task->proceeding_graphic);
-        p->range = task->work_range;
+        p->move_graphic = graphic_by_id(c, task->approach_graphic);
+        p->attack_graphic = graphic_by_id(c, task->action_graphic);
+        p->range = task->action_range;
     }
     p->min_range = t->min_range;
     p->projectile_id = t->projectile_unit_id;
-    p->fire_frame = t->frame_delay;
+    p->fire_frame = t->fire_frame;
     d->move_graphic = graphic_by_id(c, t->walking_graphic);
     d->attack_graphic = graphic_by_id(c, t->attack_graphic);
     d->idle_graphic = graphic_by_id(c, t->standing_graphic);

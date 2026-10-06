@@ -24,7 +24,7 @@
      footprint at init (the original registers footprints as units enter
      the world);
    - the overlay terrain of a border index is that border's
-     underlay_terrain (border records at map +0x338c, stride 0x5a0, read at
+     base_terrain (border records at map +0x338c, stride 0x5a0, read at
      +0x59c);
    - terrain costs and the terrain speed multiplier are the DAT terrain
      restriction row of template +0x66 (world +0x54 / 0x004aa880);

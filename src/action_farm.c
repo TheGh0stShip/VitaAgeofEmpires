@@ -37,7 +37,7 @@ int aoe_farm_action_activate_ror(AoeFarmActionRor *a,
         !aoe_farm_action_set_state_ror(a, 6, o))
         return 0;
     u = a->base.unit;
-    in = a->task->resource_in;
+    in = a->task->carry_resource;
     if (in >= 0 && u->core.storage.carried_resource_type != in)
         aoe_unit_set_carried_ror(u, in, 0.0f);
     return 1;
@@ -67,10 +67,10 @@ int aoe_farm_action_update_ror(AoeFarmActionRor *a,
         return 1;
     }
     amount = (float)((double)o->tick_seconds(o->context) * t->work_rate *
-                     a->task->work_value1);
+                     a->task->work_amount);
     saved = u->core.storage.carried_amount;
     if (a->task->field_30)
-        o->deposit(o->context, u, a->task->resource_in, amount);
+        o->deposit(o->context, u, a->task->carry_resource, amount);
     else
         aoe_unit_add_carried_ror(u, amount, 1, 1);
     a->remaining = (float)((double)a->remaining -

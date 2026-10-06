@@ -88,7 +88,7 @@ int terrain_build_draw_plan(const DatTerrains *terrains,
                                             &border_frame) &&
                 border_frame < border_sprite->frame_count) {
                 have_border = 1;
-                draw_base = (uint8_t)border->draw_terrain != 0;
+                draw_base = (uint8_t)border->draw_base != 0;
             }
         } else if (pattern != 0) {
             have_border = 1;

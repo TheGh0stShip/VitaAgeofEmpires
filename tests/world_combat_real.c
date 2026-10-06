@@ -313,9 +313,9 @@ int main(int argc, char **argv) {
         {
             const DatUnitTask *gt =
                 combat.units[worker->core.unit_id + 1000]->gather.task;
-            /* Deposits use resource_out, else the carried type. */
-            type = gt->resource_out != -1 ? gt->resource_out
-                                          : gt->resource_in;
+            /* Deposits use deposit_resource, else the carried type. */
+            type = gt->deposit_resource != -1 ? gt->deposit_resource
+                                          : gt->carry_resource;
         }
         before = runtime.players[1].resources.values[type];
         printf("villager %d gathers template %d (resource %d, %.0f left) "
@@ -521,7 +521,7 @@ int main(int argc, char **argv) {
                    ft->resource_capacity);
             if (!ft->task_count ||
                 farm->core.storage.carried_resource_type !=
-                    ft->tasks[0].resource_in ||
+                    ft->tasks[0].carry_resource ||
                 !(farm->core.storage.carried_amount > 0.0f) ||
                 farm->core.storage.carried_amount >
                     (float)ft->resource_capacity)

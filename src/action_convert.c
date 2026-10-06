@@ -90,25 +90,25 @@ int aoe_convert_action_set_state_ror(AoeConvertActionRor *a, uint8_t state,
     case 4:
         if (a->base.target) follow(a);
         if (!o->start_move(c, &a->base, a->base.target, a->range,
-                           o->graphic(c, a->task->moving_graphic), 0))
+                           o->graphic(c, a->task->approach_graphic), 0))
             return aoe_convert_action_set_state_ror(a, 0x0d, o);
         return 1;
     case 6:
-        show(a, o, a->task->moving_graphic);
+        show(a, o, a->task->approach_graphic);
         return 1;
     case 7:
-        show(a, o, a->task->proceeding_graphic);
-        if (a->task->gathering_sound >= 0)
-            o->play_sound(c, a->task->gathering_sound);
+        show(a, o, a->task->action_graphic);
+        if (a->task->action_sound >= 0)
+            o->play_sound(c, a->task->action_sound);
         t = a->base.target;
         if (t && t->runtime_owner_index > 0)
             o->flare(c, t, u->core.position.x38, u->core.position.y3c,
                      u->core.position.z40);
-        a->timer = a->task->work_value2;
+        a->timer = a->task->work_timer;
         return 1;
     case 0x0b:
         if (!o->start_move(c, &a->base, NULL, a->range,
-                           o->graphic(c, a->task->moving_graphic), 1))
+                           o->graphic(c, a->task->approach_graphic), 1))
             return aoe_convert_action_set_state_ror(a, 0x0d, o);
         return 1;
     default:
@@ -207,7 +207,7 @@ static int attempt(AoeConvertActionRor *a, const AoeConvertActionOps *o) {
         chance += chance;
     else if (cls == 0x23 || cls == 0x17)
         chance *= 8.0;
-    need = (double)u->core.unit_template->work_rate * a->task->work_value1;
+    need = (double)u->core.unit_template->work_rate * a->task->work_amount;
     if (chance <= need) {
         int16_t to = u->runtime_owner_index;
         o->event(c, 0x7b, to, t->runtime_owner_index,

@@ -1,8 +1,8 @@
 #include "terrain_transition.h"
 
 static int terrain_contains(const DatTerrain *terrain, int16_t id) {
-    for (int i = (int)terrain->terrain_units_used_count - 1; i >= 0; --i)
-        if (terrain->terrain_unit_ids[i] == id) return 1;
+    for (int i = (int)terrain->object_count - 1; i >= 0; --i)
+        if (terrain->object_ids[i] == id) return 1;
     return 0;
 }
 
@@ -23,14 +23,14 @@ int aoe_terrain_transition_cell_ror(
     index = (size_t)y * map->width + x;
     if (map->tiles[index].terrain_id >= terrains->count) return 0;
     current = &terrains->terrains[map->tiles[index].terrain_id];
-    if (current->terrain_units_used_count > 30) return 0;
+    if (current->object_count > 30) return 0;
 
-    if (current->terrain_units_used_count > 0) {
+    if (current->object_count > 0) {
         const DatTerrain *filter = NULL;
         if (filter_terrain >= 0) {
             if ((uint16_t)filter_terrain >= terrains->count) return 0;
             filter = &terrains->terrains[filter_terrain];
-            if (filter->terrain_units_used_count > 30) return 0;
+            if (filter->object_count > 30) return 0;
         }
         for (node = map->objects[index].head; node;) {
             AoeObjectUpdateNode *next = node->next;
@@ -47,10 +47,10 @@ int aoe_terrain_transition_cell_ror(
         }
     }
 
-    for (uint16_t i = 0; i < current->terrain_units_used_count; ++i) {
-        int16_t unit_id = current->terrain_unit_ids[i];
-        int32_t remaining = current->terrain_unit_density[i];
-        uint8_t placement = current->terrain_placement_flags[i];
+    for (uint16_t i = 0; i < current->object_count; ++i) {
+        int16_t unit_id = current->object_ids[i];
+        int32_t remaining = current->object_amounts[i];
+        uint8_t placement = current->object_modes[i];
         if (unit_id < 0 || remaining <= 0) continue;
         do {
             if (placement == 0) {

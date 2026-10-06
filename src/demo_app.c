@@ -1008,7 +1008,7 @@ int aoe_demo_info_object(AoeDemo *demo, const AoeLiveUnit *u, AoeInfoObjectRor *
     o->capacity = t->garrison_capacity;
     o->icon = t->icon;
     o->panel_kind = t->field_8f;
-    o->building_icon_base = (int16_t)t->building_angle;
+    o->building_icon_base = (int16_t)t->building_frame;
     o->hp = u->core.hit_points;
     o->x = u->core.position.x38;
     o->y = u->core.position.y3c;

@@ -101,7 +101,7 @@ int aoe_live_unit_low_state_ror(AoeLiveUnitCore *unit,
            constants are the floats at 0x00549920 (pi/4), 0x00549910
            (1/2pi), 0x00549918 (-0.5) and 0x005498e0 (0.0); double stands
            in for the x87 intermediates. */
-        if (current_graphic && (current_graphic->sequence_type & 2) &&
+        if (current_graphic && (current_graphic->sequence_flags & 2) &&
             current_graphic->angle_count > 0) {
             double angles = (double)(float)current_graphic->angle_count;
             double v = ((double)rotation - (double)0.7853981852531433f) *

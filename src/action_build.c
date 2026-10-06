@@ -133,23 +133,23 @@ int aoe_build_action_set_state_ror(AoeBuildActionRor *a, uint8_t state,
             a->base.y = a->base.target->core.position.y3c;
             a->base.z = a->base.target->core.position.z40;
         }
-        if (!o->start_move(c, a, a->base.target, a->task->work_range,
-                           o->graphic(c, a->task->moving_graphic), 0))
+        if (!o->start_move(c, a, a->base.target, a->task->action_range,
+                           o->graphic(c, a->task->approach_graphic), 0))
             return aoe_build_action_set_state_ror(a, 0x0d, o);
         return 1;
     case 6:
-        show(a, o, a->task->moving_graphic);
+        show(a, o, a->task->approach_graphic);
         return 1;
     case 7:
         if (!a->base.target || blocked_by_walls(a, o))
             return aoe_build_action_set_state_ror(a, 0x0d, o);
-        show(a, o, a->task->proceeding_graphic);
-        if (a->task->gathering_sound >= 0)
-            o->play_sound(c, a->task->gathering_sound);
+        show(a, o, a->task->action_graphic);
+        if (a->task->action_sound >= 0)
+            o->play_sound(c, a->task->action_sound);
         return 1;
     case 0x0b:
         if (!o->start_move(c, a, NULL, 0.0f,
-                           o->graphic(c, a->task->moving_graphic), 1))
+                           o->graphic(c, a->task->approach_graphic), 1))
             return aoe_build_action_set_state_ror(a, 0x0d, o);
         return 1;
     default:
@@ -202,7 +202,7 @@ static int work(AoeBuildActionRor *a, const AoeBuildActionOps *o) {
                  ? 1000.0f
                  : (float)((double)o->tick_seconds(c) *
                            u->core.unit_template->work_rate *
-                           a->task->work_value1);
+                           a->task->work_amount);
     if (t) {
         int completed = 0;
         if (!o->add_build_work(c, t, amount, &completed)) return 0;

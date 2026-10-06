@@ -14,21 +14,21 @@ int aoe_sprite_instance_init(AoeSpriteInstance *instance,
     next.graphic = graphic;
     next.offset_x = offset_x;
     next.offset_y = offset_y;
-    next.kind = (graphic->sequence_type & 1) ? 2 : 1;
+    next.kind = (graphic->sequence_flags & 1) ? 2 : 1;
     if (next.kind == 2) {
         if (graphic->frame_count == 0 || graphic->frame_count > INT16_MAX ||
             !isfinite(graphic->frame_duration) ||
-            !isfinite(graphic->replay_delay))
+            !isfinite(graphic->loop_delay))
             return 0;
         next.animation.period = graphic->frame_duration;
         if (next.animation.period < 0.001f)
             next.animation.period = 0.001f;
-        if (graphic->sequence_type & 4) {
+        if (graphic->sequence_flags & 4) {
             if (!rng)
                 return 0;
             if (graphic->frame_duration == 0.0f &&
                 graphic->frame_count == 1 &&
-                graphic->replay_delay == 0.0f) {
+                graphic->loop_delay == 0.0f) {
                 /* The original still draws RNG, then divides 0 by 0 for
                    this real DAT edge case (base graphic 834). A stationary
                    single frame is the defined portable outcome. */
@@ -40,7 +40,7 @@ int aoe_sprite_instance_init(AoeSpriteInstance *instance,
             if (graphic->frame_duration <= 0.0f)
                 return 0;
             float span = (float)graphic->frame_count *
-                         graphic->frame_duration + graphic->replay_delay;
+                         graphic->frame_duration + graphic->loop_delay;
             float random_time = (float)aoe_rng_next(rng) * span *
                                 (1.0f / 32768.0f);
             float frame_number = random_time / graphic->frame_duration;
@@ -71,10 +71,10 @@ int aoe_sprite_instance_tick(AoeSpriteInstance *instance,
         return 0;
     AoeSpriteAnimationGraphic graphic = {
         .frame_count = (int16_t)instance->graphic->frame_count,
-        .speed_multiplier = instance->graphic->speed_multiplier,
+        .reference_speed = instance->graphic->reference_speed,
         .frame_duration = instance->graphic->frame_duration,
-        .replay_delay = instance->graphic->replay_delay,
-        .sequence_flags = instance->graphic->sequence_type,
+        .loop_delay = instance->graphic->loop_delay,
+        .sequence_flags = instance->graphic->sequence_flags,
     };
     return aoe_sprite_animation_tick(&instance->animation, &graphic,
                                      time_delta, speed);
@@ -117,7 +117,7 @@ int16_t aoe_sprite_instance_current_frame_ror(const AoeSpriteInstance *instance)
 int aoe_sprite_instance_playing_ror(const AoeSpriteInstance *instance) {
     return instance && instance->kind == 2 && instance->graphic &&
            instance->animation.run_state &&
-           (instance->graphic->sequence_type & 1);
+           (instance->graphic->sequence_flags & 1);
 }
 
 void aoe_sprite_instance_set_frame_ror(AoeSpriteInstance *instance,

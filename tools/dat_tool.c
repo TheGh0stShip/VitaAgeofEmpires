@@ -172,11 +172,11 @@ int main(int argc, char **argv) {
         for (uint16_t i = 0; i < terrains.count; ++i) {
             const DatTerrain *terrain = &terrains.terrains[i];
             printf("terrain %u %s: %u unit entries", i, terrain->name,
-                   terrain->terrain_units_used_count);
-            for (uint16_t j = 0; j < terrain->terrain_units_used_count; ++j)
-                printf(" %d/%d/%u", terrain->terrain_unit_ids[j],
-                       terrain->terrain_unit_density[j],
-                       terrain->terrain_placement_flags[j]);
+                   terrain->object_count);
+            for (uint16_t j = 0; j < terrain->object_count; ++j)
+                printf(" %d/%d/%u", terrain->object_ids[j],
+                       terrain->object_amounts[j],
+                       terrain->object_modes[j]);
             putchar('\n');
         }
     }
@@ -189,7 +189,7 @@ int main(int argc, char **argv) {
                    i, terrain->name, terrain->filename, terrain->slp_id,
                    terrain->map_colors[0], terrain->replacement_id,
                    terrain->frame_grid[0], terrain->frame_grid[1],
-                   terrain->passable_terrain, terrain->impassable_terrain,
+                   terrain->field_2d, terrain->field_2e,
                    terrain->elevation_frames[0].frame_count,
                    terrain->elevation_frames[0].angle_count,
                    terrain->elevation_frames[0].frame_start);
@@ -269,8 +269,8 @@ int main(int argc, char **argv) {
         if (border->enabled)
             printf("border %u: %s (%s), SLP %d, style %d, draw terrain %d, underlay %d\n",
                    i, border->name, border->filename, border->slp_id,
-                   border->border_style, border->draw_terrain,
-                   border->underlay_terrain);
+                   border->border_style, border->draw_base,
+                   border->base_terrain);
     }
     printf("next section offset: 0x%zx\n", borders.next_offset);
     if (border_art_query) {
@@ -478,8 +478,8 @@ int main(int argc, char **argv) {
                    unit->size[0], unit->size[1], unit->size[2],
                    unit->state_notify_mode, unit->state_effect_mode,
                    unit->state_notify_value, unit->dying_graphic,
-                   unit->dying_sound, unit->undead_graphic,
-                   unit->undead_mode, unit->decay_rate);
+                   unit->dying_sound, unit->state6_graphic,
+                   unit->state6_mode, unit->decay_rate);
         else
             printf("unit %u/%u: absent\n", query_civ, query_unit);
         if (unit) {
@@ -491,10 +491,10 @@ int main(int argc, char **argv) {
                        "resource in %d, owner mode %u, needs carried %u, "
                        "unbuilt %u, targeting %u\n",
                        t, task->action_type, task->target_class,
-                       task->target_unit, task->target_terrain,
-                       task->resource_in, task->owner_mode,
+                       task->target_template, task->target_terrain,
+                       task->carry_resource, task->owner_mode,
                        task->requires_carried_resource, task->unbuilt_target,
-                       task->enable_targeting);
+                       task->any_flagged_target);
             }
         }
         if (unit && unit->type == 80)
@@ -502,10 +502,10 @@ int main(int argc, char **argv) {
                    "completed angle %u, disappears %u, stack unit %d, "
                    "foundation/old terrain %d/%d, research %d, sound %d\n",
                    unit->construction_graphic, unit->building_adjacent_mode,
-                   unit->building_angle, unit->disappears_when_built,
+                   unit->building_frame, unit->disappears_when_built,
                    unit->stack_unit_id, unit->foundation_terrain,
-                   unit->old_terrain, unit->building_research_id,
-                   unit->completion_sound);
+                   unit->field_176, unit->building_research_id,
+                   unit->sound_164);
     }
     printf("next section offset: 0x%zx\n", civilizations.next_offset);
     if (!dat_parse_techs(&blob, &civilizations, &techs)) {

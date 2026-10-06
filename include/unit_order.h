@@ -18,8 +18,8 @@ typedef enum {
     AOE_ACTION_SHAPE_TASK_ROR,   /* ctor(unit, task) */
     AOE_ACTION_SHAPE_UNIT_ROR,   /* ctor(unit) */
     /* Type 7: ctor(unit, target or x/y/z, task +0x34/+0x38 graphics, 0,
-       task work_range, template min_range +0x138, projectile_unit_id
-       +0x124, frame_delay +0x12a). Before construction a unit with a +0x74
+       task action_range, template min_range +0x138, projectile_unit_id
+       +0x124, fire_frame +0x12a). Before construction a unit with a +0x74
        group object hears 0x0040f6d0(600) and 0x00412f00(target ID and
        position, or -1 and x/y/z). */
     AOE_ACTION_SHAPE_ATTACK_TARGET_ROR,

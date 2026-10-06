@@ -1,12 +1,48 @@
 #include "dib_util.h"
 
 #include <assert.h>
+#include "le_bytes.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 static void w32(uint8_t *p, uint32_t v) { p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); p[2] = (uint8_t)(v >> 16); p[3] = (uint8_t)(v >> 24); }
 
+
+static void put32(uint8_t *p, uint32_t v) { p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); p[2] = (uint8_t)(v >> 16); p[3] = (uint8_t)(v >> 24); }
+static void make_info(uint8_t *info, int32_t w, int32_t h, uint16_t bpp) { memset(info, 0, 40); put32(info, 40); put32(info + 4, (uint32_t)w); put32(info + 8, (uint32_t)h); info[12] = 1; info[14] = (uint8_t)bpp; }
+static uint8_t mp_nearest(void *c, uint8_t r, uint8_t g, uint8_t b) { (void)c; (void)g; (void)b; return r == 0 && g == 0 && b == 0 ? 0 : (uint8_t)(r / 16); }
+static void mp_entry(void *c, int32_t i, uint8_t *r, uint8_t *g, uint8_t *b) { (void)c; *r = (uint8_t)i; *g = (uint8_t)(i * 2); *b = (uint8_t)(i * 3); }
+static uint8_t *mp_regrow(void *c, uint8_t *dib, size_t size) { (void)c; return realloc(dib, size); }
+static void blit_palette_tests(void) {
+    uint8_t dinfo[40], sinfo[40], dst[8 * 4], src[4 * 2];
+    AoeDibBlitRor bl;
+    int i;
+    /* A 4x2 top-down source scaled 2x into an 8x4 top-down destination; colour 0 transparent. */
+    make_info(dinfo, 8, -4, 8); make_info(sinfo, 4, -2, 8);
+    for (i = 0; i < 8; ++i) src[i] = (uint8_t)(i == 1 ? 0 : 10 + i);
+    memset(dst, 0xee, sizeof dst);
+    memset(&bl, 0, sizeof bl);
+    bl.dest_info = dinfo; bl.dest_bits = dst; bl.w = 8; bl.h = 4; bl.src_info = sinfo; bl.src_bits = src; bl.sw = 4; bl.sh = 2; bl.transparent = -1;
+    assert(aoe_dib_blit_scaled_ror(&bl) == 1 && bl.transparent == 0);
+    assert(dst[0] == 10 && dst[1] == 10 && dst[2] == 0xee && dst[3] == 0xee && dst[4] == 12 && dst[7] == 13 && dst[8] == 10 && dst[16] == 14 && dst[31] == 17);
+    /* Flipped in x and bottom-up destination. */
+    make_info(dinfo, 8, 4, 8); memset(dst, 0xee, sizeof dst); bl.flip_x = 1;
+    assert(aoe_dib_blit_scaled_ror(&bl) == 1 && dst[24] == 13 && dst[25] == 13 && dst[26] == 12 && dst[28] == 0xee && dst[30] == 10 && dst[31] == 10 && dst[0] == 17 && dst[7] == 14);
+    /* A span table whose first dword is 0 is left to the unscaled blit. */
+    { AoeDibSpanRor sp[2] = {{0, 0, 0, 0}, {0, 1, 0, 3}}; bl.spans = sp; assert(aoe_dib_blit_scaled_ror(&bl) == -1); }
+    /* Palette match: 2 colours (8-bit), the palette has 4; colour 1 maps to index 2 (r 32 / 16). */
+    {
+        uint8_t *dib = calloc(1, 40 + 2 * 4 + 4 * 1); AoeDibPaletteOpsRor o = {NULL, 4, mp_nearest, mp_entry, mp_regrow};
+        make_info(dib, 4, 1, 8); put32(dib + 32, 2); put32(dib + 20, 4);
+        dib[40 + 4 + 2] = 32; dib[40 + 4 + 0] = 32;  /* colour 1: r 32, b 32 */
+        dib[48] = 1; dib[49] = 0; dib[50] = 1; dib[51] = 1;
+        dib = aoe_dib_match_palette_ror(dib, &o, 0, 0);
+        assert(dib && aoe_le_u32(dib + 32) == 4 && dib[40 + 16] == 2 && dib[40 + 17] == 0 && dib[40 + 18] == 2 && dib[40 + 19] == 2);
+        assert(dib[40 + 4 * 3 + 2] == 3 && dib[40 + 4 * 3 + 1] == 6 && dib[40 + 4 * 3] == 9);
+        free(dib);
+    }
+}
 int main(void) {
     uint8_t info[40] = {0};
     uint32_t pitch;
@@ -98,5 +134,6 @@ int main(void) {
     }
     aoe_dib_nothing_ror();
     puts("dib_util_test: ok");
+    blit_palette_tests();
     return 0;
 }

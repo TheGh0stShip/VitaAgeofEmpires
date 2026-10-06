@@ -30,6 +30,10 @@ typedef struct AoeScenarioLoadOps {
     /* player +0x2c (ai, city, personality, kind, -1). */
     void (*player_set_ai)(void *ctx, int player, int32_t ai, int32_t city,
                           int32_t per, int32_t kind, int32_t extra);
+    /* player +0x70 (stream, slot map, version scale): variants 4..6 only
+       (may be NULL for the others). */
+    void (*player_load2)(void *ctx, int player, AoeOutcomeStream *s,
+                         const int32_t map[9], float scale);
 } AoeScenarioLoadOps;
 
 typedef struct AoeScenarioLoadWorld {
@@ -41,7 +45,16 @@ typedef struct AoeScenarioLoadWorld {
 } AoeScenarioLoadWorld;
 
 /* 0x0051ec20 (variant 0) and 0x0051eee0 (variant 1). `slot_order` is the
-   scenario info's +0x270 i32 array (player_count entries, each 0..8). */
+   scenario info's +0x270 i32 array (player_count entries, each 0..8).
+   Variants 2..6 are 0x0051f1b0, 0x0051f4d0, 0x0051f7b0, 0x0051faf0 and
+   0x0051fe30: each first skips a length-prefixed block (an i32 length,
+   that many bytes read and discarded; a failed allocation closes the
+   stream and stops) and clears 0x007d2460. Variant 2 then follows
+   variant 1 with the player loads at scale 1.04. Variants 3..6 read the
+   group count right after the views and run the player loads (+0x68,
+   scale 1.04 / 1.06 / 1.07 / 1.08) before the object groups (no per-group
+   byte pairs, no 13-byte skip); variants 4..6 then read the count again
+   and run the players' +0x70 loads at the same scale before closing. */
 void aoe_scenario_load_legacy(AoeScenarioLoadWorld *w,
                               const AoeScenarioLoadOps *ops,
                               AoeOutcomeStream *s, const int32_t *slot_order,

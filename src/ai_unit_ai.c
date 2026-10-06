@@ -1284,7 +1284,8 @@ int32_t aoe_ai_unit_ai_check_ror(const AoeAiUnitAiCheckOpsRor *o) {
             dy = y - *o->target_y;
             dx = x - *o->target_x;
         }
-        if (dx < 0.0f || dx > 0.0f || dy < 0.0f || dy > 0.0f) {
+        /* The original compares against the doubles -1.0 (0x00542740) and 1.0 (0x005425f8). */
+        if (dx < -1.0f || dx > 1.0f || dy < -1.0f || dy > 1.0f) {
             float d;
             if (o->target == -1) {
                 d = o->distance_point(o->context, *o->target_x, *o->target_y, o->unit_z);

@@ -189,6 +189,45 @@ static void terrain_entry_tests(void) {
     aoe_tilemap_place_terrain_entry_ror(&o, 1, 6, 7, 0); /* full density, same rands as the sweep test */
     assert(to_created == before + 2);
 }
+
+static int16_t pb_between(void *c, uint8_t a, uint8_t b) { (void)c; return a == 1 && b == 2 ? 3 : a == 1 && b == 4 ? 20 : -1; }
+static int pb_used(void *c, int16_t b) { (void)c; return b == 3; }
+static int16_t pb_style = 0;
+static int16_t pb_stylef(void *c, int16_t b) { (void)c; (void)b; return pb_style; }
+static void elevation_border_tests(void) {
+    static AoeMapTileRor tiles[9];
+    AoeTileMapRor m; AoeTileMapOpsRor ops = {0}; float a, b; int i;
+    memset(&m, 0, sizeof m); m.width = 3; m.height = 3; m.tiles = tiles; m.tile_w = 64; m.tile_h = 32;
+    ops.border_between = pb_between; ops.border_used = pb_used;
+    /* Flat tile at its centre: a = u + v - ..., b = (2v - 1 + 2u) / 2. */
+    tiles[0].shape = 0;
+    aoe_tilemap_elevation_point_ror(&m, 32, 16, &tiles[0], &a, &b);
+    assert(fabsf(b - 0.5f) < 1e-6f && fabsf(a - 0.5f) < 1e-6f);
+    tiles[0].shape = 7;  /* h = 2v + 2u - 1 = 1 */
+    aoe_tilemap_elevation_point_ror(&m, 32, 16, &tiles[0], &a, &b);
+    assert(fabsf(b - 1.0f) < 1e-6f && fabsf(a - 0.0f) < 1e-6f);
+    tiles[0].shape = 10;  /* h = -v */
+    aoe_tilemap_elevation_point_ror(&m, 0, 16, &tiles[0], &a, &b);
+    assert(fabsf(b - (-0.25f)) < 1e-6f && fabsf(a - 0.25f) < 1e-6f);
+    /* Borders: terrain 1 everywhere, terrain 2 to the north and west of the centre -> NW corner shape 1. */
+    for (i = 0; i < 9; ++i) tiles[i].terrain_elevation = 1;
+    tiles[1].terrain_elevation = 2; tiles[3].terrain_elevation = 2;
+    aoe_tilemap_pick_border_ror(&m, 1, 1, pb_stylef, &ops);
+    assert(tiles[4].border == 0x13);
+    pb_style = 1;  /* flag style: north (1) and west (4) */
+    aoe_tilemap_pick_border_ror(&m, 1, 1, pb_stylef, &ops);
+    assert(tiles[4].border == 0x53);
+    pb_style = 0; tiles[1].terrain_elevation = 1; tiles[3].terrain_elevation = 1; tiles[8].terrain_elevation = 2;
+    aoe_tilemap_pick_border_ror(&m, 1, 1, pb_stylef, &ops);
+    assert(tiles[4].border == 0x83);
+    tiles[8].terrain_elevation = 4;  /* border 20 is outside 0..15 */
+    aoe_tilemap_pick_border_ror(&m, 1, 1, pb_stylef, &ops);
+    assert(tiles[4].border == 0);
+    tiles[8].terrain_elevation = 1;
+    tiles[4].border = 9; aoe_tilemap_pick_border_ror(&m, 1, 1, pb_stylef, &ops); assert(tiles[4].border == 0);
+    /* A corner tile reuses itself for the missing neighbours. */
+    tiles[1].terrain_elevation = 2; aoe_tilemap_pick_border_ror(&m, 0, 0, pb_stylef, &ops); assert(tiles[0].border == 0xc3);
+}
 int main(void) {
     clamp_footprint();
     AoeTileMapOpsRor ops = {NULL, t_resize, t_refresh, t_rect, t_cell, t_begin, t_end, t_border, t_used};
@@ -316,5 +355,6 @@ int main(void) {
     sweep_tests();
     terrain_objects_tests();
     terrain_entry_tests();
+    elevation_border_tests();
     return 0;
 }

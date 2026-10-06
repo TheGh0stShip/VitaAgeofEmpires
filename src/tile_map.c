@@ -565,3 +565,88 @@ void aoe_tilemap_place_terrain_entry_ror(const AoeTerrainObjectsOpsRor *o, int32
         }
     }
 }
+
+/* 0x00447ab0 */
+void aoe_tilemap_elevation_point_ror(const AoeTileMapRor *m, int16_t sx, int16_t sy,
+                                     const AoeMapTileRor *tile, float *a, float *b) {
+    double u = (double)sx / (double)m->tile_w, v = (double)sy / (double)m->tile_h, h, t;
+    switch (tile->shape) {
+    case 1: h = v + v - (u <= 0.5 ? (0.5 - u) + (0.5 - u) : (u - 0.5) + (u - 0.5)); break;
+    case 2: t = u <= 0.5 ? 1.0 - u : u; h = t * -0.5 - (v - 0.5); break;
+    case 3:
+        if (u * 0.5 < (double)sy) h = (1.0 - u) * 0.5 - (v - 0.5);
+        else h = v + v + ((1.0 - u) + (1.0 - u) - 1.0);
+        break;
+    case 4:
+        if ((1.0 - u) * 0.5 < (double)sy) h = u * 0.5 - (v - 0.5);
+        else h = v + v + (u + u - 1.0);
+        break;
+    case 5: h = v + v + (1.0 - (u + u)); break;
+    case 6: h = u * -0.5 - (v - 0.5); break;
+    case 7: h = v + v + (u + u - 1.0); break;
+    case 8: h = (1.0 - u) * -0.5 - (v - 0.5); break;
+    case 10: h = 1.0 <= v ? -1.0 : -v; break;
+    case 11: h = u <= 0.5 ? (0.5 - u) + (0.5 - u) : 0.0; break;
+    case 12: h = 0.5 < u ? (u - 0.5) + (u - 0.5) : 0.0; break;
+    case 13: t = u <= 0.5 ? (0.5 - u) + v : (u - 0.5) + v; h = t + t; break;
+    case 14: t = 0.5 < u ? 1.0 - u : u; h = t * -0.5 - (v - 0.5); break;
+    case 15: t = (double)sy <= 1.0 - u * 0.5 ? u : 1.0 - u; h = t * -0.5 - (v - 0.5); break;
+    case 16:
+        if ((double)sy <= 1.0 - (1.0 - u) * 0.5) h = v + v + (1.0 - (u + u));
+        else h = u * -0.5 - (v - 0.5);
+        break;
+    default: h = 0.0; break;
+    }
+    t = ((v + v - 1.0) + (u + u) + h) * 0.5;
+    *b = (float)t;
+    *a = (float)((u + u) - t);
+}
+
+/* 0x004487f0 */
+void aoe_tilemap_pick_border_ror(const AoeTileMapRor *m, int16_t x, int16_t y,
+                                 int16_t (*border_style)(void *context, int16_t border),
+                                 const AoeTileMapOpsRor *ops) {
+    AoeMapTileRor *t;
+    uint8_t terrain, n[8]; /* N, S, W, E, NW, NE, SW, SE */
+    int32_t w = m->width, h = m->height, i;
+    int16_t border = -1;
+    uint8_t other = 0, flags;
+    if (x < 0 || x >= w || y < 0 || y >= h) return;
+    t = &m->tiles[y * w + x];
+    terrain = aoe_tile_terrain_ror(t);
+#define NB(dx, dy) aoe_tile_terrain_ror(&m->tiles[(y + (dy)) * w + x + (dx)])
+    n[0] = y > 0 ? NB(0, -1) : terrain;
+    n[1] = y < h - 1 ? NB(0, 1) : terrain;
+    n[2] = x > 0 ? NB(-1, 0) : terrain;
+    n[3] = x < w - 1 ? NB(1, 0) : terrain;
+    n[4] = y > 0 && x > 0 ? NB(-1, -1) : terrain;
+    n[5] = y > 0 && x < w - 1 ? NB(1, -1) : terrain;
+    n[6] = y < h - 1 && x > 0 ? NB(-1, 1) : terrain;
+    n[7] = y < h - 1 && x < w - 1 ? NB(1, 1) : terrain;
+#undef NB
+    for (i = 0; i < 8; ++i) aoe_tilemap_pick_terrain_ror(terrain, &n[i], ops);
+    for (i = 0; i < 8; ++i) if (n[i] != terrain) { other = n[i]; break; }
+    if (i == 8) { t->border = 0; return; }
+    border = ops->border_between(ops->context, terrain, other);
+    if (border < 0 || border > 15 || !ops->border_used(ops->context, border)) { t->border = 0; return; }
+#define HAS(k) (ops->border_between(ops->context, terrain, n[k]) == border)
+    if (border_style(ops->context, border) == 1) {
+        flags = (uint8_t)((HAS(0) ? 1 : 0) | (HAS(1) ? 2 : 0) | (HAS(2) ? 4 : 0) | (HAS(3) ? 8 : 0));
+    } else {
+        if (HAS(0) && HAS(2)) flags = 1;
+        else if (HAS(0) && HAS(3)) flags = 2;
+        else if (HAS(1) && HAS(2)) flags = 3;
+        else if (HAS(1) && HAS(3)) flags = 4;
+        else if (HAS(0)) flags = 9;
+        else if (HAS(1)) flags = 10;
+        else if (HAS(2)) flags = 11;
+        else if (HAS(3)) flags = 12;
+        else if (HAS(4)) flags = 5;
+        else if (HAS(5)) flags = 6;
+        else if (HAS(6)) flags = 7;
+        else if (HAS(7)) flags = 8;
+        else { t->border = 0; return; }
+    }
+#undef HAS
+    t->border = (uint8_t)((border & 0xf) | (flags << 4));
+}

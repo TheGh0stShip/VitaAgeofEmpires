@@ -293,4 +293,35 @@ void aoe_tilemap_place_terrain_objects_ror(const AoeTerrainObjectsOpsRor *o, int
 void aoe_tilemap_place_terrain_entry_ror(const AoeTerrainObjectsOpsRor *o, int32_t player,
                                          int32_t x, int32_t y, int32_t once);
 
+
+/* 0x00447ab0 (sx, sy, tile, &a, &b): a point's position inside a tile by
+   the tile's elevation shape (+0x04). With u = sx / tile width (double)
+   and v = sy / tile height, the shape gives a height term h: 0 / 9 (and
+   unknown shapes) 0; 1 2v - 2|u - 0.5|; 2 u when u > 0.5 else 1 - u,
+   then * -0.5 - (v - 0.5); 3 (1 - u) * 0.5 - (v - 0.5) when 0.5 u < v,
+   else 2v + 2(1 - u) - 1; 4 u * 0.5 - (v - 0.5) when 0.5 (1 - u) < v,
+   else 2v + 2u - 1; 5 2v + 1 - 2u; 6 u * -0.5 - (v - 0.5); 7 2v + 2u -
+   1; 8 1 - u then * -0.5 - (v - 0.5); 10 -v when v < 1 else -1; 11 1 -
+   2u when u <= 0.5 else 0; 12 2u - 1 when u > 0.5 else 0; 13 2(|u - 0.5|
+   + v); 14 u when u <= 0.5 else 1 - u, then * -0.5 - (v - 0.5); 15 u when
+   v <= 1 - 0.5u else 1 - u, then as 6 / 8; 16 1 - 2u when v <= 1 - 0.5(1
+   - u) else u then as 6. Then b = (2v - 1 + 2u + h) * 0.5 and a = 2u - b.
+   The original works in x87 extended precision. */
+void aoe_tilemap_elevation_point_ror(const AoeTileMapRor *m, int16_t sx, int16_t sy,
+                                     const AoeMapTileRor *tile, float *a, float *b);
+
+/* 0x004487f0 (x, y): the tile's border byte (+0x06) from its eight
+   neighbours (edge tiles reuse themselves). Each neighbour's terrain
+   first goes through 0x00448c50 (`pick_terrain`). With every neighbour
+   equal the byte is 0. Else the first differing one picks the border
+   (border_between(terrain, other); none, outside 0..15 or unused
+   (+0x338c) gives 0). A border of style 1 (+0x392a) sets bits 4..7 for
+   the north, south, west and east neighbours sharing it; otherwise a
+   shape in the high nibble: NW corner (N and W) 1, NE 2, SW 3, SE 4, N
+   alone 9, S 10, W 11, E 12, and the diagonals NW 5, NE 6, SW 7, SE 8
+   (0 when none matches); the low nibble is the border id. */
+void aoe_tilemap_pick_border_ror(const AoeTileMapRor *m, int16_t x, int16_t y,
+                                 int16_t (*border_style)(void *context, int16_t border),
+                                 const AoeTileMapOpsRor *ops);
+
 #endif

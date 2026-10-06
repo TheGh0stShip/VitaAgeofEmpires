@@ -1,4 +1,5 @@
 #include "dib_util.h"
+#include "le_bytes.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -255,4 +256,125 @@ void aoe_dib_nothing_ror(void) {}
 
 void aoe_dib_copy_back_ror(uint8_t *dst, const uint8_t *src, int32_t n) {
     for (; n != 0; --n) dst[n - 1] = src[n - 1];
+}
+
+/* 0x0042e460 */
+int aoe_dib_blit_scaled_ror(AoeDibBlitRor *bl) {
+    uint32_t dpitch, spitch;
+    int32_t dheight, sheight, ddir, sdir, i, row, drow, srow, sstep, dstep;
+    int32_t xoff[1024];
+    /* A span table whose first dword is 0 sends the original to the
+       unscaled 0x42e1f0; the caller routes that case (-1 here). */
+    if (bl->spans && bl->spans[0].empty == 0 && bl->spans[0].solid == 0 && bl->spans[0].first == 0 &&
+        bl->spans[0].last == 0)
+        return -1;
+    if (bl->transparent < 0) bl->transparent = 0;
+    if (bl->clip && !aoe_dib_clip_ror(bl->dest_info, NULL, &bl->dest_x, &bl->dest_y, &bl->w, &bl->h,
+                                      &bl->sx, &bl->sy, &bl->sw, &bl->sh, bl->flip_x, bl->flip_y))
+        return 0;
+    if (bl->w <= 0 || bl->h <= 0 || bl->w > 1024) return 0;
+    sstep = (bl->sw << 8) / bl->w;
+    dstep = (bl->sh << 8) / bl->h;
+    aoe_dib_layout_ror(bl->dest_info, &dpitch, &dheight, &ddir);
+    aoe_dib_layout_ror(bl->src_info, &spitch, &sheight, &sdir);
+    if (bl->flip_y) sdir = -sdir;
+    drow = ddir == 1 ? bl->dest_y : dheight - 1 - bl->dest_y;
+    if (!bl->flip_x) {
+        for (i = 0; i < bl->w; ++i) xoff[i] = (int32_t)(((int64_t)bl->sx << 8) + (int64_t)i * sstep) >> 8;
+    } else {
+        for (i = 0; i < bl->w; ++i) xoff[bl->w - 1 - i] = (int32_t)(((int64_t)bl->sx << 8) + (int64_t)i * sstep) >> 8;
+    }
+    for (row = 0, srow = bl->sy << 8; row < bl->h; ++row, srow += dstep, drow += ddir) {
+        int32_t sr = srow >> 8, sline = sdir == 1 ? sr : sheight - 1 - sr;
+        uint8_t *d = bl->dest_bits + (size_t)drow * dpitch + bl->dest_x;
+        const uint8_t *s = bl->src_bits + (size_t)sline * spitch;
+        if (bl->spans && !bl->flip_x) {
+            const AoeDibSpanRor *sp = &bl->spans[sr];
+            int32_t from, to;
+            if (sp->empty) continue;
+            from = sp->first < bl->sx ? 0 : ((sp->first - bl->sx) * (bl->w << 8) / bl->sw) >> 8;
+            to = ((sp->last - bl->sx + 1) * (bl->w << 8) / bl->sw) >> 8;
+            if (to > bl->w) to = bl->w;
+            if (from >= to) continue;
+            if ((bl->w << 8) / bl->sw == 0x100 && sp->solid) {
+                memcpy(d + from, s + xoff[from], (size_t)(to - from));
+            } else {
+                for (i = from; i < to; ++i) {
+                    uint8_t px = s[xoff[i]];
+                    if (px != bl->transparent) d[i] = px;
+                }
+            }
+        } else {
+            for (i = 0; i < bl->w; ++i) {
+                uint8_t px = s[xoff[i]];
+                if (px != bl->transparent) d[i] = px;
+            }
+        }
+    }
+    return 1;
+}
+
+/* 0x0042f190 */
+uint8_t *aoe_dib_match_palette_ror(uint8_t *dib, const AoeDibPaletteOpsRor *o, int remap_transparent,
+                                   int from_last) {
+    uint32_t header = aoe_le_u32(dib), width = aoe_le_u32(dib + 4);
+    int32_t height = (int32_t)aoe_le_u32(dib + 8), colours, image, bits_off, i, pal = o->palette_size;
+    uint16_t bpp = aoe_le_u16(dib + 14);
+    uint32_t compression = aoe_le_u32(dib + 16);
+    uint8_t table[256], transparent = 0, repl = 0;
+    uint8_t *rgb = dib + header;
+    if (height < 0) height = -height;
+    colours = (int32_t)aoe_le_u32(dib + 32);
+    if (colours == 0 && bpp < 9) colours = 1 << bpp;
+    image = (int32_t)aoe_le_u32(dib + 20);
+    if (image == 0) image = (int32_t)(((width * bpp + 31) >> 3) & ~3u) * height;
+    bits_off = compression == 3 ? (int32_t)header + 12 : (int32_t)header + colours * 4;
+    if (remap_transparent) {
+        int32_t r = rgb[2], g = rgb[1], b = rgb[0], step = 1, pass = 0;
+        transparent = from_last ? 0 : dib[bits_off + (int32_t)((width + 3) & ~3u) * (height - 1)];
+        for (;;) {
+            r += step; g += step; b += step;
+            if (r > 255 || g > 255 || b > 255 || r < 0 || g < 0 || b < 0) {
+                if (pass) break;
+                pass = 1; step = -1; r = rgb[2]; g = rgb[1]; b = rgb[0];
+                continue;
+            }
+            repl = o->nearest(o->context, (uint8_t)r, (uint8_t)g, (uint8_t)b);
+            if (repl) break;
+        }
+    }
+    for (i = 0; i < colours && i < 256; ++i) {
+        const uint8_t *c = rgb + i * 4;
+        if (remap_transparent && i == transparent) { table[i] = 0; continue; }
+        table[i] = o->nearest(o->context, c[2], c[1], c[0]);
+        if (remap_transparent && table[i] == 0) table[i] = repl;
+    }
+    for (; i < 256; ++i) table[i] = (uint8_t)i;
+    aoe_le_put_u32(dib + 32, (uint32_t)pal);
+    if (colours < pal) {
+        size_t size = header + (size_t)pal * 4 + (size_t)image;
+        int32_t new_off = compression == 3 ? (int32_t)header + 12 : (int32_t)header + pal * 4;
+        dib = o->regrow(o->context, dib, size);
+        memmove(dib + new_off, dib + bits_off, (size_t)image);
+        bits_off = new_off;
+    } else if (colours > pal) {
+        int32_t new_off = compression == 3 ? (int32_t)header + 12 : (int32_t)header + pal * 4;
+        memmove(dib + new_off, dib + bits_off, (size_t)image);
+        bits_off = new_off;
+    }
+    if (compression == 0) {
+        if (bpp == 8) aoe_dib_remap8_ror(dib + bits_off, image, table);
+        else aoe_dib_remap4_ror(dib + bits_off, image, table);
+    } else if (compression == 1) {
+        aoe_dib_remap_rle8_ror(dib + bits_off, table);
+    } else if (compression == 2) {
+        aoe_dib_nothing_ror();
+    }
+    rgb = dib + header;
+    for (i = 0; i < pal; ++i) {
+        uint8_t r, g, b;
+        o->entry(o->context, i, &r, &g, &b);
+        rgb[i * 4 + 2] = r; rgb[i * 4 + 1] = g; rgb[i * 4] = b; rgb[i * 4 + 3] = 0;
+    }
+    return dib;
 }

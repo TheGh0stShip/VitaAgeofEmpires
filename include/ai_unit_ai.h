@@ -666,8 +666,9 @@ typedef struct {
    followed (+0x94, flag 1): 10 either way; within range a member's own
    target (its +0x3c(0)) goes to +0x5c (10), or +0xd4(0) == 6 gives 10.
    0x2c8: a gone or dead target fails as above; the target's offset from
-   the saved point (-10, -10 for none) non-zero and its distance past the
-   range moves to the object (+0x94, no flag) or the point (+0x90): 10.
+   the saved point (-10, -10 for none) beyond -1.0..1.0 on either axis
+   and its distance past the range moves to the object (+0x94, no flag)
+   or the point (+0x90): 10.
    Else 9. */
 int32_t aoe_ai_unit_ai_check_ror(const AoeAiUnitAiCheckOpsRor *o);
 

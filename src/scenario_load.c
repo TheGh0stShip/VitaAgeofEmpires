@@ -18,7 +18,16 @@ void aoe_scenario_load_legacy(AoeScenarioLoadWorld *w,
                               int variant) {
     int32_t map[9];
     int32_t n, groups, count, i, j, header;
+    float scale = variant == 0 ? 1.0f : variant <= 3 ? (variant == 1 ? 1.03f : 1.04f)
+                : variant == 4 ? 1.06f : variant == 5 ? 1.07f : 1.08f;
     if (variant) w->load_counter = 0;
+    if (variant >= 2) {
+        int32_t skip = aoe_stream_i32(s);
+        if (skip > 0 && !aoe_stream_take(s, (size_t)skip)) {
+            o->close(o->ctx, s);
+            return;
+        }
+    }
     header = aoe_stream_i32(s);
     o->read_header(o->ctx, s);
     o->read_map(o->ctx, s);
@@ -28,9 +37,16 @@ void aoe_scenario_load_legacy(AoeScenarioLoadWorld *w,
         if (slot_order[i] >= 0 && slot_order[i] < 9) map[slot_order[i]] = i;
     for (i = 0; i < n; i++) o->player_new_view(o->ctx, i);
     groups = aoe_stream_i32(s);
-    for (i = 0; i < groups && !s->failed; i++) {
-        (void)aoe_stream_u8(s);
-        (void)aoe_stream_u8(s);
+    if (variant >= 3) {
+        for (i = 1; i < groups && i < 9; i++) {
+            int p = (i < w->player_count && mapped(o, map, i)) ? map[i] : 0;
+            o->player_load(o->ctx, p, s, map, scale);
+        }
+    } else {
+        for (i = 0; i < groups && !s->failed; i++) {
+            (void)aoe_stream_u8(s);
+            (void)aoe_stream_u8(s);
+        }
     }
     for (i = 0; i < groups && !s->failed; i++) {
         count = aoe_stream_i32(s);
@@ -57,10 +73,18 @@ void aoe_scenario_load_legacy(AoeScenarioLoadWorld *w,
         }
     }
     w->header_value = header;
-    (void)aoe_stream_take(s, 13);
-    for (i = 1; i < groups && i < 9; i++) {
-        int p = (i < w->player_count && mapped(o, map, i)) ? map[i] : 0;
-        o->player_load(o->ctx, p, s, map, variant ? 1.03f : 1.0f);
+    if (variant <= 2) {
+        (void)aoe_stream_take(s, 13);
+        for (i = 1; i < groups && i < 9; i++) {
+            int p = (i < w->player_count && mapped(o, map, i)) ? map[i] : 0;
+            o->player_load(o->ctx, p, s, map, scale);
+        }
+    } else if (variant >= 4) {
+        groups = aoe_stream_i32(s);
+        for (i = 1; i < groups && i < 9; i++) {
+            int p = (i < w->player_count && mapped(o, map, i)) ? map[i] : 0;
+            o->player_load2(o->ctx, p, s, map, scale);
+        }
     }
     o->close(o->ctx, s);
     for (i = 0; i + 1 < w->player_count && i + 1 < groups && i + 1 < 9; i++) {

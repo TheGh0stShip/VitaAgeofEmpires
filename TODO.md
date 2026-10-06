@@ -50,6 +50,7 @@ The objective is a faithful, native PS Vita port of *Age of Empires I*, with Ris
 ## Translation status (2026-10-06)
 
 - [x] Translate every Ghidra-discovered patched RoR 1.0a game-code function (4,510/4,510 cited; `docs/PORT_COVERAGE.md`). Excludes the hand-written assembly module (0x00524e90.., 32 functions) and the C runtime (0x00525c24.., 1,308 functions).
+- [ ] Translate the functions the stricter audit lists as only mentioned (`tools/port_translation_audit.py`: 149 functions, about 43 KB, mostly comm, world and game-object construction), and the partly translated screen constructors (e.g. MP Setup 0x00487f40).
 - [ ] Integrate the translations: replace the callback ("ops") seams with the reconstructed game/world/player/unit/panel objects and run them from one game loop and state machine.
 - [ ] Native equivalents for the assembly module (shape rasterizers, copy kernels), audited against the existing sprite/draw code.
 - [ ] Vita platform layer for the translated screens: panel/surface rendering, fonts, input mapping, audio (effects, MIDI, user-extracted CD music), settings persistence, string resources from the user's `language.dll`.

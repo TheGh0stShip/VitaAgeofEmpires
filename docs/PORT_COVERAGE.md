@@ -63,6 +63,62 @@ Ready now (all callees cited): 0
 | 0x00510000 | 191 | 191 (100%) | 65792 | 65792 (100%) |
 | 0x00520000 | 89 | 89 (100%) | 19744 | 19744 (100%) |
 
+## Translation audit (2026-10-06)
+
+`tools/port_translation_audit.py` is stricter than the citation count: a
+function counts as translated only when its address documents a function
+(a header outside struct bodies, or a comment directly above a definition),
+not when a translation merely names it as a callee. It is still a lower
+bound on what is missing: a function whose address also appears in a
+module's description passes. Known example: the MP Setup Screen's panel
+constructor 0x00487f40 (only its state and non-panel methods are
+translated). Treat "100% cited" accordingly.
+
+Patched RoR 1.0a game code: 4510 functions, 4493 with an 8-digit citation, 149 of those only mentioned as callees (42810 bytes)
+
+| Address | Size | Mentioned in |
+| --- | ---: | --- |
+| 0x00422ce0 | 2784 | include/comm_handler.h |
+| 0x0041f780 | 2384 | include/comm_handler.h |
+| 0x004816d0 | 2208 | include/game_ror.h, include/game_screen.h |
+| 0x0050c570 | 2176 | include/command_game.h |
+| 0x0041d700 | 2160 | include/comm_handler.h |
+| 0x00474d40 | 1872 | include/world_base.h |
+| 0x0041e1c0 | 1680 | include/game_frame.h |
+| 0x0041ebe0 | 1664 | include/world_game.h, src/comm_handler.c |
+| 0x0043cf60 | 1072 | include/game_startup.h |
+| 0x004e9fa4 | 932 | include/world_ror.h |
+| 0x00443d80 | 912 | include/world_base.h |
+| 0x00506900 | 896 | include/world_ror.h |
+| 0x004e9c60 | 836 | include/world_ror.h |
+| 0x00447e40 | 800 | include/edit_toolbar.h, include/tile_map.h |
+| 0x004445e0 | 784 | include/tile_map.h, include/world_game.h |
+| 0x004ea40d | 781 | include/world_ror.h |
+| 0x004484f0 | 768 | src/terrain.c |
+| 0x004a4ea0 | 704 | include/world_base.h |
+| 0x00424f30 | 656 | include/comm_handler.h, include/comm_system_message.h |
+| 0x00448270 | 640 | include/map_shore.h, include/random_map.h |
+| 0x00479050 | 624 | src/screens/achievements_screen.c |
+| 0x00446640 | 608 | include/world_game.h |
+| 0x004a4c40 | 608 | include/world_base.h |
+| 0x004ef8c0 | 544 | include/world_ror.h |
+| 0x004f02d0 | 528 | include/scenario_runtime.h, src/scenario_runtime.c |
+| 0x004a5220 | 512 | include/world_base.h |
+| 0x0043f730 | 496 | src/tech_tree.c |
+| 0x0041be20 | 448 | include/game_ui.h |
+| 0x00421480 | 448 | include/comm_handler.h |
+| 0x004468a0 | 384 | include/world_game.h |
+| 0x0041e850 | 368 | include/game_frame.h |
+| 0x004272b0 | 368 | include/action_repair.h, src/world_combat.c |
+| 0x004f3350 | 368 | include/command_player.h |
+| 0x00447230 | 352 | include/world_base.h |
+| 0x00424c80 | 336 | include/mp_setup_screen.h |
+| 0x004463f0 | 336 | include/map_shore.h |
+| 0x00405db0 | 304 | include/world_combat.h, src/world_combat.c |
+| 0x00450ae0 | 304 | include/game_window.h |
+| 0x00501250 | 304 | include/game_ui.h |
+| 0x00521a30 | 288 | include/random_map.h |
+
 ## Commands
 
 ```
@@ -70,4 +126,5 @@ python3 tools/revision_match.py            # refresh the revision maps
 python3 tools/port_worklist.py --summary   # coverage by region
 python3 tools/port_worklist.py --classes   # classes by uncited own code
 python3 tools/port_worklist.py --region 0x4b --limit 60   # leaf-first list
+python3 tools/port_translation_audit.py --all   # cited but only as callees
 ```

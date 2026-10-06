@@ -101,6 +101,18 @@ static const AoeMpSetupScreenOpsRor ops = {
     f_skind, f_pidx, f_tab, f_focus, f_lobby, f_wait, f_drop, f_make, f_show, f_quit,
     f_hopen, f_hclose, f_hcount, f_hname, f_haddr, f_halias, f_oktext};
 
+static char chat_sent[32], input_now[32] = "hi";
+static int base_calls, civ_set = -1;
+static const char *a_text(void *c, void *p) { (void)c; (void)p; return input_now; }
+static void a_set(void *c, void *p, const char *t) { (void)c; (void)p; snprintf(input_now, sizeof input_now, "%s", t); }
+static void a_chat(void *c, const char *t) { (void)c; snprintf(chat_sent, sizeof chat_sent, "%s", t); }
+static int32_t a_id(void *c, void *p) { (void)c; (void)p; return 7; }
+static void a_civ(void *c, int32_t pl, int32_t v) { (void)c; civ_set = pl * 100 + v; }
+static int32_t a_count(void *c) { (void)c; return 4; }
+static int a_host(void *c) { (void)c; return 0; }
+static int a_base(void *c, void *p, int32_t ac, int32_t x, int32_t y) { (void)c; (void)p; (void)ac; (void)x; (void)y; ++base_calls; return 9; }
+static const char *a_name(void *c, void *p) { (void)c; (void)p; return "Other"; }
+
 int main(void) {
     static AoeGameSettingsRor g;
     static AoeMpSetupScreenRor m;
@@ -271,6 +283,27 @@ int main(void) {
     host_ok = 0; ok_txt[0] = 0;
     aoe_mp_setup_screen_addresses_ror(&m);
     assert(ok_txt[0] == 0 && host_closed == 2);
+
+    /* 0x004895b0: chat input, a civilisation list, the base fallback. */
+    {
+        static AoeMpSetupScreenOpsRor o;
+        static AoeMpSetupScreenRor a;
+        static AoeGameSettingsRor ag;
+        static int chat_panel, civ_panel, other;
+        o.input_text = a_text; o.input_set = a_set; o.send_chat = a_chat; o.list_id = a_id;
+        o.set_civ = a_civ; o.player_count = a_count; o.host = a_host; o.base_action = a_base;
+        o.panel_name = a_name;
+        memset(&ag, 0, sizeof ag);
+        aoe_settings_set_flag_97e_ror(&ag, 1);
+        a.settings = &ag; a.ops = &o;
+        a.panel_610 = &chat_panel; a.civ_lists[2] = &civ_panel;
+        assert(aoe_mp_setup_screen_action_ror(&a, &chat_panel, 0, 0, 0) == 1);
+        assert(strcmp(chat_sent, "hi") == 0 && input_now[0] == 0);
+        assert(aoe_mp_setup_screen_action_ror(&a, &civ_panel, 0, 0, 0) == 1);
+        assert(civ_set == 207 && a.field_72c == 7);
+        assert(aoe_mp_setup_screen_action_ror(&a, &other, 0, 0, 0) == 9 && base_calls == 1);
+        assert(aoe_mp_setup_screen_action_ror(&a, NULL, 1, 0, 0) == 9 && base_calls == 2);
+    }
 
     puts("mp_setup_screen_test: ok");
     return 0;

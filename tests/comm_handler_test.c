@@ -192,6 +192,24 @@ static void join_lobby_tests(void) {
     lb_iface = 1; lb_create_hr = -1;
     assert(aoe_comm_lobby_connect_ror(&c, &l, &has) == 0);
 }
+/* 0x00424760: slot 3 (computer) moves into empty slot 2, slot 1 stays. */
+static void compact_tests(void) {
+    static AoeCommRor c;
+    static AoeCommOpsRor o;
+    static char names[10][0x80], infos[10][0x80];
+    o.self_dpid = self_dpid; o.log = log_; o.post = post;
+    c.ops = &o; c.count = 3; c.names = names; c.infos = infos;
+    c.player_state[1] = 2; c.dpid[1] = 100;
+    c.player_state[3] = 4; c.dpid[3] = 7; c.stat[5][3] = 55; c.last_turn[3] = 9;
+    strcpy(names[3], "Cpu"); strcpy(infos[3], "x");
+    nposts = 0; self_id = 100;
+    aoe_comm_compact_players_ror(&c);
+    assert(c.player_state[2] == 4 && c.dpid[2] == 7 && c.stat[5][2] == 55 && c.last_turn[2] == 9);
+    assert(strcmp(names[2], "Cpu") == 0 && strcmp(infos[2], "x") == 0);
+    assert(c.player_state[3] == 0 && c.dpid[3] == 0 && names[3][0] == 0 && c.stat[5][3] == 0);
+    assert(c.self == 1 && nposts >= 1 && posts[nposts - 1][0] == 0x17b8);
+}
+
 int main(void) {
     enable_new_players_tests();
     static AoeCommRor c;
@@ -441,5 +459,6 @@ int main(void) {
     puts("comm_handler_test: ok");
     session_tests();
     join_lobby_tests();
+    compact_tests();
     return 0;
 }

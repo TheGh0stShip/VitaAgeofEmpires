@@ -906,3 +906,72 @@ int32_t aoe_game_screen_paint_ror(const AoeGameScreenPaintOpsRor *o) {
     o->set_painting(o->context, 0);
     return 0;
 }
+
+int aoe_game_screen_command_ror(int map_orders, int32_t code, int32_t arg, int right,
+                                int scores_on,
+                                void (*run)(void *ctx, uint32_t handler, int32_t arg, int32_t arg2),
+                                void *ctx) {
+    uint32_t h = 0;
+    int32_t a = 0, a2 = 0;
+    if (right) {
+        if (!map_orders || code != 0x12) return 0;
+        run(ctx, 0x485520u, arg, -1);
+        return 1;
+    }
+    switch (code) {
+    case 6: h = 0x4856b0u; break;
+    case 8: h = 0x484e80u; break;
+    case 9: h = 0x485620u; break;
+    case 0xb: h = 0x484900u; break;
+    case 0xc: h = 0x485140u; break;
+    case 0xd: h = 0x4849b0u; break;
+    case 0xe: h = 0x484b60u; break;
+    case 0xf: h = 0x4850b0u; break;
+    case 0x15: h = 0x457cd0u; break;
+    case 0x18: h = 0x484f90u; a = !scores_on; break;
+    default: break;
+    }
+    if (!h && map_orders) {
+        switch (code) {
+        case 1: h = 0x485770u; break;
+        case 2: h = 0x4851d0u; break;
+        case 3: h = 0x4847e0u; break;
+        case 4: h = 0x42c330u; break;
+        case 5: h = 0x4854f0u; break;
+        case 7: h = 0x485660u; break;
+        case 0x10: h = 0x4ed890u; a = arg; break;
+        case 0x11: h = 0x4852f0u; a = arg; break;
+        case 0x12: case 0x20: h = 0x485520u; a = arg; a2 = 1; break;
+        case 0x13: h = 0x484820u; a = arg; break;
+        case 0x14: h = 0x484980u; break;
+        case 0x16: h = 0x485830u; break;
+        case 0x17: h = 0x485860u; break;
+        case 0x19: case 0x1a: case 0x1b: h = 0x4858b0u; a = code - 0x19; break;
+        case 0x1c: h = 0x484ef0u; break;
+        case 0x1d: h = 0x484b10u; break;
+        case 0x1e: h = 0x484790u; break;
+        case 0x1f: h = 0x484f40u; break;
+        case 0x21: h = 0x485520u; a = arg; a2 = -1; break;
+        default: break;
+        }
+    }
+    if (!h) return 0;
+    run(ctx, h, a, a2);
+    return 1;
+}
+
+void aoe_game_screen_player_changed_ror(int32_t *stored_id, int16_t *stored_civ,
+                                        const AoeGameScreenPlayerOpsRor *o) {
+    int32_t old = *stored_id, now = o->player_id(o->context);
+    *stored_id = now;
+    *stored_civ = o->player_civ(o->context);
+    if (old != now) {
+        int32_t st = o->game_state(o->context);
+        if (st == 0x15) o->state15_reset(o->context);
+        switch (st) {
+        case 1: case 2: case 3: case 8: case 9: case 10: case 0xe: case 0x12: break;
+        default: o->game_refresh(o->context); break;
+        }
+    }
+    o->first_page(o->context);
+}

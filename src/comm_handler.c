@@ -1260,3 +1260,41 @@ int32_t aoe_comm_lobby_connect_ror(AoeCommRor *c, const AoeCommLobbyOpsRor *l,
     l->set_launched(l->context, 1);
     return 1;
 }
+
+static int compact_live(const AoeCommRor *c, uint32_t slot) {
+    return aoe_comm_playing_ror(c, slot) || aoe_comm_computer_ror(c, slot);
+}
+
+static void compact_locked(AoeCommRor *c, uint32_t slot) {
+    char text[0x100];
+    snprintf(text, sizeof text, "Position %d *LOCKED*.   Plr=%s", (int)slot,
+             c->names ? c->names[slot] : "");
+    if (c->ops && c->ops->log) c->ops->log(c->ops->context, text);
+}
+
+void aoe_comm_compact_players_ror(AoeCommRor *c) {
+    uint32_t i, j, k;
+    char text[0x40];
+    for (i = 1; i <= c->count; ++i) {
+        if (compact_live(c, i)) {
+            compact_locked(c, i);
+            continue;
+        }
+        for (j = i; j <= c->count && !compact_live(c, j); ++j) {}
+        if (j > c->count) continue;
+        if (c->names) memcpy(c->names[i], c->names[j], sizeof c->names[i]);
+        if (c->infos) memcpy(c->infos[i], c->infos[j], sizeof c->infos[i]);
+        c->dpid[i] = c->dpid[j];
+        for (k = 0; k < 8; ++k) c->stat[k][i] = c->stat[k][j];
+        c->player_state[i] = c->player_state[j];
+        c->last_turn[i] = c->last_turn[j];
+        c->time_1344[i] = c->time_1344[j];
+        snprintf(text, sizeof text, "Moved %d->%d", (int)j, (int)i);
+        if (c->ops && c->ops->log) c->ops->log(c->ops->context, text);
+        compact_locked(c, i);
+        aoe_comm_init_player_ror(c, j, 0);
+        if (c->names) c->names[j][0] = '\0';
+        if (c->infos) c->infos[j][0] = '\0';
+    }
+    aoe_comm_find_self_ror(c);
+}

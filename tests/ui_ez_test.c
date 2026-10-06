@@ -238,6 +238,44 @@ static void att_mmw(void *c, void *w) { (void)c; att_mm_world = w; }
 static void att_mmp(void *c, void *p) { (void)c; att_mm_player = p; }
 static void *att_viewed(void *c) { (void)c; return (void *)77; }
 
+static int rs_calls[3], rs_n;
+static void rs_rect(void *c, int32_t w, int32_t h) { (void)c; (void)w; (void)h; rs_calls[rs_n++] = 1; }
+static void rs_layout(void *c) { (void)c; rs_calls[rs_n++] = 2; }
+
+static void editor_key_tests(void) {
+    AoeEditorKeyStateRor st = {3, 0, 0, 0, 0, 0};
+    AoeEditorKeyResultRor r;
+    AoeScenarioEditorResizeOpsRor ro = {NULL, rs_rect, rs_layout};
+    assert(aoe_scenario_editor_key_ror(&st, 'A', 1, 0, &r) == 1 && st.grid == 3);
+    aoe_scenario_editor_key_ror(&st, 'A', 1, 0, &r);
+    assert(st.grid == 0 && r.action == AOE_EDKEY_GRID);
+    aoe_scenario_editor_key_ror(&st, 'A', 1, 1, &r);
+    assert(st.grid == 0 && r.action == AOE_EDKEY_NONE);
+    aoe_scenario_editor_key_ror(&st, 'B', 1, 0, &r);
+    assert(st.cycle == 1);
+    aoe_scenario_editor_key_ror(&st, 'B', 1, 0, &r);
+    assert(st.cycle == 0 && r.action == AOE_EDKEY_CYCLE);
+    aoe_scenario_editor_key_ror(&st, 'W', 1, 0, &r);
+    assert(r.action == AOE_EDKEY_PAGE && r.page == 9);
+    aoe_scenario_editor_key_ror(&st, 9, 0, 0, &r);
+    assert(r.action == AOE_EDKEY_FOCUS_PLAYERS);
+    aoe_scenario_editor_key_ror(&st, '2', 0, 0, &r);
+    assert(r.action == AOE_EDKEY_DROPDOWN && r.dropdown_index == 1 && r.panel_offset == 0x5b4);
+    st.page = 4;
+    aoe_scenario_editor_key_ror(&st, '0', 0, 0, &r);
+    assert(r.action == AOE_EDKEY_DROPDOWN && r.dropdown_index == 0 && r.panel_offset == 0x618);
+    st.page = 8;
+    aoe_scenario_editor_key_ror(&st, '3', 0, 0, &r);
+    assert(r.player == 3 && r.panel_offset == 0x7cc && r.notify_arg == 3);
+    st.page = 1;
+    aoe_scenario_editor_key_ror(&st, '5', 0, 0, &r);
+    assert(r.action == AOE_EDKEY_PLAYER && r.player == 5);
+    aoe_scenario_editor_key_ror(&st, 0x1b, 0, 0, &r);
+    assert(r.action == AOE_EDKEY_CLEAR);
+    aoe_scenario_editor_resize_ror(640, 480, &ro);
+    assert(rs_n == 3 && rs_calls[0] == 1 && rs_calls[1] == 2 && rs_calls[2] == 1);
+}
+
 static void editor_release_tests(void) {
     AoeScenarioEditorReleaseOpsRor o = {NULL, ed_close, ed_del, ed_fbuf, ed_dobj, ed_fshape, ed_vnotify, ed_brel};
     AoeScenarioEditorAttachOpsRor a = {NULL, att_map, att_player, att_mmw, att_mmp, att_viewed};
@@ -835,5 +873,6 @@ int main(void) {
         assert(!aoe_editor_condition_plan_ror(19, 1, &cp));
     }
     editor_release_tests();
+    editor_key_tests();
     return 0;
 }

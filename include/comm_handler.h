@@ -143,6 +143,7 @@ typedef struct {
     uint8_t rx_buf[4001];             /* +0x24: the receive buffer */
     uint32_t rx_bytes;                /* +0x12b8 */
     uint32_t rx_messages;             /* +0x1334 */
+    char (*infos)[0x80];              /* +0x12cc: per slot, the second name */
     const AoeCommOpsRor *ops;
 } AoeCommRor;
 
@@ -283,6 +284,15 @@ int aoe_comm_request_resend_ror(AoeCommRor *c, int32_t serial, uint32_t slot);
 int aoe_comm_ack_received_ror(AoeCommRor *c, int32_t serial, uint32_t slot);
 int aoe_comm_tx_purge_ror(AoeCommRor *c);
 int aoe_comm_rx_deliver_ror(AoeCommRor *c);
+
+/* 0x00424760 compact the player slots: each slot 1..count that is
+   playing or a computer stays ("Position %d *LOCKED*.   Plr=%s"); an
+   empty one takes the next playing or computer slot above it (its two
+   names, DirectPlay ID, eight stats, state, last turn and +0x1344 time;
+   "Moved %d->%d", then the LOCKED line) and that slot is initialised
+   (0x00424330 with ID 0 and empty names). Finally our slot is found
+   again (0x00420780). */
+void aoe_comm_compact_players_ror(AoeCommRor *c);
 
 #endif
 

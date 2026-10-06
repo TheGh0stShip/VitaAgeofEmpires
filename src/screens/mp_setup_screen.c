@@ -498,3 +498,168 @@ int aoe_mp_setup_screen_start_ror(AoeMpSetupScreenRor *m) {
     OPS->ok_message(CTX, 0x961, 0x1c2, 100);
     return 0;
 }
+
+static void mp_setup_defocus_chat(AoeMpSetupScreenRor *m) {
+    if (m->panel_610 && OPS->panel_active(CTX, m->panel_610)) OPS->focus(CTX, m->panel_610);
+}
+
+static void mp_setup_ready(AoeMpSetupScreenRor *m) {
+    int host_here;
+    if (!OPS->button_state(CTX, m->panel_714)) {
+        OPS->log(CTX, "$$$ SELECTED NOT READY");
+        OPS->send_ready(CTX, 0, 0, 0, OPS->host(CTX) ? 0 : OPS->cd_check(CTX, 0) + 1, 0, 0, 0, 0);
+        mp_setup_defocus_chat(m);
+        m->field_85c = 0;
+    } else {
+        OPS->log(CTX, "$$$ SELECTED I'M READY");
+        if (OPS->host(CTX)) {
+            OPS->send_ready(CTX, 1, 0, 0, 0, 0, 0, 0, 0);
+        } else {
+            int32_t s;
+            if (OPS->player_version(CTX, 0) != 2) {
+                OPS->button_slot_e4(CTX, m->panel_714, 0);
+                OPS->ok_message(CTX, 0x25e3, 450, 100);
+                return;
+            }
+            s = OPS->self_slot(CTX) - 1;
+            OPS->log(CTX, "$$$ SAVING MYCIV & MYTEAM");
+            m->field_72c = OPS->list_id(CTX, m->civ_lists[s]);
+            m->field_730 = OPS->list_id(CTX, m->pos_lists[s]);
+            m->field_734 = OPS->button_value(CTX, m->color_buttons[s]);
+            m->field_738 = OPS->button_state(CTX, m->team_buttons[s]) + 1;
+            m->field_73c = aoe_settings_flag_8fc_ror(m->settings) ? OPS->scenario_checksum(CTX) : 0;
+            OPS->send_ready(CTX, 1, m->field_72c, m->field_730 + 1, OPS->cd_check(CTX, 0) + 1,
+                            m->field_734, m->field_738, m->field_73c, 2);
+        }
+        mp_setup_defocus_chat(m);
+        m->field_85c = 1;
+    }
+    OPS->update_ready(CTX);
+    host_here = OPS->host(CTX);
+    if (host_here) {
+        OPS->button_set_state(CTX, m->panel_620, m->field_85c);
+        OPS->button_set_state(CTX, m->panel_700, m->field_85c == 0);
+        OPS->game_slot_48(CTX);
+        m->field_88c = 0;
+        OPS->share_player_data_now(CTX);
+    }
+}
+
+/* 0x004895b0 */
+int aoe_mp_setup_screen_action_ror(AoeMpSetupScreenRor *m, void *panel, int32_t action,
+                                   int32_t a, int32_t b) {
+    const char *name;
+    int32_t i;
+    if (!panel) return OPS->base_action(CTX, panel, action, a, b);
+    if (action == 1) {
+        if (panel == m->panel_700) { mp_setup_defocus_chat(m); aoe_mp_setup_screen_start_ror(m); return 1; }
+        if (panel == m->panel_714) { mp_setup_ready(m); return 1; }
+        if (panel == m->panel_620) {
+            mp_setup_defocus_chat(m);
+            if (!OPS->screen_exists(CTX, "Game Settings Screen")) {
+                OPS->wait_cursor(CTX);
+                OPS->make_screen(CTX, "Game Settings Screen", 0);
+            }
+            OPS->show_screen(CTX, "Game Settings Screen");
+            return 1;
+        }
+        if (panel == m->panel_710) { OPS->help(CTX); return 1; }
+        if (panel == m->panel_718) { OPS->quit(CTX); return 1; }
+        if (panel == m->panel_70c) { mp_setup_defocus_chat(m); aoe_mp_setup_screen_leave_ror(m, 0); return 1; }
+    }
+    if (panel == m->panel_858) {
+        if (action == 1) { aoe_mp_setup_screen_addresses_ror(m); return 1; }
+    } else if (action == 1) {
+        for (i = 0; i < 8; ++i) {
+            if (panel == m->color_buttons[i]) {
+                OPS->set_color(CTX, i, OPS->button_value(CTX, panel));
+                if (aoe_settings_flag_97e_ror(m->settings) && !OPS->host(CTX))
+                    m->field_734 = OPS->button_value(CTX, panel);
+                return 1;
+            }
+            if (panel == m->team_buttons[i]) {
+                OPS->set_byte_bbd0(CTX, i, OPS->button_state(CTX, panel) + 1);
+                if (aoe_settings_flag_97e_ror(m->settings) && !OPS->host(CTX))
+                    m->field_738 = OPS->button_state(CTX, panel) + 1;
+                return 1;
+            }
+        }
+    }
+    if (panel == m->panel_610 && action == 0) {
+        const char *t = OPS->input_text(CTX, panel);
+        if (t && *t) {
+            OPS->send_chat(CTX, t);
+            OPS->input_set(CTX, panel, "");
+            return 1;
+        }
+    }
+    if (panel == m->panel_6e0 && action == 0) {
+        OPS->set_player_count(CTX, OPS->list_id(CTX, panel));
+        OPS->settings_refresh(CTX);
+        return 1;
+    }
+    name = OPS->panel_name(CTX, panel);
+    if (name && strcmp(name, "Game Settings Screen") == 0) {
+        if (action != 0) {
+            OPS->settings_refresh(CTX);
+            if (!aoe_settings_flag_97d_ror(m->settings)) {
+                OPS->game_slot_48(CTX);
+                m->field_88c = 0;
+            }
+        }
+        OPS->show_screen(CTX, "MP Setup Screen");
+        return 1;
+    }
+    if (name && strcmp(name, "Kick Dialog") == 0) {
+        void *list = m->kind_lists[m->kick_player - 1];
+        int32_t index = 0;
+        if (action == 0) {
+            int32_t id = OPS->list_id(CTX, list);
+            OPS->kick_send(CTX, m->kick_player);
+            OPS->comm_slot(CTX, m->kick_player, id);
+            index = OPS->list_index(CTX, list, id);
+        }
+        OPS->list_select(CTX, list, index);
+        OPS->delete_panel(CTX, panel);
+        return 1;
+    }
+    if (action == 0) {
+        for (i = 0; i < OPS->player_count(CTX); ++i) {
+            if (panel == m->kind_lists[i]) {
+                if (aoe_settings_flag_97e_ror(m->settings) && OPS->list_selected(CTX, panel) > 0 &&
+                    OPS->slot_human(CTX, i + 1)) {
+                    aoe_mp_setup_screen_kick_ror(m, i + 1);
+                    return 1;
+                }
+                OPS->comm_slot(CTX, i + 1, OPS->list_id(CTX, panel));
+                return 1;
+            }
+            if (panel == m->civ_lists[i]) {
+                OPS->set_civ(CTX, i, OPS->list_id(CTX, panel));
+                if (aoe_settings_flag_97e_ror(m->settings) && !OPS->host(CTX))
+                    m->field_72c = OPS->list_id(CTX, panel);
+                return 1;
+            }
+            if (panel == m->pos_lists[i]) {
+                int32_t next = 1, s;
+                if (aoe_settings_flag_97e_ror(m->settings)) {
+                    OPS->set_position(CTX, i, OPS->list_id(CTX, panel));
+                    if (!OPS->host(CTX)) m->field_730 = OPS->list_id(CTX, panel);
+                    return 1;
+                }
+                /* Single player: any list sets player 0's position; the
+                   others take the remaining used scenario slots in turn. */
+                OPS->set_position(CTX, 0, OPS->list_id(CTX, panel));
+                for (s = 0; s < 8; ++s) {
+                    if (s != OPS->position_of(CTX, 0) && OPS->scenario_slot_used(CTX, s)) {
+                        OPS->set_position(CTX, next, s);
+                        if (++next >= OPS->player_count(CTX)) break;
+                    }
+                }
+                OPS->update_ready(CTX);
+                return 1;
+            }
+        }
+    }
+    return OPS->base_action(CTX, panel, action, a, b);
+}

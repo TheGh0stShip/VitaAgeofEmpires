@@ -1086,6 +1086,67 @@ static void test_setup_and_preview(void)
     pv_hit = 0;
     assert(aoe_main_view_place_preview_ror(&pv_ops, 1, 2, &code, &py) == 1 && code == 0);
 }
+static int ep_ok, ep_reloc, ep_x, ep_y, ep_rel; static uint32_t ep_shape, ep_face;
+static int ep_true(void *c) { (void)c; return 1; }
+static void ep_mouse(void *c, int32_t *x, int32_t *y) { (void)c; *x = 50; *y = 60; }
+static int ep_pick(void *c, int32_t x, int32_t y) { (void)c; return x == 40 && y == 40; }
+static int ep_tile(void *c, int32_t x, int32_t y, int32_t *tx, int32_t *ty) { (void)c; (void)x; (void)y; *tx = 3; *ty = 4; return 1; }
+static void ep_corners(void *c, float fx, float fy, int16_t o[8]) { (void)c; (void)fx; (void)fy; o[0] = 10; o[1] = 20; o[4] = 30; o[5] = 40; }
+static int ep_can(void *c, float fx, float fy) { (void)c; assert(fx == 3.5f && fy == 4.5f); return ep_ok; }
+static uint32_t ep_flags(void *c) { (void)c; return 5u << 7; }
+static uint8_t ep_facing(void *c) { (void)c; return 3; }
+static uint8_t ep_shape_cb(void *c) { (void)c; return 0x42; }
+static int ep_relocating(void *c) { (void)c; return ep_reloc; }
+static void ep_draw(void *c, int32_t x, int32_t y, int r, uint32_t f, uint32_t s) { (void)c; ep_x = x; ep_y = y; ep_rel = r; ep_face = f; ep_shape = s; }
+static void test_editor_preview(void)
+{
+    AoeMainViewEditorPreviewOps o = {0, ep_true, ep_mouse, ep_pick, ep_tile, ep_corners, ep_can,
+                                     ep_flags, ep_true, ep_facing, ep_shape_cb, ep_relocating, ep_draw};
+    int32_t code = 7, py = 0;
+    ep_ok = 1; ep_reloc = 1;
+    assert(aoe_main_view_editor_preview(&o, 10, 20, 100, 100, &code, &py) == 1);
+    assert(code == 0 && py == 31 && ep_x == 21 && ep_y == 31);
+    assert(ep_rel == 1 && ep_face == 1 && ep_shape == 0x97);
+    ep_ok = 0;
+    assert(aoe_main_view_editor_preview(&o, 10, 20, 100, 100, &code, &py) == 1);
+    assert(ep_shape == 0x42);
+    assert(aoe_main_view_editor_preview(&o, 60, 20, 100, 100, &code, &py) == 0);
+}
+
+static int rc_log;
+static void rc_cancel(void *c) { (void)c; rc_log |= 1; }
+static void rc_prep(void *c) { (void)c; rc_log |= 2; }
+static int rc_yes(void *c, int32_t x, int32_t y) { (void)c; (void)x; (void)y; return 1; }
+static void rc_note(void *c) { (void)c; rc_log |= 4; }
+static int rc_busy(void *c) { (void)c; return 0; }
+static void rc_order(void *c, int32_t x, int32_t y) { (void)c; assert(x == 5 && y == 6); rc_log |= 8; }
+static int rc_find(void *c, int32_t u) { (void)c; return u == 9; }
+static void rc_rally(void *c) { (void)c; rc_log |= 16; }
+static void rc_box(void *c) { (void)c; rc_log |= 32; }
+static void rc_redraw(void *c) { (void)c; rc_log |= 64; }
+static void rc_reset(void *c) { (void)c; rc_log |= 128; }
+static void rc_unsel(void *c) { (void)c; rc_log |= 256; }
+static void test_right_click(void)
+{
+    AoeMainViewRightClickOps o = {0, 3, 0, 0, 1, 1, 1, rc_cancel, rc_prep, rc_yes, rc_note, rc_busy,
+                                  rc_order, rc_find, rc_yes, rc_rally, rc_box, rc_redraw, rc_reset, rc_unsel};
+    assert(aoe_main_view_right_click(&o, 5, 6, 0) == 0);
+    o.mode = 4; o.drag_pending = 1; rc_log = 0;
+    assert(aoe_main_view_right_click(&o, 5, 6, 0) == 1 && rc_log == 1);
+    o.drag_pending = 0; rc_log = 0;
+    assert(aoe_main_view_right_click(&o, 5, 6, 0) == 1 && rc_log == (2 | 8));
+    rc_log = 0;
+    assert(aoe_main_view_right_click(&o, 5, 6, 9) == 1 && rc_log == (2 | 16 | 64));
+    o.sub_mode = 0x15; rc_log = 0;
+    assert(aoe_main_view_right_click(&o, 5, 6, 0) == 1 && rc_log == (2 | 32 | 64 | 128));
+    o.sub_mode = 0x14; rc_log = 0;
+    assert(aoe_main_view_right_click(&o, 5, 6, 0) == 1 && rc_log == (2 | 4));
+    o.sub_mode = 0; o.full_player = 0; rc_log = 0;
+    assert(aoe_main_view_right_click(&o, 5, 6, 0) == 1 && rc_log == (2 | 256 | 64));
+    o.selection_kind = 3;
+    assert(aoe_main_view_right_click(&o, 5, 6, 0) == 0);
+}
+
 int main(void)
 {
     AoeMainViewRor v;
@@ -1270,5 +1331,7 @@ int main(void)
     puts("main_view_test: ok");
     test_collect_nearby();
     test_setup_and_preview();
+    test_editor_preview();
+    test_right_click();
     return 0;
 }

@@ -1066,4 +1066,75 @@ typedef struct {
 int aoe_main_view_place_preview_ror(const AoeMainViewPreviewOpsRor *o, int32_t x, int32_t y,
                                     int32_t *cursor_code, int32_t *preview_y);
 
+
+/* 0x00511080 (editor/game view): the placement preview under the game
+   mouse. Needs a selected template (game +0x3fc != -1 with a non-null
+   template in the player's table) and the mouse inside the view rect
+   (+0x8c..+0x98); the view pick must hit terrain
+   ('3'). The pick point goes through the template's +0x24 snap, then the
+   tile check and footprint corners; the
+   placement check (+0x20) sets the cursor code as in the RoR sibling.
+   With the template's +0x18 the preview is drawn at the corner midpoint
+   with facing bit (+0xa8 & 1) and shape 0x97 when placeable else +0xa9;
+   in game mode 8 / sub-mode 1 with a relocation object at +0x174 the
+   relocated object's colour and its +0x35 byte are used. The cursor code
+   is cleared afterwards. Returns 1 when the preview path ran. */
+typedef struct {
+    void *context;
+    int (*has_template)(void *context);
+    void (*mouse)(void *context, int32_t *x, int32_t *y);
+    int (*pick_terrain)(void *context, int32_t vx, int32_t vy); /* nonzero for '3' */
+    int (*tile_at)(void *context, int32_t vx, int32_t vy, int32_t *tx, int32_t *ty);
+    void (*corners)(void *context, float fx, float fy, int16_t out[8]);
+    int (*can_place)(void *context, float fx, float fy);
+    uint32_t (*template_flags)(void *context);
+    int (*template_has_graphic)(void *context);
+    uint8_t (*template_facing)(void *context);   /* +0xa8 */
+    uint8_t (*template_shape)(void *context);    /* +0xa9 */
+    int (*relocating)(void *context);            /* mode 8/1 and +0x174 set */
+    void (*draw_preview)(void *context, int32_t x, int32_t y, int relocated,
+                         uint32_t facing, uint32_t shape);
+} AoeMainViewEditorPreviewOps;
+int aoe_main_view_editor_preview(const AoeMainViewEditorPreviewOps *o, int32_t left,
+                                 int32_t top, int32_t right, int32_t bottom,
+                                 int32_t *cursor_code, int32_t *preview_y);
+
+/* 0x00519ed0 (game view): the right-click handler. Only in game modes
+   4..7. A pending drag (+0x168) is cancelled (+0xf4) -> 1. Otherwise
+   runs; in sub-mode 0x14 a pick hitting an
+   object ('4') tells it +0x78(-1) -> 1. Else a busy check
+   or a selection kind (+0xec byte) other than 1/2 returns 0. For an
+   observer-less game (player +0x8dc == 2): outside modes 5/7, sub-mode 0
+   either issues the default order (+0x104 with x, y, 1, -1) when no
+   unit is given, or with a found unit and the rally feature
+   on, a terrain pick ('3') sets the rally point (,
+   view +0xd8 with 1.0f, (2)), flashes and redraws
+   (+0x20(1)); sub-mode 0x15 clears the box and redraws;
+   any other sub-mode resets the mode (+0x10(0,0)). Otherwise outside
+   mode 7, sub-mode 0 cancels the selection and redraws,
+   anything else resets the mode. */
+typedef struct {
+    void *context;
+    int32_t mode, sub_mode;
+    int drag_pending;
+    uint8_t selection_kind;
+    int full_player; /* player +0x8dc == 2 */
+    int rally_enabled;
+    void (*cancel_drag)(void *context);
+    void (*prepare)(void *context);
+    int (*pick_object)(void *context, int32_t x, int32_t y); /* nonzero for '4' */
+    void (*object_notify)(void *context);
+    int (*busy)(void *context);
+    void (*default_order)(void *context, int32_t x, int32_t y);
+    int (*find_unit)(void *context, int32_t unit);
+    int (*pick_terrain)(void *context, int32_t x, int32_t y); /* nonzero for '3' */
+    void (*set_rally)(void *context);
+    void (*clear_box)(void *context);
+    void (*redraw)(void *context);
+    void (*reset_mode)(void *context);
+    void (*cancel_selection)(void *context);
+} AoeMainViewRightClickOps;
+int aoe_main_view_right_click(const AoeMainViewRightClickOps *o, int32_t x, int32_t y,
+                              int32_t unit);
+
 #endif

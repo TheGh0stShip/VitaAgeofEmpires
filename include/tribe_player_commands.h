@@ -321,4 +321,90 @@ typedef struct {
 int32_t aoe_tribe_player_load_templates_ror(AoeOutcomeStream *s, float version,
                                             const AoeTribePlayerLoadOpsRor *ops);
 
+/* 0x004f34c0: AI/notification message router. The object for `id`
+   (0x005206d0) must exist and the game must be live (0x00407a60) unless
+   the code is 0x20a, 0x72 or 0x74. Codes:
+   0x1f9 with a == 0x25d: when `id` is ours (0x004e0980) and the current
+     mode (0x00454240) is 0x6b, 0x004e04b0(0x00451ab0()).
+   0x201 / 0x72 / 0x74: forwarded unchanged to the AI (+0x23c, +0x1146c,
+     vtable +0x40).
+   0x202 with a == 0x25d or 0x26f: if 0x004bc690(id) and 0x004bc2d0(id,
+     object x +0x38, y +0x3c) yields a point (returns 1), 0x004db6a0(id,
+     px, py); otherwise 0x004d7790(id).
+   0x209: when object `a` exists, 0x0040aa20(its template +0x4a, 0, 10).
+   0x20a: 0x004c8300(id, a, b).  0x20d: 0x004be0d0(a). */
+typedef struct {
+    void *context;
+    int (*object_exists)(void *context, int32_t id, float *x, float *y);
+    int16_t (*object_template_id)(void *context, int32_t id);
+    int (*game_live)(void *context);
+    int (*is_ours)(void *context, int32_t id);
+    int32_t (*mode)(void *context);
+    void (*mode_6b_action)(void *context);
+    void (*forward_ai)(void *context, int32_t id, int32_t from, int32_t code, int32_t a,
+                       int32_t b, int32_t c);
+    int (*can_retarget)(void *context, int32_t id);
+    int (*find_point)(void *context, int32_t id, float x, float y, int32_t *px, int32_t *py);
+    void (*goto_point)(void *context, int32_t id, int32_t px, int32_t py);
+    void (*fallback)(void *context, int32_t id);
+    void (*flash)(void *context, int16_t template_id, int32_t a, int32_t b);
+    void (*on_20a)(void *context, int32_t id, int32_t a, int32_t b);
+    void (*on_20d)(void *context, int32_t a);
+} AoeTribeMessageOpsRor;
+void aoe_tribe_player_message_ror(const AoeTribeMessageOpsRor *ops, int32_t id, int32_t from,
+                                  int32_t code, int32_t a, int32_t b, int32_t c);
+
+/* 0x004f0030: the tribe player's per-tick update. World time (+0x84 of
+   the world) accumulates at +0x238; for each whole second: the 15-step
+   counter +0x230 advances and on wrapping samples the score (record
+   +0x2c, 0x004b0c00 as in 0x004f1aa0); record +0x58 = 100 when
+   0x0041b7c0 is set, else explored fraction (0x00517810) * 100; +0xb0 =
+   +0x50 - (+0x4c - +0x2c) floored at 0; +0x24 += +0x28 capped at 100;
+   the countdowns +0x22c and +0x234 drop towards 0; a player above 0
+   with no state-2 unit outside classes 1, 2, 11, 20, 21, 27, 30, 37
+   is told vtable +0x04(2) and +0xb4 is cleared. Then the base update
+   (0x0045d040), record +0x00 -= +0x84 * +0x2c * dt / 60 floored at 0,
+   the AI (+0x23c) update when 0x004253e0 is 1 (preceded by
+   0x005204d0(3) when world +0xfc is -1; AI vtable +0x30(0)), and
+   0x0044a850 when the global 0x00582edc is set. */
+typedef struct {
+    float score;      /* +0x2c */
+    float explored;   /* +0x58 */
+    float r50, r4c;   /* +0x50, +0x4c */
+    float margin;     /* +0xb0 */
+    float r24, r28;   /* +0x24, +0x28 */
+    float r00, r84;   /* +0x00, +0x84 */
+    int32_t rb4;      /* +0xb4 */
+} AoeTribeTickRecordRor;
+typedef struct {
+    int16_t cls;
+    uint8_t state;
+} AoeTribeTickUnitRor;
+typedef struct {
+    float accum;        /* +0x238 */
+    int32_t counter;    /* +0x230 */
+    int32_t down_22c;   /* +0x22c */
+    int32_t down_234;   /* +0x234 */
+    int16_t player_id;  /* +0x4a */
+    int has_ai;         /* +0x23c */
+    AoeTribeTickRecordRor *rec; /* +0x50 */
+    const AoeTribeTickUnitRor *units; /* +0x28 list */
+    int32_t unit_count;
+} AoeTribeTickStateRor;
+typedef struct {
+    void *context;
+    void (*sample)(void *context, int32_t skip, int32_t value);
+    int (*full_explore)(void *context);
+    float (*explored_fraction)(void *context);
+    void (*notify)(void *context, int32_t kind);
+    void (*base_update)(void *context);
+    int (*ai_ready)(void *context);
+    int32_t (*world_fc)(void *context);
+    void (*world_signal)(void *context, int32_t v);
+    void (*ai_update)(void *context, int32_t v);
+    int (*global_flag)(void *context);
+    void (*global_hook)(void *context);
+} AoeTribeTickOpsRor;
+void aoe_tribe_player_tick_ror(AoeTribeTickStateRor *p, float dt, const AoeTribeTickOpsRor *ops);
+
 #endif

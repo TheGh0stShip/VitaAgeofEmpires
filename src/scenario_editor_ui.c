@@ -358,3 +358,74 @@ void aoe_scenario_editor_attach_world_ror(void *world, const AoeScenarioEditorAt
     if (o->minimap_set_world) o->minimap_set_world(o->context, world);
     if (o->minimap_set_player) o->minimap_set_player(o->context, player);
 }
+
+int aoe_scenario_editor_key_ror(AoeEditorKeyStateRor *st, int32_t key, int32_t alt,
+                                int32_t modal, AoeEditorKeyResultRor *out) {
+    static const struct { int32_t key, page; } pages[] = {
+        {'C',10},{'D',5},{'I',6},{'M',1},{'O',8},{'P',3},{'T',2},{'U',4},{'V',7},{'W',9}};
+    AoeEditorKeyResultRor r = {AOE_EDKEY_NONE, 0, 0, 0, 0, 0};
+    size_t i;
+    int32_t n;
+    if (out) *out = r;
+    if (!st || modal) return 0;
+    if (alt) {
+        if (key == 'A') {
+            st->grid = st->grid == 3 ? 0 : 3;
+            r.action = AOE_EDKEY_GRID;
+            if (out) *out = r;
+            return 1;
+        }
+        if (key == 'B') {
+            st->cycle++;
+            if (st->cycle >= (st->cycle_wide ? 5 : 2)) st->cycle = 0;
+            r.action = AOE_EDKEY_CYCLE;
+            if (out) *out = r;
+            return 0;
+        }
+        for (i = 0; i < sizeof pages / sizeof pages[0]; ++i)
+            if (pages[i].key == key) {
+                r.action = AOE_EDKEY_PAGE;
+                r.page = pages[i].page;
+                if (out) *out = r;
+                return 0;
+            }
+        if (key >= 0x41 && key <= 0x57) return 0;
+    }
+    if (key == 9) {
+        if (st->page == 3 && !st->edit_focused) r.action = AOE_EDKEY_FOCUS_PLAYERS;
+        else if (st->page == 6 && !st->edit_focused && st->victory_items)
+            r.action = AOE_EDKEY_FOCUS_VICTORY;
+    } else if (key == 0x1b) {
+        r.action = AOE_EDKEY_CLEAR;
+    } else if (key >= '0' && key <= '8') {
+        n = key - '0';
+        r.action = AOE_EDKEY_DROPDOWN;
+        r.dropdown_index = n - 1;
+        if (st->page == 8 && n > 0) {
+            r.panel_offset = 0x7cc; r.notify_arg = 3; r.player = n;
+        } else if (st->page == 3) {
+            if (n > 0 && !st->edit_focused) r.panel_offset = 0x5b4;
+            else r.action = AOE_EDKEY_NONE;
+        } else if (st->page == 4) {
+            r.dropdown_index = n; r.panel_offset = 0x618;
+        } else if (st->page == 6) {
+            if (n > 0 && !st->edit_focused) { r.panel_offset = 0x73c; r.notify_arg = 1; }
+            else r.action = AOE_EDKEY_NONE;
+        } else if (st->page == 5) {
+            if (n > 0) { r.panel_offset = 0x894; r.notify_arg = 1; }
+            else r.action = AOE_EDKEY_NONE;
+        } else if (n > 0) {
+            r.action = AOE_EDKEY_PLAYER; r.dropdown_index = 0; r.player = n;
+        } else r.action = AOE_EDKEY_NONE;
+    }
+    if (out) *out = r;
+    return 0;
+}
+
+int aoe_scenario_editor_resize_ror(int32_t w, int32_t h, const AoeScenarioEditorResizeOpsRor *o) {
+    if (!o) return 0;
+    if (o->base_set_rect) o->base_set_rect(o->context, w, h);
+    if (o->layout) o->layout(o->context);
+    if (o->base_set_rect) o->base_set_rect(o->context, w, h);
+    return 0;
+}

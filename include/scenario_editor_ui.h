@@ -220,4 +220,48 @@ typedef struct {
 } AoeScenarioEditorAttachOpsRor;
 void aoe_scenario_editor_attach_world_ror(void *world, const AoeScenarioEditorAttachOpsRor *ops);
 
+/* 0x00493110: the editor screen's key handler. Nothing happens while a
+   modal is up (0x00451ad0). With Alt held: 'A' flips the world's grid
+   byte (+0x50) between 0 and 3; 'B' bumps the 0x007d200c counter, wrapping
+   to 0 at 2 (or 5 when 0x0041b7f0 is set) and redraws the map view; the
+   page letters press their tab button (vtable +0xe4) and open the page
+   (0x00491650). Without Alt: Tab focuses the player list (page 3) or the
+   victory list (page 6, if it has items) when no edit box (+0x3c) owns
+   input; Esc clears the selection (0x00494a60); '1'..'8' pick a player on
+   the per-page dropdown (0x00461c70, then vtable +0xb8 on the panel),
+   page 8 also storing and reloading the player page (0x004953f0,
+   0x00492780, 0x00495470); page 4 takes '0'..'8'. */
+typedef enum {
+    AOE_EDKEY_NONE = 0, AOE_EDKEY_GRID, AOE_EDKEY_CYCLE, AOE_EDKEY_PAGE,
+    AOE_EDKEY_FOCUS_PLAYERS, AOE_EDKEY_FOCUS_VICTORY, AOE_EDKEY_CLEAR,
+    AOE_EDKEY_DROPDOWN, AOE_EDKEY_PLAYER
+} AoeEditorKeyActionRor;
+typedef struct {
+    int32_t page;          /* +0x4a4 */
+    int32_t edit_focused;  /* the +0x4d4 control's +0x3c */
+    int32_t victory_items; /* +0x76c list +0x6c */
+    uint8_t grid;          /* world +0x50 */
+    int32_t cycle;         /* 0x007d200c */
+    int32_t cycle_wide;    /* 0x0041b7f0 */
+} AoeEditorKeyStateRor;
+typedef struct {
+    AoeEditorKeyActionRor action;
+    int32_t page;          /* PAGE: 1..10 */
+    int32_t dropdown_index;/* DROPDOWN: index selected */
+    int32_t panel_offset;  /* DROPDOWN: the panel told via +0xb8 */
+    int32_t notify_arg;    /* DROPDOWN: its first argument */
+    int32_t player;        /* PLAYER / page-8 DROPDOWN: player switched to */
+} AoeEditorKeyResultRor;
+int aoe_scenario_editor_key_ror(AoeEditorKeyStateRor *st, int32_t key, int32_t alt,
+                                int32_t modal, AoeEditorKeyResultRor *out);
+
+/* 0x00493060: the editor's resize: the base set-rect (0x004533f0), the
+   panel layout (0x499160), then the base set-rect again. */
+typedef struct {
+    void *context;
+    void (*base_set_rect)(void *context, int32_t w, int32_t h);
+    void (*layout)(void *context);
+} AoeScenarioEditorResizeOpsRor;
+int aoe_scenario_editor_resize_ror(int32_t w, int32_t h, const AoeScenarioEditorResizeOpsRor *ops);
+
 #endif

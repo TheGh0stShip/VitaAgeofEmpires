@@ -134,3 +134,81 @@ fail:
 void border_art_free(BorderArtCache *cache) {
     terrain_art_free(cache);
 }
+
+#include <stdio.h>
+#include <stdlib.h>
+
+static int border_text_token(const char **cursor, char *out, size_t cap) {
+    const char *p = *cursor;
+    size_t n = 0;
+    while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') ++p;
+    if (!*p) { *cursor = p; return 0; }
+    while (*p && *p != ' ' && *p != '\t' && *p != '\r' && *p != '\n') {
+        if (n + 1 < cap) out[n++] = *p;
+        ++p;
+    }
+    out[n] = 0;
+    *cursor = p;
+    return 1;
+}
+
+static int16_t border_text_hd(const char **cursor) {
+    char tok[64];
+    if (!border_text_token(cursor, tok, sizeof tok)) return 0;
+    return (int16_t)strtol(tok, NULL, 10);
+}
+
+/* 0x00446f80 */
+int border_text_load(BorderTextRecord records[16], const char *text) {
+    char tok[64];
+    int16_t count;
+    for (int i = 0; i < 16; ++i) records[i].used = 0;
+    if (!text) return 0;
+    const char *cur = text;
+    count = border_text_hd(&cur);
+    for (int r = 0; r < count; ++r) {
+        char name[64], file[64];
+        if (!border_text_token(&cur, tok, sizeof tok)) break;
+        int16_t id = (int16_t)strtol(tok, NULL, 10);
+        border_text_token(&cur, name, sizeof name);
+        border_text_token(&cur, file, sizeof file);
+        int32_t slp = (int32_t)strtol(border_text_token(&cur, tok, sizeof tok) ? tok : "0", NULL, 10);
+        int16_t f[7];
+        for (int k = 0; k < 7; ++k) f[k] = border_text_hd(&cur);
+        float v1 = border_text_token(&cur, tok, sizeof tok) ? strtof(tok, NULL) : 0.0f;
+        float v2 = border_text_token(&cur, tok, sizeof tok) ? strtof(tok, NULL) : 0.0f;
+        int16_t g[3];
+        for (int k = 0; k < 3; ++k) g[k] = border_text_hd(&cur);
+        if (id < 0 || id >= 16) continue;
+        BorderTextRecord *b = &records[id];
+        int16_t offset = 0;
+        for (int row = 0; row < 19; ++row)
+            for (int c = 0; c < 12; ++c) {
+                BorderTextShape *s = &b->shapes[row][c];
+                s->count = border_text_hd(&cur);
+                s->size = border_text_hd(&cur);
+                s->offset = offset;
+                offset = (int16_t)(offset + s->size * s->count);
+            }
+        b->color_table = f[4];
+        b->b2a = (uint8_t)f[3];
+        b->b29 = (uint8_t)f[1];
+        b->b28 = (uint8_t)f[2];
+        for (char *p = name; *p; ++p) if (*p == '_') *p = ' ';
+        name[sizeof b->name - 1] = 0;
+        memcpy(b->name, name, sizeof b->name);
+        file[sizeof b->file_name - 1] = 0;
+        memcpy(b->file_name, file, sizeof b->file_name);
+        b->used = 1;
+        b->slp_id = slp;
+        b->b2b = (uint8_t)f[5];
+        b->w2c = f[6];
+        b->value_whole = v1 == 0.0f ? 0 : (int16_t)(int32_t)v1;
+        b->value = v1;
+        b->value2 = v2;
+        b->b59a = (uint8_t)g[0];
+        b->w59c = g[1];
+        b->w59e = g[2];
+    }
+    return 1;
+}

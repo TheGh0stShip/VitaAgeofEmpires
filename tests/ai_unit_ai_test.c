@@ -612,7 +612,24 @@ static void rally_tests(void) {
     ry_cls[1] = 0x12; ry_idle[3] = 0;
     assert(aoe_ai_unit_ai_rally_ror(55, &o) == 0);
 }
+static int ft_blocked(void *c, int32_t x, int32_t y) { (void)c; return x == 5 && y == 5; }
+static uint8_t ft_zone(void *c, int32_t x, int32_t y) { (void)c; (void)y; return x == 4 ? 2 : 1; }
+static int ft_accept(void *c, float x, float y) { (void)c; (void)x; (void)y; return 1; }
+static int ft_filt(void *c, int32_t x, int32_t y) { (void)c; return x == 6 && y == 5; }
+static int32_t ft_rand(void *c) { (void)c; return 0; }
+static int32_t ft_move(void *c, int32_t x, int32_t y, float r) { (void)c; (void)x; (void)y; (void)r; return 7; }
+static void free_tile_tests(void) {
+    AoeAiUnitAiFreeTileOpsRor o = {NULL, 5.5f, 5.5f, 1.0f, 100, 100, 0, -1.0f, -1.0f, ft_rand, 1,
+                                   ft_blocked, ft_zone, ft_accept, ft_filt, ft_move};
+    int32_t x = -1, y = -1;
+    /* (5,5) blocked; (5,4) is the first tile at distance 1. */
+    assert(aoe_ai_unit_ai_free_tile_ror(0, 0, &x, &y, &o) == 7 && x == 5 && y == 4);
+    o.has_point = 1; o.px = 7.0f; o.py = 5.0f; /* (6,5) best, filtered out -> (6,4)/(6,6) tie: first */
+    assert(aoe_ai_unit_ai_free_tile_ror(0, 1, &x, &y, &o) == 7 && x == 6 && y == 4);
+    assert(aoe_ai_unit_ai_free_tile_ror(0x2c1, 0, &x, &y, &o) == 0);
+}
 int main(void) {
+    free_tile_tests();
     ai_kind_for_unit_tests();
     nearest_tests();
     base_method_tests();

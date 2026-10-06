@@ -420,3 +420,91 @@ int32_t aoe_tribe_player_load_templates_ror(AoeOutcomeStream *s, float version,
     if (version >= 7.09f) o->load_list(o->context, 2, s);
     return count;
 }
+
+/* 0x004f34c0 */
+void aoe_tribe_player_message_ror(const AoeTribeMessageOpsRor *ops, int32_t id, int32_t from,
+                                  int32_t code, int32_t a, int32_t b, int32_t c)
+{
+    float x = 0.0f, y = 0.0f;
+    int exists = ops->object_exists(ops->context, id, &x, &y);
+    if (code != 0x20a && code != 0x72 && code != 0x74) {
+        if (!exists || !ops->game_live(ops->context))
+            return;
+    }
+    switch (code) {
+    case 0x1f9:
+        if (a == 0x25d && ops->is_ours(ops->context, id) && ops->mode(ops->context) == 0x6b)
+            ops->mode_6b_action(ops->context);
+        return;
+    case 0x201: case 0x72: case 0x74:
+        ops->forward_ai(ops->context, id, from, code, a, b, c);
+        return;
+    case 0x202:
+        if (a == 0x25d || a == 0x26f) {
+            int32_t px = b, py = a;
+            if (ops->can_retarget(ops->context, id) &&
+                ops->find_point(ops->context, id, x, y, &px, &py) == 1)
+                ops->goto_point(ops->context, id, px, py);
+            else
+                ops->fallback(ops->context, id);
+        }
+        return;
+    case 0x209:
+        if (ops->object_exists(ops->context, a, NULL, NULL))
+            ops->flash(ops->context, ops->object_template_id(ops->context, a), 0, 10);
+        return;
+    case 0x20a: ops->on_20a(ops->context, id, a, b); return;
+    case 0x20d: ops->on_20d(ops->context, a); return;
+    default: return;
+    }
+}
+
+/* 0x004f0030 */
+void aoe_tribe_player_tick_ror(AoeTribeTickStateRor *p, float dt, const AoeTribeTickOpsRor *ops)
+{
+    AoeTribeTickRecordRor *r = p->rec;
+    p->accum += dt;
+    while (p->accum > 1.0f) {
+        p->accum -= 1.0f;
+        if (++p->counter > 14) {
+            p->counter -= 15;
+            ops->sample(ops->context, 0, r->score >= 0.0f ? (int32_t)r->score : 0);
+        }
+        r->explored = ops->full_explore(ops->context) ? 100.0f
+                                                      : ops->explored_fraction(ops->context) * 100.0f;
+        r->margin = r->r50 - (r->r4c - r->score);
+        if (r->margin < 0.0f)
+            r->margin = 0.0f;
+        r->r24 += r->r28;
+        if (r->r24 > 100.0f)
+            r->r24 = 100.0f;
+        if (p->down_22c > 0)
+            --p->down_22c;
+        if (p->down_234 > 0)
+            --p->down_234;
+        if (p->player_id > 0) {
+            int32_t i;
+            for (i = 0; i < p->unit_count; ++i) {
+                int16_t c = p->units[i].cls;
+                if (c != 11 && c != 30 && c != 27 && c != 1 && c != 21 && c != 20 && c != 2 &&
+                    c != 37 && p->units[i].state == 2)
+                    break;
+            }
+            if (i == p->unit_count) {
+                ops->notify(ops->context, 2);
+                r->rb4 = 0;
+            }
+        }
+    }
+    ops->base_update(ops->context);
+    r->r00 -= r->r84 * r->score * dt * (1.0f / 60.0f);
+    if (r->r00 < 0.0f)
+        r->r00 = 0.0f;
+    if (p->has_ai && ops->ai_ready(ops->context) == 1) {
+        if (ops->world_fc(ops->context) == -1)
+            ops->world_signal(ops->context, 3);
+        ops->ai_update(ops->context, 0);
+    }
+    if (ops->global_flag(ops->context))
+        ops->global_hook(ops->context);
+}

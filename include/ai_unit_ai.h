@@ -562,4 +562,29 @@ typedef struct {
 } AoeAiUnitAiRallyOpsRor;
 int32_t aoe_ai_unit_ai_rally_ror(int32_t target_id, const AoeAiUnitAiRallyOpsRor *o);
 
+/* 0x004119e0 (a unit AI slot): a free tile near the unit. Skipped (0)
+   for order 0x2c1 with a full +0x3c/+0x40 point. The rectangle is the
+   unit's tile (ftol of +0x38/+0x3c) +- its type's +0x28, clamped to the
+   map. A tile counts when not blocked (0x00412fd0), in our zone
+   (0x004ab9e0 equals 0x004aba60), accepted by the unit's +0x114 and,
+   with `filter`, not rejected by 0x00411cb0. The score is the squared
+   distance, plus that to the +0x3c/+0x40 point when set; a tile wins
+   when first or below best + rand()%3 (one rand per call). The best is
+   then ordered through the unit's +0x198 with range +0x28 - 1.0 (0x00542534). */
+typedef struct {
+    void *context;
+    float x, y, sight;          /* unit +0x38, +0x3c, type +0x28 */
+    int32_t map_w, map_h;
+    int has_point; float px, py; /* AI +0x3c/+0x40 (-1.0 = unset) */
+    int32_t (*rand_)(void *context);
+    uint8_t own_zone;
+    int (*blocked)(void *context, int32_t x, int32_t y);
+    uint8_t (*zone)(void *context, int32_t x, int32_t y);
+    int (*accept)(void *context, float x, float y);
+    int (*filtered)(void *context, int32_t x, int32_t y);
+    int32_t (*move)(void *context, int32_t x, int32_t y, float range);
+} AoeAiUnitAiFreeTileOpsRor;
+int32_t aoe_ai_unit_ai_free_tile_ror(int32_t order, int filter, int32_t *out_x, int32_t *out_y,
+                                     const AoeAiUnitAiFreeTileOpsRor *o);
+
 #endif

@@ -120,6 +120,60 @@ typedef struct {
     int32_t (*cd_check)(void *context, int32_t players);
     void (*launch_session)(void *context);
     int (*start_game)(void *context);
+    /* 0x004895b0's action handler. A panel is active (+0x6c); a button's
+       state (0x0045f400), value (0x0045f410), set state (0x0045f3a0) and
+       vtable +0xe4; a list's item ID (0x00461ed0), selected index
+       (0x00461e50), index of an ID (0x00461e70) and select (0x00461d50);
+       an input's text (0x00462560, NULL when none) and set text
+       (0x004623e0). */
+    int (*panel_active)(void *context, void *panel);
+    int32_t (*button_state)(void *context, void *panel);
+    int32_t (*button_value)(void *context, void *panel);
+    void (*button_set_state)(void *context, void *panel, int32_t state);
+    void (*button_slot_e4)(void *context, void *panel, int32_t v);
+    int32_t (*list_id)(void *context, void *panel);
+    int32_t (*list_selected)(void *context, void *panel);
+    int32_t (*list_index)(void *context, void *panel, int32_t id);
+    void (*list_select)(void *context, void *panel, int32_t index);
+    const char *(*input_text)(void *context, void *panel);
+    void (*input_set)(void *context, void *panel, const char *text);
+    /* The debug log (0x0042c330); player 0's version (0x0041b820); the
+       comm ready message (0x004251c0, eight values); the scenario file's
+       checksum (0x0041c040 of "<dir><name>.scn", or ".scx" when no .scn
+       exists, 0x0041b740 the name); the ready-state redraw (0x48b640);
+       the host shares player data (0x00420640(1)); the chat sent
+       (0x004213e0); a screen exists (0x00451ae0); the help (0x00457cd0);
+       the screen refresh (0x48c010). */
+    void (*log)(void *context, const char *text);
+    int32_t (*player_version)(void *context, int32_t player);
+    void (*send_ready)(void *context, int32_t ready, int32_t civ, int32_t team, int32_t cd,
+                       int32_t color, int32_t flag, int32_t checksum, int32_t version);
+    int32_t (*scenario_checksum)(void *context);
+    void (*update_ready)(void *context);
+    void (*share_player_data_now)(void *context);
+    void (*send_chat)(void *context, const char *text);
+    int (*screen_exists)(void *context, const char *name);
+    void (*help)(void *context);
+    void (*settings_refresh)(void *context);
+    /* Player settings: colour (0x00505420), the 0x0041bbd0 byte, player
+       count (0x0041bb30), the player count (0x0041b9a0), civilisation
+       (0x005053c0), position (0x005053f0) and position of a player
+       (0x005053e0); the comm kicks (0x004256c0), a comm slot is a human
+       here (0x00423da0); the dialog that sent the action, its name
+       (0x00454170) and deletion (vtable +0x00 with 1); the base action
+       handler (0x00457e50). */
+    void (*set_color)(void *context, int32_t player, int32_t color);
+    void (*set_byte_bbd0)(void *context, int32_t player, int32_t v);
+    void (*set_player_count)(void *context, int32_t n);
+    int32_t (*player_count)(void *context);
+    void (*set_civ)(void *context, int32_t player, int32_t civ);
+    void (*set_position)(void *context, int32_t player, int32_t pos);
+    int32_t (*position_of)(void *context, int32_t player);
+    void (*kick_send)(void *context, int32_t slot);
+    int (*slot_human)(void *context, int32_t slot);
+    const char *(*panel_name)(void *context, void *panel);
+    void (*delete_panel)(void *context, void *panel);
+    int (*base_action)(void *context, void *panel, int32_t action, int32_t a, int32_t b);
 } AoeMpSetupScreenOpsRor;
 
 typedef struct {
@@ -142,6 +196,10 @@ typedef struct {
     int32_t chat_from, chat_to;              /* +0x890, +0x894 */
     void *panel_610, *panel_620;             /* +0x610, +0x620 */
     void *panel_700, *panel_70c, *panel_714; /* +0x700, +0x70c, +0x714 */
+    void *panel_710, *panel_718, *panel_6e0; /* +0x710, +0x718, +0x6e0 */
+    void *panel_858;                         /* +0x858 (addresses button) */
+    void *color_buttons[8], *team_buttons[8];          /* +0x570, +0x590 */
+    void *kind_lists[8], *civ_lists[8], *pos_lists[8]; /* +0x5b0, +0x5d0, +0x5f0 */
     AoeGameSettingsRor *settings;
     const AoeMpSetupScreenOpsRor *ops;
 } AoeMpSetupScreenRor;
@@ -238,5 +296,19 @@ void aoe_mp_setup_screen_addresses_ror(AoeMpSetupScreenRor *m);
    the session launched; the game started (1) or message 0x961 (0).
    A team ID of 0 lands in the original's changed flag (local [0]); kept. */
 int aoe_mp_setup_screen_start_ror(AoeMpSetupScreenRor *m);
+
+/* 0x004895b0 action handler: a panel action. Action 1 on: +0x700 start
+   (0x00489ef0, after focusing the chat); +0x714 ready toggle (see the
+   source); +0x620 the "Game Settings Screen" (made when absent) shown;
+   +0x710 help; +0x718 quit; +0x70c leave (0); +0x858 the addresses;
+   colour / +0x590 buttons i set the colour / byte (state + 1), a
+   non-host remembers them. Action 0 on: the chat input sends non-empty
+   text and clears it; +0x6e0 the player count then the refresh; kind,
+   civilisation and position lists of player i. Closing dialogs: "Game
+   Settings Screen" (refresh and +0x48 on a non-zero action, then this
+   screen shown), "Kick Dialog" (yes kicks +0x724, no reselects 0, then
+   the dialog deleted). Anything else goes to the base handler. */
+int aoe_mp_setup_screen_action_ror(AoeMpSetupScreenRor *m, void *panel, int32_t action,
+                                   int32_t a, int32_t b);
 
 #endif

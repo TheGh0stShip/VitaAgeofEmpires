@@ -235,6 +235,77 @@ static void load_templates_tests(void) {
     s.pos = 0; s.size = 1;
     assert(aoe_tribe_player_load_templates_ror(&s, 7.23f, &o) == -1);
 }
+static int m_exists = 1, m_live = 1, m_mode = 0x6b, m_find = 1, m_log[8];
+static int m_ex(void *c, int32_t id, float *x, float *y) { (void)c; (void)id; if (x) *x = 3.0f, *y = 4.0f; return m_exists; }
+static int16_t m_tid(void *c, int32_t id) { (void)c; return (int16_t)(id + 1); }
+static int m_live_f(void *c) { (void)c; return m_live; }
+static int m_ours(void *c, int32_t id) { (void)c; return id == 5; }
+static int32_t m_mode_f(void *c) { (void)c; return m_mode; }
+static void m_6b(void *c) { (void)c; ++m_log[0]; }
+static void m_fwd(void *c, int32_t i, int32_t f, int32_t k, int32_t a, int32_t b, int32_t d) { (void)c; (void)i; (void)f; (void)a; (void)b; (void)d; m_log[1] = k; }
+static int m_can(void *c, int32_t id) { (void)c; (void)id; return 1; }
+static int m_fp(void *c, int32_t id, float x, float y, int32_t *px, int32_t *py) { (void)c; (void)id; assert(x == 3.0f && y == 4.0f); *px = 7; *py = 8; return m_find; }
+static void m_goto(void *c, int32_t id, int32_t px, int32_t py) { (void)c; (void)id; m_log[2] = px * 10 + py; }
+static void m_fb(void *c, int32_t id) { (void)c; (void)id; ++m_log[3]; }
+static void m_flash(void *c, int16_t t, int32_t a, int32_t b) { (void)c; assert(a == 0 && b == 10); m_log[4] = t; }
+static void m_20a(void *c, int32_t id, int32_t a, int32_t b) { (void)c; (void)id; (void)a; (void)b; ++m_log[5]; }
+static void m_20d(void *c, int32_t a) { (void)c; m_log[6] = a; }
+static void test_message_router(void) {
+    AoeTribeMessageOpsRor o = {0, m_ex, m_tid, m_live_f, m_ours, m_mode_f, m_6b, m_fwd, m_can, m_fp, m_goto, m_fb, m_flash, m_20a, m_20d};
+    aoe_tribe_player_message_ror(&o, 5, 0, 0x1f9, 0x25d, 0, 0);
+    assert(m_log[0] == 1);
+    aoe_tribe_player_message_ror(&o, 6, 0, 0x1f9, 0x25d, 0, 0);
+    assert(m_log[0] == 1);
+    aoe_tribe_player_message_ror(&o, 5, 0, 0x202, 0x26f, 0, 0);
+    assert(m_log[2] == 78);
+    m_find = 0;
+    aoe_tribe_player_message_ror(&o, 5, 0, 0x202, 0x25d, 0, 0);
+    assert(m_log[3] == 1);
+    aoe_tribe_player_message_ror(&o, 5, 0, 0x209, 41, 0, 0);
+    assert(m_log[4] == 42);
+    aoe_tribe_player_message_ror(&o, 5, 0, 0x20d, 9, 0, 0);
+    assert(m_log[6] == 9);
+    m_exists = 0; /* only 0x20a/0x72/0x74 pass the gate */
+    aoe_tribe_player_message_ror(&o, 5, 0, 0x20d, 3, 0, 0);
+    assert(m_log[6] == 9);
+    aoe_tribe_player_message_ror(&o, 5, 0, 0x74, 0, 0, 0);
+    assert(m_log[1] == 0x74);
+    aoe_tribe_player_message_ror(&o, 5, 0, 0x201, 0, 0, 0);
+    assert(m_log[1] == 0x74);
+    aoe_tribe_player_message_ror(&o, 5, 0, 0x20a, 0, 0, 0);
+    assert(m_log[5] == 1);
+}
+
+static int t_log[8];
+static void t_sample(void *c, int32_t s, int32_t v) { (void)c; (void)s; t_log[0] = v; ++t_log[1]; }
+static int t_full(void *c) { (void)c; return 0; }
+static float t_frac(void *c) { (void)c; return 0.5f; }
+static void t_notify(void *c, int32_t k) { (void)c; t_log[2] = k; }
+static void t_base(void *c) { (void)c; ++t_log[3]; }
+static int t_ready(void *c) { (void)c; return 1; }
+static int32_t t_fc(void *c) { (void)c; return -1; }
+static void t_sig(void *c, int32_t v) { (void)c; t_log[4] = v; }
+static void t_ai(void *c, int32_t v) { (void)c; (void)v; ++t_log[5]; }
+static int t_flag(void *c) { (void)c; return 1; }
+static void t_hook(void *c) { (void)c; ++t_log[6]; }
+static void test_player_tick(void) {
+    AoeTribeTickOpsRor o = {0, t_sample, t_full, t_frac, t_notify, t_base, t_ready, t_fc, t_sig, t_ai, t_flag, t_hook};
+    AoeTribeTickRecordRor r = {0};
+    AoeTribeTickUnitRor units[2] = {{11, 2}, {4, 1}};
+    AoeTribeTickStateRor p = {0};
+    r.score = 42.6f; r.r50 = 1.0f; r.r4c = 50.0f; r.r24 = 99.0f; r.r28 = 2.0f; r.r00 = 10.0f; r.r84 = 1.0f; r.rb4 = 7;
+    p.counter = 14; p.down_22c = 1; p.player_id = 1; p.has_ai = 1; p.rec = &r; p.units = units; p.unit_count = 2;
+    aoe_tribe_player_tick_ror(&p, 1.5f, &o);
+    assert(p.counter == 0 && t_log[1] == 1 && t_log[0] == 42);
+    assert(r.explored == 50.0f && r.margin == 0.0f && r.r24 == 100.0f && p.down_22c == 0);
+    assert(t_log[2] == 2 && r.rb4 == 0 && p.accum == 0.5f);
+    assert(t_log[3] == 1 && t_log[4] == 3 && t_log[5] == 1 && t_log[6] == 1);
+    assert(r.r00 > 8.93f && r.r00 < 8.94f); /* 10 - 42.6 * 1.5 / 60 */
+    units[1].state = 2; t_log[2] = 0; r.rb4 = 7;
+    aoe_tribe_player_tick_ror(&p, 0.6f, &o);
+    assert(t_log[2] == 0 && r.rb4 == 7 && p.counter == 1);
+}
+
 int main(void) {
     AoeTribePlayerOpsRor ops = {0, 2, collect, template_state, ack_b, ack_u, selected, object_type, object_class, queue};
     /* Build: villagers (min 4, class 4), template 118 acknowledges, 0x66. */
@@ -368,5 +439,7 @@ int main(void) {
     test_tribe_template_load();
     test_tribe_repair();
     load_templates_tests();
+    test_message_router();
+    test_player_tick();
     return 0;
 }

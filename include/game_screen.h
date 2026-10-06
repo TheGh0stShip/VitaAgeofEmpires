@@ -585,4 +585,30 @@ typedef struct {
 } AoeGameScreenPaintOpsRor;
 int32_t aoe_game_screen_paint_ror(const AoeGameScreenPaintOpsRor *o);
 
+/* 0x00481410: the button command dispatcher (codes 1..0x21). Each code
+   names the original handler (by address) passed to `run` with its
+   arguments (handler 0x485520 gets 1 for 0x12/0x20, -1 for 0x21); with map orders off (0x0055873c clear) only codes 6, 8, 9,
+   0xb..0xf, 0x15 and 0x18 run; a right click runs only 0x12 (as
+   0x485520 with -1). Code 0x18 passes !scores_on. Returns 1 when a
+   handler ran. */
+int aoe_game_screen_command_ror(int map_orders, int32_t code, int32_t arg, int right,
+                                int scores_on,
+                                void (*run)(void *ctx, uint32_t handler, int32_t arg, int32_t arg2),
+                                void *ctx);
+/* 0x00481f70: the viewed player's id (+0x134) and civ (+0x1a0) stored in
+   the screen; when the id changed, in game state 0x15 the view's +0xf4
+   and the 0x0050ffd0 reset run, and outside states 1, 2, 3, 8, 9, 10,
+   0xe and 0x12 the game's +0x10 refresh(0, 0); then the first button page (0x482290). */
+typedef struct {
+    void *context;
+    int32_t (*player_id)(void *context);
+    int16_t (*player_civ)(void *context);
+    int32_t (*game_state)(void *context);
+    void (*state15_reset)(void *context);
+    void (*game_refresh)(void *context);
+    void (*first_page)(void *context);
+} AoeGameScreenPlayerOpsRor;
+void aoe_game_screen_player_changed_ror(int32_t *stored_id, int16_t *stored_civ,
+                                        const AoeGameScreenPlayerOpsRor *o);
+
 #endif

@@ -1145,3 +1145,32 @@ int32_t aoe_ai_unit_ai_rally_ror(int32_t target_id, const AoeAiUnitAiRallyOpsRor
     }
     return sent;
 }
+
+/* 0x004119e0 */
+int32_t aoe_ai_unit_ai_free_tile_ror(int32_t order, int filter, int32_t *out_x, int32_t *out_y,
+                                     const AoeAiUnitAiFreeTileOpsRor *o) {
+    if (order == 0x2c1 && o->has_point) return 0;
+    int32_t cx = (int32_t)o->x, cy = (int32_t)o->y;
+    int32_t x0 = (int32_t)(o->x - o->sight), x1 = (int32_t)(o->x + o->sight);
+    int32_t y0 = (int32_t)(o->y - o->sight), y1 = (int32_t)(o->y + o->sight);
+    if (x0 < 0) x0 = 0;
+    if (x1 > o->map_w - 1) x1 = o->map_w - 1;
+    if (y0 < 0) y0 = 0;
+    if (y1 > o->map_h - 1) y1 = o->map_h - 1;
+    int32_t slack = o->rand_(o->context) % 3, best = -1;
+    if (y0 > y1) return 0;
+    for (int32_t ty = y0; ty <= y1; ++ty)
+        for (int32_t tx = x0; tx <= x1; ++tx) {
+            if (o->blocked(o->context, tx, ty) || o->zone(o->context, tx, ty) != o->own_zone) continue;
+            if (!o->accept(o->context, (float)tx, (float)ty)) continue;
+            if (filter && o->filtered(o->context, tx, ty)) continue;
+            int32_t d = (tx - cx) * (tx - cx) + (ty - cy) * (ty - cy);
+            if (o->has_point) {
+                int32_t px = (int32_t)o->px, py = (int32_t)o->py;
+                d += (tx - px) * (tx - px) + (ty - py) * (ty - py);
+            }
+            if (best == -1 || d < slack + best) { *out_x = tx; *out_y = ty; best = d; }
+        }
+    if (best == -1) return 0;
+    return o->move(o->context, *out_x, *out_y, o->sight - 1.0f);
+}

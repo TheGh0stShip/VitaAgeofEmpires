@@ -422,4 +422,23 @@ int aoe_game_ror_open_video_ror(AoeGameRorVideoOpenOpsRor *ops);
 void aoe_game_ror_stats_text_ror(const AoeGameBaseRor *g, int show_max, char *title, int title_size,
                                  char *view, int view_size);
 
+/* 0x005016d0: the AI debug lines. With a world (+0x3f4 +0x40) and its
+   current player (+0x7c): when 0x00454150 reports 1 (debug), line 0 is
+   "Player #%d: %s" with the player's AI text (vtable +0x14(1)) or
+   "Player #%d: AI is not functional." without, and lines 1..5 the AI
+   texts 2..6 ("" when none); otherwise line 0 is the text of slot 0,
+   line 1 "Player #%d is not a computer player." and the rest "". When
+   the debug panel (+0xc24) is up the six lines are shown (0x004821b0),
+   in reverse order in debug mode. */
+typedef struct {
+    void *context;
+    int has_world;
+    int32_t player;            /* world +0x7c */
+    int debug_mode;            /* 0x00454150() == 1 */
+    int panel_up;              /* +0xc24 */
+    const char *(*ai_text)(void *context, int32_t slot); /* player vtable +0x14 */
+    void (*show)(void *context, const char *const lines[6]); /* 0x004821b0 */
+} AoeGameRorAiLinesOpsRor;
+void aoe_game_ror_ai_lines_ror(AoeGameRorAiLinesOpsRor *ops, char lines[6][256]);
+
 #endif

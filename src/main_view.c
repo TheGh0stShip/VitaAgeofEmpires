@@ -1537,3 +1537,85 @@ int aoe_main_view_place_preview_ror(const AoeMainViewPreviewOpsRor *o, int32_t x
     *cursor_code = 0;
     return 1;
 }
+
+/* 0x00511080: editor/game-mouse placement preview (see main_view.h). */
+int aoe_main_view_editor_preview(const AoeMainViewEditorPreviewOps *o, int32_t left,
+                                 int32_t top, int32_t right, int32_t bottom,
+                                 int32_t *cursor_code, int32_t *preview_y) {
+    int32_t mx, my, tx, ty;
+    int16_t c[8];
+    float fx, fy;
+    int ok;
+    if (!o || !o->has_template(o->context)) return 0;
+    o->mouse(o->context, &mx, &my);
+    if (mx < left || mx > right || my < top || my > bottom) return 0;
+    if (!o->pick_terrain(o->context, mx - left, my - top)) return 0;
+    if (!o->tile_at(o->context, mx - left, my - top, &tx, &ty)) return 0;
+    fx = (float)tx + 0.5f;
+    fy = (float)ty + 0.5f;
+    o->corners(o->context, fx, fy, c);
+    ok = o->can_place(o->context, fx, fy);
+    if (!ok) {
+        *cursor_code = 5;
+    } else {
+        uint32_t v = (o->template_flags(o->context) >> 7) & 7;
+        *cursor_code = (int32_t)(((v < 4 ? v + 0x24 : 0x2c - v) << 4) | 9);
+    }
+    if (o->template_has_graphic(o->context)) {
+        int32_t cx = 1 + (c[4] - c[0]) / 2 + c[0];
+        int32_t cy = 1 + (c[5] - c[1]) / 2 + c[1];
+        uint32_t facing = o->template_facing(o->context) & 1u;
+        uint32_t shape = ok ? 0x97u : o->template_shape(o->context);
+        *preview_y = (int16_t)cy;
+        o->draw_preview(o->context, cx, cy, o->relocating(o->context), facing, shape);
+    }
+    *cursor_code = 0;
+    return 1;
+}
+
+/* 0x00519ed0: game view right-click (see main_view.h). */
+int aoe_main_view_right_click(const AoeMainViewRightClickOps *o, int32_t x, int32_t y,
+                              int32_t unit) {
+    if (o->mode < 4 || o->mode > 7) return 0;
+    if (o->drag_pending) {
+        o->cancel_drag(o->context);
+        return 1;
+    }
+    o->prepare(o->context);
+    if (o->sub_mode == 0x14) {
+        if (o->pick_object(o->context, x, y)) o->object_notify(o->context);
+        return 1;
+    }
+    if (o->busy(o->context)) return 0;
+    if (o->selection_kind != 1 && o->selection_kind != 2) return 0;
+    if (o->full_player) {
+        if (o->mode == 5 || o->mode == 7) return 1;
+        if (o->sub_mode == 0) {
+            if (unit == 0) {
+                o->default_order(o->context, x, y);
+                return 1;
+            }
+            if (o->find_unit(o->context, unit) && o->rally_enabled &&
+                o->pick_terrain(o->context, x, y)) {
+                o->set_rally(o->context);
+                o->redraw(o->context);
+            }
+            return 1;
+        }
+        if (o->sub_mode == 0x15) {
+            o->clear_box(o->context);
+            o->redraw(o->context);
+        }
+        o->reset_mode(o->context);
+        return 1;
+    }
+    if (o->mode != 7) {
+        if (o->sub_mode != 0) {
+            o->reset_mode(o->context);
+            return 1;
+        }
+        o->cancel_selection(o->context);
+        o->redraw(o->context);
+    }
+    return 1;
+}

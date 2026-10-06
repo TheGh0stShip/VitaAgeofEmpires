@@ -706,3 +706,29 @@ void aoe_game_ror_stats_text_ror(const AoeGameBaseRor *g, int show_max, char *ti
     else
         snprintf(view, (size_t)view_size, "avg view time=???");
 }
+
+/* 0x005016d0 */
+void aoe_game_ror_ai_lines_ror(AoeGameRorAiLinesOpsRor *ops, char lines[6][256]) {
+    const char *t;
+    const char *show[6];
+    int i;
+    if (!ops || !ops->has_world) return;
+    for (i = 0; i < 6; i++) lines[i][0] = 0;
+    if (ops->debug_mode) {
+        t = ops->ai_text(ops->context, 1);
+        if (t) snprintf(lines[0], 256, "Player #%d: %s", (int)ops->player, t);
+        else snprintf(lines[0], 256, "Player #%d: AI is not functional.", (int)ops->player);
+        for (i = 2; i < 7; i++) {
+            t = ops->ai_text(ops->context, i);
+            snprintf(lines[i - 1], 256, "%s", t ? t : "");
+        }
+    } else {
+        t = ops->ai_text(ops->context, 0);
+        snprintf(lines[0], 256, "%s", t ? t : "");
+        snprintf(lines[1], 256, "Player #%d is not a computer player.", (int)ops->player);
+    }
+    if (ops->panel_up && ops->show) {
+        for (i = 0; i < 6; i++) show[i] = lines[ops->debug_mode ? 5 - i : i];
+        ops->show(ops->context, show);
+    }
+}

@@ -192,6 +192,22 @@ static void stats_text_tests(void) {
     aoe_game_ror_stats_text_ror(&g, 1, title, sizeof title, view, sizeof view);
     assert(strncmp(title, "t30,f25,max(r(v99,", 18) == 0 && strstr(title, ",o7)") != NULL);
 }
+static const char *al_text(void *c, int32_t s) { (void)c; return s == 1 ? "ok" : (s == 3 ? "three" : (s == 0 ? "zero" : NULL)); }
+static const char *al_shown[6];
+static void al_show(void *c, const char *const l[6]) { int i; (void)c; for (i = 0; i < 6; i++) al_shown[i] = l[i]; }
+static void ai_lines_tests(void) {
+    char l[6][256];
+    AoeGameRorAiLinesOpsRor o = {0};
+    o.has_world = 1; o.player = 2; o.debug_mode = 1; o.panel_up = 1;
+    o.ai_text = al_text; o.show = al_show;
+    aoe_game_ror_ai_lines_ror(&o, l);
+    assert(!strcmp(l[0], "Player #2: ok") && !strcmp(l[2], "three") && !l[1][0]);
+    assert(al_shown[0] == l[5] && al_shown[5] == l[0]);
+    o.debug_mode = 0;
+    aoe_game_ror_ai_lines_ror(&o, l);
+    assert(!strcmp(l[0], "zero") && !strcmp(l[1], "Player #2 is not a computer player."));
+    assert(al_shown[0] == l[0] && !l[2][0]);
+}
 int main(void) {
     char coded[64];
     AoeGameRorCommandOpsRor cops = {NULL, ns, sp, bc};
@@ -389,5 +405,6 @@ int main(void) {
     test_destroy_editor_video();
     test_open_video();
     stats_text_tests();
+    ai_lines_tests();
     return 0;
 }

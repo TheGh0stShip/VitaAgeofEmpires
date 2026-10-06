@@ -440,6 +440,42 @@ static void paint_tests(void) {
     aoe_game_screen_paint_ror(&pt_ops);
     assert(pt_drawn == 0 && pt_level == 2);
 }
+static uint32_t cmd_h; static int32_t cmd_a, cmd_a2; static int cmd_n;
+static void cmd_run(void *c, uint32_t h, int32_t a, int32_t a2) { (void)c; cmd_h = h; cmd_a = a; cmd_a2 = a2; ++cmd_n; }
+static void command_tests(void) {
+    assert(aoe_game_screen_command_ror(1, 1, 0, 0, 0, cmd_run, NULL) && cmd_h == 0x485770u);
+    assert(aoe_game_screen_command_ror(1, 0x1a, 0, 0, 0, cmd_run, NULL) && cmd_h == 0x4858b0u && cmd_a == 1);
+    assert(aoe_game_screen_command_ror(1, 0x21, 9, 0, 0, cmd_run, NULL) && cmd_a == 9 && cmd_a2 == -1);
+    assert(aoe_game_screen_command_ror(1, 0x20, 9, 0, 0, cmd_run, NULL) && cmd_a2 == 1);
+    assert(aoe_game_screen_command_ror(0, 0x18, 0, 0, 1, cmd_run, NULL) && cmd_h == 0x484f90u && cmd_a == 0);
+    cmd_n = 0;
+    assert(!aoe_game_screen_command_ror(0, 1, 0, 0, 0, cmd_run, NULL));
+    assert(!aoe_game_screen_command_ror(1, 0xa, 0, 0, 0, cmd_run, NULL));
+    assert(!aoe_game_screen_command_ror(1, 1, 0, 1, 0, cmd_run, NULL) && cmd_n == 0);
+    assert(aoe_game_screen_command_ror(1, 0x12, 4, 1, 0, cmd_run, NULL) && cmd_a2 == -1);
+    assert(!aoe_game_screen_command_ror(0, 0x12, 4, 1, 0, cmd_run, NULL));
+}
+static int32_t pc_id, pc_state; static int pc_r15, pc_ref, pc_first;
+static int32_t pc_pid(void *c) { (void)c; return pc_id; }
+static int16_t pc_civ(void *c) { (void)c; return 3; }
+static int32_t pc_st(void *c) { (void)c; return pc_state; }
+static void pc_15(void *c) { (void)c; ++pc_r15; }
+static void pc_rf(void *c) { (void)c; ++pc_ref; }
+static void pc_fp(void *c) { (void)c; ++pc_first; }
+static void player_changed_tests(void) {
+    AoeGameScreenPlayerOpsRor o = {NULL, pc_pid, pc_civ, pc_st, pc_15, pc_rf, pc_fp};
+    int32_t id = 1; int16_t civ = 0;
+    pc_id = 1; pc_state = 4;
+    aoe_game_screen_player_changed_ror(&id, &civ, &o);
+    assert(civ == 3 && pc_ref == 0 && pc_first == 1);
+    pc_id = 2; pc_state = 0x15;
+    aoe_game_screen_player_changed_ror(&id, &civ, &o);
+    assert(id == 2 && pc_r15 == 1 && pc_ref == 1);
+    pc_id = 3; pc_state = 9;
+    aoe_game_screen_player_changed_ror(&id, &civ, &o);
+    assert(pc_ref == 1 && pc_first == 3);
+}
+
 int main(void) {
     AoeGameScreenRor s;
     AoeGameScreenButtonRor b;
@@ -808,5 +844,7 @@ int main(void) {
     lifecycle_tests();
     message_tests();
     paint_tests();
+    command_tests();
+    player_changed_tests();
     return 0;
 }

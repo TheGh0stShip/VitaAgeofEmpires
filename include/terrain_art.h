@@ -45,4 +45,34 @@ int border_art_load_direct(BorderArtCache *cache, const DatBorders *borders,
                            DrsArchive *const *archives, size_t archive_count);
 void border_art_free(BorderArtCache *cache);
 
+/* Text border table (one record per border slot 0..15). */
+typedef struct {
+    int16_t count, size, offset; /* offset: running sum of count*size */
+} BorderTextShape;
+
+typedef struct {
+    uint8_t used;
+    char name[13];       /* underscores become spaces */
+    char file_name[13];
+    int32_t slp_id;
+    int32_t color_table; /* index into the caller's table list, -1 none */
+    uint8_t b28, b29, b2a, b2b;
+    int16_t w2c;
+    int16_t value_whole; /* truncated `value`; 0 when value is 0.0 */
+    float value;
+    float value2;
+    BorderTextShape shapes[19][12];
+    uint8_t b59a;
+    int16_t w59c, w59e;
+} BorderTextRecord;
+
+/* 0x00446f80: the 16 border records are cleared, then the text
+   "count" followed by count records of
+   "%hd %s %s %d %hd %hd %hd %hd %hd %hd %hd %f %f %hd %hd %hd" (id, name,
+   file, SLP, unused, +0x29, +0x28, +0x2a, colour table, +0x2b, +0x2c,
+   value, value2, +0x59a, +0x59c, +0x59e) each followed by 19x12
+   "%hd %hd" shape pairs is parsed. A record whose id is outside 0..15 is
+   ignored. Returns 0 when `text` is NULL (the file did not open). */
+int border_text_load(BorderTextRecord records[16], const char *text);
+
 #endif

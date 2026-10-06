@@ -6,6 +6,7 @@
 #include "game_base.h"
 #include "campaign_progress.h"
 #include "game_settings.h"
+#include "load_game_screen.h"
 #include "mp_setup_screen.h"
 #include "ui_dialog.h"
 #include "ui_ez.h"
@@ -617,6 +618,39 @@ typedef struct {
 } AoeMpSetupUiRor;
 
 extern const AoeUiEzVtblRor aoe_mp_setup_ui_vtable_ror;
+
+/* The "Load Saved Game Screen" (vtable 0x005468cc) as panels: its
+   constructor 0x00485c90 over the state and methods of
+   load_game_screen.h. The screen set up (0x00468180) with its own info
+   name and ID, shadow 0, 640 x 480; the title (9471, font 1, centred) at
+   20, 10 (600 x 30) and the label (9474, font 4) at 20, 45 (600 x 20);
+   the list (font 11) at 20, 65 (600 x 352) with its scrollbar (width 20,
+   help 30320); OK (4001) at 30, Delete (9417) at 230 and Cancel (4002)
+   at 430, each 180 x 30 at y 440, OK's help 30001 and Cancel's 30002;
+   Escape on Cancel and Delete (0x2e) on Delete; the list filled
+   (0x004860a0); OK and Delete disabled when nothing is selected; the
+   first saved-game name (0x005001a0) selected and scrolled to when
+   listed (0x004650c0(1, index, 1)); the list focused; tab order list,
+   OK, Delete, Cancel. The list's ops are bound to the panel here and the
+   files come from the game UI's ops (game_dir, list_files); the action
+   handler 0x00486200 runs when `action_ops` is given, else the base one. */
+typedef struct {
+    AoeUiEzRor ez;
+    AoeLoadGameScreenRor state;
+    AoeLoadGameScreenOpsRor state_ops;          /* bound to this screen */
+    const AoeLoadGameActionOpsRor *action_ops;  /* the caller's, or NULL */
+    AoeUiTextRor *title, *label;                /* +0x478, +0x47c */
+    AoeUiListRor *list;                         /* +0x480 */
+    AoeUiScrollbarRor *list_bar;                /* +0x484 */
+    AoeUiButtonRor *ok, *cancel, *remove;       /* +0x488, +0x48c, +0x490 */
+    AoeGameUiRor *ui;
+} AoeLoadGameUiRor;
+
+extern const AoeUiEzVtblRor aoe_load_game_ui_vtable_ror;
+
+/* 0x00485c90. 0 when the screen could not be set up (+0xd8 set), else 1,
+   even when a panel failed. */
+int aoe_load_game_ui_init_ror(AoeLoadGameUiRor *l, AoeGameUiRor *ui, AoeUiAreaRor *area);
 
 /* 0x00487f40 with the state's ops (required). 0 when the screen could
    not be set up (+0xd8 set), else 1, even when a panel failed. */

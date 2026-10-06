@@ -1,7 +1,10 @@
-#include "load_game_screen.h"
+#include "game_ui.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+
+#include "../ui_ez_slots.h"
 
 static void load_game_add(void *arg, const char *name) {
     AoeLoadGameScreenRor *l = (AoeLoadGameScreenRor *)arg;
@@ -97,3 +100,145 @@ int32_t aoe_load_game_screen_action_ror(AoeLoadGameScreenRor *l, const AoeLoadGa
     }
     return o->base_action(o->context, from, code);
 }
+
+/* ---- 0x00485c90: the screen as panels (game_ui.h) ---- */
+
+#define LG(p) ((AoeLoadGameUiRor *)(p))
+
+static const char *const UI_NAME = "Load Saved Game Screen";
+
+static void lg_drop(AoeUiPanelRor **slot) {
+    if (*slot) {
+        (*slot)->vt->destroy(*slot);
+        free(*slot);
+        *slot = NULL;
+    }
+}
+#define DROP(x) lg_drop((AoeUiPanelRor **)&(x))
+
+/* The state's ops on this screen: the list (the thunk of 0x0046a6d0, the
+   +0x15c sorted flag, 0x0046a150) and the game UI's saved-game directory
+   and file search. The teardown ops stay NULL: the panels are this
+   screen's own (lg_destroy). */
+static void lg_list_clear(void *c) {
+    AoeLoadGameUiRor *l = c;
+    if (l->list) aoe_ui_text_clear_ror(&l->list->text);
+}
+static void lg_list_sorted(void *c, int32_t on) {
+    AoeLoadGameUiRor *l = c;
+    if (l->list) aoe_ui_text_set_sorted_ror(&l->list->text, on);
+}
+static void lg_list_append(void *c, const char *text) {
+    AoeLoadGameUiRor *l = c;
+    if (l->list) aoe_ui_text_append_ror(&l->list->text, text, 0);
+}
+static const char *lg_save_dir(void *c) {
+    const AoeGameUiOpsRor *o = LG(c)->ui->ops;
+    return o && o->game_dir ? o->game_dir(o->context) : "";
+}
+static void lg_find_files(void *c, const char *pattern, void (*each)(void *arg, const char *name),
+                          void *arg) {
+    const AoeGameUiOpsRor *o = LG(c)->ui->ops;
+    if (o && o->list_files) o->list_files(o->context, pattern, each, arg);
+}
+
+/* 0x00485ff0: the seven panels in order, then the base. */
+static void lg_destroy(AoeUiPanelRor *p) {
+    AoeLoadGameUiRor *l = LG(p);
+    DROP(l->title);
+    DROP(l->label);
+    DROP(l->list);
+    DROP(l->list_bar);
+    DROP(l->ok);
+    DROP(l->cancel);
+    DROP(l->remove);
+    aoe_ui_ez_release_ror(&l->ez);
+}
+
+/* +0xb8 0x00486200 through the caller's action ops, else the base slot. */
+static int32_t lg_action(AoeUiPanelRor *p, AoeUiPanelRor *from, int32_t code, int32_t value,
+                         int32_t extra) {
+    AoeLoadGameUiRor *l = LG(p);
+    if (l->action_ops) return aoe_load_game_screen_action_ror(&l->state, l->action_ops, from, code);
+    return aoe_ui_ez_action_slot_ror(p, from, code, value, extra);
+}
+
+int aoe_load_game_ui_init_ror(AoeLoadGameUiRor *l, AoeGameUiRor *ui, AoeUiAreaRor *area) {
+    AoeUiEzRor *ez = &l->ez;
+    const AoeGameUiOpsRor *o = ui->ops;
+    AoeUiPanelRor *tab[4];
+    const char *name;
+    int32_t index;
+    memset(l, 0, sizeof *l);
+    l->ui = ui;
+    l->state_ops.context = l;
+    l->state_ops.list_clear = lg_list_clear;
+    l->state_ops.list_set_sorted = lg_list_sorted;
+    l->state_ops.list_append = lg_list_append;
+    l->state_ops.save_dir = lg_save_dir;
+    l->state_ops.find_files = lg_find_files;
+    l->state.ops = &l->state_ops;
+    aoe_ui_screen_init_ror(ez, ui->system, ui->ez_ops, UI_NAME);
+    ez->panel.vt = &aoe_load_game_ui_vtable_ror.base;
+    /* 0x00451ab0 reads the system's current screen; the value is unused.
+       0x00468180 with the screen's own info name (+0xfc) and ID (+0x200). */
+    if (!aoe_ui_screen_setup_ror(ez, area, ez->info_name, ez->info_id, 1)) {
+        ez->panel.field_d8 = 1;
+        return 0;
+    }
+    aoe_ui_ez_shadow_area_ror(ez, 0);
+    aoe_ui_ez_set_reference_slot_ror(ez, 0x280, 0x1e0);
+    if (!aoe_ui_ez_create_text_id_ror(ez, &ez->panel, &l->title, 0x24ff, 0x14, 10, 600, 0x1e, 1, 1,
+                                      0, 0) ||
+        !aoe_ui_ez_create_text_id_ror(ez, &ez->panel, &l->label, 0x2502, 0x14, 0x2d, 600, 0x14, 4,
+                                      0, 0, 0) ||
+        !aoe_ui_ez_create_list_ror(ez, &ez->panel, &l->list, 0x14, 0x41, 600, 0x160, 0xb) ||
+        !aoe_ui_ez_create_text_scrollbar_ror(ez, &l->list_bar, &l->list->text, 0x14))
+        return 1;
+    aoe_ui_panel_set_help_ror(&l->list_bar->panel, 0x7670, -1);
+    if (!aoe_ui_ez_create_button_id_ror(ez, &ez->panel, &l->ok, 0xfa1, 0, 0x1e, 0x1b8, 0xb4, 0x1e,
+                                        0, 0, 0) ||
+        !aoe_ui_ez_create_button_id_ror(ez, &ez->panel, &l->remove, 0x24c9, 0, 0xe6, 0x1b8, 0xb4,
+                                        0x1e, 0, 0, 0) ||
+        !aoe_ui_ez_create_button_id_ror(ez, &ez->panel, &l->cancel, 0xfa2, 0, 0x1ae, 0x1b8, 0xb4,
+                                        0x1e, 0, 0, 0))
+        return 1;
+    aoe_ui_panel_set_help_ror(&l->ok->panel, 0x7531, -1);
+    aoe_ui_panel_set_help_ror(&l->cancel->panel, 0x7532, -1);
+    l->cancel->hotkey = 0x1b;
+    l->cancel->hotkey_shift = 0;
+    l->remove->hotkey = 0x2e;
+    l->remove->hotkey_shift = 0;
+    l->state.panels[0] = l->title;
+    l->state.panels[1] = l->label;
+    l->state.panels[2] = l->list;
+    l->state.panels[3] = l->list_bar;
+    l->state.panels[4] = l->ok;
+    l->state.panels[5] = l->cancel;
+    l->state.panels[6] = l->remove;
+    aoe_load_game_screen_fill_ror(&l->state); /* 0x004860a0 */
+    if (aoe_ui_text_selected_text_ror(&l->list->text)[0] == '\0') {
+        aoe_ui_button_set_disabled_ror(l->ok, 1);
+        aoe_ui_button_set_disabled_ror(l->remove, 1);
+    }
+    /* The saved-game name (0x005001a0) selected and scrolled to when listed. */
+    name = o && o->default_save_name ? o->default_save_name(o->context) : NULL;
+    index = name ? aoe_ui_text_index_of_ror(&l->list->text, name) : -1;
+    if (index != -1) aoe_ui_list_move_ror(l->list, 1, (int16_t)index, 1);
+    aoe_ui_panel_set_current_ror(&ez->panel, &l->list->text.panel);
+    tab[0] = &l->list->text.panel;
+    tab[1] = &l->ok->panel;
+    tab[2] = &l->remove->panel;
+    tab[3] = &l->cancel->panel;
+    aoe_ui_panels_tab_cycle_ror(tab, 4);
+    return 1;
+}
+
+const AoeUiEzVtblRor aoe_load_game_ui_vtable_ror = {
+    AOE_UI_EZ_SLOTS_MDU(lg_destroy, aoe_ui_ez_draw_slot_ror, aoe_ui_game_idle_slot_ror,
+                        aoe_ui_panel_handle_paint_ror, aoe_ui_ez_no_key_action_ror,
+                        aoe_ui_panel_zero_ror, lg_action, aoe_ui_screen_focus_slot_ror,
+                        aoe_ui_ez_mouse_down_slot_ror, aoe_ui_panel_ignore_ror),
+    aoe_ui_ez_draw_background_slot_ror,
+    aoe_ui_ez_set_reference_slot_ror,
+};

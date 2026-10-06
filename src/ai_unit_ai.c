@@ -1822,3 +1822,38 @@ int32_t aoe_unit_group_leave_ror(AoeUnitGroupRor *g, int32_t id, const AoeUnitGr
     o->left(o->context, id);
     return 1;
 }
+
+/* ---- 0x004ac030 / 0x004ac1d0 ---- */
+int aoe_unit_group_remove_ror(AoeUnitGroupRor *g, int32_t id) {
+    int32_t i, cap = g->capacity, found;
+    for (i = 0; i < cap; ++i) if (g->members[i] == id) break;
+    found = i < cap;
+    if (found) {
+        for (; i < cap - 1; ++i) g->members[i] = g->members[i + 1];
+        if (--g->count < 0) g->count = 0;
+    }
+    if (g->count < 1) g->leader = -1;
+    return found;
+}
+int32_t aoe_unit_group_reset_ror(AoeUnitGroupRor *g) {
+    g->count = 0;
+    g->leader = -1;
+    return 1;
+}
+int32_t aoe_unit_group_disband_ror(AoeUnitGroupRor *g, const AoeUnitGroupOpsRor *o) {
+    int32_t i;
+    for (i = 0; i < g->count; ++i) {
+        AoeUnitGroupRor *u;
+        if (g->capacity - 1 < i) {
+            int32_t *grown = o->regrow(o->context, g->members, g->capacity, i + 1);
+            if (grown) {
+                g->members = grown;
+                g->capacity = i + 1;
+            }
+        }
+        u = o->unit(o->context, g->members[i]);
+        if (u && u->id != g->id) aoe_unit_group_reset_ror(u);
+    }
+    aoe_unit_group_reset_ror(g);
+    return 1;
+}

@@ -991,6 +991,19 @@ static void group_leave_tests(void) {
     assert(aoe_unit_group_leave_ror(&ug[2], 9, &o) == 1 && strcmp(ug_log, "grow(5) left(9) ") == 0 && ug[2].capacity == 5);
     free(ug[2].members);
 }
+
+static void group_remove_tests(void) {
+    AoeUnitGroupOpsRor o = {NULL, ug_unit, ug_leader, ug_left, ug_regrow};
+    int32_t m[4] = {1, 2, 3, 0};
+    AoeUnitGroupRor g = {1, m, 3, 4, 1};
+    /* Removing 2 shifts 3 (and the spare slot) down; a missing ID changes nothing; the last removal clears the leader. */
+    assert(aoe_unit_group_remove_ror(&g, 2) == 1 && g.count == 2 && m[0] == 1 && m[1] == 3 && m[2] == 0 && g.leader == 1);
+    assert(aoe_unit_group_remove_ror(&g, 9) == 0 && g.count == 2);
+    assert(aoe_unit_group_remove_ror(&g, 1) == 1 && aoe_unit_group_remove_ror(&g, 3) == 1 && g.count == 0 && g.leader == -1);
+    /* Disbanding resets every other member (count 0, leader -1), then the unit itself. */
+    ug[1].count = 3; ug[1].members = ug_m1; ug[2].count = 2; ug[2].leader = 1; ug[3].count = 2; ug[3].leader = 1;
+    assert(aoe_unit_group_disband_ror(&ug[1], &o) == 1 && ug[2].count == 0 && ug[2].leader == -1 && ug[3].count == 0 && ug[1].count == 0 && ug[1].leader == -1);
+}
 int main(void) {
     free_tile_tests();
     ai_kind_for_unit_tests();
@@ -1156,5 +1169,6 @@ int main(void) {
     message_tests();
     choose_target_tests();
     group_leave_tests();
+    group_remove_tests();
     return 0;
 }

@@ -926,17 +926,30 @@ typedef struct {
 typedef struct {
     void *context;
     AoeUnitGroupRor *(*unit)(void *context, int32_t id);   /* 0x005206d0 (NULL none) */
-    int32_t (*became_leader)(void *context);               /* 0x4ac1d0 */
-    void (*left)(void *context, int32_t id);               /* 0x4ac030(id) */
+    int32_t (*became_leader)(void *context);               /* 0x004ac1d0 (aoe_unit_group_disband_ror) */
+    void (*left)(void *context, int32_t id);               /* 0x004ac030(id) (aoe_unit_group_remove_ror) */
     /* The member array regrown to `n` entries (the old one freed). */
     int32_t *(*regrow)(void *context, int32_t *old, int32_t old_count, int32_t n);
 } AoeUnitGroupOpsRor;
 /* 0x004ac0a0(id): when `id` is this unit and it is its own leader,
-   0x4ac1d0 answers. Otherwise every member (growing the array to i + 1
+   0x004ac1d0 answers. Otherwise every member (growing the array to i + 1
    entries whenever the index reaches its capacity, as the original
    does) that resolves to another unit has `id` removed from its own
    member list (the tail shifted down, its count lowered, never below
-   0); then 0x4ac030(id); 1. */
+   0); then 0x004ac030(id); 1. */
 int32_t aoe_unit_group_leave_ror(AoeUnitGroupRor *g, int32_t id, const AoeUnitGroupOpsRor *o);
+
+
+/* 0x004ac030(id): `id` searched over the array's capacity (+0x70);
+   when found the tail shifts down and the count (+0x68) drops (not
+   below 0); a count below 1 clears the leader (+0x78 = -1). Returns
+   whether it was found. */
+int aoe_unit_group_remove_ror(AoeUnitGroupRor *g, int32_t id);
+/* 0x004ac1b0: the count cleared and the leader -1; 1. */
+int32_t aoe_unit_group_reset_ror(AoeUnitGroupRor *g);
+/* 0x004ac1d0: every member that resolves to another unit (the array
+   grown as in 0x004ac0a0) gets its group reset (0x004ac1b0), then this
+   unit's own; 1. */
+int32_t aoe_unit_group_disband_ror(AoeUnitGroupRor *g, const AoeUnitGroupOpsRor *o);
 
 #endif

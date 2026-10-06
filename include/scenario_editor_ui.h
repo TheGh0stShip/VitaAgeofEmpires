@@ -180,4 +180,44 @@ typedef struct {
 int aoe_editor_condition_plan_ror(int32_t kind, int32_t show,
                                   AoeEditorConditionPlanRor *plan);
 
+
+/* The editor screen's destructor 0x00490e30 (deleting 0x00490190). Every
+   owned child is a pointer at a fixed offset of the 0x92c-byte screen;
+   the port keeps the original release order as a table of those
+   offsets so a host that stores the panels elsewhere can map them. */
+typedef struct {
+    void *context;
+    /* 0x00451df0 by name: "QuitSaveDialog", "OpenSaveDialog",
+       "NewSaveDialog", "Save Game Screen", "Scenario Menu Dialog". */
+    void (*close_dialog)(void *context, const char *name);
+    /* 0x00419950 on the panel pointer at `offset`: deleted and cleared. */
+    void (*delete_panel)(void *context, int32_t offset);
+    /* +0x644: a buffer freed (0x005260f8); +0x660: an object deleted
+       through its vtable; +0x648..+0x65c and +0x4c4: shapes freed
+       (0x0049f840). */
+    void (*free_buffer)(void *context, int32_t offset);
+    void (*delete_object)(void *context, int32_t offset);
+    void (*free_shape)(void *context, int32_t offset);
+    /* +0x928 (the map view, when set): its vtable +0xb8 called. */
+    void (*view_notify)(void *context);
+    /* The screen's 0x00468170. */
+    void (*base_release)(void *context);
+} AoeScenarioEditorReleaseOpsRor;
+void aoe_scenario_editor_screen_release_ror(const AoeScenarioEditorReleaseOpsRor *ops);
+/* The number of panel offsets the release visits (for tests). */
+int32_t aoe_scenario_editor_screen_panel_count_ror(void);
+
+/* 0x004901b0: the editor's map view (+0x928) takes the world
+   (0x0050fee0) and the viewed player (0x0050ffa0; 0x00419b70), then the
+   diamond map does the same (0x0042c780, 0x0042cbb0). */
+typedef struct {
+    void *context;
+    void (*view_set_map)(void *context, void *world);
+    void (*view_set_player)(void *context, void *player);
+    void (*minimap_set_world)(void *context, void *world);
+    void (*minimap_set_player)(void *context, void *player);
+    void *(*viewed_player)(void *context);
+} AoeScenarioEditorAttachOpsRor;
+void aoe_scenario_editor_attach_world_ror(void *world, const AoeScenarioEditorAttachOpsRor *ops);
+
 #endif

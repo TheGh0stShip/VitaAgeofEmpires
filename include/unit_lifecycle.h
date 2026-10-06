@@ -92,6 +92,10 @@ typedef struct AoeUnitLifeOps {
     /* Owner vt+0x78(resource, amount, 0): add to an owner attribute. */
     void (*owner_add_attribute)(void *ctx, AoeUnitLife *u, int16_t resource, float amount);
     void (*remove_finished)(void *ctx, AoeUnitLife *u);      /* 0x004ae960 */
+    /* The type-30 set-graphic slot: 0x004a9e10 select a graphic and
+       0x0044bbd0 refresh the facet. */
+    void (*graphic_select)(void *ctx, AoeUnitLife *u, int32_t graphic);
+    void (*facet_refresh)(void *ctx, AoeUnitLife *u);
 } AoeUnitLifeOps;
 
 struct AoeUnitLife {
@@ -181,6 +185,12 @@ void aoe_unit_life_cleanup_type80(AoeUnitLife *u, const AoeUnitLifeOps *ops);
    zeroed, the +0x1cc queue cleared (0x00403e50; skipped here when absent)
    and the +0x1d0 counter bumped. The pairs themselves are kept. */
 void aoe_unit_life_reset_queue_type80(AoeUnitLife *u, const AoeUnitLifeOps *ops);
+
+/* 0x0044b8e0 (vtable +0x38 of types 30..80): `graphic` 0 means the
+   template's standing graphic (+0x18); when it differs from the current
+   one (+0x10) the current becomes the previous (+0x14), the graphic is
+   selected (0x004a9e10) and the facet refreshed (0x0044bbd0). */
+void aoe_unit_life_set_graphic_type30(AoeUnitLife *u, const AoeUnitLifeOps *ops, int32_t graphic);
 /* 0x004acf60 (vtable 0x00547fa0 +0x2c): type-80 post-load, the type-40
    one (0x00405cc0) then the +0x1cc queue relinked (0x00403df0). */
 void aoe_unit_life_post_load_type80(AoeUnitLife *u, const AoeUnitLifeOps *ops);

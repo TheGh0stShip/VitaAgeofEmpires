@@ -401,3 +401,12 @@ void aoe_unit_life_remove_type80(AoeUnitLife *u, const AoeUnitLifeOps *ops)
     }
     u->hit_points = 0.0f;
 }
+
+void aoe_unit_life_set_graphic_type30(AoeUnitLife *u, const AoeUnitLifeOps *ops, int32_t graphic) {
+    if (!u) return;
+    if (graphic == 0 && u->tmpl) graphic = u->tmpl->standing_graphic;
+    if (u->graphic_10 == graphic) return;
+    u->graphic_14 = u->graphic_10;
+    if (ops && ops->graphic_select) ops->graphic_select(ops->ctx, u, graphic);
+    if (ops && ops->facet_refresh) ops->facet_refresh(ops->ctx, u);
+}

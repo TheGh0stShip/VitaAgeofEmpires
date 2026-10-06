@@ -234,6 +234,128 @@ static void setup(AoeGameScreenRor *s) {
     s->height = 480;
 }
 
+/* ---- 0x0047ea00 / 0x0047eed0 / 0x0047fbe0 / 0x004843d0 ---- */
+static char closed_name[32];
+static int deleted[128], n_deleted, freed_shapes, freed_buffers, snd_play, snd_stop, all_stop,
+    base_rel, flag_1d8, arrows, base_idles;
+static void *modal_p; static int32_t modal_rect[4]; static uint32_t now_v;
+static int pal_first, pal_count; static uint8_t pal[7][4];
+static void gclose(void *c, const char *n) { (void)c; snprintf(closed_name, sizeof closed_name, "%s", n); }
+static int gsplay(void *c, void *s) { (void)c; (void)s; return snd_play; }
+static void gsstop(void *c, void *s) { (void)c; (void)s; ++snd_stop; }
+static void gallstop(void *c) { (void)c; ++all_stop; }
+static void gfshape(void *c, void *s) { (void)c; (void)s; ++freed_shapes; }
+static void gfbuf(void *c, void *b) { (void)c; (void)b; ++freed_buffers; }
+static void gdel(void *c, void *p) { (void)c; if (n_deleted < 128) deleted[n_deleted] = ix(p); ++n_deleted; }
+static void gbase_rel(void *c) { (void)c; ++base_rel; }
+static int g1d8(void *c) { (void)c; return flag_1d8; }
+static void garrow(void *c) { (void)c; ++arrows; }
+static void *gmodal_p(void *c) { (void)c; return modal_p; }
+static int grect(void *c, void *p, int32_t r[4]) { (void)c; (void)p; memcpy(r, modal_rect, sizeof modal_rect); return 1; }
+static void gbase_idle(void *c) { (void)c; ++base_idles; }
+static void gpal(void *c, int32_t first, int32_t count, const uint8_t (*rgb)[4]) {
+    (void)c; pal_first = first; pal_count = count; memcpy(pal, rgb, sizeof pal);
+}
+static uint32_t gnow2(void *c) { (void)c; return now_v; }
+static int32_t idle_state;
+static int32_t gstate2(void *c) { (void)c; return idle_state; }
+
+static void lifecycle_tests(void) {
+    AoeGameScreenRor s;
+    AoeGameScreenOpsRor o = ops;
+    int32_t self[4] = {100, 100, 300, 300};
+    int i, sf0 = sfreed;
+    o.close_dialog = gclose; o.sound_playing = gsplay; o.sound_stop = gsstop;
+    o.stop_all_sounds = gallstop; o.free_shape = gfshape; o.free_buffer = gfbuf;
+    o.delete_panel = gdel; o.base_release = gbase_rel; o.game_flag_1d8 = g1d8;
+    o.arrow_cursor = garrow; o.modal_panel = gmodal_p; o.panel_rect = grect;
+    o.base_idle = gbase_idle; o.set_palette_entries = gpal; o.now = gnow2; o.game_state = gstate2;
+    setup(&s);
+    s.ops = &o;
+    s.sound = (void *)9;
+    s.cue_sound = 1; s.cue_playing = 1;
+    for (i = 0; i < 13; ++i) s.shapes[i] = (void *)(intptr_t)(200 + i);
+    for (i = 0; i < 4; ++i) s.buffers[i] = (void *)(intptr_t)(300 + i);
+    s.diamond_map = (void *)8;
+    snd_play = 1;
+    aoe_game_screen_release_ror(&s);
+    assert(strcmp(closed_name, "Config Dialog") == 0 && snd_stop == 1 && sfreed == sf0 + 1 &&
+           all_stop == 1 && s.cue_playing == 0 && s.cue_sound == 0 && freed_shapes == 13 &&
+           freed_buffers == 4 && base_rel == 1);
+    /* chat[8], buttons[12], more[5], age, title, scores[8], resources,
+       (4c4, 510 absent) help, (514, 540 absent) timers[10], lines 5..0,
+       (57c absent), 584, view, diamond map. */
+    assert(n_deleted == 8 + 12 + 5 + 2 + 8 + 1 + 1 + 10 + 6 + 1 + 1 + 1);
+    assert(deleted[0] == 30 && deleted[7] == 37 && deleted[8] == 10 && deleted[19] == 21 &&
+           deleted[20] == 50 && deleted[25] == 3 && deleted[26] == 5 && deleted[27] == 56 &&
+           deleted[35] == 2 && deleted[36] == 55 && deleted[37] == 40 && deleted[47] == 29 &&
+           deleted[52] == 24 && deleted[53] == 4 && deleted[54] == 1 && deleted[55] == 8);
+    assert(s.view == NULL && s.sound == NULL && s.shapes[0] == NULL);
+
+    /* Overlap redraw: the modal panel inside, crossing, or containing
+       the screen redraws it; a disjoint one does not. */
+    setup(&s);
+    s.ops = &o;
+    modal_p = (void *)60;
+    modal_rect[0] = 150; modal_rect[1] = 150; modal_rect[2] = 200; modal_rect[3] = 200;
+    aoe_game_screen_redraw_overlaps_ror(&s, self, 1);
+    assert(f.redraws[60] == 1);
+    modal_rect[0] = 250; modal_rect[1] = 50; modal_rect[2] = 400; modal_rect[3] = 150;
+    aoe_game_screen_redraw_overlaps_ror(&s, self, 1);
+    assert(f.redraws[60] == 2);
+    modal_rect[0] = 0; modal_rect[1] = 0; modal_rect[2] = 500; modal_rect[3] = 500;
+    aoe_game_screen_redraw_overlaps_ror(&s, self, 1);
+    assert(f.redraws[60] == 3);
+    modal_rect[0] = 400; modal_rect[1] = 400; modal_rect[2] = 500; modal_rect[3] = 500;
+    aoe_game_screen_redraw_overlaps_ror(&s, self, 1);
+    assert(f.redraws[60] == 3);
+    modal_p = NULL;
+    aoe_game_screen_redraw_overlaps_ror(&s, self, 1);
+    assert(f.redraws[60] == 3);
+
+    /* The palette cycle: 7 entries from the index, wrapping; the index
+       steps back; nothing before the period elapses. */
+    setup(&s);
+    s.ops = &o;
+    s.cycle_period = 100;
+    s.cycle_time = 1000;
+    s.cycle_index = 5;
+    for (i = 0; i < 7; ++i) { s.cycle_colors[i][0] = (uint8_t)i; s.cycle_colors[i][1] = 10; s.cycle_colors[i][2] = 20; }
+    aoe_game_screen_palette_cycle_ror(&s, 1050);
+    assert(pal_count == 0);
+    aoe_game_screen_palette_cycle_ror(&s, 1100);
+    assert(pal_first == 0xf8 && pal_count == 7 && pal[0][0] == 5 && pal[1][0] == 6 &&
+           pal[2][0] == 0 && pal[6][0] == 4 && pal[0][1] == 10 && pal[0][3] == 0 &&
+           s.cycle_index == 4 && s.cycle_time == 1100);
+    s.cycle_index = 0;
+    aoe_game_screen_palette_cycle_ror(&s, 1300);
+    assert(s.cycle_index == 6 && pal[0][0] == 0);
+
+    /* Idle: the wait cursor released unless +0x1d8; the cycle only in
+       states 4..6 with this screen modal and the view focused; cue and
+       hover in 4 and 6; the base idle always. */
+    setup(&s);
+    s.ops = &o;
+    s.self = (void *)61;
+    s.cycle_period = 1;
+    modal_p = (void *)61;
+    vfocus = 1;
+    idle_state = 5;
+    now_v = 500;
+    pal_count = 0;
+    aoe_game_screen_idle_ror(&s);
+    assert(arrows == 1 && pal_count == 7 && base_idles == 1);
+    flag_1d8 = 1;
+    idle_state = 7;
+    pal_count = 0;
+    aoe_game_screen_idle_ror(&s);
+    assert(arrows == 1 && pal_count == 0 && base_idles == 2);
+    idle_state = 4;
+    modal_p = NULL;
+    aoe_game_screen_idle_ror(&s);
+    assert(pal_count == 0 && base_idles == 3);
+}
+
 int main(void) {
     AoeGameScreenRor s;
     AoeGameScreenButtonRor b;
@@ -599,5 +721,6 @@ int main(void) {
     aoe_game_screen_map_scores_ror(&s, 0);
     assert(map_flag == 0 && help_y == 4 && f.active[56] == 0);
     is_net = 0;
+    lifecycle_tests();
     return 0;
 }

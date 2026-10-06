@@ -256,6 +256,30 @@ typedef struct {
     uint32_t (*ping)(void *context, int32_t player);
     const char *(*player_name)(void *context, int32_t player);
     void (*score_line)(void *context, void *panel, const struct AoeGameScoreLineRor *line);
+    /* The destructor 0x0047ea00: 0x00451df0 close a dialog by name, the
+       wave sound playing (0x004a3440) and stopped (0x004a3410), all
+       sounds stopped (0x004a2510), a shape freed (0x0049f840), a buffer
+       freed (0x005260f8), a child panel deleted through its vtable, the
+       screen's 0x00468170. */
+    void (*close_dialog)(void *context, const char *name);
+    int (*sound_playing)(void *context, void *sound);
+    void (*sound_stop)(void *context, void *sound);
+    void (*stop_all_sounds)(void *context);
+    void (*free_shape)(void *context, void *shape);
+    void (*free_buffer)(void *context, void *buffer);
+    void (*delete_panel)(void *context, void *panel);
+    void (*base_release)(void *context);
+    /* Idle 0x0047fbe0: the wait cursor released (0x0041bdc0) unless game
+       +0x1d8; the panel system's modal panel (0x00451ad0) and its
+       rectangle; the base idle 0x00453360; SetPaletteEntries
+       (0x00438200(first, count, entries)). */
+    int (*game_flag_1d8)(void *context);
+    void (*arrow_cursor)(void *context);
+    void *(*modal_panel)(void *context);
+    int (*panel_rect)(void *context, void *panel, int32_t ltrb[4]);
+    void (*base_idle)(void *context);
+    void (*set_palette_entries)(void *context, int32_t first, int32_t count,
+                                const uint8_t (*rgb)[4]);
 } AoeGameScreenOpsRor;
 
 typedef struct {
@@ -290,6 +314,20 @@ typedef struct {
     uint32_t cue_time;                           /* +0x67c */
     int32_t cue_playing;                         /* +0x684 */
     uint32_t cue_start;                          /* +0x688 */
+    /* The rest of the destructor's inventory: shapes +0x478..+0x4a8
+       (8 then 5), the diamond map +0x4bc, panels +0x4c4, +0x510, +0x514,
+       +0x540, +0x57c, buffers +0x5d0..+0x5dc, the cue sound flag +0x680.
+       The palette cycle 0x004843d0: its period (+0x690), last time
+       (+0x694), start index (+0x698) and seven RGB triples (+0x69e). */
+    void *shapes[13];
+    void *diamond_map;
+    void *panel_4c4, *panel_510, *panel_514, *panel_540, *panel_57c;
+    void *buffers[4];
+    int32_t cue_sound;
+    uint32_t cycle_period, cycle_time;
+    int16_t cycle_index;
+    uint8_t cycle_colors[7][3];
+    void *self; /* the screen panel itself, for the modal comparison */
     const AoeGameScreenOpsRor *ops;
 } AoeGameScreenRor;
 
@@ -468,5 +506,31 @@ void aoe_game_screen_map_scores_ror(AoeGameScreenRor *s, int on);
    non-humans (kinds other than 2 and 4), else 0xb; empty entries hide
    their panel; stops at the first missing panel. */
 void aoe_game_screen_scores_ror(AoeGameScreenRor *s);
+
+
+/* 0x0047ea00 destructor (deleting 0x0047e9c0): the "Config Dialog"
+   closed; the sound (+0x7b8) stopped if playing, then destroyed; the
+   cue sound flag cleared (stopping all sounds when one plays); the 13
+   shapes freed; the 4 buffers freed; then the panels deleted in the
+   original order: chat[8], buttons[12] and more_buttons[5], age text,
+   title, scores[8], resources, +0x4c4, +0x510, help, +0x514, +0x540,
+   timers[10], lines[6] (last first), +0x57c, +0x584, the view, the
+   diamond map; then the screen's 0x00468170. */
+void aoe_game_screen_release_ror(AoeGameScreenRor *s);
+/* 0x0047eed0 (+0x24; 0x0047eec0 at +0x20 only forwards to the panel's
+   0x00452bb0): when the system's modal panel overlaps this screen's
+   rectangle `self_ltrb` (either rectangle's edge inside the other on
+   both axes), that panel is redrawn with `flag`. */
+void aoe_game_screen_redraw_overlaps_ror(AoeGameScreenRor *s, const int32_t self_ltrb[4],
+                                         int32_t flag);
+/* 0x0047fbe0 idle (+0x4c): the wait cursor released unless game +0x1d8;
+   in states 4, 5 and 6 with this screen modal and the view focused the
+   palette cycles; in states 4 and 6 the event cue and hover help run;
+   then the base idle. */
+void aoe_game_screen_idle_ror(AoeGameScreenRor *s);
+/* 0x004843d0: once per period, palette entries 0xf8..0xfe take the
+   seven colours starting at the index (wrapping at 7), the index steps
+   back one (6 after 0). */
+void aoe_game_screen_palette_cycle_ror(AoeGameScreenRor *s, uint32_t now);
 
 #endif

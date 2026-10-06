@@ -220,6 +220,38 @@ static int32_t t_line(void *c, int l) { (void)c; return l + 1; }
 static int16_t t_entry(void *c, int32_t i) { (void)c; return (int16_t)(50 + i); }
 static int t_building(void *c, int16_t id) { (void)c; return id == 52; }
 
+/* ---- the editor screen's release order (0x00490e30) and world attach
+   (0x004901b0) ---- */
+static char ed_closed[5][32]; static int ed_nclosed, ed_npanels, ed_nshapes, ed_buf, ed_obj, ed_notify, ed_base;
+static int32_t ed_first, ed_last, ed_shape_first;
+static void ed_close(void *c, const char *n) { (void)c; if (ed_nclosed < 5) snprintf(ed_closed[ed_nclosed], 32, "%s", n); ++ed_nclosed; }
+static void ed_del(void *c, int32_t off) { (void)c; if (ed_npanels == 0) ed_first = off; ed_last = off; ++ed_npanels; assert(ed_buf == 0 || off != 0x644); }
+static void ed_fbuf(void *c, int32_t off) { (void)c; assert(off == 0x644); ++ed_buf; }
+static void ed_dobj(void *c, int32_t off) { (void)c; assert(off == 0x660); ++ed_obj; }
+static void ed_fshape(void *c, int32_t off) { (void)c; if (ed_nshapes == 0) ed_shape_first = off; ++ed_nshapes; if (ed_nshapes == 7) assert(off == 0x4c4); }
+static void ed_vnotify(void *c) { (void)c; ++ed_notify; }
+static void ed_brel(void *c) { (void)c; ++ed_base; assert(ed_notify == 1); }
+static void *att_world, *att_player_v, *att_mm_world, *att_mm_player;
+static void att_map(void *c, void *w) { (void)c; att_world = w; }
+static void att_player(void *c, void *p) { (void)c; att_player_v = p; }
+static void att_mmw(void *c, void *w) { (void)c; att_mm_world = w; }
+static void att_mmp(void *c, void *p) { (void)c; att_mm_player = p; }
+static void *att_viewed(void *c) { (void)c; return (void *)77; }
+
+static void editor_release_tests(void) {
+    AoeScenarioEditorReleaseOpsRor o = {NULL, ed_close, ed_del, ed_fbuf, ed_dobj, ed_fshape, ed_vnotify, ed_brel};
+    AoeScenarioEditorAttachOpsRor a = {NULL, att_map, att_player, att_mmw, att_mmp, att_viewed};
+    aoe_scenario_editor_screen_release_ror(&o);
+    assert(ed_nclosed == 5 && strcmp(ed_closed[0], "QuitSaveDialog") == 0 &&
+           strcmp(ed_closed[4], "Scenario Menu Dialog") == 0);
+    assert(ed_npanels == aoe_scenario_editor_screen_panel_count_ror() && ed_npanels == 268);
+    assert(ed_first == 0x520 && ed_last == 0x4cc && ed_buf == 1 && ed_obj == 1 &&
+           ed_nshapes == 7 && ed_shape_first == 0x648 && ed_notify == 1 && ed_base == 1);
+    aoe_scenario_editor_attach_world_ror((void *)5, &a);
+    assert(att_world == (void *)5 && att_player_v == (void *)77 && att_mm_world == (void *)5 &&
+           att_mm_player == (void *)77);
+}
+
 int main(void) {
     AoeUiPlatformRor pf = {0};
     static AoeUiSystemRor sys;
@@ -802,5 +834,6 @@ int main(void) {
                cp.shown == AOE_EDITOR_COND_RELIC && cp.focus == 0);
         assert(!aoe_editor_condition_plan_ror(19, 1, &cp));
     }
+    editor_release_tests();
     return 0;
 }

@@ -612,7 +612,7 @@ add_library(aoe_game_ui STATIC src/screens/menu_dialog.c
             src/screens/send_message_dialog.c
             src/screens/tribute_dialog.c
             src/screens/about_dialog.c src/screens/main_menu.c
-    src/screens/credits.c src/screens/scenario_editor_open.c src/screens/scenario_editor_menu.c src/screens/status_screen.c src/screens/single_player_menu.c src/screens/mission_dialog.c src/screens/select_scenario.c src/screens/game_settings_screen.c src/screens/scenario_editor_screen.c src/screens/save_game_screen.c src/screens/campaign_selection.c src/screens/campaign_editor.c src/screens/name_selection.c src/screens/config_dialog.c src/screens/create_dialog.c src/screens/join_screen.c src/screens/mp_startup_screen.c src/screens/mp_setup_screen.c src/screens/load_game_screen.c)
+    src/screens/credits.c src/screens/scenario_editor_open.c src/screens/scenario_editor_menu.c src/screens/status_screen.c src/screens/single_player_menu.c src/screens/mission_dialog.c src/screens/select_scenario.c src/screens/game_settings_screen.c src/screens/scenario_editor_screen.c src/screens/save_game_screen.c src/screens/campaign_selection.c src/screens/campaign_editor.c src/screens/name_selection.c src/screens/config_dialog.c src/screens/create_dialog.c src/screens/join_screen.c src/screens/mp_startup_screen.c src/screens/mp_setup_screen.c src/screens/load_game_screen.c src/screens/mp_wait_screen.c)
 target_include_directories(aoe_game_ui PUBLIC include)
 target_link_libraries(aoe_game_ui PUBLIC aoe_ui_panel aoe_game_base aoe_game_settings aoe_campaign_progress aoe_tribute)
 
@@ -1287,6 +1287,10 @@ else()
   target_link_libraries(achievements_screen_test PRIVATE aoe_achievements_screen)
   target_compile_options(achievements_screen_test PRIVATE -UNDEBUG)
   add_test(NAME original_ror_achievements_screen COMMAND achievements_screen_test)
+  add_executable(mp_wait_screen_test tests/mp_wait_screen_test.c)
+  target_link_libraries(mp_wait_screen_test PRIVATE aoe_game_ui)
+  target_compile_options(mp_wait_screen_test PRIVATE -UNDEBUG)
+  add_test(NAME original_ror_mp_wait_screen COMMAND mp_wait_screen_test)
   add_executable(mp_setup_screen_test tests/mp_setup_screen_test.c)
   target_link_libraries(mp_setup_screen_test PRIVATE aoe_game_ui)
   target_compile_options(mp_setup_screen_test PRIVATE -UNDEBUG)

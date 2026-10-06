@@ -736,3 +736,110 @@ void aoe_game_screen_scores_ror(AoeGameScreenRor *s) {
         OPS->score_line(CTX, s->scores[i], &line);
     }
 }
+
+/* ---- 0x0047ea00 destructor, 0x0047eed0, 0x0047fbe0, 0x004843d0 ---- */
+
+#define O(s) ((s)->ops)
+#define C(s) ((s)->ops->context)
+
+static void drop_panel(AoeGameScreenRor *s, void **slot) {
+    if (*slot && O(s)->delete_panel) O(s)->delete_panel(C(s), *slot);
+    *slot = NULL;
+}
+
+void aoe_game_screen_release_ror(AoeGameScreenRor *s) {
+    int i;
+    if (!s || !s->ops) return;
+    if (O(s)->close_dialog) O(s)->close_dialog(C(s), "Config Dialog");
+    if (s->sound) {
+        if (O(s)->sound_playing && O(s)->sound_playing(C(s), s->sound) && O(s)->sound_stop)
+            O(s)->sound_stop(C(s), s->sound);
+        if (O(s)->free_sound) O(s)->free_sound(C(s), s->sound);
+        s->sound = NULL;
+    }
+    if (s->cue_sound) {
+        if (s->cue_playing) {
+            s->cue_playing = 0;
+            if (O(s)->stop_all_sounds) O(s)->stop_all_sounds(C(s));
+        }
+        s->cue_sound = 0;
+    }
+    for (i = 0; i < 13; ++i) {
+        if (s->shapes[i] && O(s)->free_shape) O(s)->free_shape(C(s), s->shapes[i]);
+        s->shapes[i] = NULL;
+    }
+    for (i = 0; i < 4; ++i) {
+        if (s->buffers[i] && O(s)->free_buffer) O(s)->free_buffer(C(s), s->buffers[i]);
+        s->buffers[i] = NULL;
+    }
+    for (i = 0; i < 8; ++i) drop_panel(s, &s->chat[i]);
+    for (i = 0; i < AOE_GAME_SCREEN_BUTTONS; ++i) drop_panel(s, &s->buttons[i]);
+    for (i = 0; i < 5; ++i) drop_panel(s, &s->more_buttons[i]);
+    drop_panel(s, &s->age_text);
+    drop_panel(s, &s->title);
+    for (i = 0; i < 8; ++i) drop_panel(s, &s->scores[i]);
+    drop_panel(s, &s->resources);
+    drop_panel(s, &s->panel_4c4);
+    drop_panel(s, &s->panel_510);
+    drop_panel(s, &s->help_panel);
+    drop_panel(s, &s->panel_514);
+    drop_panel(s, &s->panel_540);
+    for (i = 0; i < AOE_GAME_SCREEN_TIMERS; ++i) drop_panel(s, &s->timers[i]);
+    for (i = 5; i >= 0; --i) drop_panel(s, &s->lines[i]);
+    drop_panel(s, &s->panel_57c);
+    drop_panel(s, &s->panel_584);
+    drop_panel(s, &s->view);
+    drop_panel(s, &s->diamond_map);
+    if (O(s)->base_release) O(s)->base_release(C(s));
+}
+
+static int span_overlaps(int32_t a0, int32_t a1, int32_t b0, int32_t b1) {
+    return (a0 <= b0 && b0 <= a1) || (a0 <= b1 && b1 <= a1) || (b0 < a0 && a1 < b1);
+}
+
+void aoe_game_screen_redraw_overlaps_ror(AoeGameScreenRor *s, const int32_t a[4], int32_t flag) {
+    void *m;
+    int32_t b[4];
+    if (!s || !s->ops || !O(s)->modal_panel || !O(s)->panel_rect) return;
+    m = O(s)->modal_panel(C(s));
+    if (!m || !O(s)->panel_rect(C(s), m, b)) return;
+    if ((span_overlaps(a[0], a[2], b[0], b[2]) && span_overlaps(a[1], a[3], b[1], b[3])) ||
+        (span_overlaps(b[0], b[2], a[0], a[2]) && span_overlaps(b[1], b[3], a[1], a[3])))
+        if (O(s)->redraw) O(s)->redraw(C(s), m, flag);
+}
+
+void aoe_game_screen_palette_cycle_ror(AoeGameScreenRor *s, uint32_t now) {
+    uint8_t entries[7][4];
+    int k;
+    int16_t at;
+    if (!s || now - s->cycle_time < s->cycle_period) return;
+    at = s->cycle_index;
+    for (k = 0; k < 7; ++k) {
+        entries[k][0] = s->cycle_colors[at][0];
+        entries[k][1] = s->cycle_colors[at][1];
+        entries[k][2] = s->cycle_colors[at][2];
+        entries[k][3] = 0;
+        if (++at == 7) at = 0;
+    }
+    s->cycle_index = (int16_t)(s->cycle_index == 0 ? 6 : s->cycle_index - 1);
+    if (s->ops && O(s)->set_palette_entries) O(s)->set_palette_entries(C(s), 0xf8, 7, entries);
+    s->cycle_time = now;
+}
+
+void aoe_game_screen_idle_ror(AoeGameScreenRor *s) {
+    int32_t state;
+    if (!s || !s->ops) return;
+    if (!(O(s)->game_flag_1d8 && O(s)->game_flag_1d8(C(s))) && O(s)->arrow_cursor)
+        O(s)->arrow_cursor(C(s));
+    state = O(s)->game_state ? O(s)->game_state(C(s)) : 0;
+    if (state == 4 || state == 5 || state == 6) {
+        if (O(s)->modal_panel && O(s)->modal_panel(C(s)) == s->self && O(s)->view_focus &&
+            O(s)->view_focus(C(s)))
+            aoe_game_screen_palette_cycle_ror(s, O(s)->now ? O(s)->now(C(s)) : 0);
+    }
+    if (state == 4 || state == 6) {
+        aoe_game_screen_cue_ror(s);
+        aoe_game_screen_hover_ror(s);
+    }
+    if (O(s)->base_idle) O(s)->base_idle(C(s));
+}

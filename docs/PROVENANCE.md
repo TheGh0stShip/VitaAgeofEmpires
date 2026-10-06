@@ -28,7 +28,7 @@ project is used.
 ## Classes of code
 
 Run `python3 tools/provenance_audit.py --table` for the per-file list. On
-2026-10-06: 260 C files under `src/` are **translations** (they, or the
+2026-10-06: 261 C files under `src/` are **translations** (they, or the
 header documentation of the functions they define, cite executable
 functions) and 9 are **port code** written for this project without an
 original counterpart:
@@ -53,7 +53,7 @@ port glue; their headers say which parts are original.
 | DRS archives | `src/drs.c` | Registration 0x0046afc0 (0x40-byte header, `tribe` at +0x2c, table count +0x38, first data +0x3c), lookup 0x0046b280 (12-byte tables from +0x40, 12-byte entries) |
 | SLP shapes | `src/slp.c`, `src/shape.c` | Loader 0x0049f5f0, frame count 0x0049fa90, size 0x0049fa00, bounds 0x0049fac0, pixel test 0x0049fb90, draw 0x0049fe00, rasterizer 0x005409a0 (command loop 0x005410a0, tables 0x0053f440 / 0x0053f4c0, 0x00541b60) |
 | SHP shapes | `src/shape.c` | The same shape functions' SHP branch |
-| DAT (compressed) | `src/dat.c` | Raw DEFLATE body as the installed file shows; sections below |
+| Compressed streams (DAT, scenario bodies, player file) | `src/inflate.c` | The executable's decoder 0x00525b0b (work size 0x00525b05), reached from the stream read 0x0046b800: raw deflate with its own tables at 0x00525060..0x00525290 |
 | DAT graphics | `src/dat.c` | Reader 0x004a4c40, writer 0x004a5220, delta use in 0x004a5d60 |
 | DAT terrains, borders, tile geometry | `src/dat.c` | Map object read as one 0x8dd0-byte image (0x00443ce0); the map's text loader 0x00446bb0 and its format string name the terrain fields; the view's reads of +0x8d96..+0x8d9e |
 | DAT units | `src/dat_units.c` | Template loader 0x004413b0 and the class loaders; copy 0x00441f50 |
@@ -87,7 +87,7 @@ The commit history before 2026-10-06 still contains the removed documents.
 
 | Component | Where | Licence | Note |
 | --- | --- | --- | --- |
-| zlib | Linked (system / VitaSDK library) to inflate DAT, scenario and player-file bodies and to deflate player files | zlib | Not vendored. The original executable contains no zlib; it has its own stream compressor (behind 0x0046b800), which is not yet translated. Translating it would remove this dependency. |
+| zlib | Linked (system / VitaSDK library) only to deflate player files (`src/deflate_writer.c`) and in tests that make deflate input | zlib | Not vendored. Decoding no longer uses it: the DAT, scenario and player-file bodies go through `src/inflate.c`, the translation of the executable's own decoder 0x00525b0b, which matches zlib byte for byte on the installed DAT and all 20 Rise of Rome campaign scenarios. The executable's encoder (0x005223e0..0x00524fc0, documented in `deflate_writer.h`) is not yet translated; translating it would remove this dependency. |
 | stb_truetype | `third_party/stb/stb_truetype.h`, vendored | MIT or public domain (dual) | Renders the user's Windows fonts in place of GDI. Under the public-domain option no notice is required; it is still someone else's code. A port-owned TrueType rasterizer would remove it. |
 | VitaSDK runtime | The Vita build links its C library and system stubs | VitaSDK's licences | Platform requirement for any Vita program. |
 | Host C library | Host builds | — | Platform. |

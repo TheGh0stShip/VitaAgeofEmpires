@@ -140,8 +140,10 @@ Inflating 181,610 bytes yields 963,580 bytes beginning with `VER 3.7` and a
 NUL terminator. `0x00502260` opens the file through `0x00465280`, reads eight
 bytes through `0x004654e0`, and compares them with the binary's `VER 3.7`
 string at `0x005668f4`. The read path uses a 64 KiB buffer and calls a
-decompression routine at `0x00531a9b`. The shared loader in `src/dat.c`
-reimplements this with zlib raw inflation. Detailed rule structures inside
+decompression routine at `0x00531a9b`. Patched RoR 1.0a's counterpart is
+`0x00525b0b`, reached from the stream read `0x0046b800`; `src/inflate.c`
+translates it, and `src/dat.c`, the scenario reader and the player file use
+that translation. Detailed rule structures inside
 the decompressed data still need to be mapped.
 
 The first 12 decompressed bytes are the eight-byte version and two little

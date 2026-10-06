@@ -7,9 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <zlib.h>
-
 #include "deflate_writer.h"
+#include "inflate.h"
 #include "game_startup.h"
 
 #define DIR(c) ((AoeUiDirectorRor *)(c))
@@ -249,49 +248,18 @@ static void camp_find(void *c, const char *pattern,
 }
 
 /* The player file is a raw deflate stream (the original's compressed
-   file I/O, 0x0046b5b0 with the compress flag). */
+   file I/O, 0x0046b5b0 with the compress flag), decoded with the
+   executable's stream decoder (0x00525b0b, inflate.h). */
 static uint8_t *camp_read_pif(void *c, const char *path, uint32_t *size) {
     uint32_t packed_size = 0;
     uint8_t *packed = read_whole(path, &packed_size), *out = NULL;
-    z_stream z;
-    size_t cap = 4096, used = 0;
+    size_t used = 0;
     (void)c;
     if (!packed) return NULL;
-    memset(&z, 0, sizeof z);
-    if (inflateInit2(&z, -MAX_WBITS) != Z_OK) {
-        free(packed);
-        return NULL;
-    }
-    z.next_in = packed;
-    z.avail_in = packed_size;
-    for (;;) {
-        uint8_t *grown = realloc(out, cap);
-        int r;
-        if (!grown) break;
-        out = grown;
-        z.next_out = out + used;
-        z.avail_out = (uInt)(cap - used);
-        r = inflate(&z, Z_NO_FLUSH);
-        used = cap - z.avail_out;
-        if (r == Z_STREAM_END) {
-            inflateEnd(&z);
-            free(packed);
-            *size = (uint32_t)used;
-            return out;
-        }
-        if (r != Z_OK || cap > (16u << 20)) break;
-        if (z.avail_out == 0) cap *= 2;
-        else if (z.avail_in == 0) {   /* a stream without its end marker */
-            inflateEnd(&z);
-            free(packed);
-            *size = (uint32_t)used;
-            return out;
-        }
-    }
-    inflateEnd(&z);
+    if (!aoe_inflate_buffer_ror(packed, packed_size, 16u << 20, &out, &used)) out = NULL;
     free(packed);
-    free(out);
-    return NULL;
+    *size = (uint32_t)used;
+    return out;
 }
 
 typedef struct {

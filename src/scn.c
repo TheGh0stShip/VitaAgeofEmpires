@@ -3,7 +3,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <zlib.h>
+
+#include "inflate.h"
 
 enum { SCN_CHUNK = 65536, SCN_MAX_SIZE = 16 * 1024 * 1024,
        SCN_MAX_HEADER = 1024 * 1024, SCN_MAX_DIMENSION = 256,
@@ -311,48 +312,38 @@ static int read_units(ScnCursor *cursor, ScnMap *map) {
     return read_player_details(cursor, map);
 }
 
+/* The body after the raw header record: read whole and decoded with the
+   executable's stream decoder (0x00525b0b, inflate.h), as 0x00417670
+   reads it through 0x0046b800. */
 static int inflate_body(FILE *file, uint8_t **out, size_t *out_size) {
-    z_stream stream = {0};
-    uint8_t input[SCN_CHUNK];
-    size_t capacity = 0;
-    int status = Z_OK, reached_eof = 0;
+    uint8_t *packed = NULL;
+    size_t size = 0, capacity = 0;
+    int ok;
     *out = NULL;
     *out_size = 0;
-    if (inflateInit2(&stream, -MAX_WBITS) != Z_OK) return 0;
-    while (status != Z_STREAM_END) {
-        if (!stream.avail_in && !reached_eof) {
-            size_t n = fread(input, 1, sizeof(input), file);
-            if (n < sizeof(input)) {
-                if (ferror(file)) goto fail;
-                reached_eof = 1;
-            }
-            stream.next_in = input;
-            stream.avail_in = (uInt)n;
-        }
-        if (*out_size == capacity) {
-            size_t next = capacity ? capacity * 2 : SCN_CHUNK;
+    for (;;) {
+        size_t n;
+        if (size == capacity) {
             uint8_t *grown;
-            if (next > SCN_MAX_SIZE) goto fail;
-            grown = realloc(*out, next);
-            if (!grown) goto fail;
-            *out = grown;
-            capacity = next;
+            if (capacity >= SCN_MAX_SIZE) {
+                free(packed);
+                return 0;
+            }
+            grown = realloc(packed, capacity ? capacity * 2 : SCN_CHUNK);
+            if (!grown) {
+                free(packed);
+                return 0;
+            }
+            packed = grown;
+            capacity = capacity ? capacity * 2 : SCN_CHUNK;
         }
-        stream.next_out = *out + *out_size;
-        stream.avail_out = (uInt)(capacity - *out_size);
-        status = inflate(&stream, Z_NO_FLUSH);
-        *out_size = capacity - stream.avail_out;
-        if (status != Z_OK && status != Z_STREAM_END) goto fail;
-        if (reached_eof && !stream.avail_in && status != Z_STREAM_END) goto fail;
+        n = fread(packed + size, 1, capacity - size, file);
+        size += n;
+        if (n == 0) break;
     }
-    inflateEnd(&stream);
-    return 1;
-fail:
-    inflateEnd(&stream);
-    free(*out);
-    *out = NULL;
-    *out_size = 0;
-    return 0;
+    ok = !ferror(file) && aoe_inflate_buffer_ror(packed, size, SCN_MAX_SIZE, out, out_size);
+    free(packed);
+    return ok;
 }
 
 static int read_map(const uint8_t *body, size_t size, uint8_t terrain_count,

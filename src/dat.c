@@ -3,7 +3,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <zlib.h>
+
+#include "inflate.h"
 
 enum { DAT_CHUNK = 65536, DAT_MAX_SIZE = 16 * 1024 * 1024 };
 
@@ -29,51 +30,46 @@ void dat_free(DatBlob *blob) {
     memset(blob, 0, sizeof(*blob));
 }
 
+/* The file is read whole and decoded with the executable's own stream
+   decoder (0x00525b0b, inflate.h), as 0x0046b800 reads it. */
 int dat_load(const char *path, DatBlob *blob) {
     FILE *file;
-    z_stream stream = {0};
-    uint8_t input[DAT_CHUNK];
-    size_t capacity = 0;
-    int status = Z_OK, reached_eof = 0, initialized = 0;
+    uint8_t *packed = NULL;
+    size_t size = 0, capacity = 0;
     if (!path || !blob) return 0;
     memset(blob, 0, sizeof(*blob));
     file = fopen(path, "rb");
     if (!file) return 0;
-    if (inflateInit2(&stream, -MAX_WBITS) != Z_OK) goto fail;
-    initialized = 1;
-    while (status != Z_STREAM_END) {
-        if (!stream.avail_in && !reached_eof) {
-            size_t n = fread(input, 1, sizeof(input), file);
-            if (n < sizeof(input)) {
-                if (ferror(file)) goto fail;
-                reached_eof = 1;
-            }
-            stream.next_in = input;
-            stream.avail_in = (uInt)n;
-        }
-        if (blob->size == capacity) {
-            size_t next = capacity ? capacity * 2 : DAT_CHUNK;
+    for (;;) {
+        size_t n;
+        if (size == capacity) {
             uint8_t *grown;
-            if (next > DAT_MAX_SIZE) goto fail;
-            grown = realloc(blob->bytes, next);
+            if (capacity >= DAT_MAX_SIZE) goto fail;
+            grown = realloc(packed, capacity ? capacity * 2 : DAT_CHUNK);
             if (!grown) goto fail;
-            blob->bytes = grown;
-            capacity = next;
+            packed = grown;
+            capacity = capacity ? capacity * 2 : DAT_CHUNK;
         }
-        stream.next_out = blob->bytes + blob->size;
-        stream.avail_out = (uInt)(capacity - blob->size);
-        status = inflate(&stream, Z_NO_FLUSH);
-        blob->size = capacity - stream.avail_out;
-        if (status != Z_OK && status != Z_STREAM_END) goto fail;
-        if (reached_eof && !stream.avail_in && status != Z_STREAM_END) goto fail;
+        n = fread(packed + size, 1, capacity - size, file);
+        size += n;
+        if (n == 0) {
+            if (ferror(file)) goto fail;
+            break;
+        }
     }
-    if (blob->size < 8 || memcmp(blob->bytes, "VER 3.7\0", 8) != 0) goto fail;
-    inflateEnd(&stream);
     fclose(file);
+    file = NULL;
+    if (!aoe_inflate_buffer_ror(packed, size, DAT_MAX_SIZE, &blob->bytes, &blob->size))
+        goto fail;
+    free(packed);
+    if (blob->size < 8 || memcmp(blob->bytes, "VER 3.7\0", 8) != 0) {
+        dat_free(blob);
+        return 0;
+    }
     return 1;
 fail:
-    if (initialized) inflateEnd(&stream);
-    fclose(file);
+    if (file) fclose(file);
+    free(packed);
     dat_free(blob);
     return 0;
 }

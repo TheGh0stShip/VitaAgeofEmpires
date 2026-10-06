@@ -690,6 +690,10 @@ add_library(aoe_unit_class STATIC src/unit_class.c)
 target_include_directories(aoe_unit_class PUBLIC include)
 target_compile_options(aoe_unit_class PRIVATE -Wall -Wextra)
 
+add_library(aoe_pe_strings STATIC src/pe_strings.c)
+target_include_directories(aoe_pe_strings PUBLIC include)
+target_compile_options(aoe_pe_strings PRIVATE -Wall -Wextra)
+
 add_library(aoe_main_view STATIC src/main_view.c)
 target_include_directories(aoe_main_view PUBLIC include)
 target_compile_options(aoe_main_view PRIVATE -Wall -Wextra)
@@ -816,6 +820,23 @@ else()
   add_executable(scenario_scene_tool tools/scenario_scene_tool.c)
   target_link_libraries(scenario_scene_tool PRIVATE aoe_scenario_scene
     aoe_live_unit_sprite_backend aoe_color_table aoe_palette aoe_dat)
+  add_executable(lang_tool tools/lang_tool.c)
+  target_link_libraries(lang_tool PRIVATE aoe_pe_strings)
+  add_executable(pe_strings_test tests/pe_strings_test.c)
+  target_link_libraries(pe_strings_test PRIVATE aoe_pe_strings)
+  target_compile_options(pe_strings_test PRIVATE -UNDEBUG)
+  add_test(NAME pe_string_tables COMMAND pe_strings_test)
+  # The user's Rise of Rome LANGUAGEX.DLL (LANGUA_1.DLL on the disc) and
+  # base language.dll through the game's lookup (0x004ff530).
+  if(EXISTS "${CMAKE_SOURCE_DIR}/build/ror/disc/GAME/LANGUA_1.DLL" AND
+     EXISTS "/mnt/d/Age of Empires/language.dll")
+    add_test(NAME ror_language_strings_real COMMAND lang_tool
+      "${CMAKE_SOURCE_DIR}/build/ror/disc/GAME/LANGUA_1.DLL"
+      "/mnt/d/Age of Empires/language.dll" 9202 9255 0x1d4ed 4001)
+    set_tests_properties(ror_language_strings_real PROPERTIES
+      PASS_REGULAR_EXPRESSION
+      "9202\tSingle Player\n9255\tThe Rise of Rome\n120045\tFood inventory: %d\n4001\tOK")
+  endif()
   add_executable(demo_host tools/demo_host.c)
   target_link_libraries(demo_host PRIVATE aoe_demo_app)
   # The Vita tech demo loop on user-supplied data laid out as on the Vita

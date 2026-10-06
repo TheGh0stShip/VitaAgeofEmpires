@@ -690,6 +690,11 @@ add_library(aoe_unit_class STATIC src/unit_class.c)
 target_include_directories(aoe_unit_class PUBLIC include)
 target_compile_options(aoe_unit_class PRIVATE -Wall -Wextra)
 
+add_library(aoe_soft_draw STATIC src/soft_draw.c)
+target_include_directories(aoe_soft_draw PUBLIC include)
+target_compile_options(aoe_soft_draw PRIVATE -Wall -Wextra)
+target_link_libraries(aoe_soft_draw PUBLIC aoe_draw_system)
+
 add_library(aoe_pe_strings STATIC src/pe_strings.c)
 target_include_directories(aoe_pe_strings PUBLIC include)
 target_compile_options(aoe_pe_strings PRIVATE -Wall -Wextra)
@@ -826,6 +831,10 @@ else()
   target_link_libraries(pe_strings_test PRIVATE aoe_pe_strings)
   target_compile_options(pe_strings_test PRIVATE -UNDEBUG)
   add_test(NAME pe_string_tables COMMAND pe_strings_test)
+  add_executable(soft_draw_test tests/soft_draw_test.c)
+  target_link_libraries(soft_draw_test PRIVATE aoe_soft_draw)
+  target_compile_options(soft_draw_test PRIVATE -UNDEBUG)
+  add_test(NAME soft_draw_backend COMMAND soft_draw_test)
   # The user's Rise of Rome LANGUAGEX.DLL (LANGUA_1.DLL on the disc) and
   # base language.dll through the game's lookup (0x004ff530).
   if(EXISTS "${CMAKE_SOURCE_DIR}/build/ror/disc/GAME/LANGUA_1.DLL" AND

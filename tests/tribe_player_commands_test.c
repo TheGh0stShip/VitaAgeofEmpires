@@ -2,6 +2,7 @@
 #include "tribe_player_commands.h"
 
 #include <assert.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include "aoe_stream.h"
@@ -401,6 +402,38 @@ static void cursor_command_tests(void) {
     cc_found = 0;
     assert(aoe_tribe_player_cursor_command_ror(&o, 8, &cmd, &cur) == 0 && cmd == 0 && cur == 0);
 }
+
+static int32_t st_rands[64], st_rn; static char st_log[1024]; static int st_n, st_block_main = 1, st_block_extra, st_anchor = 1; static int16_t st_tmpl = 0x6d;
+static void st_add(const char *fmt, ...) { va_list ap; va_start(ap, fmt); st_n += vsnprintf(st_log + st_n, sizeof st_log - (size_t)st_n, fmt, ap); va_end(ap); }
+static int32_t st_rand(void *c) { (void)c; return st_rands[st_rn++ & 63]; }
+static int st_mblocked(void *c, float x, float y) { (void)c; st_add("mb(%g,%g) ", (double)x, (double)y); return st_block_main-- > 0; }
+static void st_cmain(void *c, float x, float y) { (void)c; st_add("main(%g,%g) ", (double)x, (double)y); }
+static int st_eblocked(void *c, float x, float y) { (void)c; st_add("eb(%g,%g) ", (double)x, (double)y); return st_block_extra-- > 0; }
+static void st_cextra(void *c, float x, float y) { (void)c; st_add("extra(%g,%g) ", (double)x, (double)y); }
+static void st_view(void *c, int32_t tx, int32_t ty, float x, float y) { (void)c; st_add("view(%d,%d,%g,%g) ", (int)tx, (int)ty, (double)x, (double)y); }
+static void st_work(void *c, float a) { (void)c; st_add("work%g ", (double)a); }
+static int st_anchorf(void *c, float *x, float *y, int16_t *t) { (void)c; *x = 40.5f; *y = 41.5f; *t = st_tmpl; return st_anchor; }
+static int32_t st_stance(void *c, int32_t p) { (void)c; return p == 2 ? 0 : 1; }
+static void st_reveal(void *c, int32_t p) { (void)c; st_add("reveal%d ", (int)p); }
+static void st_wonder(void *c, int32_t p) { (void)c; st_add("wonder%d ", (int)p); }
+static int32_t st_slot(void *c, int32_t s) { (void)c; return s == 3 ? 3 : s == 5 ? 1 : 0; }
+static void st_recip(void *c, int32_t s, int32_t st) { (void)c; st_add("recip(%d,%d) ", (int)s, (int)st); }
+static void place_start_tests(void) {
+    AoeTribeStartOpsRor o = {NULL, 0, 100, 60, st_rand, st_mblocked, st_cmain, st_eblocked, st_cextra, st_view, st_work, st_anchorf, 1, 4, 1, 1, st_stance, st_reveal, st_wonder, st_slot, st_recip};
+    /* Rolls: y 0x7fff -> 15 + 30 = 45.5, x 0 -> 15.5 (blocked); then y 0 -> 15.5, x 0x7fff -> 85.5 free. Extras: (ry, rx, fy, fx). */
+    int32_t r[] = {0x7fff, 0, 0, 0x7fff, 0x7fff, 0, 0, 0, 0x7fff, 0x7fff, 0, 0, 0, 0x7fff, 0, 0, 0, 0, 0x7fff, 0x7fff}; int i;
+    for (i = 0; i < 20; ++i) st_rands[i] = r[i];
+    aoe_tribe_player_place_start_ror(&o);
+    /* Player 1 is us, player 2 has no stance: only player 3 is shown the wonder; comm slot 3 holds it. */
+    assert(strcmp(st_log, "mb(16,46) mb(86,16) main(85.5,15.5) view(85,15,85.5,15.5) work10000 eb(82.5,18.5) extra(82.5,18.5) eb(88.5,18.5) extra(88.5,18.5) eb(88.5,12.5) extra(88.5,12.5) reveal3 wonder3 recip(3,1) ") == 0);
+    /* With units: the anchor's view; a non-wonder anchor is only revealed; not the viewed player: no recipients. */
+    st_n = 0; o.has_units = 1; st_tmpl = 5; o.viewed_player = 2;
+    aoe_tribe_player_place_start_ror(&o);
+    assert(strcmp(st_log, "view(40,41,40.5,41.5) reveal3 ") == 0);
+    st_n = 0; o.share = 0; st_anchor = 0;
+    aoe_tribe_player_place_start_ror(&o);
+    assert(st_n == 0);
+}
 int main(void) {
     AoeTribePlayerOpsRor ops = {0, 2, collect, template_state, ack_b, ack_u, selected, object_type, object_class, queue};
     /* Build: villagers (min 4, class 4), template 118 acknowledges, 0x66. */
@@ -538,5 +571,6 @@ int main(void) {
     test_player_tick();
     train_and_dump_tests();
     cursor_command_tests();
+    place_start_tests();
     return 0;
 }

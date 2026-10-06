@@ -357,6 +357,17 @@ static void start_game_tests(void) {
     aoe_game_ror_start_game_ror(&o);
     assert(strstr(sg_log, "resources=Unknown, age=Unknown, victory=Standard,") && strstr(sg_log, "civs=] timing ") && held == 1);
 }
+
+static int snd_pre; static char snd_log[512]; static int snd_n;
+static void *snd_alloc(void *c, uint32_t n, uint32_t s) { (void)c; return calloc(n, s); }
+static void *snd_load(void *c, const char *name, int32_t id) { (void)c; snd_n += snprintf(snd_log + snd_n, sizeof snd_log - (size_t)snd_n, "%s=%x ", name, (unsigned)id); return id == 0xc47f ? NULL : (void *)(intptr_t)id; }
+static void snd_preload(void *c, void *s) { (void)c; (void)s; ++snd_pre; }
+static void sounds_tests(void) {
+    AoeGameRorSoundOpsRor o = {NULL, snd_alloc, snd_load, snd_preload}; void **s = NULL; int16_t n = 0;
+    assert(aoe_game_ror_load_sounds_ror(&o, &s, &n) == 1 && n == 17 && s && s[0] == (void *)(intptr_t)0xc47c && s[3] == NULL && s[16] == (void *)(intptr_t)0xc48c && snd_pre == 16);
+    assert(strncmp(snd_log, "button1.wav=c47c button2.wav=c47d chatrcvd.wav=c47e cantdo.wav=c47f ", 66) == 0 && strstr(snd_log, "farmdie.wav=c48c "));
+    free(s);
+}
 int main(void) {
     char coded[64];
     AoeGameRorCommandOpsRor cops = {NULL, ns, sp, bc};
@@ -559,5 +570,6 @@ int main(void) {
     idle_tests();
     start_file_tests();
     start_game_tests();
+    sounds_tests();
     return 0;
 }

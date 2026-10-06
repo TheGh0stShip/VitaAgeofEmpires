@@ -693,3 +693,68 @@ int aoe_tribe_player_cursor_command_ror(const AoeTribeCursorOpsRor *o, int32_t i
         *o->class_flags = 0;
     }
 }
+
+#include "aoe_ftol.h"
+/* 0x004f1ae0 */
+void aoe_tribe_player_place_start_ror(const AoeTribeStartOpsRor *o) {
+    int shared = 0;
+    int32_t i, j;
+    if (!o->has_units) {
+        float x, y;
+        int32_t tries = 1;
+        y = (float)(o->rand_(o->context) * (o->map_h - 30) / 0x7fff + 15) + 0.5f;
+        x = (float)(o->rand_(o->context) * (o->map_w - 30) / 0x7fff + 15) + 0.5f;
+        for (;;) {
+            if (!o->main_blocked(o->context, x + 0.5f, y + 0.5f)) {
+                if (tries < 5000) {
+                    int k;
+                    o->create_main(o->context, x, y);
+                    o->set_view(o->context, aoe_ftol32(x), aoe_ftol32(y), x, y);
+                    o->add_work(o->context, 10000.0f);
+                    for (k = 0; k < 3; ++k) {
+                        float ex, ey;
+                        for (;;) {
+                            int32_t ry = o->rand_(o->context), rx = o->rand_(o->context);
+                            ey = (float)o->rand_(o->context) * 3.0518509e-05f +
+                                 (float)(ry * 6 / 0x7fff - 3) + y;
+                            ex = (float)o->rand_(o->context) * 3.0518509e-05f +
+                                 (float)(rx * 6 / 0x7fff - 3) + x;
+                            if (ey < 0.0f || ey >= (float)o->map_h || ex < 0.0f ||
+                                ex >= (float)o->map_w)
+                                continue;
+                            if (!o->extra_blocked(o->context, ex, ey)) break;
+                        }
+                        o->create_extra(o->context, ex, ey);
+                    }
+                }
+                break;
+            }
+            if (++tries >= 5000) break;
+            y = (float)(o->rand_(o->context) * (o->map_h - 30) / 0x7fff + 15) + 0.5f;
+            x = (float)(o->rand_(o->context) * (o->map_w - 30) / 0x7fff + 15) + 0.5f;
+        }
+    } else {
+        float x = 0.0f, y = 0.0f;
+        int16_t t;
+        if (o->anchor(o->context, &x, &y, &t))
+            o->set_view(o->context, aoe_ftol32(x), aoe_ftol32(y), x, y);
+    }
+    if (o->share) {
+        for (i = 1; i < o->player_count; ++i) {
+            float x, y;
+            int16_t t = 0;
+            if (!o->stance(o->context, i) || i == o->own_id) continue;
+            if (o->anchor(o->context, &x, &y, &t)) o->reveal(o->context, i);
+            if (t == 0x6d) o->wonder_notice(o->context, i);
+            shared = 1;
+        }
+    }
+    if (o->viewed_player == o->own_id && shared) {
+        for (i = 1; i < o->player_count; ++i) {
+            if (i == o->own_id) continue;
+            for (j = 1; j < 9; ++j)
+                if (o->slot_player(o->context, j) == i)
+                    o->chat_recipient(o->context, j, o->stance(o->context, i));
+        }
+    }
+}

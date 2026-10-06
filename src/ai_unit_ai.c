@@ -1214,3 +1214,293 @@ int aoe_ai_unit_ai_move_aside_ror(const AoeAiUnitAiMoveAsideOpsRor *o, float x, 
     o->set_target(o->context, -1, x, y, z);
     return 1;
 }
+
+/* 0x00414600 */
+int32_t aoe_ai_unit_ai_check_ror(const AoeAiUnitAiCheckOpsRor *o) {
+    int32_t code = o->action;
+    float x, y, z, hp;
+    uint8_t st;
+    int16_t owner, tmpl, cls;
+    int has_ai;
+    (void)hp;
+    if (code == -1) code = o->order == -1 ? -1 : o->order + 100;
+    if (code == 700) {
+        int tfound = o->target != -1 &&
+                     o->resolve(o->context, o->target, &x, &y, &z, &st, &owner, &tmpl, &cls, &has_ai);
+        int16_t tcls = tfound ? cls : 0;
+        if (!o->debug_561458_is_1 && o->owner_kind != 0 && o->unit_7c(o->context) &&
+            (!tfound || tmpl != 0x114)) {
+            int32_t best = o->nearest(o->context);
+            if (best != -1 && best != o->target &&
+                o->resolve(o->context, best, &x, &y, &z, &st, &owner, &tmpl, &cls, &has_ai)) {
+                if (cls == 3 || cls == 0x1b) {
+                    if (tmpl != 0x114) return 9;
+                } else if (tfound && tcls != 3 && tcls != 0x1b) {
+                    return 9;
+                }
+                o->order_to(o->context, 700, best, owner, x, y, z,
+                            o->attack_range(o->context, o->field_2c));
+            }
+        }
+    } else if (code == 0x2bd) {
+        int ffound = 0;
+        if (*o->follow != -1) {
+            ffound = o->resolve(o->context, *o->follow, &x, &y, &z, &st, &owner, &tmpl, &cls, &has_ai);
+            if (!ffound || (st > 2 && owner != 0)) goto fail;
+            if (*o->target_x == -1.0f) { *o->target_x = x; *o->target_y = y; }
+        }
+        if (o->order != 600 && !(o->order == 0x262 && o->unit_11c(o->context) == *o->follow)) {
+            float d;
+            if (*o->follow == -1) {
+                d = o->distance_point(o->context, *o->target_x, *o->target_y, o->unit_z);
+            } else {
+                *o->target_x = x; *o->target_y = y; *o->target_z = z;
+                d = o->distance_to(o->context, *o->follow);
+            }
+            if (o->range + 1.0f < d) {
+                if (*o->follow == -1) {
+                    if (o->can_place(o->context, aoe_ftol32(*o->target_x), aoe_ftol32(*o->target_y),
+                                     o->range) == 1)
+                        o->move_to(o->context, *o->target_x, *o->target_y, *o->target_z, o->range);
+                } else if (o->can_reach(o->context, *o->follow, o->range) == 1) {
+                    o->move_to_object(o->context, *o->follow, o->range, 1);
+                }
+                return 10;
+            }
+            if (ffound && has_ai) {
+                int32_t t = o->member_target(o->context, *o->follow);
+                if (t != -1) { o->set_5c(o->context, t); return 10; }
+                if (o->query_d4(o->context, 0) == 6) return 10;
+            }
+        }
+    } else if (code == 0x2c8) {
+        float dx, dy;
+        if (o->target == -1) {
+            dx = dy = -10.0f;
+        } else {
+            if (!o->resolve(o->context, o->target, &x, &y, &z, &st, &owner, &tmpl, &cls, &has_ai) ||
+                st > 2)
+                goto fail;
+            dy = y - *o->target_y;
+            dx = x - *o->target_x;
+        }
+        if (dx < 0.0f || dx > 0.0f || dy < 0.0f || dy > 0.0f) {
+            float d;
+            if (o->target == -1) {
+                d = o->distance_point(o->context, *o->target_x, *o->target_y, o->unit_z);
+            } else {
+                *o->target_x = x; *o->target_y = y; *o->target_z = z;
+                d = o->distance_to(o->context, o->target);
+            }
+            if (o->range < d) {
+                if (o->target != -1) o->move_to_object(o->context, o->target, o->range, 0);
+                else o->move_to(o->context, *o->target_x, *o->target_y, *o->target_z, o->range);
+                return 10;
+            }
+        }
+    }
+    return 9;
+fail:
+    *o->follow = -1;
+    o->clear_target(o->context);
+    o->stop(o->context, 1);
+    return 9;
+}
+
+/* 0x004102f0 */
+int32_t aoe_ai_play_trigger_ror(const AoeAiPlayOpsRor *o, uint8_t step, int32_t flag) {
+    AoeAiPlayStateRor *m = o->members;
+    const AoeAiPlayRuleRor *rule;
+    float lx, ly, lz, hp;
+    uint8_t st;
+    int16_t maxhp, lowner;
+    int has_ai, i, j;
+    if (!m || !o->play_exists) return 0;
+    if (step == 0xfe) { o->free_members(o->context); return 1; }
+    rule = o->rule(o->context, step);
+    if (!rule) return 0;
+    if (!o->resolve(o->context, m->leader, &lx, &ly, &lz, &st, &hp, &maxhp, &lowner, &has_ai)) return 0;
+    m->step = step;
+    for (i = 0; i < 5; ++i) {
+        const AoeAiPlayActionRor *a = &rule->actions[i];
+        if (!a->code) continue;
+        if ((a->code == 6 || a->code == 7) && flag == 0) {
+            if (a->code == 6) o->sum_hp(o->context, a->category);
+            else o->purge(o->context);
+            continue;
+        }
+        for (j = 0; j < o->group_count; ++j) {
+            int32_t id = o->group[j], k, target = -1, owner = -1, code;
+            float x = -1.0f, y = -1.0f, z = -1.0f, mx, my, mz;
+            int16_t mowner;
+            uint8_t cat = 0xff;
+            if (!o->resolve(o->context, id, &mx, &my, &mz, &st, &hp, &maxhp, &mowner, &has_ai) || !has_ai)
+                continue;
+            for (k = 0; k < AOE_AI_PLAY_MEMBERS; ++k)
+                if (m->slots[k].id == id) { cat = m->slots[k].category; break; }
+            if (cat != a->category) continue;
+            if (flag == 1 && o->path_busy(o->context, id)) continue;
+            switch (a->code) {
+            case 1:
+                x = (float)a->a + lx; y = (float)a->b + ly; z = (float)a->c + lz;
+                if (o->gather_value(o->context, a->category, m->step) >=
+                    aoe_ftol32(o->distance_point(o->context, x, y, z)))
+                    continue;
+                code = 0x2c6;
+                break;
+            case 2: code = 700; target = m->leader; owner = lowner; break;
+            case 3: code = 700; target = m->target; break;
+            case 4: code = 0x2c6; x = (float)m->point[0]; y = (float)m->point[1]; z = (float)m->point[2]; break;
+            case 5: {
+                int found = 0;
+                for (k = 0; k < AOE_AI_PLAY_MEMBERS; ++k) {
+                    float hx, hy, hz, hhp;
+                    uint8_t hst;
+                    int16_t hmax, howner;
+                    int hai;
+                    if (m->slots[k].category != (uint8_t)a->a) continue;
+                    if (!o->resolve(o->context, m->slots[k].id, &hx, &hy, &hz, &hst, &hhp, &hmax,
+                                    &howner, &hai))
+                        continue;
+                    if (aoe_ftol32(hhp) + 1 < hmax) { if (m->slots[k].id != -1) { found = 1; target = m->slots[k].id; } }
+                    break;
+                }
+                if (!found) continue;
+                code = 0x2bf;
+                break;
+            }
+            case 8: code = 0x2d8; x = (float)a->a + lx; y = (float)a->b + ly; z = (float)a->c + lz; break;
+            default: continue;
+            }
+            o->order(o->context, id, code, target, owner, x, y, z);
+        }
+    }
+    return 1;
+}
+
+/* 0x0040fbf0 */
+void aoe_ai_play_update_ror(const AoeAiPlayOpsRor *o) {
+    AoeAiPlayStateRor *m = o->members;
+    const AoeAiPlayRuleRor *rule;
+    float lx, ly, lz, hp;
+    uint8_t st;
+    int16_t maxhp, owner;
+    int has_ai, i, k;
+    if (!m || !o->play_exists) return;
+    if (!o->resolve(o->context, m->leader, &lx, &ly, &lz, &st, &hp, &maxhp, &owner, &has_ai)) {
+        int32_t cand = o->pick_leader(o->context, -1);
+        for (i = 0; i < o->group_count && cand == -1; ++i) {
+            float x, y, z;
+            if (o->group[i] == o->unit_id) continue;
+            if (o->resolve(o->context, o->group[i], &x, &y, &z, &st, &hp, &maxhp, &owner, &has_ai) &&
+                has_ai)
+                cand = o->pick_leader(o->context, o->group[i]);
+        }
+        if (cand == -1) { o->free_members(o->context); return; }
+        m->leader = cand;
+        o->fire(o->context, m->step, 0);
+        if (!o->resolve(o->context, cand, &lx, &ly, &lz, &st, &hp, &maxhp, &owner, &has_ai)) {
+            lx = ly = lz = 0.0f;
+        }
+    }
+    if (m->step == 0xfd) {
+        int32_t ids[AOE_AI_PLAY_MEMBERS], n = 0, totals[5] = {0, 0, 0, 0, 0};
+        int32_t classes = o->class_count(o->context);
+        for (i = 0; i < o->group_count && n < AOE_AI_PLAY_MEMBERS; ++i) {
+            float x, y, z;
+            if (!o->resolve(o->context, o->group[i], &x, &y, &z, &st, &hp, &maxhp, &owner, &has_ai))
+                continue;
+            ids[n++] = o->group[i];
+            for (k = 0; k < classes; ++k) o->copy_class(o->context, o->group[i], k);
+        }
+        m->start_time = o->world_time;
+        o->fill(o->context, ids, n);
+        for (i = 0; i < n; ++i) {
+            float x, y, z;
+            uint8_t cat = 0xff;
+            for (k = 0; k < AOE_AI_PLAY_MEMBERS; ++k)
+                if (m->slots[k].id == ids[i]) { cat = m->slots[k].category; break; }
+            if (o->resolve(o->context, ids[i], &x, &y, &z, &st, &hp, &maxhp, &owner, &has_ai) && cat < 5)
+                totals[cat] += aoe_ftol32(hp);
+        }
+        for (i = 0; i < 5; ++i) m->totals[i] = totals[i];
+        o->fire(o->context, 0, 0);
+        return;
+    }
+    rule = o->rule(o->context, m->step);
+    if (!rule) return;
+    for (i = 0; i < 3; ++i) {
+        const AoeAiPlayTriggerRor *t = &rule->triggers[i];
+        int fire = 0;
+        if (!t->code) break;
+        switch (t->code) {
+        case 1: {
+            uint8_t cat;
+            fire = 1;
+            for (cat = 0; cat < 5 && fire; ++cat) {
+                const AoeAiPlayActionRor *a = NULL;
+                for (k = 0; k < 5; ++k)
+                    if (rule->actions[k].category == cat && rule->actions[k].code == 1) { a = &rule->actions[k]; break; }
+                if (!a) continue;
+                for (k = 0; k < AOE_AI_PLAY_MEMBERS && fire; ++k) {
+                    float x, y, z;
+                    if (m->slots[k].category != cat) continue;
+                    if (!o->resolve(o->context, m->slots[k].id, &x, &y, &z, &st, &hp, &maxhp, &owner, &has_ai))
+                        continue;
+                    if ((float)t->a < o->distance_point(o->context, (float)a->a + lx, (float)a->b + ly,
+                                                        (float)a->b + lz))
+                        fire = 0;
+                }
+            }
+            break;
+        }
+        case 2: {
+            int32_t count = 0, dead = 0;
+            for (k = 0; k < AOE_AI_PLAY_MEMBERS; ++k) {
+                float x, y, z;
+                if (m->slots[k].category != (uint8_t)t->a) continue;
+                ++count;
+                if (!o->resolve(o->context, m->slots[k].id, &x, &y, &z, &st, &hp, &maxhp, &owner, &has_ai) || st > 2)
+                    ++dead;
+            }
+            fire = count != 0 && dead * 100 / count >= t->b;
+            break;
+        }
+        case 3: {
+            int32_t sum = 0, total = (uint8_t)t->a < 5 ? m->totals[(uint8_t)t->a] : -1;
+            for (k = 0; k < AOE_AI_PLAY_MEMBERS; ++k) {
+                float x, y, z;
+                if (m->slots[k].category != (uint8_t)t->a) continue;
+                if (o->resolve(o->context, m->slots[k].id, &x, &y, &z, &st, &hp, &maxhp, &owner, &has_ai))
+                    sum += aoe_ftol32(hp);
+            }
+            fire = total != 0 && (total - sum) * 100 / total >= t->b;
+            break;
+        }
+        case 8:
+            fire = 1;
+            for (k = 0; k < AOE_AI_PLAY_MEMBERS && fire; ++k) {
+                float x, y, z;
+                if (m->slots[k].category != (uint8_t)t->a) continue;
+                if (o->resolve(o->context, m->slots[k].id, &x, &y, &z, &st, &hp, &maxhp, &owner, &has_ai) && st == 2)
+                    fire = 0;
+            }
+            break;
+        case 9:
+            fire = 1;
+            for (k = 0; k < AOE_AI_PLAY_MEMBERS && fire; ++k) {
+                float x, y, z;
+                if (m->slots[k].category != (uint8_t)t->a) continue;
+                if (o->resolve(o->context, m->slots[k].id, &x, &y, &z, &st, &hp, &maxhp, &owner, &has_ai) &&
+                    aoe_ftol32(hp) < maxhp)
+                    fire = 0;
+            }
+            break;
+        case 10: fire = 1; break;
+        case 11: fire = t->a < (int32_t)(o->world_time - (uint32_t)m->start_time) / 1000; break;
+        default: break;
+        }
+        if (fire && o->fire(o->context, t->next, 0) == 1) return;
+    }
+    o->fire(o->context, m->step, 1);
+}

@@ -614,4 +614,142 @@ typedef struct {
 int aoe_ai_unit_ai_move_aside_ror(const AoeAiUnitAiMoveAsideOpsRor *o, float x, float y, float z,
                                   int skip_distance, int32_t force);
 
+
+/* ---- 0x00414600: the standing action check (base vtable +0xd8) ---- */
+
+typedef struct {
+    void *context;
+    int32_t action, order, target, field_2c; /* +0x28, +0x30, +0x34, +0x2c */
+    float *target_x, *target_y, *target_z;  /* +0x3c..+0x44 */
+    float range;                             /* +0x48 */
+    int32_t *follow;                         /* +0x4c */
+    int debug_561458_is_1;
+    int32_t owner_kind;                      /* 0x00454150 */
+    int (*unit_7c)(void *context);           /* unit vtable +0x7c */
+    int32_t unit_id;
+    float unit_z;
+    /* 0x00414f40: position, state, owner id, template id and class, and
+       whether the object has a unit AI (0x00407a60). */
+    int (*resolve)(void *context, int32_t id, float *x, float *y, float *z, uint8_t *state,
+                   int16_t *owner, int16_t *template_id, int16_t *unit_class, int *has_ai);
+    int32_t (*nearest)(void *context);                      /* +0x30(0, 0, 0) */
+    float (*attack_range)(void *context, int32_t extra);    /* unit +0x10c(1, 0, extra) */
+    void (*order_to)(void *context, int32_t code, int32_t target, int32_t owner, float x, float y,
+                     float z, float range);                 /* +0x10(unit, code, ...) */
+    void (*clear_target)(void *context);                    /* 0x00412ed0 */
+    void (*stop)(void *context, int32_t force);             /* +0x58 */
+    int32_t (*unit_11c)(void *context);                     /* unit vtable +0x11c */
+    float (*distance_point)(void *context, float x, float y, float z); /* 0x004aaf50 */
+    float (*distance_to)(void *context, int32_t id);        /* 0x004aaeb0 */
+    int32_t (*can_place)(void *context, int32_t tx, int32_t ty, float range); /* unit +0x198 */
+    int32_t (*can_reach)(void *context, int32_t id, float range);        /* unit +0x194 */
+    void (*move_to)(void *context, float x, float y, float z, float range); /* +0x90(..., 1) */
+    void (*move_to_object)(void *context, int32_t id, float range, int flagged); /* +0x94 */
+    int32_t (*member_target)(void *context, int32_t id);    /* its AI's +0x3c(0) */
+    void (*set_5c)(void *context, int32_t target);          /* +0x5c(target, 1) */
+    int32_t (*query_d4)(void *context, int32_t arg);        /* +0xd4 */
+} AoeAiUnitAiCheckOpsRor;
+
+/* 0x00414600: by the action, or the order + 100 without one. 700: unless
+   debugging (0x00561458 == 1), for an owner kind other than 0 whose unit
+   answers +0x7c, and a target that is not template 0x114, the nearest
+   enemy (+0x30(0, 0, 0)) other than the target, when a building (class 3
+   / 0x1b) not of template 0x114 or when the target is not a building,
+   gives 9 at once; else it is attacked (+0x10 with 700, its owner,
+   position and the unit's +0x10c(1, 0, +0x2c) range). 0x2bd: a follow
+   object (+0x4c) that is gone, or dead (state > 2) with an owner,
+   forgets itself, clears the target, stops and clears the action (9); a
+   -1.0 target x takes its position. Unless order 600, or order 0x262 on
+   the unit's +0x11c object: past range + 1.0 (the point's distance, or
+   the object's, whose position is copied) a placeable tile (+0x198 == 1)
+   moves there (+0x90, flag 1) or a reachable object (+0x194 == 1) is
+   followed (+0x94, flag 1): 10 either way; within range a member's own
+   target (its +0x3c(0)) goes to +0x5c (10), or +0xd4(0) == 6 gives 10.
+   0x2c8: a gone or dead target fails as above; the target's offset from
+   the saved point (-10, -10 for none) non-zero and its distance past the
+   range moves to the object (+0x94, no flag) or the point (+0x90): 10.
+   Else 9. */
+int32_t aoe_ai_unit_ai_check_ror(const AoeAiUnitAiCheckOpsRor *o);
+
+/* ---- Group plays: the trigger handler 0x004102f0 and the update 0x0040fbf0 ---- */
+
+#define AOE_AI_PLAY_MEMBERS 50
+typedef struct { int32_t id; uint8_t category, role; } AoeAiPlayMemberRor;
+/* The +0x12c members record (ai_tactics.h layout). */
+typedef struct {
+    AoeAiPlayMemberRor slots[AOE_AI_PLAY_MEMBERS];
+    int32_t play, leader;        /* +0x190, +0x194 */
+    int32_t point[3];            /* +0x198 */
+    int32_t totals[5];           /* +0x1a4 */
+    uint8_t step;                /* +0x1b8 */
+    int32_t target, start_time;  /* +0x1bc, +0x1c0 */
+} AoeAiPlayStateRor;
+typedef struct { uint8_t category, code; int32_t a, b, c; } AoeAiPlayActionRor;  /* 16 bytes */
+typedef struct { uint8_t code; int32_t a, b; uint8_t next; } AoeAiPlayTriggerRor; /* +0, +4, +8, +0xd */
+typedef struct {
+    AoeAiPlayActionRor actions[5];
+    AoeAiPlayTriggerRor triggers[3];
+} AoeAiPlayRuleRor;
+
+typedef struct {
+    void *context;
+    AoeAiPlayStateRor *members;   /* +0x12c, NULL for none */
+    int play_exists;              /* 0x0040e950 of +0x190 */
+    const AoeAiPlayRuleRor *(*rule)(void *context, uint8_t step); /* 0x0040cca0 */
+    int32_t unit_id;
+    const int32_t *group; int32_t group_count; /* +0x60, +0x64 */
+    /* 0x00414f40 (+0x38..+0x40, +0x48, +0x30, template +0x26) and 0x00407a60. */
+    int (*resolve)(void *context, int32_t id, float *x, float *y, float *z, uint8_t *state,
+                   float *hp, int16_t *max_hp, int16_t *owner, int *has_ai);
+    int (*path_busy)(void *context, int32_t id);            /* its AI's 0x00458400 != -1 */
+    int32_t (*gather_value)(void *context, uint8_t category, uint8_t step); /* 0x0040cc40 */
+    void (*sum_hp)(void *context, uint8_t category);        /* 0x0040d770 */
+    void (*purge)(void *context);                           /* 0x0040d720 */
+    float (*distance_point)(void *context, float x, float y, float z); /* 0x004aaf50 */
+    void (*order)(void *context, int32_t member, int32_t code, int32_t target, int32_t owner,
+                  float x, float y, float z);               /* its AI +0x10(unit, code, ..., 1.0, 1, 0, 100) */
+    void (*free_members)(void *context);
+    /* The update only. */
+    int32_t (*pick_leader)(void *context, int32_t member);  /* +0x30(1, 0, 0); -1 = our own */
+    int32_t (*class_count)(void *context);                  /* unit +0x1c8 */
+    void (*copy_class)(void *context, int32_t member, int32_t k); /* member AI +0x1bc(unit +0x1b8(k, 1)) */
+    uint32_t world_time;                                    /* world +0x4 */
+    void (*fill)(void *context, const int32_t *ids, int32_t count); /* 0x0040ccd0 */
+    int (*fire)(void *context, uint8_t step, int32_t flag); /* 0x004102f0 */
+} AoeAiPlayOpsRor;
+
+/* 0x004102f0 (step, flag): 0 without members, a play or (step 0xfe
+   aside, which frees the members and gives 1) the step's rule or the
+   leader (+0x194). The step is stored. For each of the rule's five
+   actions with a code: ResetHitPoints (6) sums the category's hit
+   points and ResetAliveCount (7) purges, both only with flag 0; the
+   others go to every group member with an AI whose category (0x0040d440)
+   is the action's and, with flag 1, no path under way: Move (1) to the
+   leader's position plus (a, b, c) when its distance exceeds the gather
+   value (0x0040cc40; order 0x2c6), Attack (2) the leader (700, its
+   owner), AttackSavedTarget (3) +0x1bc (700), Retreat (4) to the saved
+   point (0x2c6), Heal (5) the first category-a member with ftol(hp) + 1
+   below its maximum (0x2bf; a full first candidate ends the search),
+   Wait (8) the leader's position plus (a, b, c) (0x2d8). 1. */
+int32_t aoe_ai_play_trigger_ror(const AoeAiPlayOpsRor *o, uint8_t step, int32_t flag);
+
+/* 0x0040fbf0: nothing without members or a play. A missing leader is
+   replaced by our +0x30(1, 0, 0), else the first member's (own unit
+   skipped) that answers; none frees the members; the new leader re-runs
+   the step with flag 0. Step 0xfd (fresh): every member's AI takes the
+   unit's class list (+0x1bc of +0x1b8(k, 1) for k below +0x1c8), the
+   start time is the world time, the members are cast (0x0040ccd0), the
+   totals become the per-category sums of ftol(hp), and step 0 fires.
+   Otherwise each trigger of the step's rule, up to the first empty one:
+   Gather (1) fires when every category's members (with a Move action for
+   it, 0x0040d150) lie within `a` of the leader plus that action's offset
+   (the original uses b for z); Death (2) when `b` percent or more of the
+   category-a members are gone or dead; HealthLost (3) when the lost
+   share of the category's total is at least `b` percent; DeathOfGroup
+   (8) when no category-a member is at state 2; HealOfGroup (9) when none
+   is below its maximum; Immediate (10) always; Time (11) when more than
+   `a` seconds have passed. A firing (its `next` step, flag 0) that
+   answers 1 ends the update; else the step re-fires with flag 1. */
+void aoe_ai_play_update_ror(const AoeAiPlayOpsRor *o);
+
 #endif

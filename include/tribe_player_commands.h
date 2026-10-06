@@ -527,4 +527,43 @@ typedef struct {
 int aoe_tribe_player_cursor_command_ror(const AoeTribeCursorOpsRor *o, int32_t id,
                                         int32_t *command, int32_t *cursor);
 
+
+/* 0x004f1ae0: the player's start. Without units (+0x28 list empty) a
+   random tile (x from the map width, y from the height: rand * (size -
+   30) / 0x7fff + 15, plus 0.5) is tried up to 5000 times with the +0x24
+   object's +0x1b4 type's +0x20(player, x + 0.5, y + 0.5, 0, 0, 1, 1, 1,
+   1, 1); the first free one gets the type's +0x18(player, x, y, 0), the
+   view (0x0045d310 tile, 0x0045d330 point), 0x004ad7b0(10000.0) and
+   three +0x14c-type objects at random offsets (rand * 6 / 0x7fff - 3 plus
+   rand / 0x7fff, inside the map, where that type's +0x20 answers 0). With
+   units the view goes to the type-0x6d object (0x00451370) or the first
+   unit. Networked (0x0041b760) or with 0x0041b710, every other player
+   with a stance (vtable +0x1c) is shown that object (+0xd8 / +0xdc with
+   0, -1) and, for a wonder, told through its +0x94(0x70, +0x118, +0x11c,
+   0, 0); when any was and we are the viewed player (world +0x7c), each
+   comm slot 1..8 holding such a player (0x0041c080) gets the stance as
+   its recipient flag (0x0041ca50). */
+typedef struct {
+    void *context;
+    int has_units;
+    int32_t map_w, map_h;
+    int32_t (*rand_)(void *context);                 /* 0..0x7fff */
+    int (*main_blocked)(void *context, float x, float y);  /* +0x1b4 type +0x20 */
+    void (*create_main)(void *context, float x, float y);  /* +0x1b4 type +0x18 */
+    int (*extra_blocked)(void *context, float x, float y); /* +0x14c type +0x20 */
+    void (*create_extra)(void *context, float x, float y); /* +0x14c type +0x18 */
+    void (*set_view)(void *context, int32_t tx, int32_t ty, float x, float y);
+    void (*add_work)(void *context, float amount);   /* 0x004ad7b0 */
+    /* The type-0x6d object or the first unit: position and template id. */
+    int (*anchor)(void *context, float *x, float *y, int16_t *template_id);
+    int share;                                       /* 0x0041b760 || 0x0041b710 */
+    int16_t player_count, own_id, viewed_player;
+    int32_t (*stance)(void *context, int32_t player); /* vtable +0x1c */
+    void (*reveal)(void *context, int32_t player);    /* +0xd8, +0xdc */
+    void (*wonder_notice)(void *context, int32_t player); /* +0x94(0x70, ...) */
+    int32_t (*slot_player)(void *context, int32_t slot);  /* 0x0041c080 */
+    void (*chat_recipient)(void *context, int32_t slot, int32_t stance); /* 0x0041ca50 */
+} AoeTribeStartOpsRor;
+void aoe_tribe_player_place_start_ror(const AoeTribeStartOpsRor *o);
+
 #endif

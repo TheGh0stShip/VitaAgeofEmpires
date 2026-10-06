@@ -641,4 +641,23 @@ typedef struct {
 } AoeGameRorStartOpsRor;
 void aoe_game_ror_start_game_ror(const AoeGameRorStartOpsRor *o);
 
+
+/* 0x004fef10 (+0x98 override): the 17 common sounds into +0x6c (count
+   +0x68 = 17; a failed table gives 0): "button1.wav" 0xc47c, "button2.wav",
+   "chatrcvd.wav", "cantdo.wav", "tribute.wav", "resdone.wav",
+   "pkilled.wav", "pdropped.wav", "mstart.wav", "mdone.wav", "mkilled.wav",
+   "artheld.wav", "artlost.wav", "convwarn.wav", "convdone.wav", "res.wav",
+   "farmdie.wav" 0xc48c (each 0x004a2be0 with the sound system +0x60; a
+   failed allocation leaves NULL), then every loaded one preloaded
+   (0x004a2ca0(0, -1)). 1. */
+#define AOE_GAME_ROR_SOUNDS 17
+extern const char *const aoe_game_ror_sound_names_ror[AOE_GAME_ROR_SOUNDS];
+typedef struct {
+    void *context;
+    void *(*alloc_zero)(void *context, uint32_t count, uint32_t size); /* 0x0052607b */
+    void *(*load)(void *context, const char *name, int32_t id);        /* 0x004a2be0 */
+    void (*preload)(void *context, void *sound);                       /* 0x004a2ca0 */
+} AoeGameRorSoundOpsRor;
+int aoe_game_ror_load_sounds_ror(const AoeGameRorSoundOpsRor *o, void ***sounds, int16_t *count);
+
 #endif

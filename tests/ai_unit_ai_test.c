@@ -2,6 +2,7 @@
 #include "ai_unit_ai.h"
 
 #include <assert.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -655,6 +656,157 @@ static void move_aside_tests(void) {
     ma_log_n = 0; ma_free[20][20] = 1; ma_move_ok = 0; ma_order_set = 0;
     assert(aoe_ai_unit_ai_move_aside_ror(&o, 20.5f, 20.5f, 3.5f, 0, 1) == 0 && ma_order_set == 0);
 }
+
+/* ---- 0x00414600 ---- */
+typedef struct { int32_t id; float x, y, z; uint8_t state; int16_t owner, tmpl, cls; int has_ai; } CkObj;
+static CkObj ck_objs[4]; static int ck_nobj; static char ck_log[512]; static int ck_n; static int32_t ck_nearest = -1, ck_11c = -1, ck_place = 1, ck_reach = 1, ck_mtarget = -1, ck_d4 = 0; static float ck_dist = 0.0f;
+static void ck_add(const char *fmt, ...) { va_list ap; va_start(ap, fmt); ck_n += vsnprintf(ck_log + ck_n, sizeof ck_log - (size_t)ck_n, fmt, ap); va_end(ap); }
+static int ck_7c(void *c) { (void)c; return 1; }
+static int ck_resolve(void *c, int32_t id, float *x, float *y, float *z, uint8_t *st, int16_t *ow, int16_t *tm, int16_t *cl, int *ai) {
+    int i; (void)c;
+    for (i = 0; i < ck_nobj; ++i) if (ck_objs[i].id == id) { *x = ck_objs[i].x; *y = ck_objs[i].y; *z = ck_objs[i].z; *st = ck_objs[i].state; *ow = ck_objs[i].owner; *tm = ck_objs[i].tmpl; *cl = ck_objs[i].cls; *ai = ck_objs[i].has_ai; return 1; }
+    return 0;
+}
+static int32_t ck_nearestf(void *c) { (void)c; return ck_nearest; }
+static float ck_range(void *c, int32_t e) { (void)c; return 3.0f + (float)e; }
+static void ck_order(void *c, int32_t code, int32_t t, int32_t ow, float x, float y, float z, float r) { (void)c; ck_add("order(%d,%d,%d,%g,%g,%g,%g) ", (int)code, (int)t, (int)ow, (double)x, (double)y, (double)z, (double)r); }
+static void ck_clear(void *c) { (void)c; ck_add("clear "); }
+static void ck_stop(void *c, int32_t f) { (void)c; ck_add("stop%d ", (int)f); }
+static int32_t ck_11cf(void *c) { (void)c; return ck_11c; }
+static float ck_dpoint(void *c, float x, float y, float z) { (void)c; (void)x; (void)y; (void)z; return ck_dist; }
+static float ck_dto(void *c, int32_t id) { (void)c; (void)id; return ck_dist; }
+static int32_t ck_placef(void *c, int32_t tx, int32_t ty, float r) { (void)c; ck_add("place(%d,%d,%g) ", (int)tx, (int)ty, (double)r); return ck_place; }
+static int32_t ck_reachf(void *c, int32_t id, float r) { (void)c; ck_add("reach(%d,%g) ", (int)id, (double)r); return ck_reach; }
+static void ck_move(void *c, float x, float y, float z, float r) { (void)c; ck_add("move(%g,%g,%g,%g) ", (double)x, (double)y, (double)z, (double)r); }
+static void ck_moveobj(void *c, int32_t id, float r, int f) { (void)c; ck_add("follow(%d,%g,%d) ", (int)id, (double)r, f); }
+static int32_t ck_mtargetf(void *c, int32_t id) { (void)c; (void)id; return ck_mtarget; }
+static void ck_5c(void *c, int32_t t) { (void)c; ck_add("5c(%d) ", (int)t); }
+static int32_t ck_d4f(void *c, int32_t a) { (void)c; (void)a; return ck_d4; }
+static void check_tests(void) {
+    float tx = -1.0f, ty = -1.0f, tz = 0.0f; int32_t follow = -1;
+    AoeAiUnitAiCheckOpsRor o = {NULL, -1, 600, -1, 2, &tx, &ty, &tz, 2.0f, &follow, 0, 1, ck_7c, 7, 0.0f, ck_resolve, ck_nearestf, ck_range, ck_order, ck_clear, ck_stop, ck_11cf, ck_dpoint, ck_dto, ck_placef, ck_reachf, ck_move, ck_moveobj, ck_mtargetf, ck_5c, ck_d4f};
+    CkObj t = {50, 10.0f, 11.0f, 0.0f, 2, 3, 5, 6, 1}, b = {51, 20.0f, 21.0f, 1.0f, 2, 4, 9, 3, 0};
+    ck_objs[0] = t; ck_objs[1] = b; ck_nobj = 2;
+    /* 700 (order 600 + 100): a nearer enemy building other than the target is left (9); a unit is attacked. */
+    ck_nearest = 51;
+    assert(aoe_ai_unit_ai_check_ror(&o) == 9 && ck_n == 0);
+    ck_objs[1].cls = 4;
+    assert(aoe_ai_unit_ai_check_ror(&o) == 9 && strcmp(ck_log, "order(700,51,4,20,21,1,5) ") == 0);
+    ck_n = 0; o.target = 50;  /* a unit target: a non-building candidate is refused */
+    assert(aoe_ai_unit_ai_check_ror(&o) == 9 && ck_n == 0);
+    ck_objs[0].cls = 3;
+    assert(aoe_ai_unit_ai_check_ror(&o) == 9 && strcmp(ck_log, "order(700,51,4,20,21,1,5) ") == 0);
+    /* 0x2bd: the follow object is gone -> cleared; present and far -> followed (10). */
+    ck_n = 0; o.action = 0x2bd; follow = 99; o.order = -1;
+    assert(aoe_ai_unit_ai_check_ror(&o) == 9 && follow == -1 && strcmp(ck_log, "clear stop1 ") == 0);
+    ck_n = 0; follow = 50; ck_dist = 10.0f;
+    assert(aoe_ai_unit_ai_check_ror(&o) == 10 && tx == 10.0f && ty == 11.0f && strcmp(ck_log, "reach(50,2) follow(50,2,1) ") == 0);
+    ck_n = 0; ck_dist = 1.0f; ck_mtarget = 77;
+    assert(aoe_ai_unit_ai_check_ror(&o) == 10 && strcmp(ck_log, "5c(77) ") == 0);
+    ck_n = 0; ck_mtarget = -1; ck_d4 = 6;
+    assert(aoe_ai_unit_ai_check_ror(&o) == 10 && ck_n == 0);
+    ck_d4 = 0;
+    assert(aoe_ai_unit_ai_check_ror(&o) == 9);
+    ck_n = 0; follow = -1; tx = 4.5f; ty = 6.5f; ck_dist = 9.0f;
+    assert(aoe_ai_unit_ai_check_ror(&o) == 10 && strcmp(ck_log, "place(4,6,2) move(4.5,6.5,0,2) ") == 0);
+    /* 0x2c8: a target that moved and is out of range is followed without the flag. */
+    ck_n = 0; o.action = 0x2c8; o.target = 50; tx = 1.0f; ty = 1.0f;
+    assert(aoe_ai_unit_ai_check_ror(&o) == 10 && strcmp(ck_log, "follow(50,2,0) ") == 0 && tx == 10.0f);
+    ck_n = 0; ck_dist = 1.0f;
+    assert(aoe_ai_unit_ai_check_ror(&o) == 9 && ck_n == 0);
+    ck_n = 0; o.target = 60;
+    assert(aoe_ai_unit_ai_check_ror(&o) == 9 && strcmp(ck_log, "clear stop1 ") == 0);
+    ck_n = 0; o.target = -1; ck_dist = 5.0f;
+    assert(aoe_ai_unit_ai_check_ror(&o) == 10 && strcmp(ck_log, "move(10,11,0,2) ") == 0);
+}
+/* ---- 0x004102f0 / 0x0040fbf0 ---- */
+typedef struct { int32_t id; float x, y, z, hp; uint8_t state; int16_t max, owner; int has_ai; } PlObj;
+static PlObj pl_objs[8]; static int pl_nobj; static char pl_log[2048]; static int pl_n; static AoeAiPlayRuleRor pl_rule; static const AoeAiPlayRuleRor *pl_rule_ptr = &pl_rule; static int32_t pl_leader_pick = -1, pl_gather = 2, pl_fire_ret; static float pl_dist = 5.0f; static int pl_busy;
+static void pl_add(const char *fmt, ...) { va_list ap; va_start(ap, fmt); pl_n += vsnprintf(pl_log + pl_n, sizeof pl_log - (size_t)pl_n, fmt, ap); va_end(ap); }
+static const AoeAiPlayRuleRor *pl_rulef(void *c, uint8_t s) { (void)c; pl_add("rule%d ", s); return pl_rule_ptr; }
+static int pl_resolve(void *c, int32_t id, float *x, float *y, float *z, uint8_t *st, float *hp, int16_t *mx, int16_t *ow, int *ai) {
+    int i; (void)c;
+    for (i = 0; i < pl_nobj; ++i) if (pl_objs[i].id == id) { *x = pl_objs[i].x; *y = pl_objs[i].y; *z = pl_objs[i].z; *st = pl_objs[i].state; *hp = pl_objs[i].hp; *mx = pl_objs[i].max; *ow = pl_objs[i].owner; *ai = pl_objs[i].has_ai; return 1; }
+    return 0;
+}
+static int pl_busyf(void *c, int32_t id) { (void)c; (void)id; return pl_busy; }
+static int32_t pl_gatherf(void *c, uint8_t cat, uint8_t s) { (void)c; (void)cat; (void)s; return pl_gather; }
+static void pl_sum(void *c, uint8_t cat) { (void)c; pl_add("sum%d ", cat); }
+static void pl_purge(void *c) { (void)c; pl_add("purge "); }
+static float pl_distf(void *c, float x, float y, float z) { (void)c; (void)x; (void)y; (void)z; return pl_dist; }
+static void pl_order(void *c, int32_t m, int32_t code, int32_t t, int32_t ow, float x, float y, float z) { (void)c; pl_add("o(%d:%d,%d,%d,%g,%g,%g) ", (int)m, (int)code, (int)t, (int)ow, (double)x, (double)y, (double)z); }
+static void pl_free(void *c) { (void)c; pl_add("free "); }
+static int32_t pl_pick(void *c, int32_t m) { (void)c; pl_add("pick%d ", (int)m); return m == -1 ? -1 : pl_leader_pick; }
+static int32_t pl_classes(void *c) { (void)c; return 2; }
+static void pl_copy(void *c, int32_t m, int32_t k) { (void)c; pl_add("cls(%d,%d) ", (int)m, (int)k); }
+static void pl_fill(void *c, const int32_t *ids, int32_t n) { (void)c; pl_add("fill%d:%d,%d ", (int)n, (int)ids[0], n > 1 ? (int)ids[1] : -1); }
+static int pl_fire(void *c, uint8_t s, int32_t f) { (void)c; pl_add("fire(%d,%d) ", s, (int)f); return pl_fire_ret; }
+static void play_tests(void) {
+    AoeAiPlayStateRor m; int32_t group[3] = {7, 20, 21}; int i;
+    AoeAiPlayOpsRor o = {NULL, &m, 1, pl_rulef, 7, group, 3, pl_resolve, pl_busyf, pl_gatherf, pl_sum, pl_purge, pl_distf, pl_order, pl_free, pl_pick, pl_classes, pl_copy, 45000, pl_fill, pl_fire};
+    PlObj L = {7, 10.0f, 10.0f, 0.0f, 40.0f, 2, 40, 1, 1}, A = {20, 3.0f, 3.0f, 0.0f, 30.0f, 2, 40, 1, 1}, B = {21, 5.0f, 5.0f, 0.0f, 10.0f, 2, 40, 1, 1};
+    pl_objs[0] = L; pl_objs[1] = A; pl_objs[2] = B; pl_nobj = 3;
+    memset(&m, 0, sizeof m); for (i = 0; i < AOE_AI_PLAY_MEMBERS; ++i) { m.slots[i].id = -1; m.slots[i].category = 0xff; }
+    m.slots[0].id = 20; m.slots[0].category = 1; m.slots[1].id = 21; m.slots[1].category = 2; m.leader = 7; m.target = 55; m.point[0] = 1; m.point[1] = 2; m.point[2] = 3; m.step = 4; m.start_time = 40000;
+    memset(&pl_rule, 0, sizeof pl_rule);
+    pl_rule.actions[0] = (AoeAiPlayActionRor){1, 1, 2, 3, 4};   /* Move category 1 to leader + (2, 3, 4) */
+    pl_rule.actions[1] = (AoeAiPlayActionRor){2, 2, 0, 0, 0};   /* Attack the leader */
+    pl_rule.actions[2] = (AoeAiPlayActionRor){2, 6, 0, 0, 0};   /* ResetHitPoints */
+    pl_rule.actions[3] = (AoeAiPlayActionRor){1, 5, 2, 0, 0};   /* Heal category 2 */
+    pl_rule.actions[4] = (AoeAiPlayActionRor){2, 4, 0, 0, 0};   /* Retreat */
+    assert(aoe_ai_play_trigger_ror(&o, 3, 0) == 1 && m.step == 3);
+    assert(strcmp(pl_log, "rule3 o(20:710,-1,-1,12,13,4) o(21:700,7,1,-1,-1,-1) sum2 o(20:703,21,-1,-1,-1,-1) o(21:710,-1,-1,1,2,3) ") == 0);
+    pl_n = 0; pl_gather = 9; pl_busy = 1;  /* flag 1: busy members skipped, no hit point reset */
+    assert(aoe_ai_play_trigger_ror(&o, 3, 1) == 1 && strcmp(pl_log, "rule3 ") == 0);
+    pl_n = 0; pl_busy = 0;
+    assert(aoe_ai_play_trigger_ror(&o, 3, 1) == 1 && strcmp(pl_log, "rule3 o(21:700,7,1,-1,-1,-1) o(20:703,21,-1,-1,-1,-1) o(21:710,-1,-1,1,2,3) ") == 0);
+    pl_n = 0;
+    assert(aoe_ai_play_trigger_ror(&o, 0xfe, 0) == 1 && strcmp(pl_log, "free ") == 0);
+    pl_rule_ptr = NULL; assert(aoe_ai_play_trigger_ror(&o, 1, 0) == 0); pl_rule_ptr = &pl_rule;
+    o.play_exists = 0; assert(aoe_ai_play_trigger_ror(&o, 1, 0) == 0); o.play_exists = 1;
+    /* The update: a Time trigger (11) past 4 s fires step 9; its answer 1 ends the update. */
+    pl_n = 0; pl_rule.triggers[0] = (AoeAiPlayTriggerRor){11, 4, 0, 9}; pl_fire_ret = 1;
+    aoe_ai_play_update_ror(&o);
+    assert(strcmp(pl_log, "rule3 fire(9,0) ") == 0);
+    pl_n = 0; pl_fire_ret = 0; pl_rule.triggers[0].a = 5;  /* not yet: the step re-fires with flag 1 */
+    aoe_ai_play_update_ror(&o);
+    assert(strcmp(pl_log, "rule3 fire(3,1) ") == 0);
+    /* Death (2): one of the two category-1 members gone is 50 percent. */
+    pl_n = 0; m.slots[2].id = 22; m.slots[2].category = 1; pl_rule.triggers[0] = (AoeAiPlayTriggerRor){2, 1, 50, 6};
+    aoe_ai_play_update_ror(&o);
+    assert(strcmp(pl_log, "rule3 fire(6,0) fire(3,1) ") == 0);
+    pl_n = 0; pl_rule.triggers[0].b = 51;
+    aoe_ai_play_update_ror(&o);
+    assert(strcmp(pl_log, "rule3 fire(3,1) ") == 0);
+    /* HealthLost (3): total 40, 30 left -> 25 percent; HealOfGroup (9) waits for full health; DeathOfGroup (8). */
+    pl_n = 0; m.totals[1] = 40; pl_rule.triggers[0] = (AoeAiPlayTriggerRor){3, 1, 25, 7}; pl_rule.triggers[1] = (AoeAiPlayTriggerRor){9, 1, 0, 8}; pl_rule.triggers[2] = (AoeAiPlayTriggerRor){8, 2, 0, 5};
+    aoe_ai_play_update_ror(&o);
+    assert(strcmp(pl_log, "rule3 fire(7,0) fire(3,1) ") == 0);
+    pl_n = 0; pl_rule.triggers[0].b = 26; pl_objs[1].hp = 40.0f;
+    aoe_ai_play_update_ror(&o);
+    assert(strcmp(pl_log, "rule3 fire(8,0) fire(3,1) ") == 0);
+    pl_n = 0; pl_objs[1].hp = 30.0f; pl_objs[2].state = 4;
+    aoe_ai_play_update_ror(&o);
+    assert(strcmp(pl_log, "rule3 fire(5,0) fire(3,1) ") == 0);
+    /* Gather (1): members of category 1 within 4 of the leader offset; a far one holds. */
+    pl_n = 0; pl_objs[2].state = 2; m.slots[2].id = -1; m.slots[2].category = 0xff; pl_rule.triggers[0] = (AoeAiPlayTriggerRor){1, 4, 0, 2}; pl_rule.triggers[1].code = 0; pl_dist = 3.0f;
+    aoe_ai_play_update_ror(&o);
+    assert(strcmp(pl_log, "rule3 fire(2,0) fire(3,1) ") == 0);
+    pl_n = 0; pl_dist = 6.0f;
+    aoe_ai_play_update_ror(&o);
+    assert(strcmp(pl_log, "rule3 fire(3,1) ") == 0);
+    /* A fresh play (0xfd): the class lists copied, the cast, the totals, step 0. */
+    pl_n = 0; m.step = 0xfd;
+    aoe_ai_play_update_ror(&o);
+    assert(strcmp(pl_log, "cls(7,0) cls(7,1) cls(20,0) cls(20,1) cls(21,0) cls(21,1) fill3:7,20 fire(0,0) ") == 0 && m.start_time == 45000 && m.totals[1] == 30 && m.totals[2] == 10);
+    /* A gone leader: the first member with an AI picks one; none frees the members. */
+    pl_n = 0; m.step = 3; m.leader = 99; pl_leader_pick = 20;
+    aoe_ai_play_update_ror(&o);
+    assert(strcmp(pl_log, "pick-1 pick20 fire(3,0) rule3 fire(3,1) ") == 0 && m.leader == 20);
+    pl_n = 0; m.leader = 99; pl_leader_pick = -1;
+    aoe_ai_play_update_ror(&o);
+    assert(strcmp(pl_log, "pick-1 pick20 pick21 free ") == 0);
+}
 int main(void) {
     free_tile_tests();
     ai_kind_for_unit_tests();
@@ -815,5 +967,7 @@ int main(void) {
     scan_tests();
     rally_tests();
     move_aside_tests();
+    check_tests();
+    play_tests();
     return 0;
 }

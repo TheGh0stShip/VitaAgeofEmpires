@@ -939,3 +939,20 @@ void aoe_game_ror_start_game_ror(const AoeGameRorStartOpsRor *o) {
     if (o->can_centre_cursor) o->centre_cursor(o->context);
     o->cursor_release(o->context);
 }
+
+/* 0x004fef10 */
+const char *const aoe_game_ror_sound_names_ror[AOE_GAME_ROR_SOUNDS] = {
+    "button1.wav", "button2.wav", "chatrcvd.wav", "cantdo.wav", "tribute.wav", "resdone.wav",
+    "pkilled.wav", "pdropped.wav", "mstart.wav", "mdone.wav", "mkilled.wav", "artheld.wav",
+    "artlost.wav", "convwarn.wav", "convdone.wav", "res.wav", "farmdie.wav"};
+int aoe_game_ror_load_sounds_ror(const AoeGameRorSoundOpsRor *o, void ***sounds, int16_t *count) {
+    int i;
+    *count = AOE_GAME_ROR_SOUNDS;
+    *sounds = o->alloc_zero(o->context, AOE_GAME_ROR_SOUNDS, sizeof(void *));
+    if (!*sounds) return 0;
+    for (i = 0; i < AOE_GAME_ROR_SOUNDS; ++i)
+        (*sounds)[i] = o->load(o->context, aoe_game_ror_sound_names_ror[i], 0xc47c + i);
+    for (i = 0; i < AOE_GAME_ROR_SOUNDS; ++i)
+        if ((*sounds)[i]) o->preload(o->context, (*sounds)[i]);
+    return 1;
+}

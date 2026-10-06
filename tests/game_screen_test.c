@@ -609,6 +609,34 @@ static void action_tests(void) {
     ac_n = 0; ac_name = "Help Dialog";
     assert(aoe_game_screen_action_ror(&o, (void *)2, 0, 0, 0) == 42 && strcmp(ac_log, "ov base ") == 0);
 }
+
+static char gl_log[4096]; static int gl_n, gl_base; static int32_t gl_scores[8] = {1, -1, 0, -1, -1, -1, -1, 1};
+static void gl_add(const char *fmt, ...) { va_list ap; va_start(ap, fmt); gl_n += vsnprintf(gl_log + gl_n, sizeof gl_log - (size_t)gl_n, fmt, ap); va_end(ap); }
+static int32_t gl_score(void *c, int i) { (void)c; return gl_scores[i]; }
+static void gl_basef(void *c) { (void)c; ++gl_base; }
+static void gl_active(void *c, uint16_t off, int32_t v) { (void)c; gl_add("a%x=%d ", off, (int)v); }
+static void gl_mode(void *c, uint16_t off, const AoeGameScreenModeRor *m) { (void)c; gl_add("m%x(%d,%d,%d,%d,%d,%d,%d,%d,%d/%x) ", off, m->v[0], m->v[1], m->v[2], m->v[3], m->v[4], m->v[5], m->v[6], m->v[7], m->v[8], m->refs[3]); }
+static void gl_rect(void *c, uint16_t off, int32_t x, int32_t y, int32_t w, int32_t h) { (void)c; gl_add("r%x(%d,%d,%d,%d) ", off, (int)x, (int)y, (int)w, (int)h); }
+static void gl_style(void *c, uint16_t off, uint8_t s) { (void)c; gl_add("s%x=%d ", off, s); }
+static void gl_pages(void *c, int small, int16_t base, int16_t pages) { (void)c; gl_add("pages(%d,%d,%d) ", small, base, pages); }
+static void gl_notify(void *c, int16_t p) { (void)c; gl_add("notify%d ", p); }
+static void layout_tests(void) {
+    AoeGameScreenLayoutOpsRor o = {NULL, 0, 640, 480, 0, 640, 0, 2, gl_score, gl_basef, gl_active, gl_mode, gl_rect, gl_style, gl_pages, gl_notify};
+    assert(aoe_game_screen_layout_ror(&o) == 0 && gl_base == 1 && gl_n == 0);
+    o.has_view = 1;
+    aoe_game_screen_layout_ror(&o);
+    assert(strstr(gl_log, "a50c=1 a544=1 a548=1 a54c=1 a550=1 a554=1 a558=1 a58c=1 a594=1 a5a8=1 m540(7,240,4,4,4,160,160,20,20/0) r4b8(0,20,640,334) r4bc(411,362,220,114) r580(270,2,106,16) r588(2,2,280,16) r4c0(0,0,270,20) r4c4(5,361,127,114) r4c8(136,362,54,54) s4c8=0 ") == gl_log);
+    assert(strstr(gl_log, "r4f4(406,420,54,54) s4f4=0 r4dc(406,362,102,53) s4dc=2 r4f4(406,443,102,53) s4f4=2 r4f8(388,0,72,19) r4fc(460,0,108,19) r500(568,0,72,19) r504(605,444,30,30) s504=3 r508(605,362,30,30) s508=3 pages(1,0,2) m584(2,4,4,4,4,600,600,60,60/0) m514(7,4,4,4,4,120,120,20,20/0) m518(9,4,4,4,4,170,170,20,20/0) ") != NULL);
+    assert(strstr(gl_log, "m53c(9,4,184,4,4,170,170,20,20/0) m50c(8,4,0,4,4,0,0,34,34/0) m510(7,70,8,70,8,0,0,20,20/0) m544(8,4,0,4,0,0,0,20,20/50c) m548(8,4,0,4,0,0,0,20,20/544) ") != NULL);
+    assert(strstr(gl_log, "r55c(4,34,620,20) ") && strstr(gl_log, "r578(4,174,620,20) m5a8(10,4,0,4,4,200,200,20,20/0) m594(10,4,0,4,0,200,200,20,20/598) m58c(10,4,0,4,0,200,200,20,20/590) a50c=0 a544=0 ") && strstr(gl_log, "a558=0 a58c=1 a594=0 a5a8=1 notify2 "));
+    /* 800x600 with the overlay: the overlay strip and the shorter view; the large button set. */
+    gl_n = 0; o.width = 800; o.height = 600; o.overlay_active = 1; o.world_11c = 1; o.screen_width = 800;
+    aoe_game_screen_layout_ror(&o);
+    assert(strstr(gl_log, "m540(7,320,4,4,4,160,160,20,20/0) r57c(0,20,800,30) r4b8(0,50,800,424) r4bc(571,480,220,114) r580(270,2,268,16) ") && strstr(gl_log, "r4c4(5,481,127,114) r4c8(136,482,54,54) ") && strstr(gl_log, "r4f4(406,540,54,54) s4f4=0 r4f8(548,0,72,19) ") && strstr(gl_log, "r504(765,564,30,30) s504=3 r508(765,482,30,30) s508=3 pages(0,11,10) ") && strstr(gl_log, "m50c(8,4,0,184,4,0,0,34,34/0) m510(7,150,8,150,8,0,0,20,20/0) "));
+    gl_n = 0; o.width = 1024; o.height = 768;
+    aoe_game_screen_layout_ror(&o);
+    assert(strstr(gl_log, "m540(7,432,4,4,4,160,160,20,20/0) r57c(0,20,1024,30) r4b8(0,50,1024,592) r4bc(795,648,220,114) r580(270,2,492,16) ") && strstr(gl_log, "r4c4(5,649,127,114) r4c8(136,650,54,54) ") && strstr(gl_log, "r4f8(772,0,72,19) r4fc(844,0,108,19) r500(952,0,72,19) r504(989,732,30,30) s504=3 r508(989,650,30,30) "));
+}
 int main(void) {
     AoeGameScreenRor s;
     AoeGameScreenButtonRor b;
@@ -983,5 +1011,6 @@ int main(void) {
     draw_tests();
     idle_tick_tests();
     action_tests();
+    layout_tests();
     return 0;
 }

@@ -364,4 +364,42 @@ typedef struct {
 } AoeScenarioEditorDropdownOpsRor;
 int aoe_scenario_editor_open_dropdown_ror(const AoeScenarioEditorDropdownOpsRor *o, int32_t offset);
 
+
+/* ---- 0x00499160: the editor's control layout ---- */
+
+/* A set_fixed_position (vtable +0x1c) row: the control's offset, then
+   x, y, width, height. */
+typedef struct { uint16_t offset; int16_t x, y, w, h; } AoeEditorRectRor;
+/* A set_position_mode (vtable +0x18) row: nine values then four control
+   references (offsets, 0 for none). */
+typedef struct { int32_t v[9]; uint16_t refs[4]; } AoeEditorModeRor;
+
+typedef struct {
+    void *context;
+    int has_controls;            /* +0x4c8 */
+    int lines_overflow;          /* the +0x63c text's 0x0046a0c0 < its 0x0046a0b0 */
+    void (*position_mode)(void *context, uint16_t offset, const AoeEditorModeRor *m);
+    void (*set_rect)(void *context, uint16_t offset, int32_t x, int32_t y, int32_t w, int32_t h);
+} AoeEditorLayoutOpsRor;
+
+/* 0x00499160: nothing without controls. The ten top buttons (+0x4d8..)
+   take mode 7 (2, 2, 2, 2, 0x32, 0x6d, 0x16, 0x16) each referring to
+   its predecessor (+0x4d4 + 4 i; none for the first and sixth), the
+   second five also to +0x4c4 + 4 i; +0x500 mode 9, +0x504 and +0x4cc
+   mode 10, +0x4d4 mode 8 (ref +0x4cc), +0x63c mode 7 (0x7c, 200; refs
+   +0x500, +0x4d4), +0x660 mode 8; when the +0x63c text overflows it is
+   re-laid (0x68, 0xdc) and +0x640 (mode 7, 0x12) refers to it; +0x4c8
+   mode 7 refers to +0x63c (or +0x640), +0x500 and +0x4d4; +0x4d0 mode 8.
+   Then the fixed rectangles of every tool panel (tables rects_a..f in
+   scenario_editor_ui.c, in the original order) with the regular rows:
+   +0x5c4 / +0x5d8 + 4 k (k 0..3: x 0xa6 + 0x44 (k / 2), y 0x19 + 0x2c
+   (k % 2), labels 0x12 above), +0x5ec / +0x5f8 (x 500), the twelve
+   +0x704 + 4 i at (0xdc + 0x30 (i / 4), 0x1e + 0x1a (i % 4), 0x2c,
+   0x16), five +0x778 / +0x78c rows from y 8 step 0x19, +0x774 mode 7
+   (0xaf, 4, 0x28, 4), three +0x7a4 / +0x7b4 rows from y 0x16 step 0x2c,
+   the +0x7d4 / +0x814, +0x7e8 / +0x828 (five from y 0x1a) and +0x7fc /
+   +0x83c (six from y 6) columns step 0x14, and eight +0x874, +0x8a8..
+   +0x8b0, +0x908 columns from x 0x96 step 0x1f. */
+void aoe_scenario_editor_layout_ror(const AoeEditorLayoutOpsRor *o);
+
 #endif

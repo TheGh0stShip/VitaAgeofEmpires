@@ -356,6 +356,30 @@ static void dropdown_tests(void) {
     dd_n = 0; o.failed = 1; assert(aoe_scenario_editor_open_dropdown_ror(&o, 0x4c4) == 0 && strcmp(dd_log, "new82 front hide clear ") == 0);
     dd_n = 0; dd_create_ok = 0; assert(aoe_scenario_editor_open_dropdown_ror(&o, 0x894) == 0 && strcmp(dd_log, "new96 ") == 0);
 }
+
+static int el_modes, el_rects; static char el_first[128], el_last[64]; static int el_seen_5b0, el_seen_908_7, el_seen_704_11; static AoeEditorModeRor el_m4c8;
+static void el_mode(void *c, uint16_t off, const AoeEditorModeRor *m) { (void)c; ++el_modes; if (off == 0x4c8) el_m4c8 = *m; if (el_modes == 1) snprintf(el_first, sizeof el_first, "%x:%d,%d,%d,%d,%d,%d,%d,%d,%d/%x,%x,%x,%x", off, m->v[0], m->v[1], m->v[2], m->v[3], m->v[4], m->v[5], m->v[6], m->v[7], m->v[8], m->refs[0], m->refs[1], m->refs[2], m->refs[3]); }
+static void el_rect(void *c, uint16_t off, int32_t x, int32_t y, int32_t w, int32_t h) {
+    (void)c; ++el_rects;
+    if (off == 0x5b0) el_seen_5b0 = (el_seen_5b0 << 8) | (y & 0xff);
+    if (off == 0x908 + 28 && x == 0x96 + 0x1f * 7 && y == 0x70 && w == 0x1a && h == 0x12) el_seen_908_7 = 1;
+    if (off == 0x704 + 44 && x == 0xdc + 0x60 && y == 0x1e + 0x4e && w == 0x2c) el_seen_704_11 = 1;
+    snprintf(el_last, sizeof el_last, "%x:%d,%d,%d,%d", off, x, y, w, h);
+}
+static void editor_layout_tests(void) {
+    AoeEditorLayoutOpsRor o = {NULL, 0, 0, el_mode, el_rect};
+    aoe_scenario_editor_layout_ror(&o);
+    assert(el_modes == 0 && el_rects == 0);
+    o.has_controls = 1;
+    aoe_scenario_editor_layout_ror(&o);
+    assert(el_modes == 19 && strcmp(el_first, "4d8:7,2,2,2,2,50,109,22,22/0,0,0,0") == 0 && el_m4c8.refs[0] == 0x63c && el_m4c8.refs[1] == 0x500 && el_m4c8.refs[3] == 0x4d4);
+    /* 142 fixed rows (0x5b0 twice: y 4 then 0x2a) plus the regular rows (8 + 4 + 12 + 10 + 6 + 10 + 10 + 12 + 40). */
+    assert(el_rects == 122 + 8 + 4 + 12 + 10 + 6 + 10 + 10 + 12 + 40 && el_seen_5b0 == 0x042a && el_seen_908_7 && el_seen_704_11);
+    assert(strcmp(el_last, "8a4:2,112,145,22") == 0);
+    el_modes = 0; o.lines_overflow = 1;
+    aoe_scenario_editor_layout_ror(&o);
+    assert(el_modes == 21 && el_m4c8.refs[0] == 0x640);
+}
 int main(void) {
     AoeUiPlatformRor pf = {0};
     static AoeUiSystemRor sys;
@@ -943,5 +967,6 @@ int main(void) {
     new_scenario_tests();
     clear_controls_tests();
     dropdown_tests();
+    editor_layout_tests();
     return 0;
 }

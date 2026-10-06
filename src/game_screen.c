@@ -1219,3 +1219,91 @@ int32_t aoe_game_screen_action_ror(const AoeGameScreenActionOpsRor *o, void *fro
     }
     return o->base_action(o->context, from, code, a, b);
 }
+
+/* 0x0047f000 */
+static void gs_mode(const AoeGameScreenLayoutOpsRor *o, uint16_t off, int32_t a, int32_t b, int32_t c,
+                    int32_t d, int32_t e, int32_t f, int32_t g, int32_t h, int32_t i, uint16_t r0,
+                    uint16_t r1, uint16_t r2, uint16_t r3) {
+    AoeGameScreenModeRor m;
+    m.v[0] = a; m.v[1] = b; m.v[2] = c; m.v[3] = d; m.v[4] = e; m.v[5] = f; m.v[6] = g; m.v[7] = h;
+    m.v[8] = i;
+    m.refs[0] = r0; m.refs[1] = r1; m.refs[2] = r2; m.refs[3] = r3;
+    o->position_mode(o->context, off, &m);
+}
+int32_t aoe_game_screen_layout_ror(const AoeGameScreenLayoutOpsRor *o) {
+    static const uint16_t lines[6] = {0x544, 0x548, 0x54c, 0x550, 0x554, 0x558};
+    int32_t saved[8];
+    int i, k, small = 0;
+    int32_t W, half, vh, vh2, mapx, mapy, w580, y4c4, by, x4f8, x4fc, x500, y504;
+    o->base_resize(o->context);
+    if (!o->has_view) return 0;
+    o->set_active(o->context, 0x50c, 1);
+    for (i = 0; i < 6; ++i) o->set_active(o->context, lines[i], 1);
+    for (i = 0; i < 8; ++i) {
+        saved[i] = o->score_active(o->context, i);
+        if (saved[i] != -1) o->set_active(o->context, (uint16_t)(0x58c + 4 * i), 1);
+    }
+    if (o->width < 0x400 || o->height < 0x300) {
+        if (o->width < 800 || o->height < 600) {
+            small = 1; W = 640; half = 0xf0; vh = 0x14e; vh2 = 0x130; mapx = 0x19b; mapy = 0x16a;
+            w580 = 0x6a; y4c4 = 0x169; by = 0x16a; x4f8 = 0x184; x4fc = 0x1cc; x500 = 0x238; y504 = 0x1bc;
+        } else {
+            W = 800; half = 0x140; vh = 0x1c6; vh2 = 0x1a8; mapx = 0x23b; mapy = 0x1e0; w580 = 0x10c;
+            y4c4 = 0x1e1; by = 0x1e2; x4f8 = 0x224; x4fc = 0x26c; x500 = 0x2d8; y504 = 0x234;
+        }
+    } else {
+        W = 0x400; half = 0x1b0; vh = 0x26e; vh2 = 0x250; mapx = 0x31b; mapy = 0x288; w580 = 0x1ec;
+        y4c4 = 0x289; by = 0x28a; x4f8 = 0x304; x4fc = 0x34c; x500 = 0x3b8; y504 = 0x2dc;
+    }
+    gs_mode(o, 0x540, 7, half, 4, 4, 4, 0xa0, 0xa0, 0x14, 0x14, 0, 0, 0, 0);
+    if (!o->overlay_active) {
+        o->set_rect(o->context, 0x4b8, 0, 0x14, W, vh);
+    } else {
+        o->set_rect(o->context, 0x57c, 0, 0x14, W, 0x1e);
+        o->set_rect(o->context, 0x4b8, 0, 0x32, W, vh2);
+    }
+    o->set_rect(o->context, 0x4bc, mapx, mapy, 0xdc, 0x72);
+    o->set_rect(o->context, 0x580, 0x10e, 2, w580, 0x10);
+    o->set_rect(o->context, 0x588, 2, 2, 0x118, 0x10);
+    o->set_rect(o->context, 0x4c0, 0, 0, 0x10e, 0x14);
+    o->set_rect(o->context, 0x4c4, 5, y4c4, 0x7f, 0x72);
+    for (k = 0; k < 12; ++k) {
+        uint16_t off = (uint16_t)(0x4c8 + 4 * k);
+        o->set_rect(o->context, off, 0x88 + 0x36 * (k % 6), by + 0x3a * (k / 6), 0x36, 0x36);
+        o->button_style(o->context, off, 0);
+    }
+    if (small) {
+        o->set_rect(o->context, 0x4dc, 0x196, 0x16a, 0x66, 0x35);
+        o->button_style(o->context, 0x4dc, 2);
+        o->set_rect(o->context, 0x4f4, 0x196, 0x1bb, 0x66, 0x35);
+        o->button_style(o->context, 0x4f4, 2);
+    }
+    o->set_rect(o->context, 0x4f8, x4f8, 0, 0x48, 0x13);
+    o->set_rect(o->context, 0x4fc, x4fc, 0, 0x6c, 0x13);
+    o->set_rect(o->context, 0x500, x500, 0, 0x48, 0x13);
+    o->set_rect(o->context, 0x504, small ? 0x25d : W == 800 ? 0x2fd : 0x3dd, y504, 0x1e, 0x1e);
+    o->button_style(o->context, 0x504, 3);
+    o->set_rect(o->context, 0x508, small ? 0x25d : W == 800 ? 0x2fd : 0x3dd, by, 0x1e, 0x1e);
+    o->button_style(o->context, 0x508, 3);
+    o->button_pages(o->context, small, (int16_t)(small ? 0 : 0xb), (int16_t)(small ? 2 : 10));
+    gs_mode(o, 0x584, 2, 4, 4, 4, 4, 600, 600, 0x3c, 0x3c, 0, 0, 0, 0);
+    gs_mode(o, 0x514, 7, 4, 4, 4, 4, 0x78, 0x78, 0x14, 0x14, 0, 0, 0, 0);
+    for (i = 0; i < 10; ++i)
+        gs_mode(o, (uint16_t)(0x518 + 4 * i), 9, 4, 4 + 0x14 * i, 4, 4, 0xaa, 0xaa, 0x14, 0x14, 0, 0, 0, 0);
+    gs_mode(o, 0x50c, 8, 4, 0, o->world_11c ? 0xb8 : 4, 4, 0, 0, 0x22, 0x22, 0, 0, 0, 0);
+    gs_mode(o, 0x510, 7, (o->screen_width - 500) / 2, 8, (o->screen_width - 500) / 2, 8, 0, 0, 0x14,
+            0x14, 0, 0, 0, 0);
+    for (i = 0; i < 6; ++i)
+        gs_mode(o, lines[i], 8, 4, 0, 4, 0, 0, 0, 0x14, 0x14, 0, 0, 0, i == 0 ? 0x50c : lines[i - 1]);
+    for (i = 0; i < 8; ++i) o->set_rect(o->context, (uint16_t)(0x55c + 4 * i), 4, 0x22 + 0x14 * i, 0x26c, 0x14);
+    for (i = 7; i >= 0; --i)
+        if (saved[i] != -1)
+            gs_mode(o, (uint16_t)(0x58c + 4 * i), 10, 4, 0, 4, i == 7 ? 4 : 0, 200, 200, 0x14, 0x14, 0, 0, 0,
+                    (uint16_t)(i == 7 ? 0 : 0x590 + 4 * i));
+    o->set_active(o->context, 0x50c, 0);
+    for (i = 0; i < 6; ++i) o->set_active(o->context, lines[i], 0);
+    for (i = 0; i < 8; ++i)
+        if (saved[i] != -1) o->set_active(o->context, (uint16_t)(0x58c + 4 * i), saved[i]);
+    o->notify(o->context, o->viewed_player);
+    return 0;
+}

@@ -813,4 +813,61 @@ typedef struct {
 int32_t aoe_game_screen_action_ror(const AoeGameScreenActionOpsRor *o, void *from, int32_t code,
                                    int32_t a, int32_t b);
 
+
+/* ---- 0x0047f000: the game screen's layout (+0x50, the resize) ---- */
+typedef struct { int32_t v[9]; uint16_t refs[4]; } AoeGameScreenModeRor;
+typedef struct {
+    void *context;
+    int has_view;                /* +0x4b8 */
+    int32_t width, height;       /* +0x14, +0x18 */
+    int overlay_active;          /* +0x57c's +0x6c */
+    int32_t screen_width;        /* 0x00454240 */
+    int world_11c;               /* world +0x11c */
+    int16_t viewed_player;       /* 0x00419b70 +0x4a */
+    /* The score panel i (+0x58c + 4 i): -1 when absent, else its +0x6c. */
+    int32_t (*score_active)(void *context, int i);
+    void (*base_resize)(void *context);                      /* 0x004533f0 */
+    void (*set_active)(void *context, uint16_t offset, int32_t v);  /* +0x14 */
+    void (*position_mode)(void *context, uint16_t offset, const AoeGameScreenModeRor *m); /* +0x18 */
+    void (*set_rect)(void *context, uint16_t offset, int32_t x, int32_t y, int32_t w, int32_t h); /* +0x1c */
+    void (*button_style)(void *context, uint16_t offset, uint8_t style); /* button +0x2c0 */
+    /* +0x4ac = +0x480 (small) or +0x48c, +0x4b0 = 0 / 0xb, +0x4b2 = +0x4b4 = pages. */
+    void (*button_pages)(void *context, int small, int16_t base, int16_t pages);
+    void (*notify)(void *context, int16_t player);           /* 0x004816d0(p, p) */
+} AoeGameScreenLayoutOpsRor;
+
+/* 0x0047f000: the base resize; 0 without a view. The help text (+0x50c),
+   the six message lines (+0x544..+0x558) and the present score panels
+   (their +0x6c remembered) are shown while laying out. Below 800x600:
+   +0x540 mode 7 (0xf0, 4, 4, 4, 0xa0, 0xa0, 0x14, 0x14), the view at (0,
+   0x14, 640, 0x14e) or, with the overlay (+0x57c) active, the overlay at
+   (0, 0x14, 640, 0x1e) and the view at (0, 0x32, 640, 0x130); the map
+   (+0x4bc) (0x19b, 0x16a, 0xdc, 0x72), +0x580 (0x10e, 2, 0x6a, 0x10),
+   +0x588 (2, 2, 0x118, 0x10), +0x4c0 (0, 0, 0x10e, 0x14), +0x4c4 (5,
+   0x169, 0x7f, 0x72); the twelve buttons (+0x4c8..) 0x36 square from
+   (0x88, 0x16a) in two rows of six (step 0x36, 0x3a; style 0), then
+   +0x4dc (0x196, 0x16a, 0x66, 0x35) and +0x4f4 (0x196, 0x1bb) style 2,
+   +0x4f8 (0x184, 0, 0x48, 0x13), +0x4fc (0x1cc, 0, 0x6c, 0x13), +0x500
+   (0x238, 0, 0x48, 0x13), +0x504 (0x25d, 0x1bc, 0x1e, 0x1e) and +0x508
+   (0x25d, 0x16a) style 3; the small button set, base 0, 2 pages. Below
+   1024x768 the same with 800 wide (0x140; view height 0x1c6 / 0x1a8;
+   map at (0x23b, 0x1e0); +0x580 0x10c wide; +0x4c4 y 0x1e1; buttons from
+   y 0x1e2; +0x4f8 x 0x224, +0x4fc 0x26c, +0x500 0x2d8; +0x504 (0x2fd,
+   0x234), +0x508 (0x2fd, 0x1e2)), else 1024 (0x1b0; 0x26e / 0x250;
+   (0x31b, 0x288); 0x1ec; 0x289; 0x28a; 0x304, 0x34c, 0x3b8; (0x3dd,
+   0x2dc), (0x3dd, 0x28a)); both the large set, base 0xb, 10 pages.
+   Then +0x584 mode 2 (4, 4, 4, 4, 600, 600, 0x3c, 0x3c), +0x514 mode 7
+   (4, 4, 4, 4, 0x78, 0x78, 0x14, 0x14), the ten timers (+0x518..) mode 9
+   (4, 4 + 0x14 i, 4, 4, 0xaa, 0xaa, 0x14, 0x14), the help text mode 8
+   (4, 0, 4 or 0xb8 with the world's +0x11c, 4, 0, 0, 0x22, 0x22), +0x510
+   mode 7 ((W - 500) / 2, 8, (W - 500) / 2, 8, 0, 0, 0x14, 0x14) from the
+   screen width, the six lines mode 8 (4, 0, 4, 0, 0, 0, 0x14, 0x14) each
+   referring to the previous (+0x50c first), the eight chat lines
+   (+0x55c..) at (4, 0x22 + 0x14 i, 0x26c, 0x14), the score panels from
+   the eighth down mode 10 (4, 0, 4, 4 for the eighth else 0, 200, 200,
+   0x14, 0x14; the lower ones referring to the next). The help text and
+   lines are hidden again, the score panels restored, and the viewed
+   player notified. 0. */
+int32_t aoe_game_screen_layout_ror(const AoeGameScreenLayoutOpsRor *o);
+
 #endif

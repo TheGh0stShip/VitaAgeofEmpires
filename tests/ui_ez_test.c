@@ -418,6 +418,73 @@ static void build_tests(void) {
     eb_calls = 0; eb_fail_at = 0; eb_fail_kind = -2;
     { int k = 0; for (k = 0; k < n; ++k) if (st[k].kind == AOE_EB_TAIL) break; assert(k < n && st[k + 1].kind == AOE_EB_TEXT_ID && st[k + 1].offset == 0x898); }
 }
+
+static char ea_log[2048]; static int32_t ea_q[16]; static int32_t ea_area_v[4] = {10, 20, 30, 40}; static float ea_cx, ea_cy;
+static void ea_add(const char *fmt, ...) { va_list ap; size_t n = strlen(ea_log); va_start(ap, fmt); vsnprintf(ea_log + n, sizeof ea_log - n, fmt, ap); va_end(ap); }
+static void ea_step(void *c, int id, int32_t a, int32_t b, int32_t d) { (void)c; ea_add("s%d(%x,%d,%d) ", id, (unsigned)a, (int)b, (int)d); }
+static void ea_select(void *c, void *obj) { (void)c; ea_add("sel(%d) ", (int)(intptr_t)obj); }
+static int32_t ea_query(void *c, int id, int32_t a) { (void)c; ea_add("q%d(%x) ", id, (unsigned)a); return ea_q[id]; }
+static void ea_area(void *c, int32_t out[4]) { (void)c; memcpy(out, ea_area_v, sizeof ea_area_v); }
+static void ea_center(void *c, float x, float y) { (void)c; ea_cx = x; ea_cy = y; ea_add("center "); }
+static int ea_run(AoeEditorActionStateRor *st, uint16_t from, const char *name, int32_t code, int obj) {
+    AoeEditorActionOpsRor o = {NULL, ea_step, ea_select, ea_query, ea_area, ea_center};
+    ea_log[0] = '\0';
+    return aoe_scenario_editor_action_ror(st, from, name, code, (void *)(intptr_t)obj, &o);
+}
+static void action_tests(void) {
+    AoeEditorActionStateRor st; memset(&st, 0, sizeof st); st.player = 1;
+    /* No sender: nothing. A page button press stores page 2; other codes on it return 1 doing nothing. */
+    assert(ea_run(&st, 0, NULL, 1, 0) == 0 && ea_log[0] == '\0');
+    assert(ea_run(&st, 0x4dc, NULL, 1, 0) == 1 && strcmp(ea_log, "s3(2,0,0) ") == 0);
+    assert(ea_run(&st, 0x500, NULL, 5, 0) == 1 && ea_log[0] == '\0');
+    /* The main view's 0x10 with pick 2 stores object B and reselects; a seed input edit marks changed. */
+    st.pick = 2; st.object_a = (void *)(intptr_t)7;
+    assert(ea_run(&st, 0x4c8, NULL, 0x10, 9) == 1 && st.object_b == (void *)(intptr_t)9 && strcmp(ea_log, "s1(0,0,0) sel(7) sel(9) s2(0,0,0) ") == 0);
+    assert(!st.changed && ea_run(&st, 0x540, NULL, 0, 0) == 0 && st.changed && strncmp(ea_log, "sel(7) sel(9) ", 14) == 0);
+    st.object_a = st.object_b = NULL; st.changed = 0;
+    /* Dialogs: QuitSaveDialog code 1 with the main menu made removes the editor; OpenSaveDialog code 0 saves kind 2. */
+    ea_q[AOE_EQ_TO_MAIN_MENU] = 1;
+    assert(ea_run(&st, 0x1000, "QuitSaveDialog", 1, 0) == 1 && strcmp(ea_log, "s6(0,0,0) s7(2,0,0) q8(0) s7(0,0,0) ") == 0);
+    ea_q[AOE_EQ_TO_MAIN_MENU] = 0;
+    assert(ea_run(&st, 0x1000, "QuitSaveDialog", 1, 0) == 1 && strstr(ea_log, "s9(0,0,0) "));
+    assert(ea_run(&st, 0x1000, "OpenSaveDialog", 0, 0) == 1 && strcmp(ea_log, "s6(0,0,0) s7(3,0,0) s8(2,0,0) ") == 0);
+    assert(ea_run(&st, 0x1000, "OKDialog", 0, 0) == 1 && strcmp(ea_log, "s7(1,0,0) s3(3,0,0) ") == 0);
+    /* Map page: generate with size line 2 (120), type line 1, 3 players, seeded 123. */
+    st.page = 1; st.map_kind = 3; st.track = 1;
+    ea_q[AOE_EQ_LIST_LINE] = 2; ea_q[AOE_EQ_DROPDOWN] = 2; ea_q[AOE_EQ_SEED] = 55; ea_q[AOE_EQ_SEED_INPUT] = 123;
+    assert(ea_run(&st, 0x54c, NULL, 1, 0) == 1 && st.changed);
+    assert(strstr(ea_log, "s17(7b,0,0) s18(0,0,0) s19(78,2,3) s17(37,0,0) s20(0,0,0) s21(3c,0,0) s22(0,0,0) s23(0,0,0) s13(550,0,0) "));
+    st.map_kind = 1; ea_q[AOE_EQ_LIST_LINE] = 1;
+    assert(ea_run(&st, 0x54c, NULL, 1, 0) == 1 && strstr(ea_log, "s16(6,96,0) s21(30,0,0) "));
+    assert(ea_run(&st, 0x50c, NULL, 1, 0) == 1 && strcmp(ea_log, "s12(2,0,0) ") == 0);
+    /* Terrain page: brush 3; the terrain list line. */
+    st.page = 2; ea_q[AOE_EQ_LIST_SEL] = 4;
+    assert(ea_run(&st, 0x560, NULL, 1, 0) == 1 && strcmp(ea_log, "s26(3,0,0) ") == 0);
+    assert(ea_run(&st, 0x5a0, NULL, 2, 0) == 1 && strcmp(ea_log, "q3(5a0) s24(4,0,0) s13(558,1,0) ") == 0);
+    assert(ea_run(&st, 0x5a0, NULL, 0, 0) == 0);
+    /* Units page: list value 0 -> edit mode (mode, 3) and 0; a line pick in mode 8 skips the radio. */
+    st.page = 4; ea_q[AOE_EQ_DROPDOWN] = 0; ea_q[AOE_EQ_EDIT_MODE] = 8;
+    assert(ea_run(&st, 0x618, NULL, 0, 0) == 0 && strstr(ea_log, "s33(0,0,0) ") && strstr(ea_log, "s2(8,3,0) "));
+    assert(ea_run(&st, 0x63c, NULL, 1, 0) == 1 && strcmp(ea_log, "q3(63c) s36(4,0,0) q0(0) s34(0,0,0) s35(0,0,0) s14(660,1,0) ") == 0);
+    assert(ea_run(&st, 0x620, NULL, 1, 0) == 0 && strcmp(ea_log, "s1(0,0,0) s2(e,0,0) ") == 0);
+    /* Diplomacy: the player dropdown to player 3 swaps the hidden row and loads stances. */
+    st.page = 5; ea_q[AOE_EQ_DROPDOWN] = 2;
+    assert(ea_run(&st, 0x894, NULL, 1, 0) == 1 && st.player == 3 && strcmp(ea_log, "s13(8a8,1,0) s13(8ac,1,0) s13(8b0,1,0) s13(908,0,0) q2(894) s13(8c0,0,0) s13(8c4,0,0) s13(8c8,0,0) s13(910,1,0) q2(894) s38(2,0,0) s39(2,0,0) ") == 0);
+    /* Conditions: the area button with kind 2 centres the view on (20, 30). */
+    st.page = 6; ea_q[AOE_EQ_DROPDOWN] = 2;
+    assert(ea_run(&st, 0x758, NULL, 1, 0) == 1 && st.pick == 0 && ea_cx == 20.0f && ea_cy == 30.0f && st.area[3] == 40.0f);
+    assert(ea_run(&st, 0x750, NULL, 1, 0) == 1 && st.pick == 1 && strcmp(ea_log, "q2(734) s1(0,0,0) s2(10,0,0) s1(0,0,0) ") == 0);
+    assert(ea_run(&st, 0x708, NULL, 1, 0) == 0 && st.condition == 1 && strstr(ea_log, "s40(0,0,0) s41(0,0,0) s1(0,0,0) s44(1,0,0) s41(1,0,0) "));
+    /* Global victory: radio 2 sets the unit tool and custom conquest; radio 5 only the tool. */
+    st.page = 7;
+    assert(ea_run(&st, 0x6e4, NULL, 1, 0) == 1 && strcmp(ea_log, "s45(2,0,0) s46(0,0,0) ") == 0);
+    assert(ea_run(&st, 0x6f0, NULL, 1, 0) == 1 && strcmp(ea_log, "s45(5,0,0) ") == 0);
+    /* Messages: radio 3 stores the old message and shows message 2. */
+    st.page = 9; st.message = 0;
+    assert(ea_run(&st, 0x780, NULL, 1, 0) == 0 && st.message == 2 && strcmp(ea_log, "s49(0,0,0) s50(2,0,0) ") == 0);
+    st.page = 8; ea_q[AOE_EQ_CHECK] = 1;
+    assert(ea_run(&st, 0x7c8, NULL, 1, 0) == 0 && strcmp(ea_log, "s47(0,0,0) q6(7c8) s48(2,1,0) ") == 0);
+}
 int main(void) {
     AoeUiPlatformRor pf = {0};
     static AoeUiSystemRor sys;
@@ -1007,5 +1074,6 @@ int main(void) {
     dropdown_tests();
     editor_layout_tests();
     build_tests();
+    action_tests();
     return 0;
 }

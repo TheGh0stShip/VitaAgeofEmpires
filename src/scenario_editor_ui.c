@@ -977,3 +977,291 @@ int aoe_scenario_editor_build_ror(const AoeEditorBuildOpsRor *o) {
     }
     return 1;
 }
+
+/* ---- 0x00493580 ---- */
+const char *const aoe_scenario_editor_screen_names_ror[6] = {
+    "Scenario Editor Screen", "OKDialog", "QuitSaveDialog", "OpenSaveDialog", "NewSaveDialog",
+    "Scenario Editor Open"};
+
+#define STEP(id, a, b, c) o->step(o->context, (id), (int32_t)(a), (int32_t)(b), (int32_t)(c))
+#define Q(id, a) o->query(o->context, (id), (int32_t)(a))
+
+static int ea_in(uint16_t from, uint16_t first, int n) {
+    return from >= first && from < first + 4 * n && ((from - first) & 3) == 0;
+}
+static void ea_reselect(AoeEditorActionStateRor *st, const AoeEditorActionOpsRor *o) {
+    if (st->object_a) o->select(o->context, st->object_a);
+    if (st->object_b) o->select(o->context, st->object_b);
+}
+static void ea_object_panel(const AoeEditorActionOpsRor *o) {
+    STEP(AOE_EA_OBJECT_PANEL, 0, 0, 0);
+    STEP(AOE_EA_CANCEL, 0, 0, 0);
+}
+
+int aoe_scenario_editor_action_ror(AoeEditorActionStateRor *st, uint16_t from,
+                                   const char *from_name, int32_t code, void *object,
+                                   const AoeEditorActionOpsRor *o) {
+    int i;
+    if (!from) return 0;
+    if (from != 0x4c8) ea_reselect(st, o);
+    if (code == 0 && (from == 0x540 || ea_in(from, 0x5d8, 6) || ea_in(from, 0x6b8, 5) ||
+                      from == 0x76c || from == 0x774))
+        st->changed = 1;
+    if (from == 0x4c8 && code == 0x10) {
+        STEP(AOE_EA_CLEAR_SELECTION, 0, 0, 0);
+        if (st->pick == 1) st->object_a = object;
+        if (st->pick == 2) st->object_b = object;
+        ea_reselect(st, o);
+        STEP(AOE_EA_EDIT_MODE, 0, 0, 0);
+        return 1;
+    }
+    if (from == 0x4c8 && code == 0x11) {
+        if (Q(AOE_EQ_EDIT_MODE, 0) == 0x11) STEP(AOE_EA_EDIT_MODE, 0, 0, 0);
+    } else if (code == 1) {
+        if (ea_in(from, 0x4d8, 10)) { STEP(AOE_EA_STORE_PAGES, (from - 0x4d8) / 4 + 1, 0, 0); return 1; }
+        if (from == 0x500) { STEP(AOE_EA_MENU, 0, 0, 0); return 1; }
+        if (from == 0x504) { STEP(AOE_EA_HELP, 0, 0, 0); return 1; }
+    } else if (ea_in(from, 0x4d8, 10) || from == 0x500 || from == 0x504) {
+        return 1;
+    }
+    if (from_name) {
+        const char *const *n = aoe_scenario_editor_screen_names_ror;
+        if (strcmp(from_name, n[AOE_EA_NAME_OK]) == 0) {
+            if (code != 0) return 1;
+            STEP(AOE_EA_REMOVE_SCREEN, AOE_EA_NAME_OK, 0, 0);
+            STEP(AOE_EA_STORE_PAGES, 3, 0, 0);
+            return 1;
+        }
+        for (i = AOE_EA_NAME_QUIT_SAVE; i <= AOE_EA_NAME_NEW_SAVE; ++i) {
+            if (strcmp(from_name, n[i]) != 0) continue;
+            STEP(AOE_EA_SHOW_SCREEN, AOE_EA_NAME_EDITOR, 0, 0);
+            STEP(AOE_EA_REMOVE_SCREEN, i, 0, 0);
+            if (code == 0) STEP(AOE_EA_SAVE, i - AOE_EA_NAME_QUIT_SAVE + 1, 0, 0);
+            else if (code == 1) {
+                if (i == AOE_EA_NAME_QUIT_SAVE) {
+                    if (Q(AOE_EQ_TO_MAIN_MENU, 0)) STEP(AOE_EA_REMOVE_SCREEN, AOE_EA_NAME_EDITOR, 0, 0);
+                    else STEP(AOE_EA_CLOSE_WINDOW, 0, 0, 0);
+                } else if (i == AOE_EA_NAME_OPEN_SAVE) STEP(AOE_EA_OPEN_SCREEN, 0, 0, 0);
+                else STEP(AOE_EA_NEW_SCENARIO, 0, 0, 0);
+            }
+            return 1;
+        }
+    }
+    if (st->track) st->changed = 1;
+    switch (st->page) {
+    case 1:
+        if (code != 1) break;
+        if (ea_in(from, 0x508, 3)) { STEP(AOE_EA_MAP_TOOL, (from - 0x508) / 4 + 1, 0, 0); return 1; }
+        if (from == 0x54c) {
+            static const int32_t sizes[6] = {0x48, 0x60, 0x78, 0x90, 200, 0xfa};
+            int32_t size_line, type_line, size, players, half;
+            STEP(AOE_EA_SET_ACTIVE, 0x550, 1, 0);
+            STEP(AOE_EA_REDRAW, 0, 2, 0);
+            STEP(AOE_EA_INVALIDATE, 0, 0, 0);
+            size_line = Q(AOE_EQ_LIST_LINE, 0x530);
+            type_line = Q(AOE_EQ_LIST_LINE, 0x538);
+            size = (uint32_t)size_line < 6 ? sizes[size_line] : type_line;
+            players = Q(AOE_EQ_DROPDOWN, 0x5b8) + 1;
+            if (st->map_kind == 1) {
+                static const int32_t terrains[4] = {0, 6, 1, 0x16};
+                int32_t t = Q(AOE_EQ_LIST_LINE, 0x528);
+                if ((uint32_t)t < 4) STEP(AOE_EA_BLANK_MAP, terrains[t], size, 0);
+            } else {
+                int32_t old = Q(AOE_EQ_SEED, 0);
+                STEP(AOE_EA_SET_SEED, st->map_kind == 3 ? Q(AOE_EQ_SEED_INPUT, 0x540) : -1, 0, 0);
+                STEP(AOE_EA_RESET_SELECTIONS, 0, 0, 0);
+                STEP(AOE_EA_RANDOM_MAP, size, type_line, players);
+                STEP(AOE_EA_SET_SEED, old, 0, 0);
+                STEP(AOE_EA_SEED_TEXT, 0, 0, 0);
+            }
+            half = size / 2;
+            STEP(AOE_EA_PLAYER_VIEWS, half, 0, 0);
+            STEP(AOE_EA_REFRESH_VIEWS, 0, 0, 0);
+            STEP(AOE_EA_ATTACH_VIEW, 0, 0, 0);
+            STEP(AOE_EA_SET_ACTIVE, 0x550, 0, 0);
+            return 1;
+        }
+        break;
+    case 2:
+        if (code != 2 && code != 1) return 0;
+        if (from == 0x5a0) {
+            STEP(AOE_EA_TERRAIN_LINE, Q(AOE_EQ_LIST_SEL, 0x5a0), 0, 0);
+            STEP(AOE_EA_SET_ACTIVE, 0x558, 1, 0);
+            return 1;
+        }
+        if (from == 0x5a8) { STEP(AOE_EA_ELEVATION_LINE, Q(AOE_EQ_LIST_SEL, 0x5a8), 0, 0); return 1; }
+        if (code != 1) return 0;
+        if (st->track) st->changed = 1;
+        if (ea_in(from, 0x558, 5)) { STEP(AOE_EA_BRUSH, (from - 0x558) / 4 + 1, 0, 0); return 1; }
+        if (ea_in(from, 0x584, 3)) { STEP(AOE_EA_TERRAIN_TOOL, (from - 0x584) / 4 + 1, 0, 0); return 1; }
+        return 0;
+    case 3:
+        if (code == 0) {
+            if (ea_in(from, 0x5d8, 5)) STEP(AOE_EA_FOCUS_TOOLS, 0, 0, 0);
+            if (from == 0x5bc) STEP(AOE_EA_STARTING_AGE, st->player - 1, Q(AOE_EQ_LIST_LINE, 0x5bc), 0);
+            if (from == 0x5b4) {
+                STEP(AOE_EA_PLAYER_VALUES, Q(AOE_EQ_DROPDOWN, 0x5b4) + 1, 1, 1);
+                STEP(AOE_EA_SELECT_VALUE, 0x5bc, Q(AOE_EQ_STARTING_AGE, Q(AOE_EQ_DROPDOWN, 0x5b4)), 0);
+            }
+            if (from == 0x5b8) {
+                STEP(AOE_EA_PLAYER_VALUES, st->player, 1, 0);
+                STEP(AOE_EA_PLAYER_COUNT, 0, 0, 0);
+                STEP(AOE_EA_PLAYER_VALUES, st->player, 0, 1);
+                return 0;
+            }
+        } else if (code == 1 && from == 0x5bc) {
+            STEP(AOE_EA_STARTING_AGE, st->player - 1, Q(AOE_EQ_LIST_LINE, 0x5bc), 0);
+            return 0;
+        }
+        break;
+    case 4:
+        if (code == 0) {
+            int32_t v;
+            if (from != 0x618) return 0;
+            STEP(AOE_EA_UNIT_LIST, Q(AOE_EQ_DROPDOWN, 0x618), 0, 0);
+            v = Q(AOE_EQ_DROPDOWN, 0x618);
+            if (v == 0) { STEP(AOE_EA_EDIT_MODE, Q(AOE_EQ_EDIT_MODE, 0), 3, 0); return 0; }
+            STEP(AOE_EA_EDIT_MODE, Q(AOE_EQ_EDIT_MODE, 0), 4, 0);
+            ea_object_panel(o);
+            STEP(AOE_EA_REDRAW, 0x660, 2, 0);
+            return 1;
+        }
+        if (code != 2 && code != 1) return 0;
+        if (from == 0x63c) {
+            int32_t mode;
+            STEP(AOE_EA_UNIT_LINE, Q(AOE_EQ_LIST_SEL, 0x63c), 0, 0);
+            mode = Q(AOE_EQ_EDIT_MODE, 0);
+            if (mode != 8 && mode != 0x15) STEP(AOE_EA_RADIO_SELECT, 0x61c, 0, 0);
+            ea_object_panel(o);
+            STEP(AOE_EA_REDRAW, 0x660, 1, 0);
+            return 1;
+        }
+        if (code != 1) return 0;
+        if (from == 0x61c) STEP(AOE_EA_CANCEL, 0, 0, 0);
+        else if (from == 0x620) { STEP(AOE_EA_CLEAR_SELECTION, 0, 0, 0); STEP(AOE_EA_EDIT_MODE, 0xe, 0, 0); }
+        else if (from == 0x624) STEP(AOE_EA_EDIT_MODE, 0xf, 0, 0);
+        else if (from == 0x628) STEP(AOE_EA_EDIT_MODE, 0x14, 0, 0);
+        return 0;
+    case 5:
+        if (code == 0 || code == 1) {
+            if (from == 0x894) {
+                int32_t p = st->player;
+                STEP(AOE_EA_SET_ACTIVE, 0x8a8 + 12 * (p - 1), 1, 0);
+                STEP(AOE_EA_SET_ACTIVE, 0x8ac + 12 * (p - 1), 1, 0);
+                STEP(AOE_EA_SET_ACTIVE, 0x8b0 + 12 * (p - 1), 1, 0);
+                STEP(AOE_EA_SET_ACTIVE, 0x908 + 4 * (p - 1), 0, 0);
+                p = Q(AOE_EQ_DROPDOWN, 0x894) + 1;
+                st->player = (int16_t)p;
+                STEP(AOE_EA_SET_ACTIVE, 0x8a8 + 12 * (p - 1), 0, 0);
+                STEP(AOE_EA_SET_ACTIVE, 0x8ac + 12 * (p - 1), 0, 0);
+                STEP(AOE_EA_SET_ACTIVE, 0x8b0 + 12 * (p - 1), 0, 0);
+                STEP(AOE_EA_SET_ACTIVE, 0x908 + 4 * (p - 1), 1, 0);
+                STEP(AOE_EA_LOAD_STANCES, Q(AOE_EQ_DROPDOWN, 0x894), 0, 0);
+            }
+            if (code == 1) { STEP(AOE_EA_STORE_STANCES, st->player - 1, 0, 0); return 1; }
+        }
+        break;
+    case 6: {
+        int32_t kind;
+        if ((code == 0 || code == 1) && from == 0x73c) {
+            STEP(AOE_EA_STORE_CONDITION, st->condition, 0, 0);
+            STEP(AOE_EA_PLAYER_PAGE, 0, 0, 0);
+            STEP(AOE_EA_CONDITION_PAGE, 0, 0, 0);
+            st->player = (int16_t)(Q(AOE_EQ_DROPDOWN, 0x73c) + 1);
+            STEP(AOE_EA_SELECT_PLAYER, st->player - 1, 0, 0);
+            st->condition = 0;
+            STEP(AOE_EA_CONDITION_LINE, 0, 0, 0);
+            STEP(AOE_EA_PLAYER_PAGE, 1, 0, 0);
+            STEP(AOE_EA_CONDITION_PAGE, Q(AOE_EQ_DROPDOWN, 0x734), 1, 0);
+        }
+        if (code == 0) {
+            if (from == 0x76c) STEP(AOE_EA_FOCUS_TOOLS, 0, 0, 0);
+            return 0;
+        }
+        if (code == 2) {
+            if (from == 0x734) STEP(AOE_EA_CONDITION_PAGE, Q(AOE_EQ_DROPDOWN, 0x734), 1, 0);
+            return 0;
+        }
+        if (code != 1) return 0;
+        if (from == 0x76c) return 1;
+        kind = Q(AOE_EQ_DROPDOWN, 0x734);
+        if (from == 0x734) {
+            STEP(AOE_EA_EDIT_MODE, 0, 0, 0);
+            st->object_a = st->object_b = NULL;
+            STEP(AOE_EA_CLEAR_SELECTION, 0, 0, 0);
+        }
+        if (kind == 2) { st->object_b = NULL; STEP(AOE_EA_CLEAR_SELECTION, 0, 0, 0); }
+        if (from == 0x750) {
+            st->pick = 1;
+            STEP(AOE_EA_EDIT_MODE, 0x10, 0, 0);
+            STEP(AOE_EA_CLEAR_SELECTION, 0, 0, 0);
+            if (st->object_b) o->select(o->context, st->object_b);
+            return 1;
+        }
+        if (from == 0x754) {
+            if (kind != 1) {
+                st->pick = 3;
+                STEP(AOE_EA_CLEAR_SELECTION, 0, 0, 0);
+                if (st->object_a) o->select(o->context, st->object_a);
+                STEP(AOE_EA_EDIT_MODE, 0x11, 0, 0);
+                return 1;
+            }
+            st->pick = 2;
+            STEP(AOE_EA_EDIT_MODE, 0x10, 0, 0);
+            STEP(AOE_EA_CLEAR_SELECTION, 0, 0, 0);
+            if (st->object_a) o->select(o->context, st->object_a);
+            return 1;
+        }
+        if (from == 0x758 && kind != 1) {
+            int32_t a[4];
+            float x1, y1, x2, y2;
+            o->area(o->context, a);
+            st->pick = 0;
+            x1 = st->area[0] = (float)a[0];
+            y1 = st->area[1] = (float)a[1];
+            x2 = st->area[2] = (float)a[2];
+            y2 = st->area[3] = (float)a[3];
+            if (x2 != -1.0f)
+                o->center_view(o->context, x2 - (x2 - x1) * 0.5f, y2 - (y2 - y1) * 0.5f);
+            return 1;
+        }
+        if (from == 0x734) STEP(AOE_EA_CONDITION_PAGE, kind, 0, 0);
+        for (i = 0; i < 12; ++i) {
+            if (from != 0x704 + 4 * i || st->condition == i) continue;
+            STEP(AOE_EA_CONDITION_PAGE, Q(AOE_EQ_DROPDOWN, 0x734), 0, 0);
+            STEP(AOE_EA_STORE_CONDITION, st->condition, 0, 0);
+            STEP(AOE_EA_PLAYER_PAGE, 0, 0, 0);
+            STEP(AOE_EA_CLEAR_SELECTION, 0, 0, 0);
+            st->condition = i;
+            STEP(AOE_EA_CONDITION_LINE, i, 0, 0);
+            STEP(AOE_EA_PLAYER_PAGE, 1, 0, 0);
+            STEP(AOE_EA_CONDITION_PAGE, Q(AOE_EQ_DROPDOWN, 0x734), 1, 0);
+            ea_reselect(st, o);
+        }
+        return 0;
+    }
+    case 7:
+        if (code != 1) break;
+        if (!ea_in(from, 0x6e0, 5)) return 0;
+        i = (from - 0x6e0) / 4;
+        STEP(AOE_EA_UNIT_TOOL, i + 1, 0, 0);
+        if (i == 4) return 1;
+        STEP(AOE_EA_CUSTOM_CONQUEST, 0, 0, 0);
+        return 1;
+    case 8:
+        if (code != 1) break;
+        STEP(AOE_EA_STORE_TECHS, 0, 0, 0);
+        if (from == 0x7c8) STEP(AOE_EA_OPTION, 2, Q(AOE_EQ_CHECK, 0x7c8), 0);
+        break;
+    case 9:
+        if (code != 1) break;
+        STEP(AOE_EA_STORE_MESSAGE, st->message, 0, 0);
+        for (i = 0; i < 5; ++i)
+            if (from == 0x778 + 4 * i) { st->message = i; break; }
+        STEP(AOE_EA_SHOW_MESSAGE, st->message, 0, 0);
+        break;
+    default:
+        break;
+    }
+    return 0;
+}

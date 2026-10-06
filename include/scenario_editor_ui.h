@@ -466,4 +466,119 @@ const AoeEditorBuildStepRor *aoe_scenario_editor_build_steps_ror(int *count);
    every control was made. */
 int aoe_scenario_editor_build_ror(const AoeEditorBuildOpsRor *o);
 
+
+/* ---- 0x00493580: the editor screen's action handler (vtable +0xb8) ---- */
+/* Screen names the handler shows, removes or recognises as the sender. */
+enum { AOE_EA_NAME_EDITOR, AOE_EA_NAME_OK, AOE_EA_NAME_QUIT_SAVE, AOE_EA_NAME_OPEN_SAVE,
+       AOE_EA_NAME_NEW_SAVE, AOE_EA_NAME_OPEN };
+extern const char *const aoe_scenario_editor_screen_names_ror[6];
+enum { /* AoeEditorActionOpsRor.step ids (a, b, c as noted) */
+    AOE_EA_SELECT,          /* 0x0045dc10(object, 0) on the viewed player (0x00419b70) */
+    AOE_EA_CLEAR_SELECTION, /* 0x0045dcb0 on the viewed player */
+    AOE_EA_EDIT_MODE,       /* game vtable +0x10(a, b) */
+    AOE_EA_STORE_PAGES,     /* 0x00491650(a) */
+    AOE_EA_MENU,            /* 0x00494a90 */
+    AOE_EA_HELP,            /* 0x00457cd0 */
+    AOE_EA_SHOW_SCREEN,     /* 0x00451be0(name a, 0) */
+    AOE_EA_REMOVE_SCREEN,   /* 0x00451df0(name a) */
+    AOE_EA_SAVE,            /* 0x00494eb0(0, a) */
+    AOE_EA_CLOSE_WINDOW,    /* 0x00419930 (the main menu 0x00500c60 failed) */
+    AOE_EA_OPEN_SCREEN,     /* a new "Scenario Editor Open" screen (0x0049aaa0), then shown */
+    AOE_EA_NEW_SCENARIO,    /* 0x00504e50(0, 0) */
+    AOE_EA_MAP_TOOL,        /* 0x00492110(a, 1) */
+    AOE_EA_SET_ACTIVE,      /* control a's vtable +0x14(b) */
+    AOE_EA_REDRAW,          /* vtable +0x20(b) of the screen (a 0) or of control a */
+    AOE_EA_INVALIDATE,      /* InvalidateRect(game window +0x10, 0, 0) then 0x00419ba0 */
+    AOE_EA_BLANK_MAP,       /* 0x00444580(players[0], world, terrain a, b x b) on the world's map */
+    AOE_EA_SET_SEED,        /* game +0x2c = a */
+    AOE_EA_RESET_SELECTIONS,/* 0x0045db40 on players 0..8 */
+    AOE_EA_RANDOM_MAP,      /* the map's vtable +0x28(world, a x a, type b, players c) */
+    AOE_EA_SEED_TEXT,       /* text +0x548 = game +0x34 in decimal (0x53125c, vtable +0xec) */
+    AOE_EA_PLAYER_VIEWS,    /* players 0..7: 0x0045d310(a, a) and 0x0045d330((float) a, (float) a) */
+    AOE_EA_REFRESH_VIEWS,   /* players 0..7: 0x0045eb40 on +0x58, then 0x0045e940 */
+    AOE_EA_ATTACH_VIEW,     /* 0x004901b0 */
+    AOE_EA_TERRAIN_LINE,    /* 0x004926b0(a) */
+    AOE_EA_ELEVATION_LINE,  /* 0x00492750(a) */
+    AOE_EA_BRUSH,           /* 0x004923f0(a) */
+    AOE_EA_TERRAIN_TOOL,    /* 0x004924c0(a, 1) */
+    AOE_EA_FOCUS_TOOLS,     /* 0x00453eb0(0) on the tools panel +0x4d4 */
+    AOE_EA_STARTING_AGE,    /* 0x005073c0(slot a, age b) on the scenario (world +0x5c) */
+    AOE_EA_PLAYER_VALUES,   /* 0x00492780(a, b, c) */
+    AOE_EA_SELECT_VALUE,    /* 0x00461c70(b) on dropdown a */
+    AOE_EA_PLAYER_COUNT,    /* 0x0049a350 */
+    AOE_EA_UNIT_LIST,       /* 0x00492c60(a) */
+    AOE_EA_OBJECT_PANEL,    /* 0x004a4320(template, player) on +0x660: game +0x3fc's template of
+                               the viewed player (world +0x40[player +0x4a] +0x24[id]), (0, 0)
+                               when it is -1 or there is no viewed player */
+    AOE_EA_CANCEL,          /* 0x004920b0 */
+    AOE_EA_UNIT_LINE,       /* 0x00492fc0(a) */
+    AOE_EA_RADIO_SELECT,    /* 0x0045f280 on control a */
+    AOE_EA_LOAD_STANCES,    /* 0x004964c0(a) */
+    AOE_EA_STORE_STANCES,   /* 0x00496420(a) */
+    AOE_EA_STORE_CONDITION, /* 0x004957e0(a) */
+    AOE_EA_PLAYER_PAGE,     /* 0x0049a0e0(a) */
+    AOE_EA_CONDITION_PAGE,  /* 0x00496560(a, b) */
+    AOE_EA_SELECT_PLAYER,   /* 0x00506f10(a) on the scenario */
+    AOE_EA_CONDITION_LINE,  /* 0x00495d90(a) */
+    AOE_EA_UNIT_TOOL,       /* 0x00492260(a, 1) */
+    AOE_EA_CUSTOM_CONQUEST, /* 0x005070c0(1) on the scenario, check +0x668 vtable +0xe4(1) */
+    AOE_EA_STORE_TECHS,     /* 0x004953f0 then 0x00495470 */
+    AOE_EA_OPTION,          /* 0x005073a0(a, b) on the scenario */
+    AOE_EA_STORE_MESSAGE,   /* 0x00476b40(a, input +0x774's text 0x00462560) on the scenario */
+    AOE_EA_SHOW_MESSAGE,    /* input +0x774 = 0x00476c70(a) (0x004623e0); 0x004542c0(0x7770 + a, -1) */
+    AOE_EA_STEP_COUNT
+};
+enum { /* AoeEditorActionOpsRor.query ids */
+    AOE_EQ_EDIT_MODE,  /* game +0x1b4 */
+    AOE_EQ_LIST_LINE,  /* 0x00461c50 on list a */
+    AOE_EQ_DROPDOWN,   /* 0x00461e50 on dropdown a */
+    AOE_EQ_LIST_SEL,   /* 0x0046a0d0 on list a */
+    AOE_EQ_SEED_INPUT, /* atoi of input +0x540's text (0x00462560) */
+    AOE_EQ_SEED,       /* game +0x2c */
+    AOE_EQ_CHECK,      /* 0x0045f400 on check box a */
+    AOE_EQ_STARTING_AGE,/* 0x005076b0(a) on the scenario */
+    AOE_EQ_TO_MAIN_MENU /* 0x00500c60: 0 when the main menu could not be made */
+};
+typedef struct {
+    int32_t page;            /* +0x4a4: 1 map, 2 terrain, 3 players, 4 units, 5 diplomacy,
+                                6 individual victory, 7 global victory, 8 options, 9 messages */
+    int32_t pick;            /* +0x4a0: 0 none, 1 / 2 the condition's object A / B, 3 an area */
+    int32_t map_kind;        /* +0x4a8: 1 blank, 3 seeded */
+    int32_t condition;       /* +0x498 */
+    int16_t player;          /* +0x4b8, 1-based */
+    uint8_t changed, track;  /* +0x4c0, +0x4c1 */
+    void *object_a, *object_b; /* +0x480, +0x484 */
+    float area[4];           /* +0x488..+0x494 */
+    int32_t message;         /* +0x7a0 */
+} AoeEditorActionStateRor;
+typedef struct {
+    void *context;
+    void (*step)(void *context, int id, int32_t a, int32_t b, int32_t c);
+    void (*select)(void *context, void *object);          /* AOE_EA_SELECT's object */
+    int32_t (*query)(void *context, int id, int32_t a);
+    /* 0x00510070(x1, y1, x2, y2, 1) on the main view +0x4c8. */
+    void (*area)(void *context, int32_t out[4]);
+    /* The viewed player's 0x0045d330(x, y) then 0x0045d310((int) x, (int) y). */
+    void (*center_view)(void *context, float x, float y);
+} AoeEditorActionOpsRor;
+/* 0x00493580(from, code, value). `from` is the sender's offset in the
+   screen (0 none, 0x4c8 the main view), `from_name` its 0x00454170 name
+   (NULL unknown) and `object` the value for code 0x10. Any sender but the
+   main view re-selects objects A and B. Code 0 from the seed input,
+   the player resources, the global goal inputs, the condition amount or
+   the message marks the scenario changed. The main view: 0x10 clears
+   the selection, stores the object as A / B (pick 1 / 2), re-selects
+   both, edit mode (0, 0), 1; 0x11 leaves edit mode 0x11. Code 1 on a
+   page button i stores page i + 1, on +0x500 opens the menu, on +0x504
+   the help (1); other codes on those return 1. Dialogs by name:
+   "OKDialog" (code 0: removed, page 3; else 1), "QuitSaveDialog" (the
+   editor shown, the dialog removed; 0 saves kind 1; 1 goes to the main
+   menu, closing the window when that fails), "OpenSaveDialog" (0 saves
+   kind 2; 1 opens the open screen), "NewSaveDialog" (0 saves kind 3; 1
+   a new scenario). Then by page, each marking changed when tracking; see
+   the step ids. Returns 1 / 0 as the original. */
+int aoe_scenario_editor_action_ror(AoeEditorActionStateRor *st, uint16_t from,
+                                   const char *from_name, int32_t code, void *object,
+                                   const AoeEditorActionOpsRor *o);
+
 #endif

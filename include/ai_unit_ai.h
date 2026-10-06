@@ -753,4 +753,99 @@ int32_t aoe_ai_play_trigger_ror(const AoeAiPlayOpsRor *o, uint8_t step, int32_t 
    answers 1 ends the update; else the step re-fires with flag 1. */
 void aoe_ai_play_update_ror(const AoeAiPlayOpsRor *o);
 
+
+/* ---- 0x00413890: the unit AI's notification handler (base vtable +0xcc) ---- */
+
+/* What the handler reads of a world object (0x00414f40 by ID). */
+typedef struct {
+    int16_t owner, unit_class, template_id;
+    float hp;
+} AoeAiMsgObjectRor;
+
+typedef struct {
+    void *context;
+    /* The AI's own fields. */
+    int32_t *action, *field_2c, *order, *target, *target_type, *last_action, *last_target_type;
+    float *target_x, *target_y, *target_z, *range;   /* +0x3c..+0x48 */
+    int32_t *field_10;
+    int32_t owner_kind;                              /* 0x00454150 */
+    int16_t own_owner;                               /* unit +0xc -> +0x4a */
+    int32_t unit_id, leader_id;                      /* unit +0x4, +0x78 */
+    int (*resolve)(void *context, int32_t id, AoeAiMsgObjectRor *out);
+    int (*is_member)(void *context, int32_t id);
+    void (*add_member)(void *context, int32_t id);
+    void (*remove_member)(void *context, int32_t id);
+    int32_t group_count;
+    void (*notify_base)(void *context, const int32_t *msg);           /* +0x1c */
+    void (*tell_owner)(void *context, int32_t code, int32_t id);     /* owner +0xe8(unit, unit, code, id, 0, 0) */
+    void (*run_notes)(void *context, int32_t elapsed);               /* 0x00414eb0 */
+    void (*rally)(void *context, int32_t id);                        /* 0x004131c0 */
+    void (*unit_ec)(void *context, int32_t v);
+    int32_t (*self_a4)(void *context, int32_t v);                    /* +0xa4 */
+    int (*attackable)(void *context, int32_t id);                    /* +0x50 */
+    int (*in_range)(void *context, int32_t id);                      /* unit +0xe4 */
+    int (*can_reach)(void *context, int32_t id);                     /* unit +0x194(id, +0x10c(0, 0, -1, -1)) */
+    int32_t (*engage)(void *context, int32_t id);                    /* +0x5c(id, 1) */
+    int (*has_hp)(void *context, int32_t id);                        /* its +0x108 != 0 */
+    float (*damage_from_us)(void *context, int32_t id);              /* unit +0x104(object) */
+    float (*damage_to_us)(void *context, int32_t id);                /* object +0x104(unit) */
+    int32_t (*query_d4)(void *context, int32_t arg);
+    int (*move_to)(void *context, float x, float y, float z, float range, int32_t flag); /* +0x90 */
+    void (*clear_target)(void *context);                             /* 0x00412ed0 */
+    void (*stop)(void *context, int32_t force);                      /* +0x58 */
+    void (*set_order)(void *context, int32_t code);                  /* 0x0040f6d0 */
+    void (*unit_18c)(void *context);
+    uint8_t (*fog_state)(void *context, int32_t tx, int32_t ty);     /* 0x00412fd0 on owner +0x38 */
+    int32_t (*nearest)(void *context);                               /* +0x30(1, 0, 0) */
+    int32_t (*field_c0)(void *context, int32_t id);
+    int32_t (*field_40)(void *context, int32_t id);                  /* +0x40(id, -1, -1, -1, 0) */
+    int32_t (*field_44)(void *context, int32_t k);                   /* +0x44(k, 0) */
+    int32_t (*field_68)(void *context, int32_t r);                   /* +0x68(r, 1) */
+    int (*find_point)(void *context, float *x, float *y);            /* +0x48(&x, &y, 1) == 1 */
+    void (*mark_point)(void *context, float x, float y);             /* 0x00411c60 */
+    int (*step_80)(void *context, float x, float y);                 /* +0x80(x, y, 1) */
+    void (*leader_notify)(void *context);                            /* 0x4ac0a0(unit id) when +0x78 resolves */
+} AoeAiUnitAiMsgOpsRor;
+
+/* 0x00413890 (msg, elapsed): msg[0] the sender, msg[2] the code, msg[3]
+   an action code, msg[4] a value. Codes 500 / 0x20f (attacked): the
+   base told; a value of 0 or less tells the owner 0x209 and runs the
+   notes (4). With no group or a human owner the owner hears 0x201. An
+   attacker not in the group rallies (computer owners, not the target)
+   and joins it; the unit's +0xec(1). An action other than 0x2d5 / -1
+   under a computer owner, or 0x2d5, keeps it (2); so does a missing
+   attacker or one of our own owner. Order 0x25b with +0xa4(1) == 1 gives
+   3. Without a target: an attackable attacker in range or reachable is
+   engaged (an engage other than 1, or action 700, stops there; else
+   the action clears); order 0x262 keeps; else +0xa4(1); 3. Against a
+   building target (class 3 / 0x1b, templates 0x4f, 199 and 0x45
+   excepted, computer owner): the attacker engaged when attackable and
+   in range or reachable, else +0xa4(1); 3. Otherwise humans only (2
+   for computers and a 0x114 target): with no damage done to the target
+   (its +0x108 set, our +0x104 0) an attackable attacker in range or
+   reachable is engaged; then by time to kill us (hit points over the
+   damage dealt to us, 25000 when none) the attacker replaces the target
+   when attackable, slower to kill us than the target, and in range or
+   reachable; 2. Codes 0x1f9 / 0x1fa / 0x1fb (action end): action 700
+   with msg[3] 600 asks +0xd4(0) for 5 (else 2) and, for a non-0x2d5
+   action under a human owner, moves to the target point at range + 2.0
+   (success retires the action; 0x1f9 / 0x1fb failures clear the target
+   and stop (1), 0x1fa stops with 0); otherwise an action matching the
+   order (-1 and order == msg[3], or order + 100) clears and stops (0x1fa
+   with 1 and no base call); 0x2d4 with msg[3] 0x262 clears and stops with
+   0; 0x2bd with 0x262 sets order -1; 0x2d5 with 600 clears and stops
+   (1). 0x1fc: a target in the fog state 0xf or of owner 0 keeps (2); a
+   nearer enemy (+0x30(1, 0, 0)) other than the target engaged clears
+   the action (3); a computer owner moving to the target point (range
+   0) retires the action (3); else the default. 0x1fe: unit +0x18c, clear,
+   stop (1). 0x202: order 0x261 finds its object (+0x38, or +0x5c when
+   -1) through +0xc0 / +0x40 / +0x44 and +0x68 (3), else clears, stops
+   and tells the base (2); orders 0x25d / 0x26f find a point (+0x48),
+   mark it (0x00411c60) and step (+0x80; failure clears and stops) (3).
+   0x20b: +0x18c, clear, stop (1), notes, +0x10 cleared, the leader
+   notified when +0x78 resolves. 600 adds the sender to the group
+   (+0xec(1)); 699 removes it. The default clears, stops (1) and tells
+   the base. 2 unless said otherwise. */
+int32_t aoe_ai_unit_ai_message_ror(const AoeAiUnitAiMsgOpsRor *o, const int32_t *msg, int32_t elapsed);
+
 #endif

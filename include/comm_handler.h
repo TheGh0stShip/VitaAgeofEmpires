@@ -308,6 +308,39 @@ int aoe_comm_rx_deliver_ror(AoeCommRor *c);
    again (0x00420780). */
 void aoe_comm_compact_players_ror(AoeCommRor *c);
 
+
+/* 0x00421fb0: the stored-message resend. Nothing (0, "!RGEGTD
+   SendStore" logged) without guaranteed delivery. The first call starts
+   the rate window (0x00580ea4 bit 0, 0x00580e70); while the bytes sent
+   in the window (0x005817d4) per elapsed ms exceed 2.0 nothing is sent.
+   Else the window restarts, the acknowledged messages are purged
+   (0x00421ec0) and the oldest live message (serial != 0) is picked; none
+   gives 0. It must be at least 2000 ms old before turn 7, else with
+   +0x12a8 clear at least max(0x005817c4 + 2 * the game info's +0x20c,
+   0x005817c0 + 500), else 250 ms. Its time is renewed and, for every
+   slot 1..count with an ack pending, playing (0x00423da0), with an ID
+   and not ours: the pending count drops; without our ID (0x005817bc)
+   0 is returned; the message is sent again (a failure reported "RESEND
+   Transmit", success counting +0x132c and the bytes into +0x12c0 and
+   the window); a count now at 0 reports a missing player: a client logs
+   "TX Missing Player report for player=%d" and sends the 8-byte '?'
+   message (0x0041f6e0), the host logs "HOST Rcvd MAX TX for player #%d",
+   flags +0x149c[slot] and kicks it (0x004256c0). Returns +0x132c. */
+typedef struct {
+    void *context;
+    uint32_t *flags, *window_start, *window_bytes; /* 0x00580ea4, 0x00580e70, 0x005817d4 */
+    uint32_t base_c0, base_c4;                     /* 0x005817c0, 0x005817c4 */
+    int32_t info_20c;                              /* +0x14d4 -> +0x20c */
+    int32_t self_dpid;                             /* 0x005817bc */
+    int (*slot_playing)(void *context, uint32_t slot);        /* 0x00423da0 */
+    int32_t (*send)(void *context, int32_t dpid, const void *data, uint32_t size); /* DirectPlay +0x68 */
+    void (*error)(void *context, int32_t code, const char *text);   /* 0x0041d700 */
+    void (*log)(void *context, const char *text);                   /* 0x0042c330 */
+    void (*send_missing)(void *context);                            /* 0x0041f6e0(0, "?..", 8, 0, 0) */
+    void (*kick)(void *context, uint32_t slot);                     /* 0x004256c0 */
+} AoeCommStoreOpsRor;
+int32_t aoe_comm_resend_store_ror(AoeCommRor *c, const AoeCommStoreOpsRor *o, uint32_t now);
+
 #endif
 
 #ifndef VITA_AOE_COMM_HANDLER_DP_H

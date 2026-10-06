@@ -1486,3 +1486,53 @@ int aoe_comm_resend_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp, const AoeCommR
     aoe_comm_tx_purge_ror(c);
     return 1;
 }
+
+/* 0x00421fb0 */
+int32_t aoe_comm_resend_store_ror(AoeCommRor *c, const AoeCommStoreOpsRor *o, uint32_t now) {
+    uint32_t i, oldest = 0, oldest_age = 0, active = 0, need;
+    AoeCommTxRor *e;
+    if (!c->gtd) { o->log(o->context, "!RGEGTD SendStore"); return 0; }
+    if (!(*o->flags & 1)) { *o->flags |= 1; *o->window_start = now; }
+    if ((float)*o->window_bytes / (float)(int32_t)(now - *o->window_start) > 2.0f) return 0;
+    *o->window_bytes = 0;
+    *o->window_start = now;
+    aoe_comm_tx_purge_ror(c);
+    for (i = 0; i < AOE_COMM_TX_SLOTS; ++i) {
+        if (!c->tx[i].serial) continue;
+        ++active;
+        if (now - c->tx[i].time > oldest_age) { oldest_age = now - c->tx[i].time; oldest = i; }
+    }
+    if (!active) return 0;
+    if (c->turn < 7) need = 2000;
+    else if (c->field_12a8 == 0) {
+        need = o->base_c4 + (uint32_t)o->info_20c * 2;
+        if (need < o->base_c0 + 500) need = o->base_c0 + 500;
+    } else need = 250;
+    if (oldest_age < need) return 0;
+    e = &c->tx[oldest];
+    e->time = now;
+    for (i = 1; i <= c->count && i < AOE_COMM_SLOTS; ++i) {
+        if (!e->pending[i] || !o->slot_playing(o->context, i) || !c->dpid[i] || i == c->self) continue;
+        if (e->pending[i]) --e->pending[i];
+        if (!o->self_dpid) return 0;
+        {
+            int32_t r = o->send(o->context, c->dpid[i], e->data, e->size);
+            if (r == 0) { ++c->field_132c; c->bytes_sent += e->size; *o->window_bytes += e->size; }
+            else o->error(o->context, r, "RESEND Transmit");
+        }
+        if (e->pending[i] == 0 && o->slot_playing(o->context, i) && c->dpid[i] && i != c->self) {
+            char text[80];
+            if (!c->is_host) {
+                snprintf(text, sizeof text, "TX Missing Player report for player=%d ", (int)c->dpid[i]);
+                o->log(o->context, text);
+                o->send_missing(o->context);
+            } else {
+                snprintf(text, sizeof text, "HOST Rcvd MAX TX for player #%d", (int)i);
+                o->log(o->context, text);
+                c->field_149c[i] = 1;
+                o->kick(o->context, i);
+            }
+        }
+    }
+    return (int32_t)c->field_132c;
+}

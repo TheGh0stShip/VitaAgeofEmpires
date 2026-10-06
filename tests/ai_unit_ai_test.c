@@ -807,6 +807,107 @@ static void play_tests(void) {
     aoe_ai_play_update_ror(&o);
     assert(strcmp(pl_log, "pick-1 pick20 pick21 free ") == 0);
 }
+
+/* ---- 0x00413890 ---- */
+static char mg_log[1024]; static int mg_n; static int32_t mg_action = -1, mg_2c = -1, mg_order = -1, mg_target = -1, mg_ttype = -1, mg_last = 0, mg_ltt = 9, mg_f10 = 3; static float mg_tx = 4.0f, mg_ty = 5.0f, mg_tz = 0.0f, mg_range = 1.0f;
+static int mg_members[4], mg_nmem; static AoeAiMsgObjectRor mg_objs[3] = {{2, 4, 10, 40.0f}, {1, 3, 20, 100.0f}, {2, 4, 0x114, 50.0f}}; static int mg_attackable = 1, mg_in_range = 1, mg_reach = 0, mg_has_hp = 1; static int32_t mg_engage = 1, mg_d4 = 5, mg_nearest = -1; static float mg_dmg_from = 3.0f, mg_dmg_to_t = 4.0f, mg_dmg_to_o = 2.0f; static int mg_move_ok = 1, mg_find = 1, mg_step80 = 1; static uint8_t mg_fog = 0;
+static void mg_add(const char *fmt, ...) { va_list ap; va_start(ap, fmt); mg_n += vsnprintf(mg_log + mg_n, sizeof mg_log - (size_t)mg_n, fmt, ap); va_end(ap); }
+static int mg_resolve(void *c, int32_t id, AoeAiMsgObjectRor *out) { (void)c; if (id == 50) { *out = mg_objs[0]; return 1; } if (id == 60) { *out = mg_objs[1]; return 1; } if (id == 70) { *out = mg_objs[2]; return 1; } return 0; }
+static int mg_ismem(void *c, int32_t id) { (void)c; for (int i = 0; i < mg_nmem; ++i) if (mg_members[i] == id) return 1; return 0; }
+static void mg_addmem(void *c, int32_t id) { (void)c; mg_members[mg_nmem++] = id; mg_add("add%d ", (int)id); }
+static void mg_rmmem(void *c, int32_t id) { (void)c; mg_add("rm%d ", (int)id); }
+static void mg_base(void *c, const int32_t *m) { (void)c; mg_add("base%d ", (int)m[2]); }
+static void mg_tell(void *c, int32_t code, int32_t id) { (void)c; mg_add("tell(%x,%d) ", (unsigned)code, (int)id); }
+static void mg_notes(void *c, int32_t e) { (void)c; mg_add("notes%d ", (int)e); }
+static void mg_rally(void *c, int32_t id) { (void)c; mg_add("rally%d ", (int)id); }
+static void mg_ec(void *c, int32_t v) { (void)c; mg_add("ec%d ", (int)v); }
+static int32_t mg_a4(void *c, int32_t v) { (void)c; mg_add("a4(%d) ", (int)v); return 0; }
+static int mg_attackf(void *c, int32_t id) { (void)c; (void)id; return mg_attackable; }
+static int mg_inrange(void *c, int32_t id) { (void)c; (void)id; return mg_in_range; }
+static int mg_reachf(void *c, int32_t id) { (void)c; (void)id; return mg_reach; }
+static int32_t mg_engagef(void *c, int32_t id) { (void)c; mg_add("engage%d ", (int)id); return mg_engage; }
+static int mg_hashp(void *c, int32_t id) { (void)c; (void)id; return mg_has_hp; }
+static float mg_dfrom(void *c, int32_t id) { (void)c; (void)id; return mg_dmg_from; }
+static float mg_dto(void *c, int32_t id) { (void)c; return id == 50 ? mg_dmg_to_o : mg_dmg_to_t; }
+static int32_t mg_d4f(void *c, int32_t a) { (void)c; (void)a; return mg_d4; }
+static int mg_move(void *c, float x, float y, float z, float r, int32_t f) { (void)c; mg_add("move(%g,%g,%g,%g,%d) ", (double)x, (double)y, (double)z, (double)r, (int)f); return mg_move_ok; }
+static void mg_clear(void *c) { (void)c; mg_add("clear "); }
+static void mg_stop(void *c, int32_t f) { (void)c; mg_add("stop%d ", (int)f); }
+static void mg_setorder(void *c, int32_t v) { (void)c; mg_add("order%d ", (int)v); }
+static void mg_18c(void *c) { (void)c; mg_add("18c "); }
+static uint8_t mg_fogf(void *c, int32_t x, int32_t y) { (void)c; (void)x; (void)y; return mg_fog; }
+static int32_t mg_nearestf(void *c) { (void)c; return mg_nearest; }
+static int32_t mg_c0(void *c, int32_t id) { (void)c; return id == 9 ? -1 : 5; }
+static int32_t mg_40(void *c, int32_t id) { (void)c; mg_add("f40(%d) ", (int)id); return 11; }
+static int32_t mg_44(void *c, int32_t k) { (void)c; mg_add("f44(%d) ", (int)k); return 12; }
+static int32_t mg_68(void *c, int32_t r) { (void)c; mg_add("f68(%d) ", (int)r); return r == 11 ? 1 : 0; }
+static int mg_findp(void *c, float *x, float *y) { (void)c; *x = 7.0f; *y = 8.0f; return mg_find; }
+static void mg_mark(void *c, float x, float y) { (void)c; mg_add("mark(%g,%g) ", (double)x, (double)y); }
+static int mg_step(void *c, float x, float y) { (void)c; (void)x; (void)y; return mg_step80; }
+static void mg_leader(void *c) { (void)c; mg_add("leader "); }
+static void message_tests(void) {
+    AoeAiUnitAiMsgOpsRor o = {NULL, &mg_action, &mg_2c, &mg_order, &mg_target, &mg_ttype, &mg_last, &mg_ltt, &mg_tx, &mg_ty, &mg_tz, &mg_range, &mg_f10, 0, 1, 7, -1,
+                              mg_resolve, mg_ismem, mg_addmem, mg_rmmem, 0, mg_base, mg_tell, mg_notes, mg_rally, mg_ec, mg_a4, mg_attackf, mg_inrange, mg_reachf, mg_engagef, mg_hashp, mg_dfrom, mg_dto, mg_d4f, mg_move, mg_clear, mg_stop, mg_setorder, mg_18c, mg_fogf, mg_nearestf, mg_c0, mg_40, mg_44, mg_68, mg_findp, mg_mark, mg_step, mg_leader};
+    int32_t msg[5] = {50, 0, 500, 0, 0};
+    /* Attacked with no damage: the owner hears 0x209 and the notes run (4). */
+    assert(aoe_ai_unit_ai_message_ror(&o, msg, 30) == 4 && strcmp(mg_log, "base500 tell(209,50) notes30 ") == 0);
+    /* Damage, no group, computer owner with a live action: rally and join, but keep the action (2). */
+    mg_n = 0; msg[4] = 5; mg_action = 700;
+    assert(aoe_ai_unit_ai_message_ror(&o, msg, 30) == 2 && strcmp(mg_log, "base500 tell(201,50) rally50 add50 ec1 ") == 0 && mg_action == 700);
+    /* Idle, the attacker already a member, no target: engaged (3). */
+    mg_n = 0; mg_action = -1; o.group_count = 1;
+    assert(aoe_ai_unit_ai_message_ror(&o, msg, 30) == 3 && strcmp(mg_log, "base500 ec1 engage50 ") == 0 && mg_action == -1);
+    /* An attacker we cannot reach: +0xa4(1); order 0x262 keeps quiet. */
+    mg_n = 0; mg_in_range = 0;
+    assert(aoe_ai_unit_ai_message_ror(&o, msg, 30) == 3 && strcmp(mg_log, "base500 ec1 a4(1) ") == 0);
+    mg_n = 0; mg_order = 0x262;
+    assert(aoe_ai_unit_ai_message_ror(&o, msg, 30) == 3 && strcmp(mg_log, "base500 ec1 ") == 0);
+    /* A building target under a computer owner: engage when reachable. */
+    mg_n = 0; mg_order = -1; mg_target = 60; mg_in_range = 1;
+    assert(aoe_ai_unit_ai_message_ror(&o, msg, 30) == 3 && strcmp(mg_log, "base500 ec1 engage50 ") == 0);
+    /* A human owner with a unit target: the attacker (time 40/2 = 20) outlasts the target (100/4 = 25)? no -> keep; swap the damage. */
+    mg_n = 0; o.owner_kind = 1; mg_objs[1].unit_class = 4;
+    assert(aoe_ai_unit_ai_message_ror(&o, msg, 30) == 2 && strcmp(mg_log, "base500 tell(201,50) ec1 ") == 0);
+    mg_n = 0; mg_dmg_to_o = 1.0f;  /* 40 > 25 -> engage the attacker */
+    assert(aoe_ai_unit_ai_message_ror(&o, msg, 30) == 2 && strcmp(mg_log, "base500 tell(201,50) ec1 engage50 ") == 0);
+    mg_n = 0; mg_dmg_from = 0.0f;  /* no damage done to the target: engaged first, then again by the ratio */
+    assert(aoe_ai_unit_ai_message_ror(&o, msg, 30) == 2 && strcmp(mg_log, "base500 tell(201,50) ec1 engage50 engage50 ") == 0);
+    mg_n = 0; mg_target = 70;
+    assert(aoe_ai_unit_ai_message_ror(&o, msg, 30) == 2 && strcmp(mg_log, "base500 tell(201,50) ec1 ") == 0);
+    /* Action ends: 700 after 600 moves to the point at range + 2 and retires the action. */
+    mg_n = 0; msg[2] = 0x1f9; msg[3] = 600; mg_action = 700; mg_target = -1;
+    assert(aoe_ai_unit_ai_message_ror(&o, msg, 30) == 2 && strcmp(mg_log, "move(4,5,0,3,1) ") == 0 && mg_action == -1 && mg_last == 700 && mg_2c == -1);
+    mg_n = 0; mg_action = 700; mg_move_ok = 0; msg[2] = 0x1fa;
+    assert(aoe_ai_unit_ai_message_ror(&o, msg, 30) == 2 && strcmp(mg_log, "move(4,5,0,3,1) clear stop0 ") == 0);
+    mg_n = 0; mg_action = -1; mg_order = 600; msg[2] = 0x1f9;
+    assert(aoe_ai_unit_ai_message_ror(&o, msg, 30) == 2 && strcmp(mg_log, "clear stop1 base505 ") == 0);
+    mg_n = 0; mg_action = 0x2bd; msg[3] = 0x262;
+    assert(aoe_ai_unit_ai_message_ror(&o, msg, 30) == 2 && strcmp(mg_log, "order-1 ") == 0);
+    mg_n = 0; mg_action = 0x2d4; msg[2] = 0x1fb;
+    assert(aoe_ai_unit_ai_message_ror(&o, msg, 30) == 2 && strcmp(mg_log, "clear stop0 base507 ") == 0);
+    /* 0x202 with order 0x261: the object chain; with 0x25d: a point. */
+    mg_n = 0; msg[2] = 0x202; mg_order = 0x261; mg_ttype = -1;
+    assert(aoe_ai_unit_ai_message_ror(&o, msg, 30) == 3 && strcmp(mg_log, "f40(9) f68(11) ") == 0);
+    mg_n = 0; mg_ttype = 3;
+    assert(aoe_ai_unit_ai_message_ror(&o, msg, 30) == 2 && strcmp(mg_log, "f44(5) f68(12) clear stop1 base514 ") == 0);
+    mg_n = 0; mg_order = 0x25d;
+    assert(aoe_ai_unit_ai_message_ror(&o, msg, 30) == 3 && strcmp(mg_log, "mark(7,8) ") == 0 && mg_order == 0x25d);
+    /* 0x1fc: a nearer enemy is engaged; 0x20b notifies the leader; 600 / 699 and the default. */
+    mg_n = 0; msg[2] = 0x1fc; mg_target = 50; mg_nearest = 60;
+    assert(aoe_ai_unit_ai_message_ror(&o, msg, 30) == 3 && strcmp(mg_log, "engage60 ") == 0);
+    mg_n = 0; mg_fog = 0xf;
+    assert(aoe_ai_unit_ai_message_ror(&o, msg, 30) == 2 && mg_n == 0);
+    mg_n = 0; msg[2] = 0x20b; o.leader_id = 60;
+    assert(aoe_ai_unit_ai_message_ror(&o, msg, 30) == 2 && strcmp(mg_log, "18c clear stop1 notes30 leader ") == 0 && mg_f10 == 0);
+    mg_n = 0; msg[2] = 600; msg[0] = 51;
+    assert(aoe_ai_unit_ai_message_ror(&o, msg, 30) == 2 && strcmp(mg_log, "add51 ec1 ") == 0);
+    mg_n = 0; msg[2] = 699;
+    assert(aoe_ai_unit_ai_message_ror(&o, msg, 30) == 2 && strcmp(mg_log, "rm51 ") == 0);
+    mg_n = 0; msg[2] = 0x1f5;
+    assert(aoe_ai_unit_ai_message_ror(&o, msg, 30) == 2 && strcmp(mg_log, "clear stop1 base501 ") == 0);
+    mg_n = 0; msg[2] = 0x25a;
+    assert(aoe_ai_unit_ai_message_ror(&o, msg, 30) == 2 && mg_n == 0);
+}
 int main(void) {
     free_tile_tests();
     ai_kind_for_unit_tests();
@@ -969,5 +1070,6 @@ int main(void) {
     move_aside_tests();
     check_tests();
     play_tests();
+    message_tests();
     return 0;
 }

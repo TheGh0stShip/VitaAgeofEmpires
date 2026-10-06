@@ -271,6 +271,39 @@ static void reset_message_resend_tests(void) {
     assert(aoe_comm_resend_ror(&c, &dops, &rr, 10, 2) == 1 && rr_reject_dpid == 55 && rr_reject_val == 2000 && rr_dropped == 2);
     assert(aoe_comm_resend_ror(&c, &dops, &rr, 10, 4) == 0); /* no such player */
 }
+
+static char ss_log[512]; static int ss_n, ss_send_fail, ss_missing, ss_kicked; static int32_t ss_sent_to;
+static void ss_add(const char *t) { ss_n += snprintf(ss_log + ss_n, sizeof ss_log - (size_t)ss_n, "%s|", t); }
+static int ss_playing(void *c, uint32_t s) { (void)c; return s != 4; }
+static int32_t ss_send(void *c, int32_t to, const void *d, uint32_t n) { (void)c; (void)d; (void)n; ss_sent_to = to; return ss_send_fail; }
+static void ss_error(void *c, int32_t code, const char *t) { (void)c; (void)code; ss_add(t); }
+static void ss_logf(void *c, const char *t) { (void)c; ss_add(t); }
+static void ss_missingf(void *c) { (void)c; ++ss_missing; }
+static void ss_kick(void *c, uint32_t s) { (void)c; ss_kicked = (int)s; }
+static void store_tests(void) {
+    static AoeCommRor c; static AoeCommTxRor tx[AOE_COMM_TX_SLOTS];
+    uint32_t flags = 0, wstart = 0, wbytes = 0;
+    AoeCommStoreOpsRor o = {NULL, &flags, &wstart, &wbytes, 100, 200, 50, 77, ss_playing, ss_send, ss_error, ss_logf, ss_missingf, ss_kick};
+    memset(&c, 0, sizeof c); memset(tx, 0, sizeof tx); c.tx = tx; c.count = 4; c.self = 1; c.turn = 10; c.is_host = 1;
+    c.player_state[1] = c.player_state[2] = c.player_state[3] = 2; c.player_state[4] = 4;
+    c.dpid[2] = 20; c.dpid[3] = 30; c.dpid[4] = 40;
+    assert(aoe_comm_resend_store_ror(&c, &o, 1000) == 0 && strcmp(ss_log, "!RGEGTD SendStore|") == 0);
+    ss_n = 0; c.gtd = 1;
+    /* The first call opens the window; a message 299 ms old waits (need max(200 + 100, 100 + 500) = 600). */
+    tx[3].serial = 9; tx[3].time = 701; tx[3].data = calloc(8, 1); tx[3].size = 8; tx[3].pending[2] = 2; tx[3].pending[3] = 1; tx[3].pending[4] = 1;
+    assert(aoe_comm_resend_store_ror(&c, &o, 1000) == 0 && flags == 1 && wstart == 1000);
+    /* 600 ms later: slot 2 resent (pending 1), slot 3 resent and now missing -> kicked; slot 4 is not playing. */
+    assert(aoe_comm_resend_store_ror(&c, &o, 1301) == 2 && tx[3].time == 1301 && tx[3].pending[2] == 1 && tx[3].pending[3] == 0 && c.bytes_sent == 16 && wbytes == 16 && ss_kicked == 3 && c.field_149c[3] == 1 && ss_sent_to == 30);
+    assert(strcmp(ss_log, "HOST Rcvd MAX TX for player #3|") == 0);
+    /* Over the rate (16 bytes in 1 ms): nothing. A client reports the missing player instead of kicking. */
+    assert(aoe_comm_resend_store_ror(&c, &o, 1302) == 0 && wbytes == 16);
+    ss_n = 0; c.is_host = 0; tx[3].pending[2] = 1; ss_send_fail = 5;
+    assert(aoe_comm_resend_store_ror(&c, &o, 3000) == 2 && ss_missing == 1 && strcmp(ss_log, "RESEND Transmit|TX Missing Player report for player=20 |") == 0);
+    /* Before turn 7 the message must be 2 s old; without our DirectPlay ID the send stops. */
+    c.turn = 3; tx[3].pending[2] = 1; tx[3].time = 3000;
+    assert(aoe_comm_resend_store_ror(&c, &o, 4500) == 0 && tx[3].pending[2] == 1);
+    o.self_dpid = 0; assert(aoe_comm_resend_store_ror(&c, &o, 6000) == 0 && tx[3].pending[2] == 0);
+}
 int main(void) {
     enable_new_players_tests();
     static AoeCommRor c;
@@ -522,5 +555,6 @@ int main(void) {
     join_lobby_tests();
     compact_tests();
     reset_message_resend_tests();
+    store_tests();
     return 0;
 }

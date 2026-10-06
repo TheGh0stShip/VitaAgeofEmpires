@@ -1505,3 +1505,172 @@ void aoe_ai_play_update_ror(const AoeAiPlayOpsRor *o) {
     }
     o->fire(o->context, m->step, 1);
 }
+
+/* 0x00413890 */
+static void msg_default(const AoeAiUnitAiMsgOpsRor *o, const int32_t *msg, int32_t force) {
+    o->clear_target(o->context);
+    o->stop(o->context, force);
+    o->notify_base(o->context, msg);
+}
+static int msg_engage_ok(const AoeAiUnitAiMsgOpsRor *o, int32_t id) {
+    return o->in_range(o->context, id) == 1 || o->can_reach(o->context, id) == 1;
+}
+int32_t aoe_ai_unit_ai_message_ror(const AoeAiUnitAiMsgOpsRor *o, const int32_t *msg, int32_t elapsed) {
+    int32_t code = msg[2], a;
+    AoeAiMsgObjectRor obj, tgt;
+    switch (code) {
+    case 500: case 0x20f: {
+        int have_target;
+        o->notify_base(o->context, msg);
+        if (msg[4] <= 0) {
+            o->tell_owner(o->context, 0x209, msg[0]);
+            o->run_notes(o->context, elapsed);
+            return 4;
+        }
+        if (o->group_count == 0 || o->owner_kind == 1) o->tell_owner(o->context, 0x201, msg[0]);
+        if (!o->is_member(o->context, msg[0])) {
+            if (o->owner_kind == 0 && *o->target != msg[0]) o->rally(o->context, msg[0]);
+            o->add_member(o->context, msg[0]);
+        }
+        o->unit_ec(o->context, 1);
+        if (*o->action != 0x2d5 && *o->action != -1 && o->owner_kind == 0) return 2;
+        if (*o->action == 0x2d5) return 2;
+        if (!o->resolve(o->context, msg[0], &obj)) return 2;
+        if (obj.owner == o->own_owner) return 2;
+        if (*o->order == 0x25b && o->self_a4(o->context, 1) == 1) return 3;
+        have_target = *o->target != -1 && o->resolve(o->context, *o->target, &tgt);
+        if (!have_target) {
+            if (o->attackable(o->context, msg[0]) == 1 && msg_engage_ok(o, msg[0])) {
+                if (o->engage(o->context, msg[0]) != 1) return 3;
+                if (*o->action == 700) return 3;
+                *o->action = -1;
+                return 3;
+            }
+            if (*o->order == 0x262) return 3;
+            o->self_a4(o->context, 1);
+            return 3;
+        }
+        if ((tgt.unit_class == 3 || tgt.unit_class == 0x1b) && tgt.template_id != 0x4f &&
+            tgt.template_id != 199 && tgt.template_id != 0x45 && o->owner_kind == 0) {
+            if (o->attackable(o->context, msg[0]) == 1 && msg_engage_ok(o, msg[0])) {
+                o->engage(o->context, msg[0]);
+                return 3;
+            }
+            o->self_a4(o->context, 1);
+            return 3;
+        }
+        if (o->owner_kind != 1) return 2;
+        if (tgt.template_id == 0x114) return 2;
+        {
+            float hurt = o->has_hp(o->context, *o->target) ? o->damage_from_us(o->context, *o->target) : 0.0f;
+            float d_t, d_o, s_t, s_o;
+            if (o->attackable(o->context, msg[0]) == 1 && hurt == 0.0f && msg_engage_ok(o, msg[0]))
+                o->engage(o->context, msg[0]);
+            d_t = o->damage_to_us(o->context, *o->target);
+            s_t = d_t <= 0.0f ? 25000.0f : tgt.hp / d_t;
+            d_o = o->damage_to_us(o->context, msg[0]);
+            s_o = d_o <= 0.0f ? 25000.0f : obj.hp / d_o;
+            if (o->attackable(o->context, msg[0]) != 1) return 2;
+            if (s_o <= s_t) return 2;
+            if (!msg_engage_ok(o, msg[0])) return 2;
+            o->engage(o->context, msg[0]);
+            return 2;
+        }
+    }
+    case 0x1f9: case 0x1fa: case 0x1fb:
+        a = *o->action;
+        if (a == 700 && msg[3] == 600) {
+            if (o->query_d4(o->context, 0) != 5) return 2;
+            if (*o->action != 0x2d5 && o->owner_kind != 0 &&
+                o->move_to(o->context, *o->target_x, *o->target_y, *o->target_z, *o->range + 2.0f, 1)) {
+                *o->last_action = *o->action;
+                *o->action = -1;
+                *o->field_2c = -1;
+                return 2;
+            }
+            o->clear_target(o->context);
+            o->stop(o->context, code == 0x1fa ? 0 : 1);
+            return 2;
+        }
+        if ((a == -1 && *o->order == msg[3]) || (a != -1 && *o->order + 100 == a)) {
+            if (code == 0x1fa) { o->clear_target(o->context); o->stop(o->context, 1); return 2; }
+            msg_default(o, msg, 1);
+            return 2;
+        }
+        if (a == 0x2d4 && msg[3] == 0x262) {
+            if (code == 0x1fa) { o->clear_target(o->context); o->stop(o->context, 0); return 2; }
+            msg_default(o, msg, 0);
+            return 2;
+        }
+        if (a == 0x2bd && msg[3] == 0x262) { o->set_order(o->context, -1); return 2; }
+        if (a == 0x2d5 && msg[3] == 600) { o->clear_target(o->context); o->stop(o->context, 1); return 2; }
+        return 2;
+    case 0x1fc:
+        if (*o->target != -1 && o->resolve(o->context, *o->target, &tgt)) {
+            uint8_t fog = o->fog_state(o->context, aoe_ftol32(*o->target_x), aoe_ftol32(*o->target_y));
+            float x = *o->target_x, y = *o->target_y, z = *o->target_z;
+            int32_t best;
+            if (tgt.owner == 0) return 2;
+            if (fog == 0xf) return 2;
+            best = o->nearest(o->context);
+            if (best != -1 && best != *o->target && o->engage(o->context, best) == 1) { *o->action = -1; return 3; }
+            if (o->owner_kind == 0 && o->move_to(o->context, x, y, z, 0.0f, 1) == 1) {
+                *o->last_action = *o->action;
+                *o->action = -1;
+                *o->field_2c = -1;
+                return 3;
+            }
+        }
+        msg_default(o, msg, 1);
+        return 2;
+    case 0x1fe:
+        o->unit_18c(o->context);
+        o->clear_target(o->context);
+        o->stop(o->context, 1);
+        return 2;
+    case 0x202: {
+        int32_t od = *o->order;
+        float x, y;
+        if (od != 0x25d && od != 0x26f) {
+            int32_t id, k, r;
+            if (od != 0x261) return 2;
+            id = *o->target_type == -1 ? *o->last_target_type : *o->target_type;
+            k = o->field_c0(o->context, id);
+            r = k == -1 ? o->field_40(o->context, id) : o->field_44(o->context, k);
+            if (r != -1 && o->field_68(o->context, r) == 1) return 3;
+            msg_default(o, msg, 1);
+            return 2;
+        }
+        if (o->find_point(o->context, &x, &y) == 1) {
+            o->mark_point(o->context, x, y);
+            if (!o->step_80(o->context, x, y)) msg_default(o, msg, 1);
+            *o->order = od;
+            return 3;
+        }
+        msg_default(o, msg, 1);
+        return 2;
+    }
+    case 0x20b:
+        o->unit_18c(o->context);
+        o->clear_target(o->context);
+        o->stop(o->context, 1);
+        o->run_notes(o->context, elapsed);
+        *o->field_10 = 0;
+        if (o->leader_id != -1 && o->resolve(o->context, o->leader_id, &obj)) o->leader_notify(o->context);
+        return 2;
+    case 600:
+        if (!o->is_member(o->context, msg[0])) o->add_member(o->context, msg[0]);
+        o->unit_ec(o->context, 1);
+        return 2;
+    case 699:
+        o->remove_member(o->context, msg[0]);
+        return 2;
+    case 0x1f6: case 0x1f7: case 0x1f8: case 0x1fd: case 0x1ff: case 0x200: case 0x203:
+    case 0x259: case 0x25a: case 0x25b: case 0x25c: case 0x25d: case 0x25e: case 0x25f:
+    case 0x260: case 0x261: case 0x262: case 0x265: case 0x266: case 0x267: case 0x268: case 0x269:
+        return 2;
+    default:
+        msg_default(o, msg, 1);
+        return 2;
+    }
+}

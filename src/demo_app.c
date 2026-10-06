@@ -3,7 +3,9 @@
 #include "color_table.h"
 #include "combat.h"
 #include "cpx.h"
+#include "live_unit_box.h"
 #include "live_unit_sprite_backend.h"
+#include "main_view.h"
 #include "palette.h"
 #include "scenario_scene.h"
 #include "world_combat.h"
@@ -1550,82 +1552,71 @@ static int32_t part_left(const AoeSpriteDrawQueueEntry *e, const SlpFrame *f) {
                                       : e->anchor_x - f->hotspot_x;
 }
 
-typedef struct {
-    AoeDemo *demo;
-    const AoeLiveUnit *unit;
-    int32_t ax, ay;     /* the unit's anchor plus +0x28 / +0x2a */
-} SelectionBox;
-
-/* The box of the parts drawn for the unit this frame, relative to its
-   anchor (the port's stand-in for the sprite list's first-sprite bounds,
-   0x00415980). */
-static int sel_bounds(void *context, const void *graphic, uint8_t frame, int16_t *x0,
-                      int16_t *y0, int16_t *x1, int16_t *y1) {
-    SelectionBox *b = context;
-    const AoeSpriteDrawQueue *q = &b->demo->runtime.sprite_queue;
-    int found = 0;
-    int32_t l = 0, t = 0, r = 0, btm = 0;
-    (void)graphic;
-    (void)frame;
-    for (size_t i = 0; i < q->drawn; ++i) {
-        const AoeSpriteDrawQueueEntry *e = &q->entries[i];
-        const SlpFrame *f;
-        int32_t el, et;
-        if (e->object != &b->unit->core || !(f = part_frame(b->demo, e))) continue;
-        el = part_left(e, f);
-        et = e->anchor_y - f->hotspot_y;
-        if (!found || el < l) l = el;
-        if (!found || et < t) t = et;
-        if (!found || el + (int32_t)f->width - 1 > r) r = el + (int32_t)f->width - 1;
-        if (!found || et + (int32_t)f->height - 1 > btm) btm = et + (int32_t)f->height - 1;
-        found = 1;
-    }
-    if (!found) return 0;
-    *x0 = (int16_t)(l - b->ax);
-    *y0 = (int16_t)(t - b->ay);
-    *x1 = (int16_t)(r - b->ax);
-    *y1 = (int16_t)(btm - b->ay);
-    return 1;
-}
-
-static void sel_plot_box(AoeDemo *demo, int32_t x0, int32_t y0, int32_t x1, int32_t y1,
-                         uint8_t color, int filled) {
-    if (x0 > x1) { int32_t t = x0; x0 = x1; x1 = t; }
-    if (y0 > y1) { int32_t t = y0; y0 = y1; y1 = t; }
-    for (int32_t y = y0; y <= y1; ++y) {
-        if (y < 0 || (uint32_t)y >= demo->height) continue;
-        for (int32_t x = x0; x <= x1; ++x) {
-            if (x < 0 || (uint32_t)x >= demo->width) continue;
-            if (filled || y == y0 || y == y1 || x == x0 || x == x1)
-                demo->pixels[(size_t)y * demo->width + (size_t)x] = color;
-        }
+/* A line into the view's pixels, clipped to them. */
+static void sel_line(void *context, int32_t x0, int32_t y0, int32_t x1, int32_t y1,
+                     uint8_t colour) {
+    AoeDemo *demo = context;
+    int32_t dx = x1 > x0 ? x1 - x0 : x0 - x1, sx = x0 < x1 ? 1 : -1;
+    int32_t dy = y1 > y0 ? y0 - y1 : y1 - y0, sy = y0 < y1 ? 1 : -1, err = dx + dy;
+    for (;;) {
+        if (x0 >= 0 && y0 >= 0 && (uint32_t)x0 < demo->width && (uint32_t)y0 < demo->height)
+            demo->pixels[(size_t)y0 * demo->width + (size_t)x0] = colour;
+        int32_t e2 = 2 * err;
+        if (x0 == x1 && y0 == y1) break;
+        if (e2 >= dy) { err += dy; x0 += sx; }
+        if (e2 <= dx) { err += dx; y0 += sy; }
     }
 }
-static void sel_rect(void *context, void *renderer, int32_t x0, int32_t y0, int32_t x1,
-                     int32_t y1, uint8_t color) {
-    (void)renderer;
-    sel_plot_box(((SelectionBox *)context)->demo, x0, y0, x1, y1, color, 0);
+static void sel_project(void *context, float x, float y, float z, int32_t base_x, int32_t base_y,
+                        int16_t *out_x, int16_t *out_y) {
+    aoe_map_screen_offset_ror(&((AoeDemo *)context)->geometry, x, y, z, base_x, base_y, out_x,
+                              out_y);
 }
-static void sel_fill(void *context, void *renderer, int32_t x0, int32_t y0, int32_t x1,
-                     int32_t y1, uint8_t color) {
-    (void)renderer;
-    sel_plot_box(((SelectionBox *)context)->demo, x0, y0, x1, y1, color, 1);
+/* The box's draw-list nodes drawn at once (0x00513bc0: kind 1 the
+   outline, 2 the bar's healthy 0x4a and lost 0x97 parts, 4 a box). */
+static void sel_shape(void *context, int32_t kind, int16_t layer, const int32_t v[8],
+                      int32_t priority, uint8_t colour) {
+    AoeViewLineNodeRor n;
+    AoeViewLineOpsRor ops;
+    int i;
+    (void)layer;
+    (void)priority;
+    memset(&ops, 0, sizeof ops);
+    ops.context = context;
+    ops.draw_line = sel_line;
+    n.kind = kind;
+    n.colour = colour;
+    for (i = 0; i < 8; ++i) n.pt[i] = (int16_t)v[i];
+    aoe_view_line_node_draw_ror(&n, &ops);
 }
 
-/* The selection boxes (0x004a8e00: outline and health bar), drawn over
-   the sprites. The original's 8-bit view draws them from the live
-   draw's selected-unit hook (0x004a7520) as each unit is drawn; the
-   port's sprites are queued and drawn after the terrain walk, so the
-   boxes follow the flush. */
+/* The selection boxes (0x004a76f0, box style 2: the game's +0x50 as its
+   constructor 0x004162b0 sets it), drawn over the sprites. The original
+   draws them through the view's draw list from the live draw's hook
+   (0x004a7520) as each unit is drawn; the port's sprites are queued and
+   drawn after the terrain walk, so the boxes follow the flush. The
+   unit's +0x36 selected bit is given to the box on a copy (the port
+   keeps the selection outside the unit). */
 static void draw_selection(AoeDemo *demo) {
     for (int i = 0; i < demo->drawn_selected_count; ++i) {
-        SelectionBox box = {demo, demo->drawn_selected[i].unit,
-                            demo->drawn_selected[i].x + demo->drawn_selected[i].unit->core.draw_left,
-                            demo->drawn_selected[i].y + demo->drawn_selected[i].unit->core.draw_top};
-        AoeLiveUnitSelectionOps ops = {&box, NULL, sel_bounds, sel_rect, sel_fill, NULL};
-        aoe_live_unit_draw_selection_ror(&box.unit->core, demo->drawn_selected[i].graphic,
-                                         demo->pixels, demo->drawn_selected[i].x,
-                                         demo->drawn_selected[i].y, &ops);
+        const AoeLiveUnit *u = demo->drawn_selected[i].unit;
+        const DatUnit *t = u->core.unit_template;
+        AoeLiveUnitCore core = u->core;
+        AoeLiveUnitBoxInput in;
+        AoeLiveUnitBoxOps ops = {demo, sel_project, sel_shape, NULL};
+        if (!t) continue;
+        core.action_flags_36 |= 1;
+        memset(&in, 0, sizeof in);
+        in.unit = &core;
+        memcpy(in.size, t->outline, sizeof in.size);
+        in.screen_mode = 2;
+        in.game_1b0 = 4;
+        in.template_a8 = t->selection_flags;
+        in.template_a9 = t->selection_color;
+        in.max_hp = t->hit_points;
+        in.unit_78 = -1;
+        in.owner_viewed = u->runtime_owner_index == 1;
+        aoe_live_unit_draw_box_ror(&in, demo->drawn_selected[i].x, demo->drawn_selected[i].y, &ops);
     }
 }
 

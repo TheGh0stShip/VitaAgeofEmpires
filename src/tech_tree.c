@@ -299,6 +299,7 @@ int aoe_template_upgrade_copy_ror(DatUnit *slot, DatUnit *src) {
     slot->garrison_capacity = src->garrison_capacity;
     memcpy(slot->size, src->size, sizeof(slot->size));
     slot->dead_unit_id = src->dead_unit_id;
+    slot->icon = src->icon;                                  /* +0x4c */
     slot->placement_mode = src->placement_mode;
     slot->placement_overlap_mode = src->placement_overlap_mode;
     memcpy(slot->placement_side_terrain, src->placement_side_terrain,
@@ -316,7 +317,15 @@ int aoe_template_upgrade_copy_ror(DatUnit *slot, DatUnit *src) {
     slot->decay_rate = src->decay_rate;
     slot->blast_defense_level = src->blast_defense_level;
     slot->field_8c = src->field_8c;
+    slot->map_mode = src->map_mode;                          /* +0x8e */
     slot->field_8f = src->field_8f;
+    slot->map_color = src->map_color;                        /* +0x90 */
+    slot->language_help_id = src->language_help_id;          /* +0x98 */
+    slot->language_tree_id = src->language_tree_id;          /* +0x9c */
+    slot->hotkey_id = src->hotkey_id;                        /* +0xa0 */
+    slot->selection_flags = src->selection_flags;            /* +0xa8 */
+    slot->selection_color = src->selection_color;            /* +0xa9 */
+    memcpy(slot->outline, src->outline, sizeof slot->outline); /* +0xac..+0xb4 */
     slot->negative_id_mode = src->negative_id_mode;
     slot->state_notify_mode = src->state_notify_mode;
     slot->state_effect_mode = src->state_effect_mode;
@@ -333,6 +342,7 @@ int aoe_template_upgrade_copy_ror(DatUnit *slot, DatUnit *src) {
     slot->enabled = keep.enabled;
     slot->hide_in_editor = keep.hide_in_editor;
     slot->language_name_id = src->language_name_id;
+    slot->language_creation_id = src->language_creation_id; /* +0x0e */
     src->hide_in_editor = 1;
     /* 0x0043ecb0; type 25's slot 0x00440330 only forwards to it. */
     if (level >= 2) slot->speed = src->speed;

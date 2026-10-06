@@ -144,7 +144,22 @@ int main(void) {
         src->attacks = &a;
         src->attack_count = 1;
         src->train_time = 30;
+        /* 0x00441f50 also takes the picture (+0x4c), creation text
+           (+0x0e), map mode and colour (+0x8e / +0x90) and the help, tree
+           and hotkey IDs (+0x98..+0xa0): an age upgrade changes the
+           object panel's picture. */
+        slot->icon = 33;
+        src->icon = 36;
+        src->language_creation_id = 6200;
+        src->map_mode = 1;
+        src->map_color = 9;
+        src->language_help_id = 105200;
+        src->language_tree_id = 155200;
+        src->hotkey_id = 16200;
         assert(aoe_template_upgrade_copy_ror(slot, src));
+        assert(slot->icon == 36 && slot->language_creation_id == 6200 && slot->map_mode == 1 &&
+               slot->map_color == 9 && slot->language_help_id == 105200 &&
+               slot->language_tree_id == 155200 && slot->hotkey_id == 16200);
         assert(slot->id == 4 && slot->enabled == 1 &&
                slot->hide_in_editor == 0 && slot->language_name_id == 200 &&
                slot->hit_points == 50 && slot->train_time == 30 &&

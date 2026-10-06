@@ -637,21 +637,21 @@ static void test_c3l_pixel_pick(void)
 
     /* 0x005149d0 */
     c3l_build_shape();
-    assert(aoe_shape_hit_ror(c3l_shape, sizeof c3l_shape, &c3l_frame, 0, 0) == 0);  /* left of outline */
-    assert(aoe_shape_hit_ror(c3l_shape, sizeof c3l_shape, &c3l_frame, 2, 0) == 1);  /* skip */
-    assert(aoe_shape_hit_ror(c3l_shape, sizeof c3l_shape, &c3l_frame, 3, 0) == 2);  /* colour */
-    assert(aoe_shape_hit_ror(c3l_shape, sizeof c3l_shape, &c3l_frame, 5, 0) == 2);
-    assert(aoe_shape_hit_ror(c3l_shape, sizeof c3l_shape, &c3l_frame, 6, 0) == 1);
-    assert(aoe_shape_hit_ror(c3l_shape, sizeof c3l_shape, &c3l_frame, 8, 0) == 2);  /* shadow */
-    assert(aoe_shape_hit_ror(c3l_shape, sizeof c3l_shape, &c3l_frame, 9, 0) == 0);  /* past width-right */
-    assert(aoe_shape_hit_ror(c3l_shape, sizeof c3l_shape, &c3l_frame, 3, 1) == 0);  /* empty row */
-    assert(aoe_shape_hit_ror(c3l_shape, sizeof c3l_shape, &c3l_frame, 3, 2) == 0);
+    assert(aoe_view_shape_hit_ror(c3l_shape, sizeof c3l_shape, &c3l_frame, 0, 0) == 0);  /* left of outline */
+    assert(aoe_view_shape_hit_ror(c3l_shape, sizeof c3l_shape, &c3l_frame, 2, 0) == 1);  /* skip */
+    assert(aoe_view_shape_hit_ror(c3l_shape, sizeof c3l_shape, &c3l_frame, 3, 0) == 2);  /* colour */
+    assert(aoe_view_shape_hit_ror(c3l_shape, sizeof c3l_shape, &c3l_frame, 5, 0) == 2);
+    assert(aoe_view_shape_hit_ror(c3l_shape, sizeof c3l_shape, &c3l_frame, 6, 0) == 1);
+    assert(aoe_view_shape_hit_ror(c3l_shape, sizeof c3l_shape, &c3l_frame, 8, 0) == 2);  /* shadow */
+    assert(aoe_view_shape_hit_ror(c3l_shape, sizeof c3l_shape, &c3l_frame, 9, 0) == 0);  /* past width-right */
+    assert(aoe_view_shape_hit_ror(c3l_shape, sizeof c3l_shape, &c3l_frame, 3, 1) == 0);  /* empty row */
+    assert(aoe_view_shape_hit_ror(c3l_shape, sizeof c3l_shape, &c3l_frame, 3, 2) == 0);
     /* The 12-bit form keeps the low nibble: 0x02 << 4 | 1 = 0x21 pixels. */
     {
         static uint8_t big[0x40]; AoeShapeHitFrameRor fr = {0, 4, 0x40, 1};
         big[0] = 8; big[8] = 0x02; big[9] = 0x01;
-        assert(aoe_shape_hit_ror(big, sizeof big, &fr, 0x20, 0) == 2);
-        assert(aoe_shape_hit_ror(big, 9, &fr, 0x20, 0) == 0);
+        assert(aoe_view_shape_hit_ror(big, sizeof big, &fr, 0x20, 0) == 2);
+        assert(aoe_view_shape_hit_ror(big, 9, &fr, 0x20, 0) == 0);
     }
 
     memset(&v, 0, sizeof v);

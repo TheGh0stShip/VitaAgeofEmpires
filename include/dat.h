@@ -376,6 +376,11 @@ typedef struct {
        (1 small, 2 large, 3 large in its own colour, 4 colours its tiles)
        and its colour. */
     uint8_t map_mode, map_color;
+    /* Template +0xa8 / +0xa9 (selection box: bit 0 its own colour, bit 1
+       no hit-point bar; the colour) and +0xac / +0xb0 / +0xb4, the
+       selection outline's half sizes and height (0x004413b0). */
+    uint8_t selection_flags, selection_color;
+    float outline[3];
     /* Template +0x8b: blasts of a lower level (+0x11c) skip this unit. */
     uint8_t blast_defense_level;
     uint8_t blast_level;    /* type >= 50, template +0x11c */

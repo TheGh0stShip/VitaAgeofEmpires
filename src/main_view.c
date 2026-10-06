@@ -913,7 +913,7 @@ static int shape_nibble_count(const uint8_t *data, size_t size, uint32_t *p,
 }
 
 /* 0x005149d0 */
-int aoe_shape_hit_ror(const uint8_t *data, size_t size,
+int aoe_view_shape_hit_ror(const uint8_t *data, size_t size,
                       const AoeShapeHitFrameRor *frame, int32_t x, int32_t y)
 {
     uint32_t outline, start, p;
@@ -1030,7 +1030,7 @@ int aoe_main_view_pixel_object_ror(const AoeMainViewRor *v,
             if (it.key != 0)
                 continue;
             px = (it.flags & 2) ? it.right - x : x - it.left;
-            if (aoe_shape_hit_ror(it.shape, it.shape_size, it.frame, px,
+            if (aoe_view_shape_hit_ror(it.shape, it.shape_size, it.frame, px,
                                   y - it.top) == 2) {
                 hit = 1;
                 *id = it.object_id;
@@ -1875,7 +1875,7 @@ int32_t aoe_main_view_point_objects_ror(const AoeMainViewRor *v, const AoeViewDr
                 continue;
             cls = 4;
             if (it.left <= x && it.top <= y && x <= it.right && y <= it.bottom) {
-                int hit = aoe_shape_hit_ror(it.shape, it.shape_size, it.frame,
+                int hit = aoe_view_shape_hit_ror(it.shape, it.shape_size, it.frame,
                                             (it.flags & 2) ? it.right - x : x - it.left,
                                             y - it.top);
                 cls = hit == 1 ? 2 : hit == 2 ? 1 : 3;

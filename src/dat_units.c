@@ -122,7 +122,11 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
     unit->state_notify_mode = p[13]; /* pre-terminal 0x004abbf0 */
     unit->state_effect_mode = p[14]; /* state setter 0x004abdf0 */
     unit->state_notify_value = p[15]; /* pre-terminal event argument */
-    take(cursor, 14); /* selection/editor style, outline and HP-bar height */
+    p = take(cursor, 14); /* +0xa8, +0xa9, the outline +0xac / +0xb0 / +0xb4 */
+    if (!p) return 0;
+    unit->selection_flags = p[0];
+    unit->selection_color = p[1];
+    for (unsigned i = 0; i < 3; ++i) unit->outline[i] = atfloat(p + 2 + 4 * i);
     p = take(cursor, 21); /* three seven-byte resource-storage entries */
     if (!p) return 0;
     for (unsigned i = 0; i < 3; ++i) {

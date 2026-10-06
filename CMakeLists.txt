@@ -542,7 +542,8 @@ target_compile_options(aoe_live_unit_sprite_backend PRIVATE -Wall -Wextra)
 add_library(aoe_demo_app STATIC src/demo_app.c)
 target_include_directories(aoe_demo_app PUBLIC include)
 target_link_libraries(aoe_demo_app PUBLIC aoe_scenario_scene aoe_world_combat
-  aoe_live_unit_sprite_backend aoe_color_table aoe_palette aoe_cpx aoe_dat m)
+  aoe_live_unit_sprite_backend aoe_live_unit_draw aoe_main_view aoe_color_table aoe_palette
+  aoe_cpx aoe_dat m)
 target_compile_options(aoe_demo_app PRIVATE -Wall -Wextra)
 
 add_library(aoe_rng STATIC src/aoe_rng.c)

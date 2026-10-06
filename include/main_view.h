@@ -646,7 +646,7 @@ typedef struct {
    run (1, low nibble 3 the 12-bit form), or the row end).
    `size` bounds the reads here (out of bounds answers 0); the original
    trusts the data. */
-int aoe_shape_hit_ror(const uint8_t *data, size_t size,
+int aoe_view_shape_hit_ror(const uint8_t *data, size_t size,
                       const AoeShapeHitFrameRor *frame, int32_t x, int32_t y);
 
 /* One draw-row node (64 bytes, the rows' +0x5c heads) as the pick

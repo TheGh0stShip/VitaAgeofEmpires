@@ -109,6 +109,10 @@ static const char *scenario_message(void *c, int32_t i) {
     return d->scenario.texts[SCN_TEXT_MESSAGE + i];
 }
 
+static uint8_t *host_resource(void *c, uint32_t type, int32_t id, uint32_t *size) {
+    return aoe_ui_host_resource_ror(c, type, id, size);
+}
+
 /* 0x503a70: the Game Screen made; then it is shown, the Status Screen
    and the menu screens removed and (outside mode 3) the game started
    (0x005046e0: its log and music, not integrated). */
@@ -125,7 +129,8 @@ static void start_game(void *c) {
     aoe_ui_system_close_ror(system, "Game Screen");
     s = calloc(1, sizeof *s);
     if (!s) return;
-    if (!aoe_game_screen_host_init_ror(s, &d->ui, &d->host->area, d->world)) {
+    if (!aoe_game_screen_host_init_ror(s, &d->ui, &d->host->area, d->world, host_resource,
+                                       d->host)) {
         s->ez.panel.vt->destroy(&s->ez.panel);
         free(s);
         say(d, "The Game Screen could not be made", NULL);

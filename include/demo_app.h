@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "diamond_map.h"
+
 /* Portable tech-demo application: loads user-supplied original Rise of Rome
    data from a root directory, builds the reconstructed scenario runtime,
    runs the translated world update and draws the original-art scene into a
@@ -73,6 +75,27 @@ int aoe_demo_view_player_start(AoeDemo *demo, int player);
 /* A player's civilisation's interface style (the civilisation's +0x28,
    kept as the player's +0x54). 0 when there is no such player. */
 int aoe_demo_player_icon_set(const AoeDemo *demo, int player, uint8_t *icon_set);
+/* A player's attributes (player +0x4c count, +0x50 values: 0 food, 1
+   wood, 2 stone, 3 gold, ...). 0 when there is no such player. */
+int aoe_demo_player_attributes(const AoeDemo *demo, int player, int16_t *count,
+                               const float **values);
+/* The diamond map's world calls over the running scenario (the
+   minimap's view of it): the map's tiles and terrain colours, the
+   players (world players 0..count-1: the runtime's players) with their
+   colour records' map colour, their objects (state 5 or below, the
+   templates' map mode and colour), the tile features (a map-mode-4
+   object's colour, found once per scenario: trees cut down later still
+   colour their tile), the view's centre (the camera) and size in tiles
+   (0x0050fde0: the view's width / tile width, height / tile height).
+   Fog is not reconstructed: everything is visible and nobody is
+   selected. Viewed player 1. load_bitmap forwards to `load_bitmap`
+   with `bitmap_context`. */
+void aoe_demo_minimap_ops(AoeDemo *demo, AoeDiamondMapOpsRor *ops,
+                          uint8_t *(*load_bitmap)(void *context, const char *name, int32_t id,
+                                                  int32_t *width, int32_t *height),
+                          void *bitmap_context);
+/* The camera (map tile coordinates). */
+void aoe_demo_camera(const AoeDemo *demo, float *x, float *y);
 /* The DAT's terrain count (scn_load_map's `terrain_count`). */
 uint8_t aoe_demo_terrain_count(const AoeDemo *demo);
 

@@ -104,7 +104,9 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
     unit->decay_rate = atfloat(p + 7); /* runtime template +0x80 */
     unit->blast_defense_level = p[11]; /* +0x8b, blast 0x00426280 */
     unit->field_8c = p[12]; /* loader 0x004413b0 order: +0x8b,+0x8c,... */
+    unit->map_mode = p[14];  /* +0x8e */
     unit->field_8f = p[15];
+    unit->map_color = p[20]; /* +0x90, after the +0x84 float */
     p = take(cursor, 16); /* help/hotkey IDs and flags at +0xa4..+0xa7 */
     if (!p) return 0;
     unit->negative_id_mode = p[12]; /* live constructor 0x004a8200 */

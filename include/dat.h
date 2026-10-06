@@ -367,6 +367,10 @@ typedef struct {
        0x004e7dc0/0x004e7f90/0x00508010. Their meaning beyond those uses is
        not yet established. */
     uint8_t field_8c, field_8f;
+    /* Template +0x8e / +0x90 (loader 0x004413b0): the diamond map's mode
+       (1 small, 2 large, 3 large in its own colour, 4 colours its tiles)
+       and its colour. */
+    uint8_t map_mode, map_color;
     /* Template +0x8b: blasts of a lower level (+0x11c) skip this unit. */
     uint8_t blast_defense_level;
     uint8_t blast_level;    /* type >= 50, template +0x11c */

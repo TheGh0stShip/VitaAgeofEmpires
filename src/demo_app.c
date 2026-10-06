@@ -97,6 +97,15 @@ struct AoeDemo {
     AoeLiveUnitDrawRorOps draw_ops;
 
     float camera_x, camera_y;
+    /* The minimap's object list and the tile features (0 none, else the
+       map-mode-4 object's colour + 1), rebuilt per scenario. */
+    void **map_objects;
+    size_t map_object_cap;
+    uint16_t *map_features;
+    int map_features_valid;
+    uint8_t *(*map_bitmap)(void *context, const char *name, int32_t id, int32_t *width,
+                           int32_t *height);
+    void *map_bitmap_context;
     int poi;
     int hud;
     int paused;
@@ -439,6 +448,7 @@ fail:
 }
 
 static void unload_scenario(AoeDemo *demo) {
+    demo->map_features_valid = 0;
     if (!demo->loaded) return;
     aoe_world_combat_destroy_ror(&demo->combat);
     aoe_world_motion_destroy_ror(&demo->motion);
@@ -455,6 +465,8 @@ void aoe_demo_close(AoeDemo *demo) {
     if (!demo) return;
     unload_scenario(demo);
     aoe_graphic_art_cache_clear(&demo->graphic_cache);
+    free(demo->map_objects);
+    free(demo->map_features);
     free(demo->scenarios);
     free(demo->terrain);
     free(demo->second_clip);
@@ -721,6 +733,215 @@ int aoe_demo_player_icon_set(const AoeDemo *demo, int player, uint8_t *icon_set)
     if (civ >= demo->civs.count) return 0;
     *icon_set = demo->civs.civs[civ].icon_set;
     return 1;
+}
+
+int aoe_demo_player_attributes(const AoeDemo *demo, int player, int16_t *count,
+                               const float **values) {
+    if (!demo || !demo->loaded || player < 0 || player >= demo->runtime.player_count) return 0;
+    *count = demo->runtime.players[player].resources.count;
+    *values = demo->runtime.players[player].resources.values;
+    return *values != NULL;
+}
+
+/* ------------------------------------------------------------------ */
+/* The minimap's world calls */
+
+#define MDEMO(c) ((AoeDemo *)(c))
+
+static int32_t mm_width(void *c) { return MDEMO(c)->loaded ? (int32_t)MDEMO(c)->runtime.map.width : 0; }
+static int32_t mm_height(void *c) { return MDEMO(c)->loaded ? (int32_t)MDEMO(c)->runtime.map.height : 0; }
+static size_t mm_index(const AoeDemo *d, int32_t x, int32_t y) {
+    return (size_t)y * d->runtime.map.width + (size_t)x;
+}
+static int mm_inside(const AoeDemo *d, int32_t x, int32_t y) {
+    return d->loaded && x >= 0 && y >= 0 && (uint32_t)x < d->runtime.map.width &&
+           (uint32_t)y < d->runtime.map.height;
+}
+static uint8_t mm_shape(void *c, int32_t x, int32_t y) {
+    AoeDemo *d = MDEMO(c);
+    return mm_inside(d, x, y) && d->runtime.map.shapes ? d->runtime.map.shapes[mm_index(d, x, y)] : 0;
+}
+static uint8_t mm_terrain(void *c, int32_t x, int32_t y) {
+    AoeDemo *d = MDEMO(c);
+    return mm_inside(d, x, y) ? d->runtime.map.tiles[mm_index(d, x, y)].terrain_id : 0;
+}
+static uint8_t mm_terrain_color(void *c, uint8_t terrain, int which) {
+    AoeDemo *d = MDEMO(c);
+    if (terrain >= d->terrains.count || which < 0 || which > 2) return 0;
+    return d->terrains.terrains[terrain].map_colors[which];
+}
+static int mm_one(void *c) { (void)c; return 1; }
+static int mm_zero(void *c) { (void)c; return 0; }
+
+static int mm_listed(const AoeLiveUnit *u) {
+    return u && u->constructed && u->core.unit_template && u->core.state <= 5;
+}
+
+static void mm_features(AoeDemo *d) {
+    size_t n = (size_t)d->runtime.map.width * d->runtime.map.height;
+    uint16_t *grown;
+    if (d->map_features_valid || !d->loaded) return;
+    grown = realloc(d->map_features, n * sizeof *grown);
+    if (!grown) return;
+    d->map_features = grown;
+    /* The first object found on a tile wins, in the runtime's order. */
+    for (size_t i = 0; i < n; ++i) d->map_features[i] = 0;
+    for (int p = 0; p < AOE_SCENARIO_RUNTIME_PLAYERS; ++p)
+        for (uint32_t i = 0; i < d->runtime.players[p].unit_count; ++i) {
+            const AoeLiveUnit *u = &d->runtime.players[p].units[i];
+            int32_t x, y;
+            if (!mm_listed(u) || u->core.unit_template->map_mode != 4) continue;
+            x = (int32_t)u->core.position.x38;
+            y = (int32_t)u->core.position.y3c;
+            if (mm_inside(d, x, y) && !d->map_features[mm_index(d, x, y)])
+                d->map_features[mm_index(d, x, y)] = (uint16_t)(u->core.unit_template->map_color + 1);
+        }
+    d->map_features_valid = 1;
+}
+static int mm_feature(void *c, int32_t x, int32_t y, uint8_t *color) {
+    AoeDemo *d = MDEMO(c);
+    mm_features(d);
+    if (!d->map_features_valid || !mm_inside(d, x, y) || !d->map_features[mm_index(d, x, y)]) return 0;
+    *color = (uint8_t)(d->map_features[mm_index(d, x, y)] - 1);
+    return 1;
+}
+static uint32_t mm_all_bits(void *c, int32_t x, int32_t y) { (void)c; (void)x; (void)y; return 0xffffffffu; }
+static uint32_t mm_mask(void *c, const void *player) { (void)c; (void)player; return 0xffffffffu; }
+static int mm_fog(void *c, const void *player) { (void)c; (void)player; return 0; }
+static int32_t mm_shared(void *c, const void *player, int16_t n) { (void)c; (void)player; (void)n; return 0; }
+static int mm_player_index(const AoeDemo *d, const void *player) {
+    const AoeScenarioRuntimePlayerRor *p = player;
+    if (!p || p < d->runtime.players || p >= d->runtime.players + AOE_SCENARIO_RUNTIME_PLAYERS) return -1;
+    return (int)(p - d->runtime.players);
+}
+static uint8_t mm_player_color(void *c, const void *player) {
+    AoeDemo *d = MDEMO(c);
+    int i = mm_player_index(d, player);
+    uint8_t k;
+    if (i < 0) return 0;
+    k = d->resolver.colors[i];
+    return k < d->intro.color_count ? (uint8_t)(d->intro.colors[k].value & 0xff) : 0;
+}
+static void mm_center(void *c, const void *player, float *x, float *y) {
+    (void)player;
+    *x = MDEMO(c)->camera_x;
+    *y = MDEMO(c)->camera_y;
+}
+static void mm_set_center(void *c, const void *player, float x, float y) {
+    (void)player;
+    aoe_demo_set_camera(MDEMO(c), x, y);
+}
+static int32_t mm_selection(void *c, const void *player, void **out, int32_t max) {
+    (void)c; (void)player; (void)out; (void)max;
+    return 0;
+}
+static int32_t mm_viewed(void *c) { (void)c; return 1; }
+static int32_t mm_players(void *c) { return MDEMO(c)->loaded ? MDEMO(c)->runtime.player_count : 0; }
+static const void *mm_player(void *c, int32_t i) {
+    AoeDemo *d = MDEMO(c);
+    return d->loaded && i >= 0 && i < d->runtime.player_count ? &d->runtime.players[i] : NULL;
+}
+static int32_t mm_objects(void *c, const void *player, int doppelgangers, void ***out) {
+    AoeDemo *d = MDEMO(c);
+    int p = mm_player_index(d, player);
+    size_t n = 0;
+    *out = NULL;
+    if (p < 0 || doppelgangers || !d->loaded) return 0;
+    for (uint32_t i = 0; i < d->runtime.players[p].unit_count; ++i) {
+        AoeLiveUnit *u = &d->runtime.players[p].units[i];
+        if (!mm_listed(u)) continue;
+        if (n == d->map_object_cap) {
+            size_t cap = d->map_object_cap ? d->map_object_cap * 2 : 256;
+            void **grown = realloc(d->map_objects, cap * sizeof *grown);
+            if (!grown) break;
+            d->map_objects = grown;
+            d->map_object_cap = cap;
+        }
+        d->map_objects[n++] = u;
+    }
+    *out = d->map_objects;
+    return (int32_t)n;
+}
+static int mm_read(void *c, void *object, AoeDiamondObjectRor *out) {
+    AoeDemo *d = MDEMO(c);
+    const AoeLiveUnit *u = object;
+    int owner;
+    if (!mm_listed(u)) return 0;
+    owner = u->runtime_owner_index;
+    memset(out, 0, sizeof *out);
+    out->has_sprite = 1;
+    out->x = u->core.position.x38;
+    out->y = u->core.position.y3c;
+    out->owner = owner >= 0 && owner < AOE_SCENARIO_RUNTIME_PLAYERS ? &d->runtime.players[owner] : NULL;
+    out->owner_number = (int16_t)owner;
+    out->type = u->core.unit_template->type;
+    out->fog_visible = u->core.unit_template->draw_class;
+    out->map_mode = u->core.unit_template->map_mode;
+    out->map_color = u->core.unit_template->map_color;
+    return 1;
+}
+static int32_t mm_explored(void *c, const void *player, const int16_t **xy) {
+    (void)c; (void)player;
+    *xy = NULL;
+    return 0;
+}
+static void mm_clear_explored(void *c, const void *player) { (void)c; (void)player; }
+static void mm_view_size(void *c, int16_t *w, int16_t *h) {
+    AoeDemo *d = MDEMO(c);
+    *w = d->geometry.tile_width ? (int16_t)((int32_t)d->width / d->geometry.tile_width) : 0;
+    *h = d->geometry.tile_height ? (int16_t)((int32_t)d->height / d->geometry.tile_height) : 0;
+}
+static int mm_view_tiles(void *c, int32_t *x0, int32_t *y0, int32_t *x1, int32_t *y1) {
+    (void)c; (void)x0; (void)y0; (void)x1; (void)y1;
+    return 0;
+}
+static int32_t mm_edit_mode(void *c) { (void)c; return 0; }
+static uint8_t *mm_bitmap(void *c, const char *name, int32_t id, int32_t *w, int32_t *h) {
+    AoeDemo *d = MDEMO(c);
+    return d->map_bitmap ? d->map_bitmap(d->map_bitmap_context, name, id, w, h) : NULL;
+}
+
+void aoe_demo_minimap_ops(AoeDemo *demo, AoeDiamondMapOpsRor *o,
+                          uint8_t *(*load_bitmap)(void *context, const char *name, int32_t id,
+                                                  int32_t *width, int32_t *height),
+                          void *bitmap_context) {
+    memset(o, 0, sizeof *o);
+    demo->map_bitmap = load_bitmap;
+    demo->map_bitmap_context = bitmap_context;
+    o->load_bitmap = mm_bitmap;
+    o->context = demo;
+    o->map_width = mm_width;
+    o->map_height = mm_height;
+    o->tile_shape = mm_shape;
+    o->tile_terrain = mm_terrain;
+    o->terrain_color = mm_terrain_color;
+    o->all_visible = mm_one;
+    o->keep_explored = mm_zero;
+    o->tile_feature = mm_feature;
+    o->visibility = mm_all_bits;
+    o->explored_mask = mm_mask;
+    o->visible_mask = mm_mask;
+    o->fog = mm_fog;
+    o->shared_vision = mm_shared;
+    o->player_map_color = mm_player_color;
+    o->view_center = mm_center;
+    o->set_view_center = mm_set_center;
+    o->selection = mm_selection;
+    o->viewed_index = mm_viewed;
+    o->player_count = mm_players;
+    o->world_player = mm_player;
+    o->objects = mm_objects;
+    o->read_object = mm_read;
+    o->explored_tiles = mm_explored;
+    o->clear_explored = mm_clear_explored;
+    o->view_size = mm_view_size;
+    o->view_tiles = mm_view_tiles;
+    o->edit_mode = mm_edit_mode;
+}
+
+void aoe_demo_camera(const AoeDemo *demo, float *x, float *y) {
+    *x = demo ? demo->camera_x : 0.0f;
+    *y = demo ? demo->camera_y : 0.0f;
 }
 
 uint8_t aoe_demo_terrain_count(const AoeDemo *demo) {

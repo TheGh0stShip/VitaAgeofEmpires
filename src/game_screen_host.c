@@ -39,6 +39,16 @@ static void free_shape(AoeGameScreenHostRor *s, void *shape) {
 static void gs_destroy(AoeUiPanelRor *p) {
     AoeGameScreenHostRor *s = GS(p);
     int i;
+    if (s->map) {
+        s->map->map.panel.vt->destroy(&s->map->map.panel);
+        free(s->map);
+        s->map = NULL;
+    }
+    if (s->resources) {
+        s->resources->panel.vt->destroy(&s->resources->panel);
+        free(s->resources);
+        s->resources = NULL;
+    }
     for (i = 0; i < AOE_GSP_SHAPES; ++i) {
         free_shape(s, s->shapes[i]);
         s->shapes[i] = NULL;
@@ -117,8 +127,7 @@ static void gs_draw(AoeUiPanelRor *p) {
                                          d_get_clip, d_set_clip, d_lock, d_unlock,
                                          d_view_rect, d_box, d_has_shape, d_shape};
     aoe_game_screen_draw_ror(&s->screen, &ops);
-    if (!s->world || !s->pixels || !d) return;
-    if (!aoe_demo_render_indexed(s->world, s->pixels, (size_t)s->view_w)) return;
+    if (!s->world || !s->pixels || !s->rendered || !d) return;
     if (!aoe_surface_lock_ror(d, 1)) return;
     x0 = p->x + s->view_x;
     y0 = p->y + s->view_y;
@@ -136,6 +145,13 @@ static void gs_draw(AoeUiPanelRor *p) {
                    (x0 - p->x - s->view_x),
                (size_t)(x1 - x0));
     aoe_surface_unlock_ror(d);
+}
+
+/* The world drawn into the view's pixels, once per idle (the panel's
+   draw may run several times a frame for its children's rectangles). */
+static void render_view(AoeGameScreenHostRor *s) {
+    if (s->world && s->pixels)
+        s->rendered = aoe_demo_render_indexed(s->world, s->pixels, (size_t)s->view_w);
 }
 
 static int key_held(const AoeUiPanelRor *p, int vk) {
@@ -169,6 +185,12 @@ static int32_t gs_idle(AoeUiPanelRor *p) {
         else if (s->mouse_y >= p->area->height - EDGE) in.scroll_y = 1.0f;
     }
     if (s->world && dt > 0.0f) aoe_demo_update(s->world, &in, dt);
+    render_view(s);
+    /* The minimap every 0x14d ms (the screen's +0x5c0 interval). */
+    if (s->map && now - s->map_time >= 0x14d) {
+        s->map_time = now;
+        s->map->map.panel.vt->set_redraw(&s->map->map.panel, 1);
+    }
     p->vt->set_redraw(p, 1);
     return aoe_ui_panel_handle_idle_ror(p);
 }
@@ -184,6 +206,12 @@ static int32_t gs_mouse_move(AoeUiPanelRor *p, int32_t x, int32_t y, int32_t ctr
    and the buttons it styles are not assembled yet, so those calls do
    nothing; the screen's own settings and shapes are real. */
 static void st_none(void *c) { (void)c; }
+/* 0x004f81d0 on +0x4c0 (the view, map and object panel are not made). */
+static void st_panels(void *c) {
+    AoeGameScreenHostRor *s = GS(c);
+    if (s->resources && s->resource_player.attribute_count)
+        aoe_resource_panel_set_player_ror(s->resources, &s->resource_player);
+}
 static void st_info(void *c, const char *name, int32_t id) { aoe_ui_ez_set_info_ror(&GS(c)->ez, name, id); }
 static void st_popup(void *c, const char *name, int32_t id) { aoe_ui_ez_set_popup_ror(&GS(c)->ez, name, id); }
 static void st_pictures(void *c, const char *name, int32_t id) {
@@ -202,7 +230,7 @@ static void st_button_colors(void *c, uint16_t off, int32_t state, uint32_t a, u
 }
 static void st_border(void *c, int32_t i, void *shape) { (void)c; (void)i; (void)shape; }
 static void st_colors(void *c, uint16_t off, uint32_t a, uint32_t b) {
-    (void)c; (void)off; (void)a; (void)b;
+    if (off == 0x4c0 && GS(c)->resources) aoe_resource_panel_set_colors_ror(GS(c)->resources, a, b);
 }
 static void *st_load(void *c, const char *name, int32_t id) {
     const AoeUiEzOpsRor *ez = GS(c)->ui->ez_ops;
@@ -224,7 +252,7 @@ static void restyle(AoeGameScreenHostRor *s) {
     o.player_id = 1;
     if (!aoe_demo_player_icon_set(s->world, 1, &style)) style = 0;
     o.player_style = style;
-    o.player_to_panels = st_none;
+    o.player_to_panels = st_panels;
     o.mode_changed = st_none;
     o.store_player = st_none;
     o.age = st_none;
@@ -245,6 +273,124 @@ static void restyle(AoeGameScreenHostRor *s) {
     aoe_game_screen_style_ror(&o, s->shapes, &s->page_picture);
 }
 
+static const char *ui_string(void *c, int32_t id) {
+    static char text[256];
+    aoe_ui_string_ror(GS(c)->ez.panel.system, id, text, sizeof text);
+    return text;
+}
+
+/* AOE_GSC_RESOURCES: 0x004f7c00 with font record 11 (help 0x4e25), at the
+   layout's place for +0x4c0 (0, 0, 0x10e, 0x14). */
+static int make_resources(AoeGameScreenHostRor *s) {
+    const AoeUiEzOpsRor *ez = s->ui->ez_ops;
+    uintptr_t font = 0;
+    int32_t fw = 0, fh = 0;
+    AoeResourcePanelRor *r = calloc(1, sizeof *r);
+    if (!r) return 0;
+    if (ez && ez->font) ez->font(ez->context, 11, &font, &fw, &fh);
+    if (!aoe_demo_player_attributes(s->world, 1, &s->resource_player.attribute_count,
+                                    &s->resource_player.attributes))
+        s->resource_player.attribute_count = 0;
+    if (!aoe_resource_panel_init_ror(r, s->ez.panel.system, s->ez.panel.area, &s->ez.panel, font,
+                                     s->resource_player.attribute_count ? &s->resource_player : NULL)) {
+        r->panel.vt->destroy(&r->panel);
+        free(r);
+        return 0;
+    }
+    s->resources = r;
+    r->game_mode = &s->game_state;
+    r->string = ui_string;
+    r->string_context = s;
+    r->panel.vt->set_fixed_position(&r->panel, 0, 0, 0x10e, 0x14);
+    r->panel.help_id = 0x4e25;
+    return 1;
+}
+
+uint8_t *aoe_game_screen_host_bmp_ror(const uint8_t *data, uint32_t size, int32_t *width,
+                                      int32_t *height) {
+    uint32_t offset, header, w, h, stride, y;
+    int32_t raw_h;
+    uint8_t *out;
+    if (!data || size < 54 || data[0] != 'B' || data[1] != 'M') return NULL;
+    offset = (uint32_t)data[10] | (uint32_t)data[11] << 8 | (uint32_t)data[12] << 16 |
+             (uint32_t)data[13] << 24;
+    header = (uint32_t)data[14] | (uint32_t)data[15] << 8;
+    w = (uint32_t)data[18] | (uint32_t)data[19] << 8 | (uint32_t)data[20] << 16 |
+        (uint32_t)data[21] << 24;
+    raw_h = (int32_t)((uint32_t)data[22] | (uint32_t)data[23] << 8 | (uint32_t)data[24] << 16 |
+                      (uint32_t)data[25] << 24);
+    if (header < 40 || data[28] != 8 || data[29] != 0 || w == 0 || w > 4096 || raw_h == 0 ||
+        raw_h > 4096 || raw_h < -4096)
+        return NULL;
+    h = (uint32_t)(raw_h < 0 ? -raw_h : raw_h);
+    stride = (w + 3) & ~3u;
+    if (offset > size || (uint64_t)stride * h > size - offset) return NULL;
+    out = malloc((size_t)w * h);
+    if (!out) return NULL;
+    for (y = 0; y < h; ++y) {
+        uint32_t src = raw_h < 0 ? y : h - 1 - y;
+        memcpy(out + (size_t)y * w, data + offset + (size_t)src * stride, w);
+    }
+    *width = (int32_t)w;
+    *height = (int32_t)h;
+    return out;
+}
+
+/* The minimap's calls the world does not answer. */
+static uint8_t *mm_bitmap(void *c, const char *name, int32_t id, int32_t *w, int32_t *h) {
+    AoeGameScreenHostRor *s = c;
+    uint32_t size = 0;
+    uint8_t *data, *bits;
+    (void)name;
+    if (!s->resource) return NULL;
+    data = s->resource(s->resource_context, 0x62696e61u, id, &size);
+    bits = aoe_game_screen_host_bmp_ror(data, size, w, h);
+    free(data);
+    return bits;
+}
+static int32_t mg_state(void *c) { return GS(c)->game_state; }
+static int32_t mg_zero(void *c) { (void)c; return 0; }
+/* Mouse style 2: the left button moves the view, the right one orders. */
+static int32_t mg_style(void *c) { (void)c; return 2; }
+static int mg_orders(void *c) { (void)c; return 1; }
+static void mg_mode(void *c, int32_t mode, int32_t value) { (void)c; (void)mode; (void)value; }
+static void mg_clear(void *c, const void *player) { (void)c; (void)player; }
+static uint8_t mg_order(void *c, const void *player, int32_t slot, float x, float y) {
+    (void)c; (void)player; (void)slot; (void)x; (void)y;
+    return 0;
+}
+static void mg_point(void *c, const void *player, float x, float y) {
+    (void)c; (void)player; (void)x; (void)y;
+}
+static void mg_frame(void *c, int32_t redraw) { GS(c)->ez.panel.vt->set_redraw(&GS(c)->ez.panel, redraw); }
+
+/* AOE_GSC_MINIMAP: 0x005085a0, its setup 0x0042c4f0 (no buffer: the map
+   makes its own), help 0x4e33, the world (0x0042c780), "map.bmp" 0xc4e1
+   (0x0042c540) and the viewed player (0x0042cbb0), at the layout's place
+   for +0x4bc. */
+static int make_minimap(AoeGameScreenHostRor *s) {
+    static const int32_t at640[4] = {0x19b, 0x16a, 0xdc, 0x72};
+    AoeGameMinimapRor *g = calloc(1, sizeof *g);
+    if (!g) return 0;
+    aoe_demo_minimap_ops(s->world, &s->map_ops, mm_bitmap, s);
+    s->map_game_ops = (AoeGameMinimapOpsRor){s, mg_state, mg_zero, mg_style, mg_orders, mg_mode,
+                                             mg_clear, mg_order, mg_point, mg_frame};
+    aoe_game_minimap_init_ror(g, s->ez.panel.system, &s->map_ops, &s->map_game_ops);
+    if (g->map.panel.field_d8 ||
+        !aoe_diamond_map_setup_ror(&g->map, s->ez.panel.area, &s->ez.panel, 0, 0, 0, 0, 0, NULL)) {
+        g->map.panel.vt->destroy(&g->map.panel);
+        free(g);
+        return 0;
+    }
+    s->map = g;
+    g->map.panel.help_id = 0x4e33;
+    aoe_diamond_map_set_world_ror(&g->map, s->world);
+    aoe_diamond_map_load_ror(&g->map, "map.bmp", 0xc4e1);
+    aoe_diamond_map_set_player_ror(&g->map, s->map_ops.world_player(s->world, 1));
+    g->map.panel.vt->set_fixed_position(&g->map.panel, at640[0], at640[1], at640[2], at640[3]);
+    return 1;
+}
+
 static AoeUiEzVtblRor vtable = {
     AOE_UI_EZ_SLOTS_MD(gs_destroy, gs_draw, gs_idle, aoe_ui_panel_handle_paint_ror,
                        aoe_ui_ez_no_key_action_ror, aoe_ui_panel_zero_ror,
@@ -255,12 +401,17 @@ static AoeUiEzVtblRor vtable = {
 };
 
 int aoe_game_screen_host_init_ror(AoeGameScreenHostRor *s, AoeGameUiRor *ui, AoeUiAreaRor *area,
-                                  AoeDemo *world) {
+                                  AoeDemo *world,
+                                  uint8_t *(*resource)(void *context, uint32_t type, int32_t id,
+                                                       uint32_t *size),
+                                  void *resource_context) {
     AoeUiEzRor *ez = &s->ez;
     int32_t r[4];
     memset(s, 0, sizeof *s);
     s->ui = ui;
     s->world = world;
+    s->resource = resource;
+    s->resource_context = resource_context;
     s->mouse_x = s->mouse_y = -1;
     vtable.base.mouse_move = gs_mouse_move;
     aoe_ui_screen_init_ror(ez, ui->system, ui->ez_ops, NAME);
@@ -279,6 +430,9 @@ int aoe_game_screen_host_init_ror(AoeGameScreenHostRor *s, AoeGameUiRor *ui, Aoe
     s->screen.height = ez->panel.height;
     s->screen.self = &ez->panel;
     s->style = -1;
+    s->game_state = 4;
+    if (!make_resources(s) || !make_minimap(s)) return 0;
     restyle(s);
+    render_view(s);
     return 1;
 }

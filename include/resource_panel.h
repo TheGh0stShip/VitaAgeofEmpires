@@ -49,5 +49,8 @@ int aoe_resource_panel_init_ror(AoeResourcePanelRor *r, AoeUiSystemRor *system,
 void aoe_resource_panel_set_player_ror(AoeResourcePanelRor *r,
                                        const AoeResourcePlayerRor *player);
 void aoe_resource_panel_cache_ror(AoeResourcePanelRor *r);
+/* 0x004f7cf0: the text colour and shadow (+0x110, +0x114), then a
+   redraw. */
+void aoe_resource_panel_set_colors_ror(AoeResourcePanelRor *r, uint32_t color, uint32_t shadow);
 
 #endif

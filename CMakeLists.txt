@@ -897,12 +897,13 @@ else()
     # instructions), then OK starts the game on the Game Screen.
     add_test(NAME ror_campaign_start_real COMMAND ui_host_tool
       "${CMAKE_SOURCE_DIR}/build/demo_root" "${CMAKE_BINARY_DIR}"
-      c:320,198 c:320,188 t:Tester k:13 c:100,240 c:190,455 c:560,460 i:5 d:39 i:5 u:39)
+      c:320,198 c:320,188 t:Tester k:13 c:100,240 c:190,455 c:560,460 i:5 d:39 i:5 u:39
+      c:520,380 i:5)
     set_tests_properties(ror_campaign_start_real PROPERTIES
       FIXTURES_REQUIRED ror_user
       ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_test"
       PASS_REGULAR_EXPRESSION
-      "c:190,455 -> Mission Dialog\nc:560,460 -> Game Screen\ni:5 -> Game Screen\nd:39 -> Game Screen")
+      "c:190,455 -> Mission Dialog\nc:560,460 -> Game Screen\ni:5 -> Game Screen\nd:39 -> Game Screen\ni:5 -> Game Screen\nu:39 -> Game Screen\nc:520,380 -> Game Screen")
     add_test(NAME ror_shell_touch_and_buttons_real COMMAND shell_app_real
       "${CMAKE_SOURCE_DIR}/build/demo_root" "${CMAKE_BINARY_DIR}/shell_frame.ppm")
     set_tests_properties(ror_shell_touch_and_buttons_real PROPERTIES
@@ -1814,6 +1815,10 @@ else()
   target_link_libraries(small_functions_test PRIVATE aoe_live_unit_factory aoe_effects_io)
   target_compile_options(small_functions_test PRIVATE -UNDEBUG)
   add_test(NAME original_ror_small_functions COMMAND small_functions_test)
+  add_executable(game_screen_host_test tests/game_screen_host_test.c)
+  target_link_libraries(game_screen_host_test PRIVATE aoe_ui_director)
+  target_compile_options(game_screen_host_test PRIVATE -UNDEBUG)
+  add_test(NAME game_screen_host_helpers COMMAND game_screen_host_test)
   add_executable(game_screen_style_test tests/game_screen_style_test.c)
   target_link_libraries(game_screen_style_test PRIVATE aoe_ui_panel)
   target_compile_options(game_screen_style_test PRIVATE -UNDEBUG)

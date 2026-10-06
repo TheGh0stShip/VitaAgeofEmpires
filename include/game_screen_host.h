@@ -6,6 +6,8 @@
 #include "demo_app.h"
 #include "game_screen.h"
 #include "game_ui.h"
+#include "game_minimap.h"
+#include "resource_panel.h"
 
 /* The port's "Game Screen": the panel the game start (0x503a70)
    registers, assembled from what is integrated so far. Integration
@@ -17,8 +19,9 @@
    renderer, the world advanced on idle, and the view scrolled by the
    arrow keys or the pointer at a screen edge. The viewed player's
    interface (0x004816d0) loads its style's bar shape, which the
-   translated draw (0x00484110) paints behind the view. The panels on the
-   bars (resources, minimap, object panel, command buttons) are not
+   translated draw (0x00484110) paints behind the view. The resource bar
+   (0x004f7c00) and the minimap (0x005085a0) are the translated panels
+   over the world; the object panel and command buttons are not
    assembled yet. */
 typedef struct {
     AoeUiEzRor ez;
@@ -27,9 +30,20 @@ typedef struct {
     void *shapes[AOE_GSP_SHAPES]; /* +0x478..+0x48c */
     void *page_picture;           /* +0x4ac */
     int32_t style, style_width;   /* +0x714, +0x718 */
+    int32_t game_state;           /* game +0x1b0: 4 once started (0x005046e0) */
+    AoeResourcePanelRor *resources;   /* +0x4c0 */
+    AoeGameMinimapRor *map;           /* +0x4bc */
+    uint32_t map_time;                /* +0x5c4 */
+    AoeDiamondMapOpsRor map_ops;
+    AoeGameMinimapOpsRor map_game_ops;
+    /* A resource's bytes (malloc'd) by type and ID, or NULL. */
+    uint8_t *(*resource)(void *context, uint32_t type, int32_t id, uint32_t *size);
+    void *resource_context;
+    AoeResourcePlayerRor resource_player;
     AoeDemo *world;               /* the director's; not owned */
     int32_t view_x, view_y, view_w, view_h;
     uint8_t *pixels;              /* view_w x view_h */
+    int rendered;                 /* `pixels` hold a frame */
     uint32_t last_ms;
     int32_t mouse_x, mouse_y;     /* screen coordinates, -1 before any move */
 } AoeGameScreenHostRor;
@@ -41,6 +55,13 @@ void aoe_game_screen_host_view_rect_ror(int32_t width, int32_t height, int32_t r
    set up (the caller frees it). `world` must be open with a view of the
    rectangle's size and hold the started scenario. */
 int aoe_game_screen_host_init_ror(AoeGameScreenHostRor *s, AoeGameUiRor *ui, AoeUiAreaRor *area,
-                                  AoeDemo *world);
+                                  AoeDemo *world,
+                                  uint8_t *(*resource)(void *context, uint32_t type, int32_t id,
+                                                       uint32_t *size),
+                                  void *resource_context);
+/* An 8-bit BMP (file header, BITMAPINFOHEADER, palette, rows bottom-up
+   padded to four bytes) as top-down pixels (malloc'd), or NULL. */
+uint8_t *aoe_game_screen_host_bmp_ror(const uint8_t *data, uint32_t size, int32_t *width,
+                                      int32_t *height);
 
 #endif

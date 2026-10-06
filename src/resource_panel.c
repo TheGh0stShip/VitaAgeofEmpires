@@ -37,6 +37,12 @@ void aoe_resource_panel_set_player_ror(AoeResourcePanelRor *r,
     r->panel.vt->set_redraw(&r->panel, 1);
 }
 
+void aoe_resource_panel_set_colors_ror(AoeResourcePanelRor *r, uint32_t color, uint32_t shadow) {
+    r->color = color;
+    r->shadow = shadow;
+    r->panel.vt->set_redraw(&r->panel, 1);
+}
+
 int aoe_resource_panel_init_ror(AoeResourcePanelRor *r, AoeUiSystemRor *system,
                                 AoeUiAreaRor *area, AoeUiPanelRor *parent,
                                 uintptr_t font,

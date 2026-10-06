@@ -694,6 +694,10 @@ add_library(aoe_main_view STATIC src/main_view.c)
 target_include_directories(aoe_main_view PUBLIC include)
 target_compile_options(aoe_main_view PRIVATE -Wall -Wextra)
 
+add_library(aoe_view_terrain_pass STATIC src/view_terrain_pass.c)
+target_include_directories(aoe_view_terrain_pass PUBLIC include)
+target_compile_options(aoe_view_terrain_pass PRIVATE -Wall -Wextra)
+
 add_library(aoe_ui_panel STATIC src/ui_panel.c src/ui_button.c src/command_button.c src/resource_panel.c src/info_panel.c src/population_panel.c src/timer_panel.c src/edit_toolbar.c src/diamond_map.c src/game_minimap.c src/game_screen.c
             src/ui_text.c
             src/ui_scrollbar.c
@@ -1635,6 +1639,11 @@ else()
   target_link_libraries(main_view_test PRIVATE aoe_main_view)
   target_compile_options(main_view_test PRIVATE -UNDEBUG)
   add_test(NAME original_ror_main_view COMMAND main_view_test)
+
+  add_executable(view_terrain_pass_test tests/view_terrain_pass_test.c)
+  target_link_libraries(view_terrain_pass_test PRIVATE aoe_view_terrain_pass)
+  target_compile_options(view_terrain_pass_test PRIVATE -UNDEBUG)
+  add_test(NAME original_ror_view_terrain_pass COMMAND view_terrain_pass_test)
   add_executable(diamond_map_test tests/diamond_map_test.c)
   target_link_libraries(diamond_map_test PRIVATE aoe_ui_panel aoe_draw_system)
   target_compile_options(diamond_map_test PRIVATE -UNDEBUG)

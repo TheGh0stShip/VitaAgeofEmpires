@@ -625,6 +625,12 @@ add_library(aoe_game_ui STATIC src/screens/menu_dialog.c
 target_include_directories(aoe_game_ui PUBLIC include)
 target_link_libraries(aoe_game_ui PUBLIC aoe_ui_panel aoe_game_base aoe_game_settings aoe_campaign_progress aoe_tribute)
 
+add_library(aoe_ui_host STATIC src/ui_host.c)
+target_include_directories(aoe_ui_host PUBLIC include)
+target_compile_options(aoe_ui_host PRIVATE -Wall -Wextra)
+target_link_libraries(aoe_ui_host PUBLIC aoe_ui_panel aoe_soft_draw aoe_ui_font aoe_pe_strings
+  aoe_drs aoe_slp aoe_palette aoe_shape aoe_draw_system)
+
 add_library(aoe_achievements_screen STATIC src/screens/achievements_screen.c)
 target_include_directories(aoe_achievements_screen PUBLIC include)
 target_link_libraries(aoe_achievements_screen PUBLIC aoe_game_ui aoe_player_outcome aoe_action_io)
@@ -830,6 +836,17 @@ else()
   add_executable(scenario_scene_tool tools/scenario_scene_tool.c)
   target_link_libraries(scenario_scene_tool PRIVATE aoe_scenario_scene
     aoe_live_unit_sprite_backend aoe_color_table aoe_palette aoe_dat)
+  add_executable(ui_host_tool tools/ui_host_tool.c)
+  target_link_libraries(ui_host_tool PRIVATE aoe_ui_host aoe_game_ui)
+  # The translated Main Menu on the user's data (archives, language
+  # libraries and fonts linked under build/demo_root; nothing distributed).
+  if(EXISTS "${CMAKE_SOURCE_DIR}/build/demo_root/data2" AND
+     EXISTS "${CMAKE_SOURCE_DIR}/build/demo_root/languagex.dll")
+    add_test(NAME ror_main_menu_render_real COMMAND ui_host_tool
+      "${CMAKE_SOURCE_DIR}/build/demo_root" "${CMAKE_BINARY_DIR}/main_menu.ppm")
+    set_tests_properties(ror_main_menu_render_real PROPERTIES
+      PASS_REGULAR_EXPRESSION "background yes, palette yes, [1-9][0-9][0-9] colours used")
+  endif()
   add_executable(lang_tool tools/lang_tool.c)
   target_link_libraries(lang_tool PRIVATE aoe_pe_strings)
   add_executable(pe_strings_test tests/pe_strings_test.c)

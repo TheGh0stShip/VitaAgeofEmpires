@@ -16,7 +16,7 @@ static int resolved_copperplate;
 
 static void load_string(void *c, int32_t id, char *buf, int32_t size) {
     (void)c;
-    aoe_game_string_ror(&lang_x, &lang_b, id, buf, size);
+    aoe_lang_string_ror(&lang_x, &lang_b, id, buf, size);
 }
 static const AoeFontFileRor *resolve(void *c, const char *face, int want_bold) {
     (void)c;

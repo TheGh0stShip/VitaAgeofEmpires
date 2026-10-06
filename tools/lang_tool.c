@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
     for (i = 3; i < argc; ++i) {
         char out[512];
         long id = strtol(argv[i], NULL, 0);
-        aoe_game_string_ror(ok_x ? &x : NULL, ok_b ? &b : NULL, (int32_t)id, out, (int32_t)sizeof out);
+        aoe_lang_string_ror(ok_x ? &x : NULL, ok_b ? &b : NULL, (int32_t)id, out, (int32_t)sizeof out);
         printf("%ld\t%s\n", id, out);
     }
     aoe_pe_strings_free(&x);

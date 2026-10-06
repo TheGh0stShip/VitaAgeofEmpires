@@ -109,14 +109,14 @@ int main(void) {
         size_t bsize;
         uint8_t *bimg = build(base_blocks, 1, &bsize, 1);
         assert(aoe_pe_strings_open(&b, bimg, bsize) == 1);
-        aoe_game_string_ror(&t, &b, 9218, out, sizeof out);
+        aoe_lang_string_ror(&t, &b, 9218, out, sizeof out);
         assert(strcmp(out, "Single Player") == 0);
-        aoe_game_string_ror(&t, &b, 9232, out, sizeof out);   /* block 0x242 entry 0 */
+        aoe_lang_string_ror(&t, &b, 9232, out, sizeof out);   /* block 0x242 entry 0 */
         assert(strcmp(out, "B242.0") == 0);
         strcpy(out, "stale");
-        aoe_game_string_ror(&t, &b, 50000, out, sizeof out);
+        aoe_lang_string_ror(&t, &b, 50000, out, sizeof out);
         assert(out[0] == '\0');
-        aoe_game_string_ror(NULL, NULL, 9218, out, sizeof out);
+        aoe_lang_string_ror(NULL, NULL, 9218, out, sizeof out);
         assert(out[0] == '\0');
         aoe_pe_strings_free(&b);
     }

@@ -45,7 +45,7 @@ int32_t aoe_pe_load_string_ror(const AoePeStringsRor *t, int32_t id, char *out, 
    0x004ff530 tries the expansion library and, when that yields nothing,
    0x00417490 the base library, which writes "" when it fails too; the
    last byte of `out` is always cleared. Either library may be NULL. */
-void aoe_game_string_ror(const AoePeStringsRor *expansion, const AoePeStringsRor *base, int32_t id,
+void aoe_lang_string_ror(const AoePeStringsRor *expansion, const AoePeStringsRor *base, int32_t id,
                          char *out, int32_t size);
 
 #endif

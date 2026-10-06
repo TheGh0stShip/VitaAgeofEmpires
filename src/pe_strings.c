@@ -160,7 +160,7 @@ int32_t aoe_pe_load_string_ror(const AoePeStringsRor *t, int32_t id, char *out, 
     return n;
 }
 
-void aoe_game_string_ror(const AoePeStringsRor *expansion, const AoePeStringsRor *base, int32_t id,
+void aoe_lang_string_ror(const AoePeStringsRor *expansion, const AoePeStringsRor *base, int32_t id,
                          char *out, int32_t size) {
     if (size < 1) return;
     if (aoe_pe_load_string_ror(expansion, id, out, size) == 0 &&

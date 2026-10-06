@@ -732,3 +732,43 @@ void aoe_game_ror_ai_lines_ror(AoeGameRorAiLinesOpsRor *ops, char lines[6][256])
         ops->show(ops->context, show);
     }
 }
+
+/* 0x005003f0 */
+int aoe_game_ror_play_video_ror(AoeGameRorVideoStateRor *s, const AoeGameRorVideoPlayOpsRor *o,
+                                int32_t after, const char *name) {
+    char path[260], mode[100];
+    int32_t w, h;
+    if (s->window) {
+        mode[0] = '\0';
+        o->window_mode(o->context, s->window, mode, sizeof mode);
+        if (mode[0] && strcmp(mode, "stopped") != 0) o->window_stop(o->context, s->window);
+        o->window_close(o->context, s->window);
+        s->window = NULL;
+    }
+    s->after = after;
+    if (o->no_videos || !name || !*name) goto fail;
+    snprintf(path, sizeof path, "%s%s.avi", o->avi_dir, name);
+    if (!o->file_exists(o->context, path)) {
+        const char *cd = o->cd_path(o->context);
+        if (!cd) goto fail;
+        snprintf(path, sizeof path, "%sgame\\avi\\%s.avi", cd, name);
+        if (!o->file_exists(o->context, path)) goto fail;
+    }
+    if (!o->videos_enabled || (!*o->video_up && !o->open_video(o->context))) goto fail;
+    s->window = o->create_window(o->context, path);
+    if (!s->window) goto fail;
+    if (!o->mode_16bit) o->set_palette(o->context, s->window);
+    o->client_size(o->context, s->window, &w, &h);
+    if (o->double_size) { w *= 2; h *= 2; }
+    o->move_window(o->context, s->window, o->screen_width / 2 - w / 2, o->screen_height / 2 - h / 2,
+                   w, h);
+    o->before_play(o->context);
+    s->field_bf8 = 0;
+    s->start_time = o->time_now(o->context);
+    o->play(o->context, s->window);
+    o->after_play(o->context);
+    return 1;
+fail:
+    o->close_video(o->context);
+    return 0;
+}

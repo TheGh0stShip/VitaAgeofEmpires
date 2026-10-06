@@ -472,4 +472,59 @@ typedef struct {
 } AoeTribeDumpOpsRor;
 void aoe_tribe_player_dump_ror(const AoeTribeDumpOpsRor *o, int full);
 
+
+/* ---- 0x004f6de0: the command and cursor for a target ---- */
+
+/* What 0x004f6de0 reads from the target object (0x005206d0 by ID): a
+   class 0x19 object reports through its +0x94 template and +0x98 owner,
+   others through +0x08 and +0x0c -> +0x4a. */
+typedef struct {
+    int16_t unit_class;   /* template +0x14 */
+    int16_t template_id;  /* template +0x10 */
+    int16_t max_hp;       /* template +0x26 */
+    int32_t owner;        /* the owning player's ID */
+    uint8_t state;        /* +0x48 */
+    float hp;             /* +0x30 */
+} AoeTribeCursorTargetRor;
+
+/* A row of the cursor tables (game +0xa24 / +0xa28 and +0xa2c / +0xa30,
+   0x005060b0): the class, then an (action, cursor) pair per stance:
+   stance 1 at [1..2], 0 at [3..4], 2 at [5..6], 3 at [7..8], 4 at
+   [9..10]. */
+typedef struct { int32_t v[11]; } AoeTribeCursorRowRor;
+
+typedef struct {
+    void *context;
+    int (*target)(void *context, int32_t id, AoeTribeCursorTargetRor *out);
+    int16_t player_count;              /* world (+0x3c) +0x3c */
+    void (*refresh_flags)(void *context); /* vtable +0x98 */
+    int16_t selection_count;           /* +0x1a0 */
+    uint32_t *class_flags;             /* +0x19c, cleared on a retry */
+    const AoeTribeCursorRowRor *flagged; int32_t flagged_count; /* +0xa24, +0xa28 */
+    const AoeTribeCursorRowRor *plain;   int32_t plain_count;   /* +0xa2c, +0xa30 */
+    int32_t (*stance)(void *context, int32_t owner); /* +0x8c + 4 owner */
+    int32_t priests, last_priest;      /* 0x007c04f4, 0x007c04f0 */
+    int convert_units, convert_buildings; /* +0x50 -> +0x6c / +0x70 non-zero */
+} AoeTribeCursorOpsRor;
+
+/* 0x004f6de0: the command (`*command`) and cursor (`*cursor`) when the
+   selection points at object `id`. Both start at 0; 0 is returned for a
+   missing object, an owner outside the player count, a stance above 4
+   or a class without a row. The table is the flagged one while the
+   selection is non-empty and has class flags, else the plain one; the
+   row is the class's own index when it holds that class, else a search.
+   Template 0x9e / 0xa3 adds 0x32 to the cursor. The stance picks the
+   row's action: 0 -> command 0; 1 / 8 -> 4 with flag bit 0 and a target
+   state below 3, 8 otherwise retried as 7 with +0x32; 2 / 3 -> 5 with
+   bit 1 / bit 2; 4 -> 5 with bit 4 unless the target is the single
+   selected priest, needing 0 < hp < max; 5 -> 3 with bit 5 and 0 < hp
+   < max (state 0 adds 0x32); 6 / 9 -> 3 with bit 6, 9 otherwise retried
+   as 1 with +0x32; 7 -> with bit 7: class 0x12 needs unit conversion,
+   class 3 building conversion and a template other than 0x6d / 0x114,
+   any other class gives 5; other actions give 0 / 0. A flagged lookup
+   that yields 0 / 0 clears the class flags and repeats with the plain
+   table. */
+int aoe_tribe_player_cursor_command_ror(const AoeTribeCursorOpsRor *o, int32_t id,
+                                        int32_t *command, int32_t *cursor);
+
 #endif

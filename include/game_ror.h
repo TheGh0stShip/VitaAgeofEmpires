@@ -441,4 +441,54 @@ typedef struct {
 } AoeGameRorAiLinesOpsRor;
 void aoe_game_ror_ai_lines_ror(AoeGameRorAiLinesOpsRor *ops, char lines[6][256]);
 
+
+/* 0x005003f0: play the video `name`. Any open video window (+0xbec) is
+   stopped first (MCI_STOP when its MCIWNDM_GETMODE text is not
+   "stopped"), closed (WM_CLOSE) and forgotten; +0xbf0 takes `after`.
+   With videos disabled (+0x97e == 1) or no name the close path
+   (0x00500740(1)) runs and 0 is returned. The file is "<avi dir
+   (settings +0x1130)><name>.avi", else "<CDPath>game\avi\<name>.avi" when
+   the registry has a CDPath (0x0046aee0); missing files fail likewise.
+   With the global 0x007c0644 set and the video display up (+0xc00) or
+   opened (0x00506130): the MCI window (MCIWndCreateA, style
+   0x50001f0a) is subclassed (0x00500710, the old procedure in +0xbf4),
+   its palette set (0x00438170) unless in 16-bit mode (+0xc0c), centred
+   on the settings' screen size (+0x8e0 / +0x8e4; doubled in size with
+   +0xc04), 0x0041c290, the main window invalidated and painted, the
+   primary blanked (0x00437490), +0xbf8 cleared, +0xbfc the time,
+   MCI_PLAY sent, the wait cursor released (0x0041bdc0) and the cursor
+   hidden. Returns 1; a failed create fails. */
+typedef struct {
+    void *window;         /* +0xbec */
+    int32_t after;        /* +0xbf0 */
+    int32_t field_bf8;    /* +0xbf8 */
+    uint32_t start_time;  /* +0xbfc */
+} AoeGameRorVideoStateRor;
+typedef struct {
+    void *context;
+    int no_videos;             /* +0x97e == 1 */
+    const char *avi_dir;       /* settings +0x1130 */
+    int videos_enabled;        /* 0x007c0644 */
+    int32_t *video_up;         /* +0xc00 */
+    int32_t mode_16bit, double_size; /* +0xc0c, +0xc04 */
+    int32_t screen_width, screen_height; /* settings +0x8e0, +0x8e4 */
+    void (*window_mode)(void *context, void *window, char *out, int size); /* MCIWNDM_GETMODE */
+    void (*window_stop)(void *context, void *window);                      /* MCI_STOP */
+    void (*window_close)(void *context, void *window);                     /* WM_CLOSE */
+    int (*file_exists)(void *context, const char *path);
+    const char *(*cd_path)(void *context);                /* NULL when unset */
+    int (*open_video)(void *context);                     /* 0x00506130 */
+    void *(*create_window)(void *context, const char *path); /* MCIWndCreateA, subclassed */
+    void (*set_palette)(void *context, void *window);     /* MCIWNDM_GETPALETTE, 0x00438170 */
+    void (*client_size)(void *context, void *window, int32_t *w, int32_t *h);
+    void (*move_window)(void *context, void *window, int32_t x, int32_t y, int32_t w, int32_t h);
+    void (*before_play)(void *context);                   /* 0x0041c290, invalidate, paint, blank */
+    uint32_t (*time_now)(void *context);
+    void (*play)(void *context, void *window);            /* MCI_PLAY */
+    void (*after_play)(void *context);                    /* 0x0041bdc0, cursor hidden */
+    void (*close_video)(void *context);                   /* 0x00500740(1) */
+} AoeGameRorVideoPlayOpsRor;
+int aoe_game_ror_play_video_ror(AoeGameRorVideoStateRor *s, const AoeGameRorVideoPlayOpsRor *o,
+                                int32_t after, const char *name);
+
 #endif

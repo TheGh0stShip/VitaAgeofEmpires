@@ -208,6 +208,45 @@ static void ai_lines_tests(void) {
     assert(!strcmp(l[0], "zero") && !strcmp(l[1], "Player #2 is not a computer player."));
     assert(al_shown[0] == l[0] && !l[2][0]);
 }
+
+static char vp_log[512]; static int vp_n, vp_exists = 1, vp_up, vp_open_ok = 1, vp_create_ok = 1; static const char *vp_cd, *vp_mode = "playing";
+static void vp_add(const char *fmt, const char *a) { vp_n += snprintf(vp_log + vp_n, sizeof vp_log - (size_t)vp_n, fmt, a); }
+static void vp_wmode(void *c, void *w, char *o, int n) { (void)c; (void)w; snprintf(o, (size_t)n, "%s", vp_mode); }
+static void vp_stop(void *c, void *w) { (void)c; (void)w; vp_add("stop ", NULL); }
+static void vp_wclose(void *c, void *w) { (void)c; (void)w; vp_add("close ", NULL); }
+static int vp_fexists(void *c, const char *p) { (void)c; vp_add("exists(%s) ", p); return vp_exists; }
+static const char *vp_cdpath(void *c) { (void)c; return vp_cd; }
+static int vp_open(void *c) { (void)c; vp_add("open ", NULL); return vp_open_ok; }
+static void *vp_create(void *c, const char *p) { (void)c; vp_add("create(%s) ", p); return vp_create_ok ? (void *)1 : NULL; }
+static void vp_pal(void *c, void *w) { (void)c; (void)w; vp_add("palette ", NULL); }
+static void vp_size(void *c, void *w, int32_t *x, int32_t *y) { (void)c; (void)w; *x = 320; *y = 240; }
+static void vp_move(void *c, void *w, int32_t x, int32_t y, int32_t cw, int32_t ch) { (void)c; (void)w; char b[64]; snprintf(b, 64, "move(%d,%d,%d,%d) ", (int)x, (int)y, (int)cw, (int)ch); vp_add("%s", b); }
+static void vp_before(void *c) { (void)c; vp_add("before ", NULL); }
+static uint32_t vp_time(void *c) { (void)c; return 777; }
+static void vp_play(void *c, void *w) { (void)c; (void)w; vp_add("play ", NULL); }
+static void vp_after(void *c) { (void)c; vp_add("after ", NULL); }
+static void vp_closev(void *c) { (void)c; vp_add("closevideo ", NULL); }
+static void play_video_tests(void) {
+    AoeGameRorVideoStateRor s = {NULL, 0, 5, 0};
+    AoeGameRorVideoPlayOpsRor o = {NULL, 0, "D:\\avi\\", 1, &vp_up, 0, 1, 640, 480, vp_wmode, vp_stop, vp_wclose, vp_fexists, vp_cdpath, vp_open, vp_create, vp_pal, vp_size, vp_move, vp_before, vp_time, vp_play, vp_after, vp_closev};
+    assert(aoe_game_ror_play_video_ror(&s, &o, 3, "intro") == 1 && s.window == (void *)1 && s.after == 3 && s.field_bf8 == 0 && s.start_time == 777);
+    assert(strcmp(vp_log, "exists(D:\\avi\\intro.avi) open create(D:\\avi\\intro.avi) palette move(0,0,640,480) before play after ") == 0);
+    /* A playing window is stopped and closed; the CD path is the fallback; 16-bit skips the palette. */
+    vp_n = 0; vp_exists = 0; vp_cd = "E:\\"; o.mode_16bit = 1; o.double_size = 0; vp_up = 1;
+    assert(aoe_game_ror_play_video_ror(&s, &o, 4, "win") == 0 && s.window == NULL && s.after == 4);
+    assert(strcmp(vp_log, "stop close exists(D:\\avi\\win.avi) exists(E:\\game\\avi\\win.avi) closevideo ") == 0);
+    vp_n = 0; vp_exists = 1; vp_mode = "stopped"; s.window = (void *)2;
+    assert(aoe_game_ror_play_video_ror(&s, &o, 4, "win") == 1);
+    assert(strcmp(vp_log, "close exists(D:\\avi\\win.avi) create(D:\\avi\\win.avi) move(160,120,320,240) before play after ") == 0);
+    vp_n = 0; vp_create_ok = 0;
+    assert(aoe_game_ror_play_video_ror(&s, &o, 4, "win") == 0 && strstr(vp_log, "create(D:\\avi\\win.avi) closevideo ") != NULL);
+    vp_n = 0; o.no_videos = 1; s.window = NULL;
+    assert(aoe_game_ror_play_video_ror(&s, &o, 1, "x") == 0 && strcmp(vp_log, "closevideo ") == 0);
+    vp_n = 0; o.no_videos = 0; vp_cd = NULL; vp_exists = 0;
+    assert(aoe_game_ror_play_video_ror(&s, &o, 1, "x") == 0 && strcmp(vp_log, "exists(D:\\avi\\x.avi) closevideo ") == 0);
+    vp_n = 0; vp_exists = 1; vp_up = 0; vp_open_ok = 0;
+    assert(aoe_game_ror_play_video_ror(&s, &o, 1, "x") == 0 && strcmp(vp_log, "exists(D:\\avi\\x.avi) open closevideo ") == 0);
+}
 int main(void) {
     char coded[64];
     AoeGameRorCommandOpsRor cops = {NULL, ns, sp, bc};
@@ -406,5 +445,6 @@ int main(void) {
     test_open_video();
     stats_text_tests();
     ai_lines_tests();
+    play_video_tests();
     return 0;
 }

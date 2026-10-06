@@ -1156,4 +1156,51 @@ int aoe_main_view_queue_scroll_ror(AoeMainViewRor *v, AoeMainViewBlitQueueRor *q
                                    const int32_t src[4], const int32_t clip[4], int32_t dx,
                                    int32_t dy);
 
+
+/* ---- 0x0050eff0: the argument-less constructor (vtable 0x0054a61c) ---- */
+
+/* The fields +0xf4..+0x35c as the constructor leaves them. */
+typedef struct {
+    void *link;                 /* +0xf4 */
+    int32_t fields_f8[4];       /* +0xf8..+0x104 */
+    int16_t shorts_108[20];     /* +0x108..+0x12e */
+    int32_t field_130, field_134;
+    float point_x, point_y;     /* +0x138 / +0x13c: -10000 */
+    uint8_t flag_140, flag_142;
+    int16_t field_154;          /* -1 */
+    void *white_pen, *red_pen, *null_brush, *shape; /* +0x158..+0x164 */
+    uint8_t byte_168;
+    int32_t field_16c, field_170; /* -1 */
+    int32_t field_174;
+    void *regions[3];           /* +0x178..+0x180 */
+    void *buffers[2];           /* +0x184, +0x188 */
+    void *buffer2;              /* +0x2c8 */
+    int32_t fields_2cc[10];     /* +0x2cc..+0x2f0 */
+    void *lists[AOE_MAIN_VIEW_LISTS_ROR];        /* +0x2fc.. */
+    int32_t list_count[AOE_MAIN_VIEW_LISTS_ROR]; /* +0x310.. */
+    void *overlay;              /* +0x324 */
+    int32_t fields_328[3];      /* +0x328..+0x330 */
+    void *draw_rows[2];         /* +0x334, +0x338 */
+    int32_t field_33c;
+    int32_t field_340;          /* INT32_MIN */
+    int32_t fields_344[4];      /* +0x344..+0x350 */
+    void *timers;               /* +0x354: 8 entries of 0x14 */
+    int32_t timer_count, timer_capacity; /* +0x358, +0x35c: 0, 8 */
+} AoeGameViewDefaultsRor;
+
+typedef struct {
+    void *context;
+    void (*base_construct)(void *context);   /* 0x00452580 */
+    void (*set_highlight)(void *context, int32_t x0, int32_t y0, int32_t x1, int32_t y1); /* 0x0050ffd0 */
+    void *(*alloc_zero)(void *context, uint32_t count, uint32_t size); /* 0x0052607b */
+    int32_t *globals[2];                     /* 0x007d201c, 0x007d2020: cleared */
+} AoeGameViewDefaultOpsRor;
+
+/* 0x0050eff0: the base panel constructor, the vtable, every field above
+   zeroed except the no-point values (-10000), +0x154 / +0x16c / +0x170
+   (-1), +0x340 (0x80000000) and the timer list (8 x 0x14, capacity 8);
+   the highlight cleared with -1s; the two globals cleared. */
+void aoe_game_view_construct_default_ror(AoeGameViewDefaultsRor *v,
+                                         const AoeGameViewDefaultOpsRor *ops);
+
 #endif

@@ -604,3 +604,92 @@ void aoe_tribe_player_dump_ror(const AoeTribeDumpOpsRor *o, int full) {
     }
 #undef L
 }
+
+/* 0x004f6de0 */
+int aoe_tribe_player_cursor_command_ror(const AoeTribeCursorOpsRor *o, int32_t id,
+                                        int32_t *command, int32_t *cursor) {
+    AoeTribeCursorTargetRor t;
+    int32_t offset = 0, cls, stance, action, cur, hp;
+    int flagged;
+    *command = 0;
+    *cursor = 0;
+    if (!o->target(o->context, id, &t)) return 0;
+    if (t.owner < 0 || t.owner >= o->player_count) return 0;
+    o->refresh_flags(o->context);
+    if (t.template_id == 0x9e || t.template_id == 0xa3) offset = 0x32;
+    cls = t.unit_class;
+    for (;;) {
+        const AoeTribeCursorRowRor *rows, *row;
+        int32_t n, i;
+        flagged = o->selection_count != 0 && *o->class_flags != 0;
+        rows = flagged ? o->flagged : o->plain;
+        n = flagged ? o->flagged_count : o->plain_count;
+        if (cls >= 0 && cls < n && rows[cls].v[0] == cls) {
+            row = &rows[cls];
+        } else {
+            for (i = 0; i < n && rows[i].v[0] != cls; ++i) {}
+            if (i >= n) return 0;
+            row = &rows[i];
+        }
+        stance = o->stance(o->context, t.owner);
+        switch (stance) {
+        case 0: action = row->v[3]; cur = row->v[4]; break;
+        case 1: action = row->v[1]; cur = row->v[2]; break;
+        case 2: action = row->v[5]; cur = row->v[6]; break;
+        case 3: action = row->v[7]; cur = row->v[8]; break;
+        case 4: action = row->v[9]; cur = row->v[10]; break;
+        default: return 0;
+        }
+        if (action != -1) {
+            uint32_t f = *o->class_flags;
+            for (;;) {
+                int retry = 0;
+                switch (action) {
+                case 0: *command = 0; *cursor = cur + offset; break;
+                case 1: case 8:
+                    if ((f & 1) && t.state < 3) { *command = 4; *cursor = cur + offset; }
+                    else if (action == 8) { action = 7; retry = 1; }
+                    break;
+                case 2: if (f & 2) { *command = 5; *cursor = cur + offset; } break;
+                case 3: if (f & 4) { *command = 5; *cursor = cur + offset; } break;
+                case 4:
+                    if ((f & 0x10) && !(o->priests == 1 && id == o->last_priest)) {
+                        hp = (int32_t)t.hp;
+                        if (hp > 0 && hp < t.max_hp) { *command = 5; *cursor = cur + offset; }
+                    }
+                    break;
+                case 5:
+                    if (f & 0x20) {
+                        if (t.state == 0) offset = 0x32;
+                        hp = (int32_t)t.hp;
+                        if (hp > 0 && hp < t.max_hp) { *command = 3; *cursor = cur + offset; }
+                    }
+                    break;
+                case 6: case 9:
+                    if (f & 0x40) { *command = 3; *cursor = cur + offset; }
+                    else if (action == 9) { action = 1; retry = 1; }
+                    break;
+                case 7:
+                    if (f & 0x80) {
+                        if (cls == 0x12) {
+                            if (o->convert_units) { *command = 5; *cursor = cur + offset; }
+                        } else if (cls != 3) {
+                            *command = 5; *cursor = cur + offset;
+                        } else if (o->convert_buildings && t.template_id != 0x6d &&
+                                   t.template_id != 0x114) {
+                            *command = 5; *cursor = cur + offset;
+                        }
+                    }
+                    break;
+                default: *command = 0; *cursor = 0; break;
+                }
+                if (!retry) break;
+                offset = 0x32;
+            }
+        } else {
+            return 0;
+        }
+        if (!flagged || *command != 0 || *cursor != 0) return 1;
+        *o->class_flags = 0;
+    }
+}

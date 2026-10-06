@@ -1164,6 +1164,23 @@ static void test_queue_scroll(void)
     assert(aoe_main_view_queue_scroll_ror(&v, &q, src, far, 3, 0) == 1 && q.list[0].dest_x == 500 && q.list[0].dest_bottom == 600);
     free(q.list);
 }
+
+static int gd_base, gd_hl[4]; static uint32_t gd_count, gd_size;
+static void gd_basef(void *c) { (void)c; ++gd_base; }
+static void gd_hlf(void *c, int32_t a, int32_t b, int32_t d, int32_t e) { (void)c; gd_hl[0] = a; gd_hl[1] = b; gd_hl[2] = d; gd_hl[3] = e; }
+static void *gd_alloc(void *c, uint32_t n, uint32_t s) { (void)c; gd_count = n; gd_size = s; return calloc(n, s); }
+static void game_view_default_tests(void) {
+    AoeGameViewDefaultsRor v; int32_t g0 = 7, g1 = 9;
+    AoeGameViewDefaultOpsRor o = {NULL, gd_basef, gd_hlf, gd_alloc, {&g0, &g1}};
+    memset(&v, 0x5a, sizeof v);
+    aoe_game_view_construct_default_ror(&v, &o);
+    assert(gd_base == 1 && gd_hl[0] == -1 && gd_hl[3] == -1 && gd_count == 8 && gd_size == 0x14);
+    assert(v.link == NULL && v.shorts_108[19] == 0 && v.point_x == AOE_MAIN_VIEW_NO_POINT_ROR && v.point_y == AOE_MAIN_VIEW_NO_POINT_ROR);
+    assert(v.field_154 == -1 && v.field_16c == -1 && v.field_170 == -1 && v.field_340 == INT32_MIN && v.red_pen == NULL);
+    assert(v.timers && v.timer_count == 0 && v.timer_capacity == 8 && v.list_count[4] == 0 && v.overlay == NULL);
+    assert(g0 == 0 && g1 == 0);
+    free(v.timers);
+}
 int main(void)
 {
     AoeMainViewRor v;
@@ -1351,5 +1368,6 @@ int main(void)
     test_editor_preview();
     test_right_click();
     test_queue_scroll();
+    game_view_default_tests();
     return 0;
 }

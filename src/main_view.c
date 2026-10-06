@@ -1676,3 +1676,19 @@ int aoe_main_view_queue_scroll_ror(AoeMainViewRor *v, AoeMainViewBlitQueueRor *q
     v->blit_off_y = v->top;
     return n;
 }
+
+/* 0x0050eff0 */
+void aoe_game_view_construct_default_ror(AoeGameViewDefaultsRor *v,
+                                         const AoeGameViewDefaultOpsRor *ops) {
+    ops->base_construct(ops->context);
+    memset(v, 0, sizeof *v);
+    v->point_x = v->point_y = AOE_MAIN_VIEW_NO_POINT_ROR;
+    v->field_154 = -1;
+    v->field_16c = v->field_170 = -1;
+    ops->set_highlight(ops->context, -1, -1, -1, -1);
+    v->field_340 = INT32_MIN;
+    v->timer_capacity = 8;
+    v->timers = ops->alloc_zero(ops->context, 8, 0x14);
+    if (ops->globals[0]) *ops->globals[0] = 0;
+    if (ops->globals[1]) *ops->globals[1] = 0;
+}

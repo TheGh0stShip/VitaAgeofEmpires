@@ -358,6 +358,49 @@ static void train_and_dump_tests(void) {
     aoe_tribe_player_dump_ror(&d, 1);
     assert(strstr(dump_log, "Human Player: Greek|Points:") != NULL && strstr(dump_log, "Soldiers") == NULL);
 }
+
+static AoeTribeCursorTargetRor cc_t; static int cc_found = 1, cc_refresh; static int32_t cc_stance;
+static int cc_target(void *c, int32_t id, AoeTribeCursorTargetRor *o) { (void)c; (void)id; *o = cc_t; return cc_found; }
+static void cc_refresh_f(void *c) { (void)c; ++cc_refresh; }
+static int32_t cc_stance_f(void *c, int32_t owner) { (void)c; assert(owner == 2); return cc_stance; }
+static void cursor_command_tests(void) {
+    /* Rows by class: class 0 -> stance 1 attack (1, 10), stance 0 action 0 (0, 20), stance 2 heal (4, 30),
+       stance 3 repair (5, 40), stance 4 convert (7, 50); class 3 (buildings) row out of place at index 1. */
+    static const AoeTribeCursorRowRor flagged[2] = {{{0, 1, 10, 0, 20, 4, 30, 5, 40, 7, 50}}, {{3, 8, 11, 9, 21, 2, 31, 3, 41, -1, 0}}};
+    static const AoeTribeCursorRowRor plain[1] = {{{0, 0, 100, 6, 200, 0, 300, 0, 400, 0, 500}}};
+    uint32_t flags = 1; int32_t cmd = -1, cur = -1;
+    AoeTribeCursorOpsRor o = {NULL, cc_target, 4, cc_refresh_f, 1, &flags, flagged, 2, plain, 1, cc_stance_f, 0, -1, 1, 1};
+    memset(&cc_t, 0, sizeof cc_t); cc_t.owner = 2; cc_t.max_hp = 40; cc_t.hp = 25.0f;
+    cc_stance = 1;
+    assert(aoe_tribe_player_cursor_command_ror(&o, 7, &cmd, &cur) == 1 && cmd == 4 && cur == 10 && cc_refresh == 1);
+    cc_t.state = 3;  /* a dead target is not attacked: 0/0 -> plain table retried, flags cleared */
+    assert(aoe_tribe_player_cursor_command_ror(&o, 7, &cmd, &cur) == 1 && cmd == 0 && cur == 100 && flags == 0);
+    flags = 0x10; cc_stance = 2; cc_t.state = 0;
+    assert(aoe_tribe_player_cursor_command_ror(&o, 7, &cmd, &cur) == 1 && cmd == 5 && cur == 30);
+    o.priests = 1; o.last_priest = 7;  /* the selected priest itself is not healed */
+    assert(aoe_tribe_player_cursor_command_ror(&o, 7, &cmd, &cur) == 1 && cmd == 0 && cur == 300);
+    flags = 0x20; cc_stance = 3; cc_t.template_id = 0x9e;
+    assert(aoe_tribe_player_cursor_command_ror(&o, 8, &cmd, &cur) == 1 && cmd == 3 && cur == 40 + 0x32);
+    flags = 0x80; cc_stance = 4; cc_t.template_id = 0;
+    assert(aoe_tribe_player_cursor_command_ror(&o, 8, &cmd, &cur) == 1 && cmd == 5 && cur == 50);
+    /* Class 3 found by search; stance 1 action 8 without the attack bit retries as 7 with +0x32. */
+    cc_t.unit_class = 3; cc_t.template_id = 0x6d; cc_stance = 1;
+    assert(aoe_tribe_player_cursor_command_ror(&o, 8, &cmd, &cur) == 0 && flags == 0);  /* retried on the plain table, which has no class 3 */
+    cc_t.template_id = 5; flags = 0x80;
+    assert(aoe_tribe_player_cursor_command_ror(&o, 8, &cmd, &cur) == 1 && cmd == 5 && cur == 11 + 0x32);
+    flags = 0x40; cc_stance = 0;  /* action 9 with bit 6 */
+    assert(aoe_tribe_player_cursor_command_ror(&o, 8, &cmd, &cur) == 1 && cmd == 3 && cur == 21);
+    cc_stance = 4;  /* action -1 */
+    assert(aoe_tribe_player_cursor_command_ror(&o, 8, &cmd, &cur) == 0);
+    cc_stance = 5;
+    assert(aoe_tribe_player_cursor_command_ror(&o, 8, &cmd, &cur) == 0);
+    cc_t.unit_class = 9;
+    assert(aoe_tribe_player_cursor_command_ror(&o, 8, &cmd, &cur) == 0);
+    cc_t.owner = 4;
+    assert(aoe_tribe_player_cursor_command_ror(&o, 8, &cmd, &cur) == 0);
+    cc_found = 0;
+    assert(aoe_tribe_player_cursor_command_ror(&o, 8, &cmd, &cur) == 0 && cmd == 0 && cur == 0);
+}
 int main(void) {
     AoeTribePlayerOpsRor ops = {0, 2, collect, template_state, ack_b, ack_u, selected, object_type, object_class, queue};
     /* Build: villagers (min 4, class 4), template 118 acknowledges, 0x66. */
@@ -494,5 +537,6 @@ int main(void) {
     test_message_router();
     test_player_tick();
     train_and_dump_tests();
+    cursor_command_tests();
     return 0;
 }

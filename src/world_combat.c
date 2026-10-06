@@ -2707,6 +2707,9 @@ static void release_unit(AoeWorldCombatRor *c, AoeLiveUnit *u) {
     AoeWorldProjectileRor *f = flight_of(c, u);
     if (f) {
         f->active = 0;
+        /* 0x004496a0 (the projectile's destructor): a private template copy
+           (+0x1c0) gives way to the owner's template of its ID; the copy
+           itself is freed with the flight. */
         if (f->captured && u->core.unit_template == f->captured)
             u->core.unit_template = f->original;
         f->unit = NULL;

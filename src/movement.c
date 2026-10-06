@@ -889,3 +889,39 @@ int aoe_movement_face_ror(AoeLiveUnit *unit, AoeMovementRor *m,
     f = (float)aoe_movement_facet_offset_ror(unit, m, sp, x, y);
     return !(f > 0.5f) && !(f < -0.5f || isnan(f));
 }
+
+void aoe_movement_reinit_ror(AoeMovementRor *m) {
+    if (!m) return;
+    m->velocity_x = m->velocity_y = m->velocity_z = 0.0f;
+    m->blocked_wait = 0.0f;
+    m->turn_timer = 0.0f;
+    m->field_a0 = 0;
+}
+
+int aoe_movement_moving_ror(const AoeMovementRor *m) {
+    return m && m->current_speed > 0.0f;
+}
+
+uint8_t aoe_movement_hold_ror(const AoeMovementRor *m, uint8_t unit_state) {
+    if (!m || unit_state == 6 || unit_state == 7) return 0;
+    return m->hold_155;
+}
+
+void aoe_movement_set_hold_ror(AoeMovementRor *m, uint8_t value) {
+    if (m) m->hold_155 = value;
+}
+
+int32_t aoe_unit_path_coord_sum_ror(AoeUnitPathRor *path) {
+    float sum = 0.0f;
+    int32_t saved, i;
+    if (!path) return 0;
+    saved = aoe_unit_path_cursor_ror(path);
+    aoe_unit_path_rewind_ror(path);
+    for (i = 0; i < aoe_unit_path_count_ror(path); ++i) {
+        const AoePathWaypointRor *w = aoe_unit_path_current_ror(path);
+        if (w) sum = (float)((double)w->y + w->x + sum);
+        aoe_unit_path_advance_ror(path);
+    }
+    aoe_unit_path_set_cursor_ror(path, saved);
+    return aoe_ftol32(sum);
+}

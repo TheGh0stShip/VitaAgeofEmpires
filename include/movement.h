@@ -25,6 +25,8 @@ typedef struct {
     int32_t retry_baseline;        /* +0x144, read by the pathfinder */
     int32_t status;                /* +0x148: 1 stopped, 2 moving */
     uint8_t use_alternate_path;    /* +0x154 */
+    uint8_t hold_155;              /* +0x155 (0x0044eb30 sets it) */
+    int32_t field_a0;              /* live +0xa0 */
     uint8_t retry;                 /* +0x156 */
     /* +0x168: intermediate waypoint tiles, 3 bytes each starting x, y
        (owned by the list functions below; storage of
@@ -172,6 +174,22 @@ typedef struct {
     int16_t facets;         /* sprite +0x60 */
     uint8_t flags;          /* sprite +0x70; bit 1 selects facet frames */
 } AoeMovementSpriteRor;
+
+/* Moving unit (type 30) slots:
+   - 0x0044b940 re-initialise: the type-20 part (0x004152b0), then the
+     velocity, +0xa0, the blocked wait and the turn timer cleared and the
+     facet refreshed (0x0044bbd0) (aoe_movement_reinit_ror: the clears;
+     the other two calls are the caller's);
+   - 0x0044b980 moving: the speed (+0x88) above 0;
+   - 0x0044eb00 the +0x155 byte, 0 for a unit in state 6 or 7 (its
+     +0x134); 0x0044eb30 sets it;
+   - 0x0044f120: the path's waypoints, each counted as its y + x, summed
+     and truncated (the cursor is kept). */
+void aoe_movement_reinit_ror(AoeMovementRor *m);
+int aoe_movement_moving_ror(const AoeMovementRor *m);
+uint8_t aoe_movement_hold_ror(const AoeMovementRor *m, uint8_t unit_state);
+void aoe_movement_set_hold_ror(AoeMovementRor *m, uint8_t value);
+int32_t aoe_unit_path_coord_sum_ror(AoeUnitPathRor *path);
 
 /* 0x0044bbd0: with a facet sprite, unit +0x35 becomes
    ftol((facing - pi/4) * facets / 2pi + 0.5), wrapped up by facets. */

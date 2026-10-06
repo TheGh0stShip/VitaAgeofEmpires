@@ -53,7 +53,32 @@ static void place(void *c, AoeLiveUnit *u, float x, float y, float z) {
 
 static void count_clear(void *c) { ++*(int *)c; }
 
+static void slot_tests(void) {
+    AoeMovementRor m;
+    AoeUnitPathRor path;
+    memset(&m, 0, sizeof m);
+    m.velocity_x = 1.0f;
+    m.turn_timer = 2.0f;
+    m.blocked_wait = -1.0f;
+    m.field_a0 = 5;
+    aoe_movement_reinit_ror(&m);
+    assert(m.velocity_x == 0.0f && m.turn_timer == 0.0f && m.blocked_wait == 0.0f && m.field_a0 == 0);
+    assert(!aoe_movement_moving_ror(&m));
+    m.current_speed = 0.5f;
+    assert(aoe_movement_moving_ror(&m));
+    aoe_movement_set_hold_ror(&m, 3);
+    assert(aoe_movement_hold_ror(&m, 2) == 3 && aoe_movement_hold_ror(&m, 6) == 0);
+    aoe_unit_path_init_ror(&path, 4);
+    aoe_unit_path_append_ror(&path, 1.5f, 2.0f, 0.0f, 0);
+    aoe_unit_path_append_ror(&path, 3.0f, 4.25f, 0.0f, 0);
+    aoe_unit_path_set_cursor_ror(&path, 1);
+    /* 1.5 + 2 + 3 + 4.25 = 10.75, truncated; the cursor is kept. */
+    assert(aoe_unit_path_coord_sum_ror(&path) == 10 && aoe_unit_path_cursor_ror(&path) == 1);
+    aoe_unit_path_free_ror(&path);
+}
+
 int main(void) {
+    slot_tests();
     DatUnit tmpl;
     AoeLiveUnit unit;
     AoeMovementRor m;

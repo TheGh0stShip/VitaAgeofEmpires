@@ -39,3 +39,6 @@ __pycache__/
 # Locally supplied Windows Mobile / Pocket PC research material (never commit)
 Windows Mobile AoE/
 .claude/worktrees/
+*.ttf
+*.TTF
+*.otf

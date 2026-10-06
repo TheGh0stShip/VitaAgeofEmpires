@@ -695,6 +695,11 @@ target_include_directories(aoe_soft_draw PUBLIC include)
 target_compile_options(aoe_soft_draw PRIVATE -Wall -Wextra)
 target_link_libraries(aoe_soft_draw PUBLIC aoe_draw_system)
 
+add_library(aoe_ui_font STATIC src/ui_font.c)
+target_include_directories(aoe_ui_font PUBLIC include)
+target_compile_options(aoe_ui_font PRIVATE -Wall -Wextra)
+target_link_libraries(aoe_ui_font PUBLIC aoe_game_settings m)
+
 add_library(aoe_pe_strings STATIC src/pe_strings.c)
 target_include_directories(aoe_pe_strings PUBLIC include)
 target_compile_options(aoe_pe_strings PRIVATE -Wall -Wextra)
@@ -835,6 +840,33 @@ else()
   target_link_libraries(soft_draw_test PRIVATE aoe_soft_draw)
   target_compile_options(soft_draw_test PRIVATE -UNDEBUG)
   add_test(NAME soft_draw_backend COMMAND soft_draw_test)
+  add_executable(ui_font_test tests/ui_font_test.c)
+  target_link_libraries(ui_font_test PRIVATE aoe_ui_font aoe_pe_strings)
+  target_compile_options(ui_font_test PRIVATE -UNDEBUG)
+  add_test(NAME ui_font_gdi_text COMMAND ui_font_test)
+  # The user's Windows Arial and the language libraries (fonts are
+  # user-supplied retail files; none are distributed).
+  if(EXISTS "/mnt/c/Windows/Fonts/arial.ttf" AND
+     EXISTS "${CMAKE_SOURCE_DIR}/build/ror/disc/GAME/LANGUA_1.DLL" AND
+     EXISTS "/mnt/d/Age of Empires/language.dll")
+    add_test(NAME ror_ui_font_table_real COMMAND ui_font_test
+      "/mnt/c/Windows/Fonts/arial.ttf" "/mnt/c/Windows/Fonts/arialbd.ttf"
+      "${CMAKE_SOURCE_DIR}/build/ror/disc/GAME/LANGUA_1.DLL"
+      "/mnt/d/Age of Empires/language.dll")
+  endif()
+  # The same with every font from the user's data folder, Copperplate
+  # Gothic Light included.
+  if(EXISTS "${CMAKE_SOURCE_DIR}/build/demo_root/fonts/COPRGTL.TTF" AND
+     EXISTS "${CMAKE_SOURCE_DIR}/build/demo_root/fonts/arial.ttf" AND
+     EXISTS "${CMAKE_SOURCE_DIR}/build/ror/disc/GAME/LANGUA_1.DLL" AND
+     EXISTS "/mnt/d/Age of Empires/language.dll")
+    add_test(NAME ror_ui_font_table_copperplate_real COMMAND ui_font_test
+      "${CMAKE_SOURCE_DIR}/build/demo_root/fonts/arial.ttf"
+      "${CMAKE_SOURCE_DIR}/build/demo_root/fonts/arialbd.ttf"
+      "${CMAKE_SOURCE_DIR}/build/ror/disc/GAME/LANGUA_1.DLL"
+      "/mnt/d/Age of Empires/language.dll"
+      "${CMAKE_SOURCE_DIR}/build/demo_root/fonts/COPRGTL.TTF")
+  endif()
   # The user's Rise of Rome LANGUAGEX.DLL (LANGUA_1.DLL on the disc) and
   # base language.dll through the game's lookup (0x004ff530).
   if(EXISTS "${CMAKE_SOURCE_DIR}/build/ror/disc/GAME/LANGUA_1.DLL" AND

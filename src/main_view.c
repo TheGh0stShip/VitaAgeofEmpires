@@ -1,5 +1,7 @@
 #include "main_view.h"
 
+#include "le_bytes.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -2256,4 +2258,207 @@ void *aoe_game_view_selection_target_ror(const AoeGameViewTargetOpsRor *o, int32
         }
     }
     return best;
+}
+
+/* ---- 0x00510580 ---- */
+#define VR(id, a, b) o->step(o->context, (id), (int32_t)(a), (int32_t)(b))
+void aoe_main_view_render_ror(AoeViewRenderRor *v, const AoeViewRenderOpsRor *o)
+{
+    int16_t old[4];
+    int32_t old_ox, old_oy;
+
+    if (!v->has_map) {
+        VR(AOE_VR_BEGIN, 0, 0);
+        VR(AOE_VR_CLEAR, 0, 0);
+        VR(AOE_VR_END, 0, 0);
+        return;
+    }
+    memcpy(old, v->start, sizeof old);
+    old_ox = v->origin_x;
+    old_oy = v->origin_y;
+    VR(AOE_VR_REGIONS_CLEAR, 0, 0);
+    v->highlight_on = v->highlight2_on = 0;
+    o->layout(o->context, v);
+    VR(AOE_VR_BEGIN, 0, 0);
+    if (v->incremental == 1 && memcmp(old, v->start, sizeof old) != 0) {
+        int16_t dx = (int16_t)(v->origin_x - old_ox), dy = (int16_t)(v->origin_y - old_oy);
+        if (dx != 0 || dy != 0) {
+            int32_t w1 = v->width - 1, h1 = v->height - 1, dst[4], src[4];
+            if (h1 + dy < 0 || w1 + dx < 0 || h1 < dy || w1 < dx) {
+                v->incremental = 0;
+                goto tail;
+            }
+            if (dx & 7) {
+                int32_t r = ((dx > 0 ? dx : dx + 7) & ~7) - dx;
+                dx = (int16_t)(dx + r);
+                v->origin_x += r;
+            }
+            if (dy & 7) {
+                int32_t r = ((dy > 0 ? dy : dy + 7) & ~7) - dy;
+                dy = (int16_t)(dy + r);
+                v->origin_y += r;
+            }
+            if (dx < 0) { dst[0] = 0; src[0] = -dx; dst[2] = w1 + dx; src[2] = w1; }
+            else { src[0] = 0; dst[0] = dx; dst[2] = w1; src[2] = w1 - dx; }
+            if (dy < 0) { dst[1] = 0; src[1] = -dy; dst[3] = h1 + dy; src[3] = h1; }
+            else { src[1] = 0; dst[1] = dy; dst[3] = h1; src[3] = h1 - dy; }
+            o->copy_rects(o->context, dst, src);
+            if (o->direct_move) {
+                VR(AOE_VR_MOVE_PIXELS, dx, dy);
+                v->blits_active = 0;
+            } else {
+                VR(AOE_VR_QUEUE_BLITS, dx, dy);
+                if (o->mouse_global(o->context)) VR(AOE_VR_MOUSE, 0, 0);
+                if (v->blits_active) VR(AOE_VR_STEP_BLITS, 0, 0);
+            }
+            VR(AOE_VR_SCROLL_ROWS, dx, dy);
+            v->buf_x += dx;
+            if (v->buf_x >= v->buf_w) {
+                v->buf_x -= v->buf_w;
+                if (++v->buf_y >= v->buf_h) v->buf_y = 0;
+                VR(AOE_VR_WRAP_FORWARD, v->buf_x, v->buf_y);
+            } else if (v->buf_x < 0) {
+                v->buf_x += v->buf_w;
+                if (--v->buf_y < 0) v->buf_y = v->buf_h - 1;
+                VR(AOE_VR_WRAP_BACK, v->buf_x, v->buf_y);
+            }
+            v->buf_y += dy;
+            if (v->buf_y < 0) v->buf_y += v->buf_h;
+            if (v->buf_y >= v->buf_h) v->buf_y -= v->buf_h;
+            VR(AOE_VR_SET_ORIGIN, v->buf_x, v->buf_y);
+            {
+                int32_t a[4], b[4], has_a = 0, has_b = 0;
+                if (src[0] == 0) {
+                    if (src[2] != w1) {
+                        has_a = 1; a[0] = src[2] + 1; a[1] = 0; a[2] = w1; a[3] = h1;
+                        if (src[1] == 0) {
+                            if (src[3] != h1) { has_b = 1; b[0] = 0; b[1] = src[3] + 1; b[2] = src[2]; b[3] = h1; }
+                        } else { has_b = 1; b[0] = 0; b[1] = 0; b[2] = src[2]; b[3] = src[1] - 1; }
+                    } else if (src[1] == 0) {
+                        if (src[3] != h1) { has_b = 1; b[0] = 0; b[1] = src[3] + 1; b[2] = w1; b[3] = h1; }
+                    } else { has_b = 1; b[0] = 0; b[1] = 0; b[2] = w1; b[3] = src[1] - 1; }
+                } else {
+                    has_a = 1; a[0] = 0; a[1] = 0; a[2] = src[0] - 1; a[3] = h1;
+                    if (src[1] == 0) {
+                        if (src[3] != h1) { has_b = 1; b[0] = 0; b[1] = src[3] + 1; b[2] = w1; b[3] = h1; }
+                    } else { has_b = 1; b[0] = 0; b[1] = 0; b[2] = w1; b[3] = src[1] - 1; }
+                }
+                if (has_a) {
+                    memcpy(v->rect1, a, sizeof a);
+                    v->highlight_on = 1;
+                    VR(AOE_VR_DIRTY, 1, 0);
+                }
+                if (has_b) {
+                    if (has_a) {
+                        memcpy(v->rect2, b, sizeof b);
+                        v->highlight2_on = 1;
+                        VR(AOE_VR_DIRTY, 2, 0);
+                    } else {
+                        memcpy(v->rect1, b, sizeof b);
+                        v->highlight_on = 1;
+                        VR(AOE_VR_DIRTY, 1, 0);
+                    }
+                }
+            }
+        }
+    }
+tail:
+    if (o->mouse_global(o->context)) VR(AOE_VR_MOUSE, 0, 0);
+    if (v->blits_active) VR(AOE_VR_STEP_BLITS, 0, 0);
+    {
+        int32_t m = o->edit_mode(o->context);
+        if ((m > 8 && m < 11) || m == 0x13) VR(AOE_VR_BRUSH, 0, 0);
+    }
+    if (!v->incremental) {
+        v->buf_x = v->buf_y = 0;
+        VR(AOE_VR_SET_ORIGIN, 0, 0);
+        VR(AOE_VR_DIRTY, 0, 0);
+    }
+    VR(AOE_VR_DRAW, 10, 0);
+    v->incremental = 1;
+    VR(AOE_VR_END, 0, 0);
+    VR(AOE_VR_COUNT, 0, 0);
+}
+
+/* ---- 0x0050cef0 ---- */
+static void mp_put_leader(uint8_t *p, const AoeLeaderRor *l)
+{
+    aoe_le_put_u32(p, (uint32_t)l->score);
+    p[4] = l->colour;
+    memcpy(p + 5, l->name, 16);
+    p[0x15] = l->allies;
+}
+
+int aoe_world_mp_end_report_ror(const AoeMpEndReportOpsRor *o, uint8_t out[AOE_MP_END_REPORT_SIZE])
+{
+    static const int32_t categories[5] = {0xff, 2, 1, 0, 3};
+    const char *title;
+    uint8_t slots = 0, active = 0, code;
+    int32_t i, slot;
+
+    if (*o->sent != 0 || !o->launched(o->context))
+        return 0;
+    *o->sent = 1;
+    memset(out, 0, AOE_MP_END_REPORT_SIZE);
+    for (i = 1; i < o->player_count; i++)
+        if (o->player_active(o->context, i)) active++;
+    out[1] = active;
+    title = o->scenario_title(o->context);
+    if (title) strncpy((char *)out + 2, title, 33);
+    aoe_le_put_u32(out + 0x24, o->game_time_ms / 1000);
+    for (i = 0; i < 5; i++) {
+        AoeLeaderRor l;
+        memset(&l, 0, sizeof l);
+        o->leader(o->context, categories[i], &l);
+        mp_put_leader(out + 0x28 + 0x18 * i, &l);
+    }
+    for (slot = 1; slot <= 8; slot++) {
+        uint8_t *e = out + 0xa0 + 0x2c * (slot - 1);
+        int32_t p = o->slot_player(o->context, slot);
+        const char *name;
+        if (p == 0)
+            continue;
+        slots++;
+        name = o->slot_name(o->context, slot);
+        if (name) strncpy((char *)e, name, 15);
+        aoe_le_put_u32(e + 0x10, (uint32_t)o->points(o->context, p));
+        e[0x14] = o->player_80(o->context, p) == 1;
+        e[0x15] = o->slot_a94(o->context, slot - 1);
+        e[0x16] = o->game_a58(o->context, slot);
+        e[0x17] = o->slot_ac4(o->context, slot - 1);
+        e[0x18] = o->slot_994(o->context, slot - 1);
+        e[0x28] = o->player_88(o->context, p);
+        if (o->lobby_slot(o->context, slot)) e[0x19] = 3;
+        else if (o->game_a15(o->context, slot)) e[0x19] = 2;
+        else e[0x19] = o->player_80(o->context, p) == 1 ? 0 : 1;
+        for (i = 0; i < 3; i++)
+            aoe_le_put_u32(e + 0x1c + 4 * i, (uint32_t)o->player_value(o->context, p, i));
+    }
+    out[0] = slots;
+    switch (o->map_size_code) {
+    case 0: code = 0; break;
+    case 1: code = 1; break;
+    case 2: code = 6; break;
+    case 100: code = 2; break;
+    case 0x65: code = 3; break;
+    case 0x66: code = 4; break;
+    case 0x67: code = 5; break;
+    case 0x68: code = 7; break;
+    default: code = 8; break;
+    }
+    out[0x200] = o->settings[0];
+    out[0x201] = o->settings[4];
+    out[0x202] = o->settings[0x6a];
+    out[0x203] = 0;
+    out[0x204] = o->settings[0x10];
+    out[0x205] = o->settings[0x64];
+    out[0x206] = o->settings[0x60];
+    out[0x207] = o->settings[0x5d];
+    out[0x208] = o->settings[0x5c];
+    out[0x209] = o->option_985;
+    out[0x20a] = o->settings[0x69];
+    out[0x20c] = o->cheats;
+    out[0x20d] = code;
+    o->send(o->context, out, AOE_MP_END_REPORT_SIZE);
+    return 1;
 }

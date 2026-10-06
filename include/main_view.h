@@ -1456,4 +1456,107 @@ typedef struct {
 void *aoe_game_view_selection_target_ror(const AoeGameViewTargetOpsRor *o, int32_t x, int32_t y,
                                          int32_t *flag, int16_t arg);
 
+
+/* ---- 0x00510580: the view's render (scroll copy and redraw) ---- */
+typedef struct {
+    int has_map;                  /* +0xfc */
+    int16_t start[4];             /* +0x126, +0x128, +0x12a, +0x12c */
+    int32_t origin_x, origin_y;   /* +0x130, +0x134 */
+    int32_t width, height;        /* +0x14, +0x18 */
+    uint8_t incremental;          /* +0x142 */
+    int32_t highlight_on, highlight2_on; /* +0x2a0, +0x2a4 */
+    int32_t rect1[4], rect2[4];   /* +0x2a8.., +0x2b8.. */
+    int32_t buf_x, buf_y;         /* +0x2d0, +0x2d4: the terrain buffer's wrapped origin */
+    int32_t buf_w, buf_h;         /* the terrain buffer's +0x18, +0x1c */
+    int32_t blits_active;         /* +0x2d8 */
+} AoeViewRenderRor;
+enum { /* AoeViewRenderOpsRor.step ids */
+    AOE_VR_BEGIN,          /* vtable +0x28(0) */
+    AOE_VR_CLEAR,          /* 0x00438b50(+0x24 area, +0xef colour) (no map) */
+    AOE_VR_END,            /* vtable +0x2c */
+    AOE_VR_REGIONS_CLEAR,  /* 0x004a38c0 on +0x178, +0x17c, +0x180 */
+    AOE_VR_MOVE_PIXELS,    /* 0x00439700(dst, src, dx, dy, clip left, top): windowed (+0x478 == 1) or no back buffer (+0xe8) */
+    AOE_VR_QUEUE_BLITS,    /* 0x00510190(dst, src, dx, dy) */
+    AOE_VR_MOUSE,          /* 0x0044a850 (with the global 0x00582edc) */
+    AOE_VR_STEP_BLITS,     /* 0x005104a0(0) (while +0x2d8) */
+    AOE_VR_SCROLL_ROWS,    /* 0x00516660(dx, dy) */
+    AOE_VR_WRAP_FORWARD,   /* "view::draw" lock: the first (new buf_x) bytes of row 0 copied past the last row, unlock */
+    AOE_VR_WRAP_BACK,      /* "view::draw2" lock: (new buf_x) bytes of row 0 copied past the last row, unlock "view::draw3" */
+    AOE_VR_SET_ORIGIN,     /* 0x00438f40(buf_x, buf_y) */
+    AOE_VR_DIRTY,          /* 0x00438d20(rect a: 1 rect1, 2 rect2, 0 the buffer's +0x28 rectangle, 0) */
+    AOE_VR_BRUSH,          /* 0x00511310 (edit modes 9, 10, 0x13) */
+    AOE_VR_DRAW,           /* 0x00510ef0(10, +0x324) */
+    AOE_VR_COUNT           /* 0x007d2010 += 1 */
+};
+typedef struct {
+    void *context;
+    void (*step)(void *context, int id, int32_t a, int32_t b);
+    /* 0x00510c70: the start fields and origin recomputed into `v`. */
+    void (*layout)(void *context, AoeViewRenderRor *v);
+    /* The copy rectangles (left, top, right, bottom) handed to the move / queue step. */
+    void (*copy_rects)(void *context, const int32_t dst[4], const int32_t src[4]);
+    int direct_move;              /* the area's owner +0x478 == 1 or its +0xe8 == 0 */
+    int (*mouse_global)(void *context);
+    int32_t (*edit_mode)(void *context);
+} AoeViewRenderOpsRor;
+/* 0x00510580: without a map: begin, clear, end. Otherwise the regions
+   are emptied, the highlights cleared and the layout recomputed; in the
+   incremental mode with changed start fields the origin's move (dx, dy,
+   16-bit) copies the overlap: a move past the view falls back to a full
+   draw (+0x142 cleared); each delta is rounded towards zero to a
+   multiple of 8 (the origin adjusted); the overlap (dst, src) is moved
+   directly or queued as blits, the draw rows scrolled, the buffer origin
+   advanced and wrapped (copying the wrapped row part under a lock), set
+   (0x00438f40), and the exposed strips dirtied: the new columns (rect
+   1) and the new rows (rect 2, or rect 1 when no columns were exposed).
+   Then the mouse, a blit step, the brush highlight in edit modes 9, 10,
+   0x13; a non-incremental view resets the buffer origin and dirties the
+   whole buffer; the draw (code 10), +0x142 set, end, the frame count. */
+void aoe_main_view_render_ror(AoeViewRenderRor *v, const AoeViewRenderOpsRor *o);
+
+/* ---- 0x0050cef0: the networked game's end report ---- */
+#define AOE_MP_END_REPORT_SIZE 0x21c
+typedef struct {
+    void *context;
+    int32_t *sent;                /* world +0x120 */
+    int (*launched)(void *context);                /* 0x004241e0 */
+    int16_t player_count;         /* world +0x3c */
+    int (*player_active)(void *context, int32_t player);   /* 0x00454150 != 0 */
+    const char *(*scenario_title)(void *context);  /* 0x00475b30 */
+    uint32_t game_time_ms;        /* world +0x04 */
+    void (*leader)(void *context, int32_t category, AoeLeaderRor *out); /* 0x0050cdf0 */
+    int32_t (*slot_player)(void *context, int32_t slot);   /* 0x0041c080 */
+    const char *(*slot_name)(void *context, int32_t slot); /* 0x004241a0 on the comm's +0x14 */
+    int32_t (*points)(void *context, int32_t player);      /* 0x00454170 on the player's +0x34 */
+    uint8_t (*player_80)(void *context, int32_t player);
+    uint8_t (*player_88)(void *context, int32_t player);
+    uint8_t (*slot_a94)(void *context, int32_t i);         /* 0x005053b0 */
+    uint8_t (*slot_ac4)(void *context, int32_t i);         /* 0x00505410 */
+    uint8_t (*slot_994)(void *context, int32_t i);         /* 0x0041b9b0 */
+    uint8_t (*game_a58)(void *context, int32_t slot);      /* game +0xa58 + 4 (slot - 1) */
+    int (*lobby_slot)(void *context, int32_t slot);        /* comm +0x14's +0x1750 + 4 (slot - 1) */
+    uint8_t (*game_a15)(void *context, int32_t slot);      /* game +0xa15 + slot */
+    /* The player's +0x840 list: the value of the node of kind 0 / 1 / 2 (-1 none). */
+    int32_t (*player_value)(void *context, int32_t player, int kind);
+    uint8_t cheats;               /* 0x0041b7a0 */
+    uint8_t option_985;           /* 0x0041b7c0 */
+    uint8_t map_size_code;        /* world +0x1e */
+    const uint8_t *settings;      /* the 0x6c-byte settings snapshot (0x00505170, packed) */
+    void (*send)(void *context, const uint8_t *record, int32_t size); /* 0x00425930 */
+} AoeMpEndReportOpsRor;
+/* 0x0050cef0: once (world +0x120), when launched: the 0x21c-byte record
+   (little-endian): +0 slots with players, +1 active players of 1..n-1,
+   +2 the scenario title (34), +0x24 the game time in seconds, +0x28 /
+   +0x40 / +0x58 / +0x70 / +0x88 the leaders of categories 0xff, 2, 1,
+   0, 3 (score, colour, name 16, allies, 2 pad), +0xa0 eight 0x2c-byte
+   slot entries (name 16, points, +0x80 == 1, 0x005053b0, game +0xa58,
+   0x00505410, 0x0041b9b0, status 3 lobby / 2 dropped / 0 (+0x80 == 1)
+   / 1, -1 pad, the three list values, +0x88), +0x200 the settings' map
+   size, map type, population (16-bit), victory, starting age, resource
+   level, +0x5d, +0x5c, 0x0041b7c0, +0x69, 0x0041b7a0, the map size code
+   (+0x1e: 0, 1, 6, 2..5 for 100..0x67, 7 for 0x68, else 8) and three
+   zero dwords; sent with 0x00425930. Unwritten bytes are zero here
+   (the original sends its stack). Returns 1 when sent. */
+int aoe_world_mp_end_report_ror(const AoeMpEndReportOpsRor *o, uint8_t out[AOE_MP_END_REPORT_SIZE]);
+
 #endif

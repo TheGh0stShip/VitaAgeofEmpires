@@ -1,4 +1,5 @@
 #include "main_view.h"
+#include "le_bytes.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -1399,6 +1400,69 @@ static void target_tests(void) {
     assert(aoe_game_view_selection_target_ror(&o, 7, 7, &flag, 9) == NULL && flag == 0);
     gp_n = 0; flag = 5; assert(aoe_game_view_selection_target_ror(&o, 7, 7, &flag, -1) == NULL && flag == 0); gp_n = 4;
 }
+
+/* 0x00510580 recorder. */
+static char vr_log[512]; static int32_t vr_dst[4], vr_src[4]; static int vr_mouse, vr_edit; static int16_t vr_new_start[4] = {1, 2, 3, 4}; static int32_t vr_new_origin[2] = {16, -8};
+static void vr_step(void *c, int id, int32_t a, int32_t b) { (void)c; size_t n = strlen(vr_log); snprintf(vr_log + n, sizeof vr_log - n, "s%d(%d,%d) ", id, (int)a, (int)b); }
+static void vr_layout(void *c, AoeViewRenderRor *v) { (void)c; memcpy(v->start, vr_new_start, sizeof v->start); v->origin_x = vr_new_origin[0]; v->origin_y = vr_new_origin[1]; strcat(vr_log, "layout "); }
+static void vr_rects(void *c, const int32_t d[4], const int32_t s[4]) { (void)c; memcpy(vr_dst, d, sizeof vr_dst); memcpy(vr_src, s, sizeof vr_src); }
+static int vr_mouse_q(void *c) { (void)c; return vr_mouse; }
+static int32_t vr_edit_q(void *c) { (void)c; return vr_edit; }
+static void render_tests(void) {
+    AoeViewRenderOpsRor o = {NULL, vr_step, vr_layout, vr_rects, 0, vr_mouse_q, vr_edit_q};
+    AoeViewRenderRor v; memset(&v, 0, sizeof v);
+    /* No map: begin, clear, end. */
+    vr_log[0] = '\0'; aoe_main_view_render_ror(&v, &o);
+    assert(strcmp(vr_log, "s0(0,0) s1(0,0) s2(0,0) ") == 0);
+    /* The first (non-incremental) draw: the origin reset, the whole buffer dirtied, the draw. */
+    v.has_map = 1; v.width = 64; v.height = 32; v.buf_w = 64; v.buf_h = 32; vr_log[0] = '\0';
+    aoe_main_view_render_ror(&v, &o);
+    assert(strcmp(vr_log, "s3(0,0) layout s0(0,0) s11(0,0) s12(0,0) s14(10,0) s2(0,0) s15(0,0) ") == 0 && v.incremental == 1 && v.origin_x == 16);
+    /* An incremental scroll by (16, -8): the overlap copy is queued, the rows scrolled, the buffer origin
+       wraps to (16, 24), the new columns (48..63) are rect 1 and the new rows (0..7 up to x 47) rect 2. */
+    vr_new_start[0] = 9; vr_new_origin[0] = 32; vr_new_origin[1] = -16; vr_mouse = 1; vr_edit = 9; vr_log[0] = '\0';
+    aoe_main_view_render_ror(&v, &o);
+    assert(strcmp(vr_log, "s3(0,0) layout s0(0,0) s5(16,-8) s6(0,0) s8(16,-8) s11(16,24) s12(1,0) s12(2,0) s6(0,0) s13(0,0) s14(10,0) s2(0,0) s15(0,0) ") == 0);
+    assert(vr_dst[0] == 16 && vr_dst[1] == 0 && vr_dst[2] == 63 && vr_dst[3] == 23 && vr_src[0] == 0 && vr_src[1] == 8 && vr_src[2] == 47 && vr_src[3] == 31);
+    assert(v.highlight_on && v.highlight2_on && v.rect1[0] == 48 && v.rect1[2] == 63 && v.rect1[3] == 31 && v.rect2[1] == 0 && v.rect2[2] == 47 && v.rect2[3] == 7 && v.buf_x == 16 && v.buf_y == 24);
+    /* A move of 5 rounds to 0 (the origin pulled back by 5): nothing exposed. A move past the view drops to a full draw. */
+    vr_new_start[0] = 10; vr_new_origin[0] = 37; vr_mouse = 0; vr_edit = 0; vr_log[0] = '\0'; o.direct_move = 1; v.blits_active = 1;
+    aoe_main_view_render_ror(&v, &o);
+    assert(v.origin_x == 32 && !v.highlight_on && v.blits_active == 0 && strcmp(vr_log, "s3(0,0) layout s0(0,0) s4(0,0) s8(0,0) s11(16,24) s14(10,0) s2(0,0) s15(0,0) ") == 0);
+    vr_new_start[0] = 11; vr_new_origin[0] = 200; vr_log[0] = '\0';
+    aoe_main_view_render_ror(&v, &o);
+    assert(strstr(vr_log, "s0(0,0) s11(0,0) s12(0,0) s14(10,0) ") && v.incremental == 1 && v.buf_x == 0);
+}
+/* 0x0050cef0 recorder. */
+static int32_t mp_sent_flag; static uint8_t mp_settings[0x6c]; static uint8_t mp_record[AOE_MP_END_REPORT_SIZE]; static int mp_send_calls;
+static int mp_launched(void *c) { (void)c; return 1; }
+static int mp_active(void *c, int32_t p) { (void)c; return p != 2; }
+static const char *mp_title(void *c) { (void)c; return "Hill Fort"; }
+static void mp_leader(void *c, int32_t cat, AoeLeaderRor *out) { (void)c; out->score = cat * 10; out->colour = (uint8_t)cat; strcpy(out->name, "L"); out->allies = 1; }
+static int32_t mp_slot_player(void *c, int32_t slot) { (void)c; return slot == 1 ? 1 : slot == 3 ? 2 : 0; }
+static const char *mp_slot_name(void *c, int32_t slot) { (void)c; return slot == 1 ? "Ann" : "Bob"; }
+static int32_t mp_points(void *c, int32_t p) { (void)c; return 1000 + p; }
+static uint8_t mp_p80(void *c, int32_t p) { (void)c; return p == 1 ? 1 : 2; }
+static uint8_t mp_p88(void *c, int32_t p) { (void)c; return (uint8_t)(7 + p); }
+static uint8_t mp_b(void *c, int32_t i) { (void)c; return (uint8_t)(i + 1); }
+static int mp_lobby(void *c, int32_t slot) { (void)c; return slot == 3; }
+static uint8_t mp_a15(void *c, int32_t slot) { (void)c; (void)slot; return 0; }
+static int32_t mp_value(void *c, int32_t p, int kind) { (void)c; return kind == 1 ? -1 : p * 100 + kind; }
+static void mp_send(void *c, const uint8_t *rec, int32_t size) { (void)c; assert(size == AOE_MP_END_REPORT_SIZE); memcpy(mp_record, rec, (size_t)size); ++mp_send_calls; }
+static void mp_end_report_tests(void) {
+    AoeMpEndReportOpsRor o = {NULL, &mp_sent_flag, mp_launched, 4, mp_active, mp_title, 125999, mp_leader, mp_slot_player, mp_slot_name, mp_points, mp_p80, mp_p88, mp_b, mp_b, mp_b, mp_b, mp_lobby, mp_a15, mp_value, 1, 2, 0x66, mp_settings, mp_send};
+    uint8_t out[AOE_MP_END_REPORT_SIZE];
+    mp_settings[0] = 3; mp_settings[4] = 5; mp_settings[0x6a] = 75; mp_settings[0x10] = 7; mp_settings[0x64] = 2; mp_settings[0x60] = 1; mp_settings[0x5d] = 9; mp_settings[0x5c] = 8; mp_settings[0x69] = 1;
+    assert(aoe_world_mp_end_report_ror(&o, out) == 1 && mp_send_calls == 1 && mp_sent_flag == 1);
+    assert(out[0] == 2 && out[1] == 2 && strcmp((const char *)out + 2, "Hill Fort") == 0 && aoe_le_u32(out + 0x24) == 125);
+    assert(aoe_le_u32(out + 0x28) == 2550 && out[0x2c] == 0xff && out[0x2d] == 'L' && out[0x3d] == 1 && aoe_le_u32(out + 0x40) == 20 && aoe_le_u32(out + 0x88) == 30);
+    /* Slot 1 (player 1, Ann): points 1001, +0x80 == 1, status 0; slot 3 (Bob, player 2): status 3 (lobby), value kind 1 is -1. */
+    assert(strcmp((const char *)out + 0xa0, "Ann") == 0 && aoe_le_u32(out + 0xb0) == 1001 && out[0xb4] == 1 && out[0xb5] == 1 && out[0xb6] == 2 && out[0xb7] == 1 && out[0xb8] == 1 && out[0xb9] == 0 && aoe_le_u32(out + 0xbc) == 100 && aoe_le_u32(out + 0xc0) == 0xffffffffu && aoe_le_u32(out + 0xc4) == 102 && out[0xc8] == 8);
+    assert(strcmp((const char *)out + 0xa0 + 0x58, "Bob") == 0 && out[0xa0 + 0x58 + 0x19] == 3 && out[0xa0 + 0x58 + 0x14] == 0 && out[0xa0 + 0x2c] == 0);
+    assert(out[0x200] == 3 && out[0x201] == 5 && aoe_le_u16(out + 0x202) == 75 && out[0x204] == 7 && out[0x205] == 2 && out[0x206] == 1 && out[0x207] == 9 && out[0x208] == 8 && out[0x209] == 2 && out[0x20a] == 1 && out[0x20c] == 1 && out[0x20d] == 4 && aoe_le_u32(out + 0x218) == 0);
+    /* Sent once only. */
+    assert(aoe_world_mp_end_report_ror(&o, out) == 0 && mp_send_calls == 1);
+}
 int main(void)
 {
     AoeMainViewRor v;
@@ -1594,5 +1658,7 @@ int main(void)
     scroll_tests();
     pick_tests();
     target_tests();
+    render_tests();
+    mp_end_report_tests();
     return 0;
 }

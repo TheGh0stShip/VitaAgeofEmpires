@@ -121,6 +121,18 @@ int aoe_demo_selection(const AoeDemo *demo, AoeLiveUnit **out, int max);
    step 0x00405f20 (task selection: gather, attack or move). Returns the
    number ordered. */
 int aoe_demo_order(AoeDemo *demo, int32_t sx, int32_t sy);
+/* The view's area selection 0x005114d0 over the drawn sprites: the viewed
+   player's (1) objects drawn in the view box (x0, y0)..(x1, y1)
+   (0x00514b60 with rows 10..0x14, kind 4 and above) in a state below 7
+   are added to the selection (0x0045dc10, up to 25), the previous one
+   cleared first unless `add` (Shift); with none, the object at the box's
+   centre (the original scores 0x005145a0's candidates within min(w, h)
+   clamped to 50; the port takes the sprite under the centre). 1 when
+   something was selected. */
+int aoe_demo_select_area(AoeDemo *demo, int32_t x0, int32_t y0, int32_t x1, int32_t y1, int add);
+/* A rectangle outline in an indexed frame of this view's size. */
+void aoe_demo_draw_box(const AoeDemo *demo, uint8_t *dst, size_t stride, int32_t x0, int32_t y0,
+                       int32_t x1, int32_t y1, uint8_t colour);
 /* What the object panel (0x004f83d0) reads of a unit (AoeInfoObjectRor:
    the template's fields by offset, the owner's colour, number and
    civilisation, the stat slots +0x230..+0x248 of the type 50 classes);

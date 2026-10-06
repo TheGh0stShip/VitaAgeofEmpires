@@ -71,6 +71,9 @@ typedef struct {
     int32_t mouse_x, mouse_y;     /* screen coordinates, -1 before any move */
     int16_t place_unit;           /* game +0x3fc: the unit to place, -1 none */
     int32_t edit_mode, edit_sub;  /* game +0x1b4 / +0x1b8: 7 places a building */
+    int32_t press_x, press_y;     /* view +0xc4 / +0xc8: the left press, view coordinates */
+    int pressing;                 /* the left button held since a press on the view */
+    uint8_t drag_kind;            /* view +0x168: 1 while a box is dragged */
 } AoeGameScreenHostRor;
 
 /* The view rectangle for a screen size (0x0047f000 without the

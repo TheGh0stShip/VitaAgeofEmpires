@@ -858,8 +858,8 @@ else()
      EXISTS "${CMAKE_SOURCE_DIR}/build/demo_root/languagex.dll")
     add_test(NAME ror_main_menu_render_real COMMAND ui_host_tool
       "${CMAKE_SOURCE_DIR}/build/demo_root" "${CMAKE_BINARY_DIR}" p:main_menu)
-    set_tests_properties(ror_main_menu_render_real PROPERTIES FIXTURES_REQUIRED ror_user
-      ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_test")
+    set_tests_properties(ror_main_menu_render_real PROPERTIES FIXTURES_REQUIRED ror_user_main_menu_render_real
+      ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_main_menu_render_real")
     set_tests_properties(ror_main_menu_render_real PROPERTIES
       PASS_REGULAR_EXPRESSION "frame main_menu: [1-9][0-9][0-9] colours")
     # Clicking through the translated menus: Single Player and back,
@@ -869,18 +869,32 @@ else()
       "${CMAKE_SOURCE_DIR}/build/demo_root" "${CMAKE_BINARY_DIR}"
       c:320,198 c:320,388 c:320,348 k:27 c:320,298 k:13 d:0x11 k:0x43 u:0x11 k:27
       c:320,248)
-    set_tests_properties(ror_menu_navigation_real PROPERTIES FIXTURES_REQUIRED ror_user
-      ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_test" PASS_REGULAR_EXPRESSION
+    set_tests_properties(ror_menu_navigation_real PROPERTIES FIXTURES_REQUIRED ror_user_menu_navigation_real
+      ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_menu_navigation_real" PASS_REGULAR_EXPRESSION
       "c:320,198 -> Single Player Menu\nc:320,388 -> Main Menu\nc:320,348 -> Scenario Editor Menu\nk:27 -> Main Menu\nc:320,298 -> Main Menu modal OKDialog\nk:13 -> Main Menu\nd:0x11 -> Main Menu\nk:0x43 -> Credits Screen\nu:0x11 -> Credits Screen\nk:27 -> Main Menu\nc:320,248 -> MP Startup Screen")
     # The game's own files (registry.txt, game<N>.nfo) go to a fresh
     # scratch folder, never the user's data.
-    add_test(NAME ror_user_dir_reset COMMAND ${CMAKE_COMMAND} -E
-      rm -rf "${CMAKE_BINARY_DIR}/userdata_test")
-    add_test(NAME ror_user_dir_make COMMAND ${CMAKE_COMMAND} -E
-      make_directory "${CMAKE_BINARY_DIR}/userdata_test")
-    set_tests_properties(ror_user_dir_reset PROPERTIES FIXTURES_SETUP ror_user_reset)
-    set_tests_properties(ror_user_dir_make PROPERTIES FIXTURES_SETUP ror_user
-      FIXTURES_REQUIRED ror_user_reset)
+    # Each route test gets its own user folder (the player file it writes
+    # would otherwise change the next test's route); the campaign tests
+    # share the extracted scenario cache in demo_root and run one at a time.
+    function(aoe_user_folder_fixture name)
+      add_test(NAME ror_user_${name}_reset COMMAND ${CMAKE_COMMAND} -E
+        rm -rf "${CMAKE_BINARY_DIR}/userdata_${name}")
+      add_test(NAME ror_user_${name}_make COMMAND ${CMAKE_COMMAND} -E
+        make_directory "${CMAKE_BINARY_DIR}/userdata_${name}")
+      set_tests_properties(ror_user_${name}_reset PROPERTIES FIXTURES_SETUP ror_user_${name}_reset)
+      set_tests_properties(ror_user_${name}_make PROPERTIES FIXTURES_SETUP ror_user_${name}
+        FIXTURES_REQUIRED ror_user_${name}_reset)
+    endfunction()
+    aoe_user_folder_fixture(main_menu_render_real)
+    aoe_user_folder_fixture(menu_navigation_real)
+    aoe_user_folder_fixture(single_player_routes_real)
+    aoe_user_folder_fixture(campaign_start_real)
+    aoe_user_folder_fixture(building_placement_real)
+    aoe_user_folder_fixture(drag_selection_real)
+    aoe_user_folder_fixture(campaign_quit_real)
+    aoe_user_folder_fixture(shell_touch_and_buttons_real)
+    aoe_user_folder_fixture(menu_exit_real)
     # Single player: Scenario (the index from scenario/) and Escape back;
     # Campaign with no players asks for a name; typing one and Enter adds
     # the player (game<N>.nfo written) and opens the campaigns.
@@ -888,8 +902,9 @@ else()
       "${CMAKE_SOURCE_DIR}/build/demo_root" "${CMAKE_BINARY_DIR}"
       c:320,198 c:320,288 k:27 c:320,188 t:Tester k:13)
     set_tests_properties(ror_single_player_routes_real PROPERTIES
-      FIXTURES_REQUIRED ror_user
-      ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_test"
+      FIXTURES_REQUIRED ror_user_single_player_routes_real
+      ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_single_player_routes_real"
+     
       PASS_REGULAR_EXPRESSION
       "c:320,288 -> Select Scenario Screen\nk:27 -> Single Player Menu\nc:320,188 -> Single Player Menu modal New Name Dialog\nt:Tester -> Single Player Menu modal New Name Dialog\nk:13 -> Campaign Selection Screen")
     # Campaign -> Birth of Rome -> OK: the scenario's Mission Dialog (its
@@ -899,9 +914,10 @@ else()
       c:320,198 c:320,188 t:Tester k:13 c:100,240 c:190,455 c:560,460 i:5 d:39 i:5 u:39
       c:520,380 i:5 c:520,410 i:2 c:220,90 r:420,250 i:20 c:476,404 i:5 c:300,140 i:5
       c:162,388 i:20)
-    set_tests_properties(ror_campaign_start_real PROPERTIES
-      FIXTURES_REQUIRED ror_user
-      ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_test"
+    set_tests_properties(ror_campaign_start_real PROPERTIES RESOURCE_LOCK demo_root_cache
+      FIXTURES_REQUIRED ror_user_campaign_start_real
+      ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_campaign_start_real"
+     
       PASS_REGULAR_EXPRESSION
       "c:190,455 -> Mission Dialog\nc:560,460 -> Game Screen\ni:5 -> Game Screen\nd:39 -> Game Screen\ni:5 -> Game Screen\nu:39 -> Game Screen\nc:520,380 -> Game Screen(.|\n)*r:420,250 -> Game Screen\ni:20 -> Game Screen(.|\n)*c:162,388 -> Game Screen")
     # Building placement from the screen: a villager selected, its build
@@ -912,20 +928,34 @@ else()
       "${CMAKE_SOURCE_DIR}/build/demo_root" "${CMAKE_BINARY_DIR}"
       c:320,198 c:320,188 t:Tester k:13 c:100,240 c:190,455 c:560,460 i:5
       c:215,85 i:2 c:163,389 i:2 c:163,389 i:2 m:300,250 i:2 c:300,250 i:20 r:420,250 i:2)
-    set_tests_properties(ror_building_placement_real PROPERTIES
-      FIXTURES_REQUIRED ror_user
-      ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_test"
+    set_tests_properties(ror_building_placement_real PROPERTIES RESOURCE_LOCK demo_root_cache
+      FIXTURES_REQUIRED ror_user_building_placement_real
+      ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_building_placement_real"
+     
       PASS_REGULAR_EXPRESSION
       "c:215,85 -> Game Screen\ni:2 -> Game Screen\nc:163,389 -> Game Screen\ni:2 -> Game Screen\nc:163,389 -> Game Screen\ni:2 -> Game Screen\nm:300,250 -> Game Screen\ni:2 -> Game Screen\nc:300,250 -> Game Screen\ni:20 -> Game Screen\nr:420,250 -> Game Screen")
+    # A drag box over the villagers left of the town center selects them
+    # (0x00519e00 / 0x00515d30 / 0x005114d0); the selection is ordered.
+    add_test(NAME ror_drag_selection_real COMMAND ui_host_tool
+      "${CMAKE_SOURCE_DIR}/build/demo_root" "${CMAKE_BINARY_DIR}"
+      c:320,198 c:320,188 t:Tester k:13 c:100,240 c:190,455 c:560,460 i:5
+      D:20,90 m:140,200 i:1 U:140,200 i:2 r:420,250 i:10)
+    set_tests_properties(ror_drag_selection_real PROPERTIES RESOURCE_LOCK demo_root_cache
+      FIXTURES_REQUIRED ror_user_drag_selection_real
+      ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_drag_selection_real"
+     
+      PASS_REGULAR_EXPRESSION
+      "D:20,90 -> Game Screen\nm:140,200 -> Game Screen\ni:1 -> Game Screen\nU:140,200 -> Game Screen\ni:2 -> Game Screen\nr:420,250 -> Game Screen")
     # In the game: Escape clears the selection, F10 opens the Menu Dialog,
     # Quit Game asks, and Yes leaves for the Main Menu.
     add_test(NAME ror_campaign_quit_real COMMAND ui_host_tool
       "${CMAKE_SOURCE_DIR}/build/demo_root" "${CMAKE_BINARY_DIR}"
       c:320,198 c:320,188 t:Tester k:13 c:100,240 c:190,455 c:560,460 i:5 c:220,90 k:27
       k:121 k:27 k:121 c:320,65 c:230,268 i:5)
-    set_tests_properties(ror_campaign_quit_real PROPERTIES
-      FIXTURES_REQUIRED ror_user
-      ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_test"
+    set_tests_properties(ror_campaign_quit_real PROPERTIES RESOURCE_LOCK demo_root_cache
+      FIXTURES_REQUIRED ror_user_campaign_quit_real
+      ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_campaign_quit_real"
+     
       PASS_REGULAR_EXPRESSION
       "k:27 -> Game Screen\nk:121 -> Game Screen modal Menu Dialog\nk:27 -> Game Screen\nk:121 -> Game Screen modal Menu Dialog\nc:320,65 -> Game Screen modal QuitGameDialog\nc:230,268 -> Main Menu")
     # The on-screen keyboard: a fresh user folder (no players), so
@@ -945,12 +975,12 @@ else()
     add_test(NAME ror_shell_touch_and_buttons_real COMMAND shell_app_real
       "${CMAKE_SOURCE_DIR}/build/demo_root" "${CMAKE_BINARY_DIR}/shell_frame.ppm")
     set_tests_properties(ror_shell_touch_and_buttons_real PROPERTIES
-      FIXTURES_REQUIRED ror_user
-      ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_test")
+      FIXTURES_REQUIRED ror_user_shell_touch_and_buttons_real
+      ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_shell_touch_and_buttons_real")
     add_test(NAME ror_menu_exit_real COMMAND ui_host_tool
       "${CMAKE_SOURCE_DIR}/build/demo_root" "${CMAKE_BINARY_DIR}" c:320,398)
-    set_tests_properties(ror_menu_exit_real PROPERTIES FIXTURES_REQUIRED ror_user
-      ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_test" PASS_REGULAR_EXPRESSION
+    set_tests_properties(ror_menu_exit_real PROPERTIES FIXTURES_REQUIRED ror_user_menu_exit_real
+      ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_menu_exit_real" PASS_REGULAR_EXPRESSION
       "c:320,398 -> \\(quit\\)")
   endif()
   add_executable(port_registry_test tests/port_registry_test.c)

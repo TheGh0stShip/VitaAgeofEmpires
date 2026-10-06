@@ -9,6 +9,8 @@
 #include "palette.h"
 #include "scenario_scene.h"
 #include "world_combat.h"
+#include <stddef.h>
+#include "visibility_watch.h"
 #include "unit_placement_check.h"
 #include "tile_map.h"
 
@@ -1721,6 +1723,100 @@ AoeLiveUnit *aoe_demo_pick(AoeDemo *demo, int32_t x, int32_t y) {
         }
     }
     return NULL;
+}
+
+static void line_into(uint8_t *dst, size_t stride, int32_t w, int32_t h, int32_t x0, int32_t y0,
+                      int32_t x1, int32_t y1, uint8_t colour);
+
+/* The world object of an ID (the world's +0x88 table, 0x005206d0). */
+static AoeLiveUnit *unit_by_id(AoeDemo *demo, int32_t id) {
+    AoeVisibilityUnitRef *ref = aoe_visibility_registry_resolve(&demo->runtime.world.view, id);
+    return ref ? (AoeLiveUnit *)((char *)ref - offsetof(AoeLiveUnitCore, position)) : NULL;
+}
+
+/* 0x0045dc10: the unit put in the selection's next slot (25 at most). */
+static int select_add(AoeDemo *demo, AoeLiveUnit *u) {
+    int i;
+    for (i = 0; i < demo->selected_count; ++i)
+        if (demo->selected[i] == u) return 1;
+    if (demo->selected_count >= AOE_DEMO_SELECTION) return 0;
+    demo->selected[demo->selected_count++] = u;
+    return 1;
+}
+
+/* The sprite queue as the view's draw rows for the picks: one row (10)
+   holds every drawn part in order; a part's box is its frame's. */
+static const void *rows_head(void *c, int32_t row) {
+    AoeDemo *d = c;
+    return row == 10 && d->runtime.sprite_queue.drawn ? &d->runtime.sprite_queue.entries[0] : NULL;
+}
+static void rows_item(void *c, const void *node, AoeViewDrawItemRor *out) {
+    AoeDemo *d = c;
+    const AoeSpriteDrawQueue *q = &d->runtime.sprite_queue;
+    const AoeSpriteDrawQueueEntry *e = node;
+    size_t i = (size_t)(e - q->entries);
+    const SlpFrame *f;
+    memset(out, 0, sizeof *out);
+    out->next = i + 1 < q->drawn ? &q->entries[i + 1] : NULL;
+    out->object_id = e->object ? aoe_demo_unit_id((const AoeLiveUnit *)e->object) : -1;
+    out->key = e->object ? 0 : 1;
+    if (e->object && (f = part_frame(d, e))) {
+        out->left = (int16_t)part_left(e, f);
+        out->top = (int16_t)(e->anchor_y - f->hotspot_y);
+        out->right = (int16_t)(out->left + (int32_t)f->width - 1);
+        out->bottom = (int16_t)(out->top + (int32_t)f->height - 1);
+    } else {
+        out->key = 1;
+    }
+}
+static int rows_object(void *c, int32_t id, int16_t *player, uint8_t *state, uint8_t *kind) {
+    AoeLiveUnit *u = unit_by_id(c, id);
+    if (!u || !u->core.unit_template) return 0;
+    *player = u->runtime_owner_index;
+    *state = u->core.state;
+    *kind = u->core.unit_template->pick_kind;
+    return 1;
+}
+
+int aoe_demo_select_area(AoeDemo *demo, int32_t x0, int32_t y0, int32_t x1, int32_t y1, int add) {
+    AoeMainViewRor v;
+    AoeViewDrawRowsOpsRor rows;
+    AoeViewPickedRor out[AOE_VIEW_PICKED_MAX_ROR];
+    int32_t n, i;
+    int any = 0;
+    if (!demo || !demo->loaded) return 0;
+    memset(&v, 0, sizeof v);
+    v.right = (int32_t)demo->width - 1;
+    v.bottom = (int32_t)demo->height - 1;
+    rows.context = demo;
+    rows.row_head = rows_head;
+    rows.item = rows_item;
+    rows.object = rows_object;
+    if (!add) demo->selected_count = 0;
+    n = aoe_main_view_box_objects_ror(&v, &rows, x0, y0, x1, y1, 10, 0x14, 1, 4, out);
+    for (i = 0; i < n; ++i) {
+        AoeLiveUnit *u = unit_by_id(demo, out[i].id);
+        if (!u || !alive(u) || u->core.state >= 7) continue;
+        if (!select_add(demo, u)) break;
+        any = 1;
+    }
+    if (any) return 1;
+    {
+        AoeLiveUnit *u = aoe_demo_pick(demo, (x0 + x1) / 2, (y0 + y1) / 2);
+        return u && alive(u) && select_add(demo, u);
+    }
+}
+
+void aoe_demo_draw_box(const AoeDemo *demo, uint8_t *dst, size_t stride, int32_t x0, int32_t y0,
+                       int32_t x1, int32_t y1, uint8_t colour) {
+    int32_t w, h;
+    if (!demo || !dst) return;
+    w = (int32_t)demo->width;
+    h = (int32_t)demo->height;
+    line_into(dst, stride, w, h, x0, y0, x1, y0, colour);
+    line_into(dst, stride, w, h, x1, y0, x1, y1, colour);
+    line_into(dst, stride, w, h, x1, y1, x0, y1, colour);
+    line_into(dst, stride, w, h, x0, y1, x0, y0, colour);
 }
 
 int aoe_demo_screen_to_map(const AoeDemo *demo, int32_t sx, int32_t sy, float *mx, float *my) {

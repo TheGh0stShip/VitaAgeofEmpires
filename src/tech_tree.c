@@ -317,6 +317,7 @@ int aoe_template_upgrade_copy_ror(DatUnit *slot, DatUnit *src) {
     slot->decay_rate = src->decay_rate;
     slot->blast_defense_level = src->blast_defense_level;
     slot->field_8c = src->field_8c;
+    slot->pick_kind = src->pick_kind;                        /* +0x8d */
     slot->map_mode = src->map_mode;                          /* +0x8e */
     slot->field_8f = src->field_8f;
     slot->map_color = src->map_color;                        /* +0x90 */

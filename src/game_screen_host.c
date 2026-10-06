@@ -201,6 +201,12 @@ static void render_view(AoeGameScreenHostRor *s) {
     if (s->world && s->pixels) {
         s->rendered = aoe_demo_render_indexed(s->world, s->pixels, (size_t)s->view_w);
         if (s->rendered) draw_place_preview(s);
+        /* The drag box (the view's kind-1 draw node) from the press to the
+           pointer, in the selection box's colour. */
+        if (s->rendered && s->drag_kind == 1 && s->mouse_x >= 0)
+            aoe_demo_draw_box(s->world, s->pixels, (size_t)s->view_w, s->press_x, s->press_y,
+                              s->mouse_x - s->ez.panel.x - s->view_x,
+                              s->mouse_y - s->ez.panel.y - s->view_y, 0x4a);
     }
 }
 
@@ -249,6 +255,12 @@ static int32_t gs_mouse_move(AoeUiPanelRor *p, int32_t x, int32_t y, int32_t ctr
     AoeGameScreenHostRor *s = GS(p);
     s->mouse_x = x;
     s->mouse_y = y;
+    /* 0x00519e00: a move with the button held draws the kind-1 box from the
+       press point and continues the drag. */
+    if (s->pressing && s->world) {
+        int32_t vx = x - p->x - s->view_x, vy = y - p->y - s->view_y;
+        if (vx != s->press_x || vy != s->press_y) s->drag_kind = 1;
+    }
     return aoe_ui_panel_mouse_move_ror(p, x, y, ctrl, shift);
 }
 
@@ -615,11 +627,42 @@ static int32_t gs_mouse_down(AoeUiPanelRor *p, uint8_t button, int32_t x, int32_
         return 1;
     }
     if (button == 1) {
-        aoe_demo_select(s->world, aoe_demo_pick(s->world, vx, vy));
-        selection_changed(s);
+        /* 0x00519d50: the press is captured; the selection follows on the
+           release (0x00519ed0 / 0x00515d30), or a drag box (0x00519e00). */
+        s->press_x = vx;
+        s->press_y = vy;
+        s->pressing = 1;
+        s->drag_kind = 0;
     } else {
         aoe_demo_order(s->world, vx, vy);
     }
+    render_view(s);
+    p->vt->set_redraw(p, 1);
+    return 1;
+}
+
+/* The left release (0x00519ed0 edit mode 0): a dragged box selects the
+   area (0x00515d30 kind 2 -> 0x005114d0), a plain release the point;
+   Shift adds to the selection. */
+static int32_t gs_mouse_up(AoeUiPanelRor *p, uint8_t button, int32_t x, int32_t y, int32_t c,
+                           int32_t sh) {
+    AoeGameScreenHostRor *s = GS(p);
+    int32_t vx = x - p->x - s->view_x, vy = y - p->y - s->view_y, x0, y0, x1, y1;
+    if (button != 1 || !s->pressing || !s->world)
+        return aoe_ui_panel_mouse_up_ror(p, button, x, y, c, sh);
+    s->pressing = 0;
+    if (s->drag_kind == 1) {
+        x0 = s->press_x < vx ? s->press_x : vx;
+        x1 = s->press_x < vx ? vx : s->press_x;
+        y0 = s->press_y < vy ? s->press_y : vy;
+        y1 = s->press_y < vy ? vy : s->press_y;
+    } else {
+        x0 = x1 = vx;
+        y0 = y1 = vy;
+    }
+    s->drag_kind = 0;
+    aoe_demo_select_area(s->world, x0, y0, x1, y1, key_held(p, 0x10));
+    selection_changed(s);
     render_view(s);
     p->vt->set_redraw(p, 1);
     return 1;
@@ -1478,6 +1521,7 @@ int aoe_game_screen_host_init_ror(AoeGameScreenHostRor *s, AoeGameUiRor *ui, Aoe
     s->place_unit = -1;
     vtable.base.mouse_move = gs_mouse_move;
     vtable.base.mouse_down = gs_mouse_down;
+    vtable.base.mouse_up = gs_mouse_up;
     aoe_ui_screen_init_ror(ez, ui->system, ui->ez_ops, NAME);
     ez->panel.vt = &vtable.base;
     if (!aoe_ui_screen_setup_ror(ez, area, "", 0xc388, 1)) {

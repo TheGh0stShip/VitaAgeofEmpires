@@ -110,6 +110,7 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
     unit->decay_rate = atfloat(p + 7); /* runtime template +0x80 */
     unit->blast_defense_level = p[11]; /* +0x8b, blast 0x00426280 */
     unit->field_8c = p[12]; /* loader 0x004413b0 order: +0x8b,+0x8c,... */
+    unit->pick_kind = p[13]; /* +0x8d */
     unit->map_mode = p[14];  /* +0x8e */
     unit->field_8f = p[15];
     unit->map_color = p[20]; /* +0x90, after the +0x84 float */

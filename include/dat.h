@@ -449,6 +449,10 @@ typedef struct {
        0x004e7dc0/0x004e7f90/0x00508010. Their meaning beyond those uses is
        not yet established. */
     uint8_t field_8c, field_8f;
+    /* Template +0x8d: the view's picks compare it as a kind: the box
+       selection 0x00514b60 takes objects of kind 4 and above, the point
+       pick's fallback in 0x005114d0 kinds above 1. */
+    uint8_t pick_kind;
     /* Template +0x8e / +0x90 (loader 0x004413b0): the diamond map's mode
        (1 small, 2 large, 3 large in its own colour, 4 colours its tiles)
        and its colour. */

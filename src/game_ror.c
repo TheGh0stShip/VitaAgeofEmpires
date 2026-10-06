@@ -1009,3 +1009,150 @@ int aoe_game_ror_cheat_ror(const AoeGameRorCheatOpsRor *o, int32_t player, const
     if (coded_is(coded, "ZEUS")) { o->player_54(o->context, player); return 1; }
     return 0;
 }
+
+/* 0x00501980 */
+void aoe_game_ror_notify_ror(const AoeGameNotifyOpsRor *o, int32_t kind, int32_t a, int32_t b,
+                             int32_t c, int32_t d) {
+    char fmt[0x100], text[0x200];
+    int ours = a == o->viewed_player, i;
+    if (!o->has_game_screen) return;
+#define GN_SOUND(n) o->step(o->context, AOE_GN_SOUND, (n), 0, NULL)
+#define GN_NAMED(id, who) do { o->string(o->context, (id), fmt, sizeof fmt); \
+        snprintf(text, sizeof text, fmt, o->player_name(o->context, (who))); } while (0)
+    switch (kind) {
+    case 1: case 2: case 3:
+        if (!ours) return;
+        GN_SOUND(3);
+        o->format(o->context, kind == 1 ? 0x66 : kind == 2 ? 0x67 : 0x69, 0, text, sizeof text);
+        o->step(o->context, AOE_GN_FIRST_LINE, 0, 0, text);
+        return;
+    case 4:
+        if (ours || o->dropped[a]) return;
+        o->dropped[a] = 1;
+        GN_SOUND(7);
+        if (a > 0) { GN_NAMED(0xbc4, a); o->step(o->context, AOE_GN_CHAT, 0, 0, text); }
+        return;
+    case 5:
+        if (ours || a <= 0) return;
+        GN_SOUND(6);
+        GN_NAMED(b == 0 ? 0xbc5 : 0xbc4, a);
+        o->step(o->context, AOE_GN_CHAT, 0, 0, text);
+        return;
+    case 6:
+        if (ours) return;
+        GN_SOUND(6);
+        if (a > 0) { GN_NAMED(0xbc6, a); o->step(o->context, AOE_GN_CHAT, 0, 0, text); }
+        return;
+    case 7:
+        if (b != o->viewed_player) return;
+        GN_SOUND(4);
+        o->string(o->context, c == 0 ? 0xbc8 : c == 1 ? 0xbc7 : c == 3 ? 0xbc1 : 0xbc9, fmt, sizeof fmt);
+        snprintf(text, sizeof text, fmt, o->player_name(o->context, a), (int)a);
+        o->step(o->context, AOE_GN_CHAT, 0, 0, text);
+        return;
+    case 8:
+        o->step(o->context, AOE_GN_TIMERS, 0, 0, NULL);
+        if (b != o->viewed_player) return;
+        fmt[0] = '\0';
+        if (c == 0) o->string(o->context, 0xbd2, fmt, sizeof fmt);
+        else if (c == 1) o->string(o->context, 0xbd1, fmt, sizeof fmt);
+        else if (c == 3) o->string(o->context, 0xbd3, fmt, sizeof fmt);
+        snprintf(text, sizeof text, fmt, o->player_name(o->context, a));
+        o->step(o->context, AOE_GN_CHAT, 0, 0, text);
+        return;
+    case 100:
+        if (!ours) return;
+        GN_SOUND(b == 0x65 || b == 0x66 || b == 0x67 ? 5 : 0xf);
+        o->step(o->context, AOE_GN_BUTTONS, 0, 0, NULL);
+        o->step(o->context, AOE_GN_VIEW_REMEMBER, c, d, NULL);
+        return;
+    case 0x66: case 0x69:
+        if (!ours) return;
+        o->step(o->context, AOE_GN_BUTTONS, 0, 0, NULL);
+        o->step(o->context, AOE_GN_VIEW_REMEMBER, c, d, NULL);
+        return;
+    case 0x68: case 0x7d:
+        if (!ours) return;
+        if (kind == 0x68) GN_SOUND(3);
+        o->format(o->context, kind == 0x68 ? 1000 : 1, b, text, sizeof text);
+        o->step(o->context, AOE_GN_FIRST_LINE, 0, 0, text);
+        return;
+    case 0x6b:
+        if (!ours) return;
+        GN_SOUND(3);
+        o->format(o->context, 0x6a, 0, text, sizeof text);
+        o->step(o->context, AOE_GN_FIRST_LINE, 0, 0, text);
+        return;
+    case 0x6c:
+        GN_SOUND(8);
+        if (ours) o->string(o->context, 0xbf2, text, sizeof text);
+        else GN_NAMED(0xbcb, a);
+        o->step(o->context, AOE_GN_CHAT, 0, 0, text);
+        o->step(o->context, AOE_GN_VIEW_REMEMBER, c, d, NULL);
+        return;
+    case 0x6d: case 0x6e: {
+        int32_t id;
+        if (kind == 0x6e && o->world_108) return;
+        GN_SOUND(kind == 0x6d ? 9 : 10);
+        if (ours) {
+            id = kind == 0x6d ? (o->world_108 ? 0xbee : 0xbcc) : 0xbcf;
+            o->string(o->context, id, text, sizeof text);
+        } else {
+            int allied = o->player_108(o->context, a) && !o->stance(o->context, o->viewed_player) &&
+                         o->player_108(o->context, o->viewed_player) && !o->stance(o->context, a);
+            if (kind == 0x6d) id = o->world_108 ? 0xbef : allied ? 0xbcd : 0xbce;
+            else id = 0xbd0;
+            GN_NAMED(id, a);
+        }
+        o->step(o->context, AOE_GN_VIEW_REMEMBER, c, d, NULL);
+        o->step(o->context, AOE_GN_CHAT, 0, 0, text);
+        o->step(o->context, AOE_GN_TIMERS, 0, 0, NULL);
+        return;
+    }
+    case 0x72: case 0x74: {
+        int32_t id;
+        GN_SOUND(0xb);
+        if (o->world_108) id = kind == 0x72 ? 0xbf0 : 0xbf1;
+        else if (ours) id = kind == 0x72 ? 0xbd4 : 0xbd9;
+        else {
+            int allied = o->player_108(o->context, a) && !o->stance(o->context, o->viewed_player) &&
+                         o->player_108(o->context, o->viewed_player) && !o->stance(o->context, a);
+            id = allied ? (kind == 0x72 ? 0xbd4 : 0xbd9) : (kind == 0x72 ? 0xbd5 : 0xbda);
+        }
+        o->string(o->context, id, text, sizeof text);
+        o->step(o->context, AOE_GN_CHAT, 0, 0, text);
+        o->step(o->context, AOE_GN_TIMERS, 0, 0, NULL);
+        for (i = 1; i < o->player_count; ++i) o->step(o->context, AOE_GN_TELL_PLAYER, i, a, NULL);
+        return;
+    }
+    case 0x73: case 0x75:
+        if (o->world_108) return;
+        GN_SOUND(0xc);
+        o->string(o->context, kind == 0x73 ? 0xbd6 : 0xbdb, text, sizeof text);
+        o->step(o->context, AOE_GN_CHAT, 0, 0, text);
+        o->step(o->context, AOE_GN_TIMERS, 0, 0, NULL);
+        return;
+    case 0x76: case 0x77: case 0x78: case 0x79: case 0x7a:
+        if (!ours) return;
+        GN_SOUND(3);
+        o->string(o->context, 0xbe7 + (kind - 0x76), text, sizeof text);
+        o->step(o->context, AOE_GN_FIRST_LINE, 0, 0, text);
+        return;
+    case 0x7b:
+        if (!ours && b == o->viewed_player) GN_SOUND(0xd);
+        o->step(o->context, AOE_GN_VIEW_REMEMBER, c, d, NULL);
+        return;
+    case 0x7c:
+        if (ours) o->step(o->context, AOE_GN_BUTTONS, 0, 0, NULL);
+        return;
+    case 0x7e:
+        if (!ours) return;
+        GN_SOUND(0x10);
+        o->step(o->context, AOE_GN_VIEW_REMEMBER, c, d, NULL);
+        return;
+    default:
+        return;
+    }
+#undef GN_SOUND
+#undef GN_NAMED
+}

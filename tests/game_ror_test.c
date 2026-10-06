@@ -394,6 +394,39 @@ static void cheat_tests(void) {
     o.cheats_on = 0;
     assert(aoe_game_ror_cheat_ror(&o, 1, "zeus") == 0);
 }
+
+static char gn_log[1024]; static int gn_n; static int32_t gn_dropped[9]; static int gn_108[9] = {0, 1, 1, 0}, gn_stance[9];
+static void gn_add(const char *fmt, ...) { va_list ap; va_start(ap, fmt); gn_n += vsnprintf(gn_log + gn_n, sizeof gn_log - (size_t)gn_n, fmt, ap); va_end(ap); }
+static const char *gn_name(void *c, int32_t p) { (void)c; return p == 1 ? "Ann" : p == 2 ? "Bob" : "Cy"; }
+static int gn_108f(void *c, int32_t p) { (void)c; return gn_108[p]; }
+static int gn_stancef(void *c, int32_t p) { (void)c; return gn_stance[p]; }
+static void gn_string(void *c, int32_t id, char *o, int n) { (void)c; snprintf(o, (size_t)n, "S%x[%%s]", (unsigned)id); }
+static void gn_format(void *c, int32_t id, int32_t v, char *o, int n) { (void)c; snprintf(o, (size_t)n, "F%x:%d", (unsigned)id, (int)v); }
+static void gn_step(void *c, int32_t id, int32_t a, int32_t b, const char *t) { (void)c; gn_add("%d(%d,%d%s%s) ", (int)id, (int)a, (int)b, t ? "," : "", t ? t : ""); }
+static void notify_tests(void) {
+    AoeGameNotifyOpsRor o = {NULL, 1, 1, 4, 0, gn_dropped, gn_name, gn_108f, gn_stancef, gn_string, gn_format, gn_step};
+    aoe_game_ror_notify_ror(&o, 2, 1, 0, 0, 0);
+    assert(strcmp(gn_log, "1(3,0) 2(0,0,F67:0) ") == 0);
+    gn_n = 0; aoe_game_ror_notify_ror(&o, 2, 2, 0, 0, 0); assert(gn_n == 0);
+    gn_n = 0; aoe_game_ror_notify_ror(&o, 4, 2, 0, 0, 0); assert(strcmp(gn_log, "1(7,0) 3(0,0,Sbc4[Bob]) ") == 0 && gn_dropped[2] == 1);
+    gn_n = 0; aoe_game_ror_notify_ror(&o, 4, 2, 0, 0, 0); assert(gn_n == 0);
+    gn_n = 0; aoe_game_ror_notify_ror(&o, 7, 3, 1, 3, 0); assert(strcmp(gn_log, "1(4,0) 3(0,0,Sbc1[Cy]) ") == 0);
+    gn_n = 0; aoe_game_ror_notify_ror(&o, 8, 3, 1, 1, 0); assert(strcmp(gn_log, "6(0,0) 3(0,0,Sbd1[Cy]) ") == 0);
+    gn_n = 0; aoe_game_ror_notify_ror(&o, 100, 1, 0x66, 7, 8); assert(strcmp(gn_log, "1(5,0) 4(0,0) 5(7,8) ") == 0);
+    gn_n = 0; aoe_game_ror_notify_ror(&o, 0x68, 1, 55, 0, 0); assert(strcmp(gn_log, "1(3,0) 2(0,0,F3e8:55) ") == 0);
+    /* Diplomacy: player 2 allied with us both ways -> 0xbcd; a stance breaks it -> 0xbce; with the world's +0x108 0xbef. */
+    gn_n = 0; aoe_game_ror_notify_ror(&o, 0x6d, 2, 0, 3, 4); assert(strcmp(gn_log, "1(9,0) 5(3,4) 3(0,0,Sbcd[Bob]) 6(0,0) ") == 0);
+    gn_n = 0; gn_stance[2] = 1; aoe_game_ror_notify_ror(&o, 0x6d, 2, 0, 3, 4); assert(strcmp(gn_log, "1(9,0) 5(3,4) 3(0,0,Sbce[Bob]) 6(0,0) ") == 0);
+    gn_n = 0; o.world_108 = 1; aoe_game_ror_notify_ror(&o, 0x6d, 1, 0, 3, 4); assert(strcmp(gn_log, "1(9,0) 5(3,4) 3(0,0,Sbee[%s]) 6(0,0) ") == 0);
+    gn_n = 0; aoe_game_ror_notify_ror(&o, 0x6e, 1, 0, 0, 0); assert(gn_n == 0);
+    gn_n = 0; aoe_game_ror_notify_ror(&o, 0x72, 2, 0, 0, 0); assert(strcmp(gn_log, "1(11,0) 3(0,0,Sbf0[%s]) 6(0,0) 7(1,2) 7(2,2) 7(3,2) ") == 0);
+    gn_n = 0; o.world_108 = 0; gn_stance[2] = 0; aoe_game_ror_notify_ror(&o, 0x74, 2, 0, 0, 0); assert(strcmp(gn_log, "1(11,0) 3(0,0,Sbd9[%s]) 6(0,0) 7(1,2) 7(2,2) 7(3,2) ") == 0);
+    gn_n = 0; aoe_game_ror_notify_ror(&o, 0x75, 2, 0, 0, 0); assert(strcmp(gn_log, "1(12,0) 3(0,0,Sbdb[%s]) 6(0,0) ") == 0);
+    gn_n = 0; aoe_game_ror_notify_ror(&o, 0x78, 1, 0, 0, 0); assert(strcmp(gn_log, "1(3,0) 2(0,0,Sbe9[%s]) ") == 0);
+    gn_n = 0; aoe_game_ror_notify_ror(&o, 0x7b, 2, 1, 9, 9); assert(strcmp(gn_log, "1(13,0) 5(9,9) ") == 0);
+    gn_n = 0; aoe_game_ror_notify_ror(&o, 0x7e, 1, 0, 1, 2); assert(strcmp(gn_log, "1(16,0) 5(1,2) ") == 0);
+    gn_n = 0; o.has_game_screen = 0; aoe_game_ror_notify_ror(&o, 0x7e, 1, 0, 1, 2); assert(gn_n == 0);
+}
 int main(void) {
     char coded[64];
     AoeGameRorCommandOpsRor cops = {NULL, ns, sp, bc};
@@ -598,5 +631,6 @@ int main(void) {
     start_game_tests();
     sounds_tests();
     cheat_tests();
+    notify_tests();
     return 0;
 }

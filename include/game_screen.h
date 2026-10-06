@@ -870,4 +870,90 @@ typedef struct {
    player notified. 0. */
 int32_t aoe_game_screen_layout_ror(const AoeGameScreenLayoutOpsRor *o);
 
+
+/* ---- 0x004822a0: the command buttons rebuilt ---- */
+
+/* A train or research entry as a button: its slot byte, picture frame,
+   id, help ids, extra values and texts (the original's 0x00483760
+   arguments). */
+typedef struct {
+    int32_t slot, frame, id, help, help2, a, b;
+    char name[0x200], help_text[0x200];
+} AoeButtonEntryRor;
+
+/* Picture sets: 0 +0x48c (commands), 1 +0x490 (techs), 2 +0x494 (units),
+   3 the civilisation's building set (+0x498 + 4 civ), 4 the page set
+   (+0x4ac). */
+typedef struct {
+    void *context;
+    int has_current_unit;        /* +0x5c8 */
+    int32_t edit_mode, field_1b8, game_state; /* game +0x1b4, +0x1b8, +0x1b0 */
+    uint8_t civ;                 /* viewed player +0x54 (6+ -> 0) */
+    int16_t *count, *shown;      /* +0x5e0, +0x5e4 */
+    int16_t page;                /* +0x5e2 */
+    int16_t frame_4b0, frame_4b2, frame_4b4;
+    int current_is_ours;         /* current unit +0xc == the viewed player */
+    uint8_t common_8f;           /* 0x0045e000 */
+    int busy;                    /* 0x004859b0 */
+    int16_t selection_count;     /* player +0x1a0 */
+    uint8_t current_group;       /* current unit +0x37 */
+    int all_have_124_118;        /* every selected template: +0x124 != -1 and +0x118 != 0 */
+    int any_cargo;               /* a selected unit's +0x24's +0x8 > 0 */
+    int all_8f_3_to_9;           /* every selected template +0x8f in 3..9 */
+    int first_has_actions;       /* 0x004065f0 */
+    int has_class_4;             /* 0x0045dfb0(4) */
+    int is_building;             /* current template +0x4 == 'P' */
+    int16_t action_type, action_sub; /* 0x004ad870: type (100 clears the sub) */
+    uint8_t current_state;       /* current unit +0x48 */
+    int16_t current_template;    /* current template +0x10 */
+    int queue_enabled;           /* 0x00558740 */
+    int16_t queue_count;         /* current unit +0x1c6 */
+    int32_t (*queued_of)(void *context, int16_t template_id); /* sum of +0x1c0 pairs */
+    int32_t age;                 /* ftol(viewed player +0x50 -> +0x18) */
+    int (*age_research)(void *context, int32_t tech, AoeButtonEntryRor *e); /* 0x004ea9ac != -1, filled */
+    /* Lists: `which` 0 the editor list +0x5d8, 1 the unit list +0x5d4; the
+       research list +0x5d0 (0x004f0bf0). Entries in button form. */
+    int32_t (*train_list)(void *context, int which, int16_t building);
+    void (*train_entry)(void *context, int which, int32_t i, AoeButtonEntryRor *e);
+    int32_t (*research_list)(void *context, int16_t building);
+    void (*research_entry)(void *context, int32_t i, AoeButtonEntryRor *e);
+    void (*set)(void *context, int set, int32_t index, int32_t frame, int32_t command,
+                int32_t value, int32_t help, int32_t help2, int32_t a, int32_t b, int32_t c,
+                const char *name, const char *help_text);   /* 0x00483760 */
+    void (*queue_flag)(void *context, int on, int32_t n);  /* 0x004f7bc0 / 0x004f7be0 */
+    void (*hide_unused)(void *context);                    /* 0x004834a0 */
+} AoeGameScreenButtonsOpsRor;
+
+/* 0x004822a0: the button count (+0x5e0) and shown page (+0x5e4 -1)
+   reset, every button marked unused, the mouse point cleared. Without a
+   current unit only the unused ones are hidden. In edit mode 6 with
+   +0x1b8 == 1 the editor's train list for building 0x76 fills the page:
+   a wonder entry takes slot 6 when no 0x57 entry exists; page 0 shows
+   slots below 11, later pages those above 10 (the rest flag a "more"
+   button: page set, index 5, +0x4b0, command 0xc, help 0x1d4d7); the
+   page button (index 0xb, +0x4b2, command 0xb, help 0x1d4d9). In mode 0
+   outside state 5 with our own unit, by the selection's common +0x8f:
+   3 -> stop (0, frame 2, 3, help 0x1d4df), attack ground (1, 0, 0x1f,
+   0x1d4f6), busy (2, 3, 5, 0x1d4dd) and the group buttons; 9 -> busy,
+   groups; 4 -> (0, 4, 0x16, 0x1d4ea), with every unit convertible (1,
+   0xc, 0x17, 0x1d4eb), busy, groups; 6 -> (0, 0xd, 0x1c, 0x1d4f1), (1,
+   0xe, 0x1d, 0x1d4f2), busy, groups; 7 -> cargo (0, 5, 7, 0x1d4e9), busy,
+   groups; 5 -> tech set (1, 0x57, 0x19, 0x1a25c, 0x265af), (2, 0x56,
+   0x1a, 0x1a25d), (3, 0x58, 0x1b, 0x1a25e), busy, groups; 2 (a 'P'
+   building): under construction (0, 3, 0x14, 0x1d4e5); built and not
+   researching (0x67) nor training without the queue (0x66): the
+   research and train lists; queued units (queue on, +0x1c6 > 0) add
+   busy at 6 and show only entries with queued copies (their count
+   through 0x004f7be0), ending there; otherwise train entries as unit
+   buttons (command 0x12), a wonder with no research offers the next age
+   (tech 100 + age below 4) and research entries as tech buttons
+   (command 0x11); empty lists fall back to the groups; 0 with several
+   units of kinds 3..9: class-4 units (0, 2, 3, 0x1d4df), actions (busy
+   slot, 3, 5), groups; anything else: class 4, busy, groups and the
+   page button with command 0xb. The group buttons: one unit in a group
+   (6, 8, 9, 0x1d4e3); several units (6, 7, 8, 0x1d4e1) and (7, 8, 9).
+   Not our unit or other modes: the page button (+0x4b4 or +0x4b2,
+   command 6 or 0xb). Then the unused buttons are hidden. */
+void aoe_game_screen_buttons_ror(const AoeGameScreenButtonsOpsRor *o);
+
 #endif

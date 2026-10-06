@@ -1307,3 +1307,140 @@ int32_t aoe_game_screen_layout_ror(const AoeGameScreenLayoutOpsRor *o) {
     o->notify(o->context, o->viewed_player);
     return 0;
 }
+
+/* 0x004822a0 */
+#define GSB_CMD(idx, frame, cmd, help) \
+    o->set(o->context, 0, (idx), (frame), (cmd), 0, (help), -1, 0, 0, 0, NULL, NULL)
+static void gsb_groups(const AoeGameScreenButtonsOpsRor *o) {
+    if (o->selection_count < 2) {
+        if (o->current_group) GSB_CMD(6, 8, 9, 0x1d4e3);
+    } else {
+        GSB_CMD(6, 7, 8, 0x1d4e1);
+        GSB_CMD(7, 8, 9, 0x1d4e3);
+    }
+}
+static void gsb_entry(const AoeGameScreenButtonsOpsRor *o, int set, int32_t command,
+                      const AoeButtonEntryRor *e) {
+    o->set(o->context, set, (int32_t)aoe_game_screen_button_slot_ror((uint8_t)e->slot), e->frame,
+           command, e->id, e->help, e->help2, e->a, e->b, 0, e->name, e->help_text);
+}
+void aoe_game_screen_buttons_ror(const AoeGameScreenButtonsOpsRor *o) {
+    AoeButtonEntryRor e;
+    int16_t page_frame = o->frame_4b4;
+    int32_t page_cmd = 6, i, n;
+    *o->count = 0;
+    *o->shown = -1;
+    if (!o->has_current_unit) { o->hide_unused(o->context); return; }
+    if (o->edit_mode == 6 && o->field_1b8 == 1) {
+        int32_t wonder = -1, has57 = -1, more = 0;
+        n = o->train_list(o->context, 0, 0x76);
+        *o->count = (int16_t)n;
+        for (i = 0; i < n; ++i) {
+            o->train_entry(o->context, 0, i, &e);
+            if (e.id == 0x6d) wonder = i;
+            else if (e.id == 0x57) has57 = i;
+        }
+        for (i = 0; i < n; ++i) {
+            o->train_entry(o->context, 0, i, &e);
+            if (i == wonder && has57 == -1) e.slot = 6;
+            if ((o->page == 0) ? e.slot < 0xb : e.slot > 10) gsb_entry(o, 3, 0x13, &e);
+            else more = 1;
+        }
+        if (more) o->set(o->context, 4, 5, o->frame_4b0, 0xc, 0, 0x1d4d7, -1, 0, 0, 0, NULL, NULL);
+        page_frame = o->frame_4b2; page_cmd = 0xb;
+    } else if (o->edit_mode == 0 && o->game_state != 5) {
+        if (o->current_is_ours) {
+            uint8_t k = o->common_8f;
+            int generic = 0;
+            if (k == 3) {
+                GSB_CMD(0, 2, 3, 0x1d4df);
+                GSB_CMD(1, 0, 0x1f, 0x1d4f6);
+                if (o->busy) GSB_CMD(2, 3, 5, 0x1d4dd);
+                gsb_groups(o);
+            } else if (k == 9) {
+                if (o->busy) GSB_CMD(0, 3, 5, 0x1d4dd);
+                gsb_groups(o);
+            } else if (k == 4) {
+                int32_t next = 1;
+                GSB_CMD(0, 4, 0x16, 0x1d4ea);
+                if (o->all_have_124_118) { GSB_CMD(1, 0xc, 0x17, 0x1d4eb); next = 2; }
+                if (o->busy) GSB_CMD(next, 3, 5, 0x1d4dd);
+                gsb_groups(o);
+            } else if (k == 6) {
+                GSB_CMD(0, 0xd, 0x1c, 0x1d4f1);
+                GSB_CMD(1, 0xe, 0x1d, 0x1d4f2);
+                if (o->busy) GSB_CMD(2, 3, 5, 0x1d4dd);
+                gsb_groups(o);
+            } else if (k == 7) {
+                int32_t next = 0;
+                if (o->any_cargo) { GSB_CMD(0, 5, 7, 0x1d4e9); next = 1; }
+                if (o->busy) GSB_CMD(next, 3, 5, 0x1d4dd);
+                gsb_groups(o);
+            } else if (k == 5) {
+                o->set(o->context, 1, 1, 0x57, 0x19, 0, 0x1a25c, 0x265af, 0, 0, 0, NULL, NULL);
+                o->set(o->context, 1, 2, 0x56, 0x1a, 0, 0x1a25d, 0x265af, 0, 0, 0, NULL, NULL);
+                o->set(o->context, 1, 3, 0x58, 0x1b, 0, 0x1a25e, 0x265af, 0, 0, 0, NULL, NULL);
+                if (o->busy) GSB_CMD(0, 3, 5, 0x1d4dd);
+                gsb_groups(o);
+            } else if (k == 2 && o->is_building) {
+                int16_t sub = o->action_type == 100 ? 0 : o->action_sub;
+                if (o->current_state < 2) {
+                    GSB_CMD(0, 3, 0x14, 0x1d4e5);
+                } else if (o->current_state == 2 &&
+                           sub != 0x67 && (sub != 0x66 || o->queue_enabled)) {
+                    int32_t rn = o->research_list(o->context, o->current_template);
+                    int32_t tn = o->train_list(o->context, 1, o->current_template);
+                    int queued = 0;
+                    *o->count = (int16_t)(tn + rn);
+                    if (o->queue_enabled && o->queue_count > 0) {
+                        queued = 1;
+                        GSB_CMD(6, 3, 5, 0x1d4dd);
+                    }
+                    for (i = 0; i < tn; ++i) {
+                        o->train_entry(o->context, 1, i, &e);
+                        if (!queued) {
+                            gsb_entry(o, 2, 0x12, &e);
+                            o->queue_flag(o->context, 0, 0);
+                        } else {
+                            int32_t q = o->queued_of(o->context, (int16_t)e.id);
+                            if (q > 0) {
+                                gsb_entry(o, 2, 0x12, &e);
+                                o->queue_flag(o->context, 1, q);
+                            }
+                        }
+                    }
+                    if (queued) { o->hide_unused(o->context); return; }
+                    if (o->current_template == 0x6d && rn == 0 && o->age < 4 &&
+                        o->age_research(o->context, o->age + 100, &e)) {
+                        gsb_entry(o, 1, 0x11, &e);
+                        rn = -1;
+                    } else {
+                        for (i = 0; i < rn; ++i) {
+                            o->research_entry(o->context, i, &e);
+                            gsb_entry(o, 1, 0x11, &e);
+                        }
+                    }
+                    if (tn == 0 && rn == 0) gsb_groups(o);
+                } else {
+                    if (o->busy) GSB_CMD(0, 3, 5, 0x1d4dd);
+                }
+            } else if (k == 0 && o->selection_count > 1 && o->all_8f_3_to_9) {
+                if (o->has_class_4) GSB_CMD(0, 2, 3, 0x1d4df);
+                if (o->first_has_actions) GSB_CMD(o->has_class_4 ? 1 : 0, 3, 5, 0x1d4dd);
+                gsb_groups(o);
+            } else {
+                generic = 1;
+            }
+            if (generic) {
+                if (o->has_class_4) GSB_CMD(0, 2, 3, 0x1d4df);
+                if (o->busy) GSB_CMD(o->has_class_4 ? 1 : 0, 3, 5, 0x1d4dd);
+                gsb_groups(o);
+                page_cmd = 0xb;
+            }
+        }
+    } else {
+        page_frame = o->frame_4b2; page_cmd = 0xb;
+    }
+    o->set(o->context, 4, 0xb, page_frame, page_cmd, 0, 0x1d4d9, -1, 0, 0, 0, NULL, NULL);
+    o->hide_unused(o->context);
+}

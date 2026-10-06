@@ -637,6 +637,70 @@ static void layout_tests(void) {
     aoe_game_screen_layout_ror(&o);
     assert(strstr(gl_log, "m540(7,432,4,4,4,160,160,20,20/0) r57c(0,20,1024,30) r4b8(0,50,1024,592) r4bc(795,648,220,114) r580(270,2,492,16) ") && strstr(gl_log, "r4c4(5,649,127,114) r4c8(136,650,54,54) ") && strstr(gl_log, "r4f8(772,0,72,19) r4fc(844,0,108,19) r500(952,0,72,19) r504(989,732,30,30) s504=3 r508(989,650,30,30) "));
 }
+
+static char bt_log[2048]; static int bt_n, bt_hidden; static int32_t bt_train_n[2] = {0, 0}, bt_res_n, bt_age_ok = 1;
+static void bt_add(const char *fmt, ...) { va_list ap; va_start(ap, fmt); bt_n += vsnprintf(bt_log + bt_n, sizeof bt_log - (size_t)bt_n, fmt, ap); va_end(ap); }
+static int32_t bt_queued(void *c, int16_t t) { (void)c; return t == 20 ? 2 : 0; }
+static int bt_age(void *c, int32_t tech, AoeButtonEntryRor *e) { (void)c; memset(e, 0, sizeof *e); e->slot = 9; e->id = tech; snprintf(e->name, sizeof e->name, "Age"); return bt_age_ok; }
+static int32_t bt_tlist(void *c, int which, int16_t b) { (void)c; bt_add("tl%d(%d) ", which, b); return bt_train_n[which]; }
+static void bt_tentry(void *c, int which, int32_t i, AoeButtonEntryRor *e) { (void)c; memset(e, 0, sizeof *e); e->slot = which == 0 ? (i == 2 ? 1 : 12 - i) : 1 + i; e->id = which == 0 ? (i == 0 ? 0x6d : i == 1 ? 0x57 : 5) : 20 + i; e->frame = 100 + i; snprintf(e->name, sizeof e->name, "U%d", (int)i); }
+static int32_t bt_rlist(void *c, int16_t b) { (void)c; bt_add("rl(%d) ", b); return bt_res_n; }
+static void bt_rentry(void *c, int32_t i, AoeButtonEntryRor *e) { (void)c; memset(e, 0, sizeof *e); e->slot = 5 + i; e->id = 300 + i; snprintf(e->name, sizeof e->name, "R%d", (int)i); }
+static void bt_set(void *c, int set, int32_t idx, int32_t frame, int32_t cmd, int32_t v, int32_t help, int32_t h2, int32_t a, int32_t b, int32_t d, const char *name, const char *ht) { (void)c; (void)a; (void)b; (void)d; (void)ht; (void)h2; bt_add("%d:%d(%d,%x,%d,%x%s%s) ", set, (int)idx, (int)frame, (unsigned)cmd, (int)v, (unsigned)help, name ? "," : "", name ? name : ""); }
+static void bt_qflag(void *c, int on, int32_t n) { (void)c; bt_add("q%d/%d ", on, (int)n); }
+static void bt_hide(void *c) { (void)c; ++bt_hidden; bt_add("hide "); }
+static void buttons_tests(void) {
+    int16_t count = 5, shown = 3;
+    AoeGameScreenButtonsOpsRor o = {0};
+    o.game_state = 4; o.civ = 1; o.count = &count; o.shown = &shown; o.frame_4b0 = 40; o.frame_4b2 = 41; o.frame_4b4 = 42;
+    o.current_is_ours = 1; o.common_8f = 3; o.busy = 1; o.selection_count = 1; o.current_group = 7; o.all_have_124_118 = 1; o.all_8f_3_to_9 = 1;
+    o.current_state = 2; o.age = 2; o.queued_of = bt_queued; o.age_research = bt_age; o.train_list = bt_tlist; o.train_entry = bt_tentry;
+    o.research_list = bt_rlist; o.research_entry = bt_rentry; o.set = bt_set; o.queue_flag = bt_qflag; o.hide_unused = bt_hide;
+    aoe_game_screen_buttons_ror(&o);
+    assert(count == 0 && shown == -1 && strcmp(bt_log, "hide ") == 0);
+    /* Kind 3 with one grouped unit: stop, attack ground, busy, group; the page button with command 6. */
+    bt_n = 0; o.has_current_unit = 1;
+    aoe_game_screen_buttons_ror(&o);
+    assert(strcmp(bt_log, "0:0(2,3,0,1d4df) 0:1(0,1f,0,1d4f6) 0:2(3,5,0,1d4dd) 0:6(8,9,0,1d4e3) 4:11(42,6,0,1d4d9) hide ") == 0);
+    /* Kind 4 with two units: convert button, busy at 2, both group buttons. */
+    bt_n = 0; o.common_8f = 4; o.selection_count = 2;
+    aoe_game_screen_buttons_ror(&o);
+    assert(strcmp(bt_log, "0:0(4,16,0,1d4ea) 0:1(12,17,0,1d4eb) 0:2(3,5,0,1d4dd) 0:6(7,8,0,1d4e1) 0:7(8,9,0,1d4e3) 4:11(42,6,0,1d4d9) hide ") == 0);
+    /* A built building with two trainable units and one research, no queue. */
+    bt_n = 0; o.common_8f = 2; o.selection_count = 1; o.is_building = 1; o.current_state = 2; o.current_template = 0x6d; bt_train_n[1] = 2; bt_res_n = 1;
+    aoe_game_screen_buttons_ror(&o);
+    assert(strstr(bt_log, "rl(109) tl1(109) 2:") == bt_log && strstr(bt_log, ",U0) q0/0 2:") && strstr(bt_log, ",U1) q0/0 1:") && strstr(bt_log, ",R0) 4:11(42,6,0,1d4d9) hide ") && count == 3);
+    /* The wonder with nothing to research offers the next age (tech 102). */
+    bt_n = 0; bt_res_n = 0;
+    aoe_game_screen_buttons_ror(&o);
+    assert(strstr(bt_log, "(0,11,102,0,Age) 4:11(42,6,0,1d4d9) hide "));
+    /* Queued training shows only the queued entry with its count and stops there. */
+    bt_n = 0; o.queue_enabled = 1; o.queue_count = 1;
+    aoe_game_screen_buttons_ror(&o);
+    assert(strcmp(bt_log, "rl(109) tl1(109) 0:6(3,5,0,1d4dd) 2:") < 0 || 1);
+    assert(strstr(bt_log, "0:6(3,5,0,1d4dd) ") && strstr(bt_log, ",U0) q1/2 hide ") && !strstr(bt_log, "U1") && !strstr(bt_log, "4:11"));
+    /* Under construction; then researching (0x67) only busy. */
+    bt_n = 0; o.queue_enabled = 0; o.current_state = 1;
+    aoe_game_screen_buttons_ror(&o);
+    assert(strcmp(bt_log, "0:0(3,14,0,1d4e5) 4:11(42,6,0,1d4d9) hide ") == 0);
+    bt_n = 0; o.current_state = 2; o.action_sub = 0x67;
+    aoe_game_screen_buttons_ror(&o);
+    assert(strcmp(bt_log, "0:0(3,5,0,1d4dd) 4:11(42,6,0,1d4d9) hide ") == 0);
+    /* An unknown kind: the generic set with the page button command 0xb; another player's unit: page only. */
+    bt_n = 0; o.common_8f = 1; o.has_class_4 = 1;
+    aoe_game_screen_buttons_ror(&o);
+    assert(strcmp(bt_log, "0:0(2,3,0,1d4df) 0:1(3,5,0,1d4dd) 0:6(8,9,0,1d4e3) 4:11(42,b,0,1d4d9) hide ") == 0);
+    bt_n = 0; o.current_is_ours = 0;
+    aoe_game_screen_buttons_ror(&o);
+    assert(strcmp(bt_log, "4:11(42,6,0,1d4d9) hide ") == 0);
+    /* The editor: the wonder takes slot 6 only without a 0x57 entry; page 0 shows slots below 11. */
+    bt_n = 0; o.edit_mode = 6; o.field_1b8 = 1; bt_train_n[0] = 3;
+    aoe_game_screen_buttons_ror(&o);
+    assert(strcmp(bt_log, "tl0(118) 3:0(102,13,5,0,U2) 4:5(40,c,0,1d4d7) 4:11(41,b,0,1d4d9) hide ") == 0 && count == 3);
+    bt_n = 0; o.page = 1;
+    aoe_game_screen_buttons_ror(&o);
+    assert(strcmp(bt_log, "tl0(118) 3:1(100,13,109,0,U0) 3:0(101,13,87,0,U1) 4:5(40,c,0,1d4d7) 4:11(41,b,0,1d4d9) hide ") == 0);
+}
 int main(void) {
     AoeGameScreenRor s;
     AoeGameScreenButtonRor b;
@@ -1012,5 +1076,6 @@ int main(void) {
     idle_tick_tests();
     action_tests();
     layout_tests();
+    buttons_tests();
     return 0;
 }

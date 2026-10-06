@@ -693,4 +693,62 @@ typedef struct {
 } AoeGameRorCheatOpsRor;
 int aoe_game_ror_cheat_ror(const AoeGameRorCheatOpsRor *o, int32_t player, const char *text);
 
+
+/* 0x00501980 (+0x?: kind, a, b, c, d): a game notification shown on the
+   game screen (+0xc24; nothing without it). "Us" is the world's viewed
+   player (+0x7c); sounds through 0x0041c120; texts through the game's
+   strings (+0x20) and formats (+0x28, kind 0x67); chat lines through
+   0x00480760; the first message line through 0x00482260(1, text, 0x55,
+   0); the view history through 0x005064d0(c, d). Kinds (a is a player
+   unless noted): 1 / 2 / 3 ours: sound 3, format 0x66 / 0x67 / 0x69 as
+   the first line. 4 (a comm slot): another player's slot not yet
+   dropped (0x007c0500[a]) marks it, sound 7 and, for a player above 0,
+   string 0xbc4 with the name as chat. 5 another player above 0: sound
+   6, 0xbc5 (b 0) / 0xbc4 with the name. 6 another: sound 6, above 0
+   0xbc6 with the name. 7 (b ours): sound 4, 0xbc8 / 0xbc7 / 0xbc1 (c 3)
+   / 0xbc9 formatted with player a's name and a. 8: the timer panels
+   (0x004839a0); b ours: 0xbd2 (c 0) / 0xbd1 (c 1) / 0xbd3 (c 3) / none,
+   with player a's name. 100 ours: sound 5 for b 0x65..0x67 else 0xf,
+   the buttons rebuilt (0x004822a0), the view remembered. 0x66 / 0x69
+   ours: the buttons rebuilt and the view remembered. 0x68 ours: sound 3,
+   format 1000 with b as the first line; 0x7d ours: format 1 with b.
+   0x6b ours: sound 3, format 0x6a. 0x6c: sound 8, 0xbf2 (ours) or 0xbcb
+   with a's name as chat, the view remembered. 0x6d: sound 9; a not us:
+   0xbce / 0xbef (world +0x108) / 0xbcd when both players are allied
+   with us (0x0045da60 0, their +0x108 set) with a's name, ours 0xbcc /
+   0xbee; the view remembered, the chat shown and the timers refreshed.
+   0x6e (world +0x108 clear): sound 10, 0xbcf ours else 0xbd0 with the
+   name; likewise. 0x72 / 0x74: sound 0xb, 0xbd4 / 0xbd9 (ours, or both
+   allied), 0xbd5 / 0xbda, 0xbf0 / 0xbf1 with +0x108; the chat shown,
+   the timers refreshed and every player told (+0xe8(a's id, i, kind, 0,
+   0, 0)). 0x73 / 0x75 (+0x108 clear): sound 0xc, 0xbd6 / 0xbdb as chat
+   with the timers. 0x76..0x7a ours: sound 3, strings 0xbe7..0xbeb as the
+   first line. 0x7b: sound 0xd when a is not us but b is; the view
+   remembered. 0x7c ours: the buttons rebuilt. 0x7e ours: sound 0x10, the
+   view remembered. */
+enum {
+    AOE_GN_SOUND = 1,       /* 0x0041c120(a) */
+    AOE_GN_FIRST_LINE,      /* 0x00482260(1, text, 0x55, 0) */
+    AOE_GN_CHAT,            /* 0x00480760(text) */
+    AOE_GN_BUTTONS,         /* 0x004822a0 */
+    AOE_GN_VIEW_REMEMBER,   /* 0x005064d0(c, d) */
+    AOE_GN_TIMERS,          /* 0x004839a0 */
+    AOE_GN_TELL_PLAYER      /* players[a] +0xe8(b, a, kind, 0, 0, 0) */
+};
+typedef struct {
+    void *context;
+    int has_game_screen;
+    int16_t viewed_player, player_count;
+    int32_t world_108;
+    int32_t *dropped;            /* 0x007c0500[] */
+    const char *(*player_name)(void *context, int32_t player);
+    int (*player_108)(void *context, int32_t player);
+    int (*stance)(void *context, int32_t player);   /* 0x0045da60 (0 allied) */
+    void (*string)(void *context, int32_t id, char *out, int size);
+    void (*format)(void *context, int32_t id, int32_t value, char *out, int size); /* +0x28(0x67, id, value) */
+    void (*step)(void *context, int32_t id, int32_t a, int32_t b, const char *text);
+} AoeGameNotifyOpsRor;
+void aoe_game_ror_notify_ror(const AoeGameNotifyOpsRor *o, int32_t kind, int32_t a, int32_t b,
+                             int32_t c, int32_t d);
+
 #endif

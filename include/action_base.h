@@ -130,6 +130,27 @@ int aoe_explore_action_update_ror(AoeBaseActionRor *action,
    zone near the boat unloads here (6); a nonnegative point sails (4 for
    the transport itself as target, else 11)), +0x30 = 0x00406b50 (sail
    to the point, 11). Owner notices carry 0x266. */
+/* Two adjacent unit slots (table words 0x005433d0 / 0x005433d4 and
+   0x0054476c / 0x00544770): 0x00427820(x, y, z) retargets a head transport action (+0x18
+   type 0xc) to the unit itself at (x, y, z); without one a new transport
+   action (0x004067d0) at the point replaces the list (0x00403e50) and is
+   adopted (+0x208) first. 0x00427910(unused, x, y, z) does the same, but a
+   head transport action is retargeted to the unit's own position, and a
+   new one starts there before its retarget to (x, y, z). 0 when the
+   action cannot be made, else 1. */
+typedef struct {
+    void *context;
+    void *(*head_transport)(void *context, AoeLiveUnit *unit); /* NULL: none */
+    void *(*new_transport)(void *context, AoeLiveUnit *unit, float x, float y, float z);
+    void (*clear_list)(void *context, AoeLiveUnit *unit);
+    void (*adopt)(void *context, AoeLiveUnit *unit, void *action);
+    void (*retarget)(void *context, void *action, AoeLiveUnit *target, float x, float y,
+                     float z);
+} AoeTransportUnitOpsRor;
+int aoe_transport_unit_go_ror(AoeLiveUnit *unit, float x, float y, float z,
+                              const AoeTransportUnitOpsRor *ops);
+int aoe_transport_unit_go_from_here_ror(AoeLiveUnit *unit, float x, float y, float z,
+                                        const AoeTransportUnitOpsRor *ops);
 int aoe_transport_action_init_ror(AoeBaseActionRor *action,
                                   AoeLiveUnit *unit, const DatUnitTask *task,
                                   float x, float y, float z);

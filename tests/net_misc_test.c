@@ -20,7 +20,24 @@ static void cleanup(void *c) { (void)c; cleanups++; }
 static uint32_t pw, pm, pwp, plp;
 static void post(void *c, uint32_t w, uint32_t m, uint32_t a, uint32_t b) { (void)c; pw = w; pm = m; pwp = a; plp = b; }
 
+static int hi_start_v;
+static int hi_startup(void *c) { (void)c; return hi_start_v; }
+static int hi_name(void *c, char *out, int n) { (void)c; snprintf(out, (size_t)n, "box"); return 0; }
+
+static void host_init_tests(void) {
+    AoeHostInfoRor h;
+    AoeHostOpsRor o;
+    memset(&o, 0, sizeof o);
+    o.startup = hi_startup;
+    o.gethostname = hi_name;
+    hi_start_v = 1;
+    assert(aoe_host_init_ror(&h, &o) == 0 && h.started == 0);
+    hi_start_v = 0;
+    assert(aoe_host_init_ror(&h, &o) == 1 && h.started == 1 && strcmp(h.name, "box") == 0);
+}
+
 int main(void) {
+    host_init_tests();
     AoeDebugLogRor l;
     AoeDebugLogOpsRor lops = {NULL, lopen, lclose, now};
     AoeHostInfoRor h;

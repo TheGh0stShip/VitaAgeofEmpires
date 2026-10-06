@@ -143,3 +143,23 @@ void aoe_debug_log_close_ror(AoeDebugLogRor *l, const AoeDebugLogOpsRor *ops) {
     l->file = NULL;
     l->open = 0;
 }
+
+int aoe_host_init_ror(AoeHostInfoRor *h, const AoeHostOpsRor *ops) {
+    char scratch[0xff];
+    int32_t i;
+    if (!h) return 0;
+    aoe_host_clear_ror(h);
+    for (i = 0; i < AOE_HOST_ENTRIES; ++i) aoe_host_clear_pair_ror(h->entries[i].address);
+    if (!ops || !ops->startup || ops->startup(ops->context) != 0) {
+        h->started = 0;
+        return 0;
+    }
+    h->started = 1;
+    if (ops->gethostname) aoe_host_name_ror(h, ops);
+    scratch[0] = 0;
+    if (ops->lookup) {
+        aoe_host_addresses_ror(h, ops, scratch, sizeof scratch);
+        aoe_host_aliases_ror(h, ops, scratch);
+    }
+    return 1;
+}

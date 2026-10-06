@@ -47,7 +47,39 @@ static AoeLiveUnit *resolve(void *c, int32_t id) { (void)c; (void)id; return NUL
 static void rel(void *c, AoeLiveUnit *t, AoeLiveUnit *u) { (void)c; (void)t; (void)u; }
 static void att(void *c, AoeLiveUnit *t, AoeLiveUnit *u, int16_t ty) { (void)c; (void)t; (void)u; (void)ty; }
 
+static int tu_head_v, tu_new_v = 1, tu_clears, tu_adopts;
+static float tu_x, tu_y;
+static AoeLiveUnit *tu_target;
+static int tu_action;
+static void *tu_head(void *c, AoeLiveUnit *u) { (void)c; (void)u; return tu_head_v ? &tu_action : NULL; }
+static void *tu_new(void *c, AoeLiveUnit *u, float x, float y, float z) {
+    (void)c; (void)u; (void)z; tu_x = x; tu_y = y; return tu_new_v ? &tu_action : NULL;
+}
+static void tu_clear(void *c, AoeLiveUnit *u) { (void)c; (void)u; ++tu_clears; }
+static void tu_adopt(void *c, AoeLiveUnit *u, void *a) { (void)c; (void)u; (void)a; ++tu_adopts; }
+static void tu_retarget(void *c, void *a, AoeLiveUnit *t, float x, float y, float z) {
+    (void)c; (void)a; (void)z; tu_target = t; tu_x = x; tu_y = y;
+}
+
+static void transport_unit_tests(void) {
+    static AoeLiveUnit boat;
+    AoeTransportUnitOpsRor o = {NULL, tu_head, tu_new, tu_clear, tu_adopt, tu_retarget};
+    boat.core.position.x38 = 4.0f;
+    boat.core.position.y3c = 5.0f;
+    /* No head: a new action, the list replaced, then the retarget. */
+    assert(aoe_transport_unit_go_ror(&boat, 9.0f, 8.0f, 0.0f, &o) == 1 && tu_clears == 1 &&
+           tu_adopts == 1 && tu_target == &boat && tu_x == 9.0f && tu_y == 8.0f);
+    /* A head transport from here goes to the unit's own position. */
+    tu_head_v = 1;
+    assert(aoe_transport_unit_go_from_here_ror(&boat, 9.0f, 8.0f, 0.0f, &o) == 1 &&
+           tu_clears == 1 && tu_x == 4.0f && tu_y == 5.0f);
+    tu_head_v = 0;
+    tu_new_v = 0;
+    assert(aoe_transport_unit_go_ror(&boat, 9.0f, 8.0f, 0.0f, &o) == 0);
+}
+
 int main(void) {
+    transport_unit_tests();
     AoeBaseActionOps o;
     AoeBaseActionRor a;
     uint8_t r;

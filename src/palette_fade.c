@@ -163,3 +163,24 @@ int aoe_surface_snapshot_ror(AoeDrawSurfaceRor *s, const char *format,
     free(out);
     return ok;
 }
+
+void aoe_palette_remap_ror(const uint8_t palette[1024], uint32_t color, int32_t percent,
+                           uint8_t map[256]) {
+    uint8_t blended[1024];
+    int i, j;
+    aoe_palette_blend_ror(palette, blended, color, percent, -1, -1);
+    for (i = 0; i < 256; ++i) {
+        int32_t best = 20000, best_j = 0;
+        const uint8_t *b = blended + 4 * i;
+        for (j = 0; j < 256; ++j) {
+            const uint8_t *p = palette + 4 * j;
+            int32_t d = (b[2] - p[2]) * (b[2] - p[2]) + (b[1] - p[1]) * (b[1] - p[1]) +
+                        (b[0] - p[0]) * (b[0] - p[0]);
+            if (d < best) {
+                best = d;
+                best_j = j;
+            }
+        }
+        map[i] = (uint8_t)best_j;
+    }
+}

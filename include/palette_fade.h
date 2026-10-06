@@ -17,6 +17,16 @@ void aoe_palette_blend_ror(const uint8_t src[1024], uint8_t dst[1024],
                            uint32_t color, int32_t percent, int32_t keep_a,
                            int32_t keep_b);
 
+/* 0x0041d090(unused, percent, color, palette), the computed colour
+   table's constructor (vtable 0x0054320c): its ID (+0x22) and the bytes
+   +0x24 / +0x25 are cleared and its map is made from `palette` (or the
+   system palette when NULL) blended `percent` towards `color` (0 for
+   NULL; 0x0041cac0 with no kept entries): each blended entry maps to the
+   palette entry nearest by squared RGB distance below 20000 (the first
+   on ties; 0 when none is that near). */
+void aoe_palette_remap_ror(const uint8_t palette[1024], uint32_t color, int32_t percent,
+                           uint8_t map[256]);
+
 /* 0x0043a460: the surface's system palette. 0x0043a490: set a whole
    palette with entry 0 black and entry 255 white. */
 void aoe_surface_palette_ror(const AoeDrawSurfaceRor *s, uint8_t out[1024]);

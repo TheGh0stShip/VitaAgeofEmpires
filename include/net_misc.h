@@ -29,7 +29,15 @@ typedef struct {
     int (*lookup)(void *context, const char *name, const char *const **aliases,
                   const uint8_t (*const **addresses)[4]);
     void (*cleanup)(void *context);                                /* Ordinal 116 */
+    int (*startup)(void *context);           /* Ordinal 115 (WSAStartup 1.1): 0 ok */
 } AoeHostOpsRor;
+
+/* 0x0041d2a0, the constructor: emptied (0x0041d600), Winsock started
+   (0x101) and the entries made (eight in the original, each emptied by
+   0x0041d640); once started the host name (0x0041d3e0), then the
+   addresses (0x0041d500) and aliases (0x0041d400) are read through a
+   0xff-byte scratch buffer. 1 when Winsock started. */
+int aoe_host_init_ror(AoeHostInfoRor *h, const AoeHostOpsRor *ops);
 
 /* 0x0041d600: the name and counts emptied; 0x0041d390 also ends Winsock
    when started; 0x0041d640 two strings (+0x00 and +0x20) emptied.

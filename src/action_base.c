@@ -588,3 +588,36 @@ int aoe_transport_action_update_ror(AoeBaseActionRor *a,
         return 1;
     }
 }
+
+static int transport_go(AoeLiveUnit *unit, float sx, float sy, float sz, float x, float y,
+                        float z, int head_here, const AoeTransportUnitOpsRor *ops) {
+    void *a;
+    if (!unit || !ops || !ops->retarget) return 0;
+    a = ops->head_transport ? ops->head_transport(ops->context, unit) : NULL;
+    if (a) {
+        if (head_here)
+            ops->retarget(ops->context, a, unit, unit->core.position.x38,
+                          unit->core.position.y3c, unit->core.position.z40);
+        else
+            ops->retarget(ops->context, a, unit, x, y, z);
+        return 1;
+    }
+    a = ops->new_transport ? ops->new_transport(ops->context, unit, sx, sy, sz) : NULL;
+    if (!a) return 0;
+    if (ops->clear_list) ops->clear_list(ops->context, unit);
+    if (ops->adopt) ops->adopt(ops->context, unit, a);
+    ops->retarget(ops->context, a, unit, x, y, z);
+    return 1;
+}
+
+int aoe_transport_unit_go_ror(AoeLiveUnit *unit, float x, float y, float z,
+                              const AoeTransportUnitOpsRor *ops) {
+    return transport_go(unit, x, y, z, x, y, z, 0, ops);
+}
+
+int aoe_transport_unit_go_from_here_ror(AoeLiveUnit *unit, float x, float y, float z,
+                                        const AoeTransportUnitOpsRor *ops) {
+    if (!unit) return 0;
+    return transport_go(unit, unit->core.position.x38, unit->core.position.y3c,
+                        unit->core.position.z40, x, y, z, 1, ops);
+}

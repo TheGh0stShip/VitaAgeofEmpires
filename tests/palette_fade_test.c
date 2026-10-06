@@ -49,7 +49,25 @@ static int write_file(void *c, const char *path, const uint8_t *d,
     return 1;
 }
 
+static void remap_tests(void) {
+    static uint8_t pal[1024];
+    uint8_t map[256];
+    int i;
+    for (i = 0; i < 256; ++i) {
+        pal[4 * i] = (uint8_t)i;
+        pal[4 * i + 1] = (uint8_t)i;
+        pal[4 * i + 2] = (uint8_t)i;
+    }
+    /* No blend: every entry maps to itself. */
+    aoe_palette_remap_ror(pal, 0, 0, map);
+    for (i = 0; i < 256; ++i) CHECK(map[i] == i);
+    /* Fully towards white: bright entries map to the brightest grey. */
+    aoe_palette_remap_ror(pal, 0xffffff, 100, map);
+    CHECK(map[255] == 255);
+}
+
 int main(void) {
+    remap_tests();
     static const AoeDrawOpsRor ops = {.palette_set = palette_set};
     static const AoeSnapshotOpsRor snap = {NULL, exists, write_file};
     uint8_t src[1024], dst[1024];

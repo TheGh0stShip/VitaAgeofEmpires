@@ -81,6 +81,11 @@ typedef struct {
        the area's locked surface (the original's shape draw). */
     void (*draw_shape)(void *context, AoeUiAreaRor *area, void *shape,
                        int32_t frame, int32_t x, int32_t y);
+    /* GetSysColor / SetSysColors for COLOR_WINDOW (5) and COLOR_WINDOWTEXT
+       (8); ImmAssociateContext with the main window (global 0x00580d7c). */
+    uint32_t (*get_sys_color)(void *context, int32_t index);
+    void (*set_sys_colors)(void *context, uint32_t window_color, uint32_t text_color);
+    void (*ime_associate)(void *context, uintptr_t ime);
 } AoeUiPlatformRor;
 
 typedef struct AoeUiNodeRor {
@@ -102,7 +107,12 @@ struct AoeUiSystemRor {
     uintptr_t palettes[AOE_UI_PALETTES];        /* +0x1c */
     int32_t palette_refs[AOE_UI_PALETTES];      /* +0xa6c */
     int32_t palette_ids[AOE_UI_PALETTES];       /* +0xa94 */
+    uintptr_t ime;                        /* +0xabc: the saved IME context */
+    int32_t ime_off;                      /* +0xac0, 1 at first */
+    int32_t field_ac4;                    /* +0xac4 */
     int32_t enabled;                      /* +0xac8 */
+    int32_t colors_saved;                 /* +0xacc */
+    uint32_t window_color, text_color;    /* +0xad0, +0xad4 */
     int32_t app_active;                   /* game +0x18 */
     const AoeUiPlatformRor *platform;
     AoeUiPanelRor *faded_screen;          /* global 0x007bfabc */
@@ -244,6 +254,18 @@ extern const AoeUiPanelVtblRor aoe_ui_panel_vtable_ror;
 uintptr_t aoe_ui_palette_ror(AoeUiSystemRor *system, const char *name,
                           int32_t id);
 void aoe_ui_palette_release_ror(AoeUiSystemRor *system, uintptr_t palette);
+/* 0x00451990, the panel system's constructor (the global 0x005830e8
+   is made by 0x00451960 and its destructor registered by 0x00451970, both
+   from 0x00451950): no panels, palettes or IME context, input enabled,
+   the IME off; then 0x00451ec0 starts the panel list (0 when that fails)
+   and keeps the window and window-text system colours. 0x00451a00, the
+   destructor: the colours put back (0x00452350: only when kept and since
+   changed), every registered panel deleted, the palettes deleted and the
+   IME context restored (0x00452280: when there is one and the IME is on). */
+int aoe_ui_system_init_ror(AoeUiSystemRor *system, const AoeUiPlatformRor *platform);
+void aoe_ui_system_release_ror(AoeUiSystemRor *system);
+void aoe_ui_system_restore_colors_ror(const AoeUiSystemRor *system);
+void aoe_ui_system_restore_ime_ror(const AoeUiSystemRor *system);
 /* 0x004522b0 / 0x004522c0 / 0x004522d0: the input-enabled flag. */
 int32_t aoe_ui_enabled_ror(const AoeUiSystemRor *system);
 void aoe_ui_enable_ror(AoeUiSystemRor *system);

@@ -60,7 +60,36 @@ static int32_t hover(AoeUiPanelRor *p, int32_t x, int32_t y, int32_t c, int32_t 
     return 0;
 }
 
+static uint32_t sc_window = 1, sc_text = 2;
+static int sc_sets, sc_ime;
+static uint32_t sc_get(void *c, int32_t i) { (void)c; return i == 5 ? sc_window : sc_text; }
+static void sc_set(void *c, uint32_t w, uint32_t t) { (void)c; sc_window = w; sc_text = t; ++sc_sets; }
+static void sc_ime_assoc(void *c, uintptr_t ime) { (void)c; (void)ime; ++sc_ime; }
+
+static void system_lifecycle_tests(void) {
+    AoeUiSystemRor sys;
+    AoeUiPlatformRor plat;
+    memset(&plat, 0, sizeof plat);
+    plat.get_sys_color = sc_get;
+    plat.set_sys_colors = sc_set;
+    plat.ime_associate = sc_ime_assoc;
+    assert(aoe_ui_system_init_ror(&sys, &plat) == 1);
+    assert(sys.enabled == 1 && sys.ime_off == 1 && sys.colors_saved == 1 &&
+           sys.window_color == 1 && sys.text_color == 2);
+    /* Unchanged colours are left alone; changed ones are put back. */
+    aoe_ui_system_restore_colors_ror(&sys);
+    assert(sc_sets == 0);
+    sc_window = 9;
+    sys.ime = 77;
+    aoe_ui_system_release_ror(&sys);
+    assert(sc_sets == 1 && sc_window == 1 && sc_ime == 0);
+    sys.ime_off = 0;
+    aoe_ui_system_restore_ime_ror(&sys);
+    assert(sc_ime == 1);
+}
+
 int main(void) {
+    system_lifecycle_tests();
     AoeUiPlatformRor pf = {NULL, invalidate, NULL, fill, NULL, capture,
                            release, now, NULL, NULL, string, create_palette,
                            delete_palette};

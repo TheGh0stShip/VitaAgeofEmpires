@@ -1146,3 +1146,55 @@ const AoeUiPanelVtblRor aoe_ui_panel_vtable_ror = {
     aoe_ui_panel_restart_sound_ror,
     aoe_ui_panel_slot_e0_ror,
 };
+
+int aoe_ui_system_init_ror(AoeUiSystemRor *s, const AoeUiPlatformRor *platform) {
+    if (!s) return 0;
+    memset(s, 0, sizeof *s);
+    s->platform = platform;
+    s->ime_off = 1;
+    s->enabled = 1;
+    if (platform && platform->get_sys_color) {
+        s->window_color = platform->get_sys_color(platform->context, 5);
+        s->text_color = platform->get_sys_color(platform->context, 8);
+    }
+    s->colors_saved = 1;
+    return 1;
+}
+
+void aoe_ui_system_restore_colors_ror(const AoeUiSystemRor *s) {
+    const AoeUiPlatformRor *p;
+    if (!s || !s->colors_saved || !(p = s->platform) || !p->get_sys_color) return;
+    if (p->get_sys_color(p->context, 5) == s->window_color &&
+        p->get_sys_color(p->context, 8) == s->text_color)
+        return;
+    if (p->set_sys_colors) p->set_sys_colors(p->context, s->window_color, s->text_color);
+}
+
+void aoe_ui_system_restore_ime_ror(const AoeUiSystemRor *s) {
+    if (s && s->ime && !s->ime_off && s->platform && s->platform->ime_associate)
+        s->platform->ime_associate(s->platform->context, s->ime);
+}
+
+void aoe_ui_system_release_ror(AoeUiSystemRor *s) {
+    int32_t i;
+    if (!s) return;
+    aoe_ui_system_restore_colors_ror(s);
+    for (i = 0; i < s->panel_count; ++i) {
+        if (!s->panels[i]) continue;
+        s->panels[i]->vt->destroy(s->panels[i]);
+        free(s->panels[i]);
+    }
+    free(s->panels);
+    s->panels = NULL;
+    s->panel_count = s->panel_capacity = 0;
+    for (i = 0; i < AOE_UI_PALETTES; ++i) {
+        if (!s->palettes[i]) continue;
+        if (s->platform && s->platform->delete_palette)
+            s->platform->delete_palette(s->platform->context, s->palettes[i]);
+        s->palettes[i] = 0;
+        s->palette_names[i][0] = 0;
+        s->palette_refs[i] = 0;
+        s->palette_ids[0] = 0; /* the original clears +0xa94 (slot 0) each time */
+    }
+    aoe_ui_system_restore_ime_ror(s);
+}

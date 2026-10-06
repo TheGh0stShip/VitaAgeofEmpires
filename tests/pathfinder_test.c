@@ -33,7 +33,21 @@ static void test_collect_nearby(void) {
     free(out.ids);
 }
 
+static void release_test(void) {
+    AoePathfinderRor p;
+    memset(&p, 0, sizeof p);
+    p.nearby_ids = malloc(16);
+    p.nearby_count = 2;
+    p.nearby_capacity = 4;
+    p.list_11dc64 = malloc(8);
+    p.list_11dc64_count = 1;
+    aoe_path_release_ror(&p);
+    assert(!p.nearby_ids && !p.nearby_count && !p.nearby_capacity && !p.list_11dc64 &&
+           !p.list_11dc64_count);
+}
+
 int main(void) {
+    release_test();
     test_collect_nearby();
     int32_t table[256];
     AoePathfinderRor path;

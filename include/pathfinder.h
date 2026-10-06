@@ -49,7 +49,16 @@ typedef struct {
        left for later fit checks. */
     int32_t target_id;
     int32_t searches;           /* +0x11dcc4 (0x0045a4e0 counts one) */
+    /* +0x11dc64: a second ID list (count, capacity) the translated parts
+       do not fill; the destructor frees it. */
+    int32_t *list_11dc64;
+    uint32_t list_11dc64_count, list_11dc64_capacity;
 } AoePathfinderRor;
+
+/* 0x004586f0, the destructor: the nearby IDs (+0x11dce4) and the
+   +0x11dc64 list freed and emptied. The two global instances register it
+   with atexit (0x00458500 for 0x006a1cc0, 0x00458550 for 0x00583bc8). */
+void aoe_path_release_ror(AoePathfinderRor *path);
 
 /* 0x004587e0: the penalty byte of cell [first * 255 + second] (0 without
    storage or outside the grid; the original reads unchecked). */

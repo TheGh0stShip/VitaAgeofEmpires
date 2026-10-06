@@ -171,3 +171,13 @@ int aoe_path_collect_nearby_ror(const AoePathfinderRor *path,
     }
     return 1;
 }
+
+void aoe_path_release_ror(AoePathfinderRor *path) {
+    if (!path) return;
+    free(path->nearby_ids);
+    path->nearby_ids = NULL;
+    path->nearby_count = path->nearby_capacity = 0;
+    free(path->list_11dc64);
+    path->list_11dc64 = NULL;
+    path->list_11dc64_count = path->list_11dc64_capacity = 0;
+}

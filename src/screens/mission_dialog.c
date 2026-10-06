@@ -107,7 +107,7 @@ int aoe_mission_dialog_init_ror(AoeMissionDialogRor *d, AoeGameUiRor *ui, AoeUiA
         place(&d->buttons[2]->panel, 0x20a, 0x2b2, 0xf0, 0x32);
         place(&d->ok->panel, 0x306, 0x2b2, 0xf0, 0x32);
     }
-    /* Instructions first, then hints, then history; the first present
+    /* Instructions first, then the history, then the hints; the first present
        one is shown and its button selected. */
     if (message(d, 0)) {
         show_message(d, 0);

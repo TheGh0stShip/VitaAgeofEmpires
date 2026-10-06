@@ -39,6 +39,7 @@ typedef struct {
 
 struct AoeDemo {
     char root[DEMO_PATH];
+    uint32_t width, height;   /* the view (AOE_DEMO_WIDTH x HEIGHT for the demo) */
     AoeDemoClock clock;
     char status[256];
 
@@ -288,7 +289,15 @@ static int open_drs(AoeDemo *demo, DrsArchive *archive, const char *dir,
 
 AoeDemo *aoe_demo_open(const char *root, AoeDemoClock clock, char *error,
                        size_t error_size) {
-    AoeDemo *demo = calloc(1, sizeof(*demo));
+    return aoe_demo_open_view(root, clock, AOE_DEMO_WIDTH, AOE_DEMO_HEIGHT, 1,
+                              error, error_size);
+}
+
+AoeDemo *aoe_demo_open_view(const char *root, AoeDemoClock clock,
+                            uint32_t width, uint32_t height,
+                            int scan_scenario_files, char *error,
+                            size_t error_size) {
+    AoeDemo *demo = width && height ? calloc(1, sizeof(*demo)) : NULL;
     char base[DEMO_PATH], exp[DEMO_PATH], path[DEMO_PATH * 2];
     DrsArchive *terrain_archives[1], *border_archives[1];
     DrsArchive *interface_archives[2];
@@ -300,6 +309,8 @@ AoeDemo *aoe_demo_open(const char *root, AoeDemoClock clock, char *error,
         return NULL;
     }
     snprintf(demo->root, sizeof(demo->root), "%s", root);
+    demo->width = width;
+    demo->height = height;
     demo->clock = clock;
     demo->hud = 1;
     demo->resolver = (DemoResolver){{8, 0, 1, 2, 3, 4, 5, 6, 7}, 1};
@@ -391,18 +402,18 @@ AoeDemo *aoe_demo_open(const char *root, AoeDemoClock clock, char *error,
         demo_status(demo, "Out of memory for the sprite cache");
         goto fail;
     }
-    demo->pixels = calloc((size_t)AOE_DEMO_WIDTH * AOE_DEMO_HEIGHT, 1);
-    demo->first_clip = calloc((size_t)AOE_DEMO_WIDTH * AOE_DEMO_HEIGHT, 1);
-    demo->second_clip = calloc((size_t)AOE_DEMO_WIDTH * AOE_DEMO_HEIGHT, 1);
-    demo->terrain = calloc((size_t)AOE_DEMO_WIDTH * AOE_DEMO_HEIGHT, 1);
+    demo->pixels = calloc((size_t)demo->width * demo->height, 1);
+    demo->first_clip = calloc((size_t)demo->width * demo->height, 1);
+    demo->second_clip = calloc((size_t)demo->width * demo->height, 1);
+    demo->terrain = calloc((size_t)demo->width * demo->height, 1);
     demo->scenarios = calloc(DEMO_MAX_SCENARIOS, sizeof(*demo->scenarios));
     if (!demo->pixels || !demo->first_clip || !demo->second_clip ||
         !demo->terrain || !demo->scenarios) {
         demo_status(demo, "Out of memory for the frame buffers");
         goto fail;
     }
-    scan_scenarios(demo);
-    if (!demo->scenario_count) {
+    if (scan_scenario_files) scan_scenarios(demo);
+    if (scan_scenario_files && !demo->scenario_count) {
         demo_status(demo, "No scenarios: add *.scx to %s/scenario or *.cpx "
                     "to %s/campaign", root, root);
         goto fail;
@@ -647,8 +658,29 @@ static void next_point_of_interest(AoeDemo *demo) {
     }
 }
 
+static int owned_by(AoeDemo *demo, AoeLiveUnit *u, void *context) {
+    (void)demo;
+    return alive(u) && u->runtime_owner_index == *(const int *)context;
+}
+
+int aoe_demo_view_player_start(AoeDemo *demo, int player) {
+    FindTemplate f = {player, 0x6d};
+    AoeLiveUnit *u;
+    if (!demo || !demo->loaded) return 0;
+    u = visit_units(demo, match_template, &f);
+    if (!u) u = visit_units(demo, owned_by, &player);
+    if (!u) return 0;
+    demo->camera_x = u->core.position.x38;
+    demo->camera_y = u->core.position.y3c;
+    clamp_camera(demo);
+    demo->terrain_valid = 0;
+    return 1;
+}
+
 /* ------------------------------------------------------------------ */
 /* Scenario */
+
+static int load_path(AoeDemo *demo, const char *path, const char *name);
 
 int aoe_demo_load_scenario(AoeDemo *demo, size_t index) {
     const DemoScenario *s;
@@ -673,9 +705,24 @@ int aoe_demo_load_scenario(AoeDemo *demo, size_t index) {
         }
         path = extracted;
     }
+    return load_path(demo, path, s->name);
+}
+
+int aoe_demo_load_file(AoeDemo *demo, const char *path, const char *name) {
+    if (!demo || !path) return 0;
+    unload_scenario(demo);
+    return load_path(demo, path, name ? name : path);
+}
+
+uint8_t aoe_demo_terrain_count(const AoeDemo *demo) {
+    return demo ? (uint8_t)demo->intro.terrain_count : 0;
+}
+
+/* Builds and starts the scenario file at `path`. */
+static int load_path(AoeDemo *demo, const char *path, const char *name) {
     if (!scn_load_map(path, (uint8_t)demo->intro.terrain_count,
                       &demo->scenario)) {
-        demo_status(demo, "Unsupported scenario %s", s->name);
+        demo_status(demo, "Unsupported scenario %s", name);
         return 0;
     }
     if (!aoe_scenario_runtime_build_ror(
@@ -688,7 +735,7 @@ int aoe_demo_load_scenario(AoeDemo *demo, size_t index) {
         !aoe_world_combat_init_ror(&demo->combat, &demo->motion)) {
         demo->loaded = 1;
         unload_scenario(demo);
-        demo_status(demo, "Runtime build failed for %s", s->name);
+        demo_status(demo, "Runtime build failed for %s", name);
         return 0;
     }
     demo->loaded = 1;
@@ -700,8 +747,8 @@ int aoe_demo_load_scenario(AoeDemo *demo, size_t index) {
     demo->sim_accumulator = 0.0f;
     demo->stats.trained = demo->stats.attack_orders = 0;
     demo->stats.world_updates = 0;
-    demo_status(demo, "%s", s->name);
-    demo_message(demo, "Loaded %s (%ux%u)", s->name, demo->runtime.map.width,
+    demo_status(demo, "%s", name);
+    demo_message(demo, "Loaded %s (%ux%u)", name, demo->runtime.map.width,
                  demo->runtime.map.height);
     return 1;
 }
@@ -969,11 +1016,11 @@ static void scene_draw_init(AoeDemo *demo, AoeScenarioSceneDrawRor *draw,
         .border_art = &demo->border_art, .camera = camera,
         .surface = surface, .tile_edges = &demo->edges,
         .first_clip = {demo->first_clip,
-                       (size_t)AOE_DEMO_WIDTH * AOE_DEMO_HEIGHT,
-                       AOE_DEMO_WIDTH},
+                       (size_t)demo->width * demo->height,
+                       demo->width},
         .second_clip = {demo->second_clip,
-                        (size_t)AOE_DEMO_WIDTH * AOE_DEMO_HEIGHT,
-                        AOE_DEMO_WIDTH},
+                        (size_t)demo->width * demo->height,
+                        demo->width},
         /* Scenario fog history is not reconstructed yet; the original
            exploration-gate bypass shows the whole map. */
         .fog_enabled = 0, .bypass_exploration_gate = 1,
@@ -989,8 +1036,8 @@ static int draw_terrain_rect(AoeDemo *demo, uint8_t *target,
     AoeScenarioSceneDrawRor draw;
     AoeScenarioSceneResultRor result;
     TerrainViewIndexedSurface surface = {
-        target, (size_t)AOE_DEMO_WIDTH * AOE_DEMO_HEIGHT, AOE_DEMO_WIDTH,
-        AOE_DEMO_HEIGHT, AOE_DEMO_WIDTH, left, top, width, height};
+        target, (size_t)demo->width * demo->height, demo->width,
+        demo->height, demo->width, left, top, width, height};
     /* The full view's camera (same pixel origin and tile walk, so anchors
        stay in absolute screen coordinates) with its view rectangle
        narrowed to the clip, as the terrain walk requires. */
@@ -1001,7 +1048,7 @@ static int draw_terrain_rect(AoeDemo *demo, uint8_t *target,
     strip.view_width = (int32_t)width;
     strip.view_height = (int32_t)height;
     for (uint32_t y = top; y < top + height; ++y)
-        memset(target + (size_t)y * AOE_DEMO_WIDTH + left, 0, width);
+        memset(target + (size_t)y * demo->width + left, 0, width);
     scene_draw_init(demo, &draw, &strip, &surface, AOE_SCENE_PASS_TERRAIN);
     return aoe_scenario_runtime_draw_scene_ror(&demo->runtime, &draw,
                                                &result);
@@ -1009,7 +1056,7 @@ static int draw_terrain_rect(AoeDemo *demo, uint8_t *target,
 
 /* Brings the cached terrain layer up to date for `camera`. */
 static int update_terrain(AoeDemo *demo, const TerrainViewCamera *camera) {
-    const int32_t w = AOE_DEMO_WIDTH, h = AOE_DEMO_HEIGHT;
+    const int32_t w = (int32_t)demo->width, h = (int32_t)demo->height;
     uint64_t hash = map_terrain_hash(&demo->runtime.map);
     int32_t dx = camera->camera_pixel_x - demo->terrain_cam_x;
     int32_t dy = camera->camera_pixel_y - demo->terrain_cam_y;
@@ -1063,13 +1110,13 @@ size_t aoe_demo_verify_terrain_cache(AoeDemo *demo) {
                                      demo->runtime.map.width,
                                      demo->runtime.map.height,
                                      &demo->geometry, demo->camera_x,
-                                     demo->camera_y, 0, 0, AOE_DEMO_WIDTH,
-                                     AOE_DEMO_HEIGHT, &camera))
+                                     demo->camera_y, 0, 0, demo->width,
+                                     demo->height, &camera))
         return 0;
-    if (!draw_terrain_rect(demo, demo->pixels, &camera, 0, 0, AOE_DEMO_WIDTH,
-                           AOE_DEMO_HEIGHT))
+    if (!draw_terrain_rect(demo, demo->pixels, &camera, 0, 0, demo->width,
+                           demo->height))
         return (size_t)-1;
-    for (size_t i = 0; i < (size_t)AOE_DEMO_WIDTH * AOE_DEMO_HEIGHT; ++i)
+    for (size_t i = 0; i < (size_t)demo->width * demo->height; ++i)
         mismatches += demo->pixels[i] != demo->terrain[i];
     return mismatches;
 }
@@ -1087,21 +1134,21 @@ typedef struct {
 static void expand_part(void *arg, int part, int parts) {
     const ExpandJob *job = arg;
     const AoeDemo *demo = job->demo;
-    uint32_t y0 = (uint32_t)(AOE_DEMO_HEIGHT * part / parts);
-    uint32_t y1 = (uint32_t)(AOE_DEMO_HEIGHT * (part + 1) / parts);
+    uint32_t y0 = (uint32_t)(demo->height * part / parts);
+    uint32_t y1 = (uint32_t)(demo->height * (part + 1) / parts);
     for (uint32_t y = y0; y < y1; ++y) {
-        const uint8_t *src = demo->pixels + (size_t)y * AOE_DEMO_WIDTH;
+        const uint8_t *src = demo->pixels + (size_t)y * demo->width;
         uint32_t *dst = job->fb + (size_t)y * job->stride;
-        int band = job->hud && (y < 52 || y >= AOE_DEMO_HEIGHT - 20);
+        int band = job->hud && (y < 52 || y >= demo->height - 20);
         const uint32_t *lut = band ? demo->palette_half : demo->palette_abgr;
         if (!band && job->message && y >= 70 && y < 100) {
             for (uint32_t x = 0; x < job->mx0; ++x) dst[x] = lut[src[x]];
             for (uint32_t x = job->mx0; x < job->mx1; ++x)
                 dst[x] = demo->palette_half[src[x]];
-            for (uint32_t x = job->mx1; x < AOE_DEMO_WIDTH; ++x)
+            for (uint32_t x = job->mx1; x < demo->width; ++x)
                 dst[x] = lut[src[x]];
         } else {
-            for (uint32_t x = 0; x < AOE_DEMO_WIDTH; ++x)
+            for (uint32_t x = 0; x < demo->width; ++x)
                 dst[x] = lut[src[x]];
         }
     }
@@ -1125,19 +1172,19 @@ static void render_scene(AoeDemo *demo) {
                                     demo->runtime.map.width,
                                     demo->runtime.map.height, &demo->geometry,
                                     demo->camera_x, demo->camera_y, 0, 0,
-                                    AOE_DEMO_WIDTH, AOE_DEMO_HEIGHT,
+                                    demo->width, demo->height,
                                     &camera)) {
         TerrainViewIndexedSurface surface = {
-            demo->pixels, (size_t)AOE_DEMO_WIDTH * AOE_DEMO_HEIGHT,
-            AOE_DEMO_WIDTH, AOE_DEMO_HEIGHT, AOE_DEMO_WIDTH,
-            0, 0, AOE_DEMO_WIDTH, AOE_DEMO_HEIGHT};
+            demo->pixels, (size_t)demo->width * demo->height,
+            demo->width, demo->height, demo->width,
+            0, 0, demo->width, demo->height};
         AoeScenarioSceneDrawRor draw;
         uint64_t t0 = now_us(demo), t1;
         int ok = update_terrain(demo, &camera);
         t1 = now_us(demo);
         demo->stats.terrain_ms = (float)(t1 - t0) / 1000.0f;
         memcpy(demo->pixels, demo->terrain,
-               (size_t)AOE_DEMO_WIDTH * AOE_DEMO_HEIGHT);
+               (size_t)demo->width * demo->height);
         scene_draw_init(demo, &draw, &camera, &surface,
                         AOE_SCENE_PASS_OBJECTS);
         ok = ok && aoe_scenario_runtime_draw_scene_ror(&demo->runtime, &draw,
@@ -1150,7 +1197,7 @@ static void render_scene(AoeDemo *demo) {
                             ? demo->backend.last_graphic->name : "-",
                         demo->backend.last_status);
     } else {
-        memset(demo->pixels, 0, (size_t)AOE_DEMO_WIDTH * AOE_DEMO_HEIGHT);
+        memset(demo->pixels, 0, (size_t)demo->width * demo->height);
     }
     demo->stats.units_drawn = (uint32_t)result.units.drawn;
     demo->stats.terrain_tiles = (uint32_t)result.terrain_tiles;
@@ -1168,12 +1215,12 @@ static void render_scene(AoeDemo *demo) {
 
 int aoe_demo_render_indexed(AoeDemo *demo, uint8_t *dst, size_t stride) {
     uint64_t start;
-    if (!demo || !dst || stride < AOE_DEMO_WIDTH) return 0;
+    if (!demo || !dst || stride < demo->width) return 0;
     start = now_us(demo);
     render_scene(demo);
-    for (uint32_t y = 0; y < AOE_DEMO_HEIGHT; ++y)
+    for (uint32_t y = 0; y < demo->height; ++y)
         memcpy(dst + (size_t)y * stride,
-               demo->pixels + (size_t)y * AOE_DEMO_WIDTH, AOE_DEMO_WIDTH);
+               demo->pixels + (size_t)y * demo->width, demo->width);
     demo->stats.expand_ms = 0.0f;
     demo->stats.draw_ms = (float)(now_us(demo) - start) / 1000.0f;
     return 1;
@@ -1200,15 +1247,18 @@ static void add_text(AoeDemoOverlay *o, int x, int y, int scale,
 
 void aoe_demo_overlay(const AoeDemo *demo, AoeDemoOverlay *o) {
     const uint32_t white = 0xffffffffu, gold = 0xff40d0ffu;
+    int W, H;
     if (!o) return;
     memset(o, 0, sizeof(*o));
     if (!demo) return;
+    W = (int)demo->width;
+    H = (int)demo->height;
     if (demo->hud) {
         const float *r = demo->loaded ? demo->runtime.players[1].resource_values
                                       : NULL;
-        o->rects[o->rect_count++] = (AoeDemoRect){0, 0, AOE_DEMO_WIDTH, 52};
+        o->rects[o->rect_count++] = (AoeDemoRect){0, 0, W, 52};
         o->rects[o->rect_count++] =
-            (AoeDemoRect){0, AOE_DEMO_HEIGHT - 20, AOE_DEMO_WIDTH, 20};
+            (AoeDemoRect){0, H - 20, W, 20};
         add_text(o, 8, 6, 2, gold, "%s",
                  "AGE OF EMPIRES: RISE OF ROME - VITA PORT TECH DEMO");
         add_text(o, 8, 30, 1, white,
@@ -1229,17 +1279,17 @@ void aoe_demo_overlay(const AoeDemo *demo, AoeDemoOverlay *o) {
         add_text(o, 600, 40, 1, white, "TER %.1f  OBJ %.1f  EXP %.1f MS",
                  demo->stats.terrain_ms, demo->stats.objects_ms,
                  demo->stats.expand_ms);
-        add_text(o, 8, AOE_DEMO_HEIGHT - 14, 1, white, "%s",
+        add_text(o, 8, H - 14, 1, white, "%s",
                  "STICK/DPAD SCROLL  X TRAIN VILLAGER  [] ARMY ATTACK  "
                  "O NEXT VIEW  L/R SCENARIO  SELECT PAUSE  TRIANGLE HUD  "
                  "START QUIT");
     }
     if (demo->message_time > 0.0f && demo->message[0]) {
         int w = (int)strlen(demo->message) * 12 + 24;
-        if (w > AOE_DEMO_WIDTH) w = AOE_DEMO_WIDTH;
+        if (w > W) w = W;
         o->rects[o->rect_count++] =
-            (AoeDemoRect){(AOE_DEMO_WIDTH - w) / 2, 70, w, 30};
-        add_text(o, (AOE_DEMO_WIDTH - w) / 2 + 12, 78, 2, white, "%s",
+            (AoeDemoRect){(W - w) / 2, 70, w, 30};
+        add_text(o, (W - w) / 2 + 12, 78, 2, white, "%s",
                  demo->message);
     }
 }
@@ -1249,7 +1299,7 @@ int aoe_demo_render(AoeDemo *demo, uint32_t *fb, size_t stride) {
     uint64_t start;
     int message;
     uint32_t mx0 = 0, mx1 = 0;
-    if (!demo || !fb || stride < AOE_DEMO_WIDTH) return 0;
+    if (!demo || !fb || stride < demo->width) return 0;
     start = now_us(demo);
     render_scene(demo);
     aoe_demo_overlay(demo, &overlay);

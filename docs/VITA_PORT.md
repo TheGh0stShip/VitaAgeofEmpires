@@ -5,7 +5,10 @@ Rise of Rome screens on the Vita: the original Main Menu and the screens
 it leads to, drawn from your own game files by the translated panel code
 (`src/screens/`) through the UI host (`src/ui_host.c`), the screen
 director (`src/ui_director.c`) and the console shell (`src/shell_app.c`).
-The game itself (a match) is not reachable yet; see `TODO.md`.
+A campaign scenario can be started (Single Player, Campaign, OK): the
+scenario's Mission Dialog, then the Game Screen with the scenario's world
+running in the original view rectangle. The game screen's bars, minimap,
+command buttons and unit orders are not assembled yet; see `TODO.md`.
 
 The earlier tech demo (scene, world update, two commands) is now its own
 title, `VitaAoEDemo.vpk` (`VAOE00002`); see [VITA_DEMO.md](VITA_DEMO.md).
@@ -54,6 +57,14 @@ screen with the game's own pointer (Interfac 51001) on top.
 - Runs in Vita3K at 60 FPS: the Main Menu, Single Player Menu, Scenario
   Builder menu, Multiplayer screen (no networking), Help dialog and
   credits. Not yet checked on hardware.
+- Campaign start: Campaign Selection's OK reads the chosen scenario from
+  the campaign file, shows its Mission Dialog (instructions, hints,
+  history; the briefing picture is not drawn yet) and, on OK, the Game
+  Screen: the world in the 640 x 334 view at (0, 20), advanced on idle,
+  scrolled with the pointer at a screen edge (or the arrow keys on the
+  host). The view starts on the player's town center, as the original's
+  player start (0x004f1ae0) puts it. Checked on the host (with ASan);
+  the VPK builds, not yet run past the menus in Vita3K.
 - Screen changes use the original's blocking 0.13 s palette fades; the
   intermediate fade frames are not presented (the picture holds, then
   switches).

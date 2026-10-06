@@ -46,6 +46,24 @@ static int skip_string(ScnCursor *cursor) {
     return length >= 0 && skip_bytes(cursor, (size_t)length);
 }
 
+/* A 16-bit length-prefixed string kept as a NUL-terminated copy (NULL
+   when empty). */
+static int read_string(ScnCursor *cursor, char **out) {
+    int16_t length;
+    if (cursor->size - cursor->offset < 2) return 0;
+    length = (int16_t)le16(cursor->data + cursor->offset);
+    if (length < 0 || (size_t)length > cursor->size - cursor->offset - 2) return 0;
+    cursor->offset += 2;
+    if (length > 0 && cursor->data[cursor->offset]) {
+        *out = malloc((size_t)length + 1);
+        if (!*out) return 0;
+        memcpy(*out, cursor->data + cursor->offset, (size_t)length);
+        (*out)[length] = 0;
+    }
+    cursor->offset += (size_t)length;
+    return 1;
+}
+
 /* Empires.exe 0x0045ddf0 and 0x0051dd50, for the installed 1.15 body.
    The latter is the scenario object's +0xf4 reader, immediately before
    the map reader at 0x00424cb0. Unsupported versions/embedded blobs fail
@@ -74,8 +92,8 @@ static int skip_player_data_115(ScnCursor *cursor, ScnMap *map) {
     record_count = le16(cursor->data + cursor->offset);
     if (record_count > 4096 ||
         !skip_bytes(cursor, 8 + (size_t)record_count * 30)) return 0;
-    for (int i = 0; i < 10; ++i)
-        if (!skip_string(cursor)) return 0;
+    for (int i = 0; i < SCN_TEXTS; ++i)
+        if (!read_string(cursor, &map->texts[i])) return 0;
     if (cursor->size - cursor->offset < 14) return 0;
     /* 0x004a33a0 reads a 14-byte wrapper. If dimensions are nonzero,
        0x004a37d0 rounds width up to a four-byte row stride, then reads
@@ -158,6 +176,7 @@ static int skip_player_data_115(ScnCursor *cursor, ScnMap *map) {
 void scn_free_map(ScnMap *map) {
     if (!map) return;
     free(map->instructions);
+    for (int i = 0; i < SCN_TEXTS; ++i) free(map->texts[i]);
     free(map->briefing_bitmap.dib);
     free(map->tiles);
     for (int i = 0; i < 9; ++i) free(map->player_units[i].units);

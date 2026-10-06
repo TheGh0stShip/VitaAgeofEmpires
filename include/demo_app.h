@@ -50,11 +50,28 @@ typedef uint64_t (*AoeDemoClock)(void);
 AoeDemo *aoe_demo_open(const char *root, AoeDemoClock clock, char *error,
                        size_t error_size);
 void aoe_demo_close(AoeDemo *demo);
+/* As aoe_demo_open with a `width` x `height` view (aoe_demo_render_indexed
+   then draws that size) and, when `scan_scenario_files` is 0, no scenario
+   list: scenarios are then loaded by path (aoe_demo_load_file). The
+   game screen's world view uses this. */
+AoeDemo *aoe_demo_open_view(const char *root, AoeDemoClock clock,
+                            uint32_t width, uint32_t height,
+                            int scan_scenario_files, char *error,
+                            size_t error_size);
 
 size_t aoe_demo_scenario_count(const AoeDemo *demo);
 /* Builds and starts scenario `index` (wrapping). Returns 0 on failure,
    leaving the reason in aoe_demo_status. */
 int aoe_demo_load_scenario(AoeDemo *demo, size_t index);
+/* Builds and starts the scenario file at `path` (`name` for messages).
+   Returns 0 on failure, leaving the reason in aoe_demo_status. */
+int aoe_demo_load_file(AoeDemo *demo, const char *path, const char *name);
+/* The view at a player's start, as the player's start (0x004f1ae0) sets
+   it for a player with units: on its type-0x6d (town center) object, else
+   its first unit (in the runtime's unit order). 0 when it has none. */
+int aoe_demo_view_player_start(AoeDemo *demo, int player);
+/* The DAT's terrain count (scn_load_map's `terrain_count`). */
+uint8_t aoe_demo_terrain_count(const AoeDemo *demo);
 
 /* Applies input, scrolls the camera and advances the simulation by `dt`
    seconds of real time. Returns 0 when the user asked to quit. */
@@ -67,8 +84,8 @@ int aoe_demo_render(AoeDemo *demo, uint32_t *framebuffer, size_t stride);
 
 const char *aoe_demo_status(const AoeDemo *demo);
 
-/* GPU-composited platforms: draws only the indexed scene into `dst` (row
-   stride in bytes); the current 256-entry A8B8G8R8 palette (including the
+/* GPU-composited platforms: draws only the indexed scene (the view's
+   size) into `dst` (row stride in bytes); the current 256-entry A8B8G8R8 palette (including the
    cycling water entries) and the overlay description are fetched
    separately. */
 int aoe_demo_render_indexed(AoeDemo *demo, uint8_t *dst, size_t stride);

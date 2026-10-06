@@ -64,6 +64,8 @@ typedef struct {
     uint8_t *dib; /* BITMAPINFOHEADER, 256-color palette, padded pixel rows. */
 } ScnBriefingBitmap;
 
+enum { SCN_TEXT_DESCRIPTION = 0, SCN_TEXT_MESSAGE = 1, SCN_TEXT_FILE = 6, SCN_TEXTS = 10 };
+
 typedef struct {
     char version[5];
     int32_t save_type;
@@ -80,6 +82,13 @@ typedef struct {
     ScnTile *tiles; /* Scenario order. For square maps this is runtime
                        row[y][x] order; see scn_runtime_tile_order_supported. */
     size_t map_offset; /* Offset within the decompressed scenario body. */
+    /* The scenario object's ten strings in the order its writer
+       0x00476280 stores them (NULL when empty): the description
+       (+0x1010; the file name in the campaign scenarios), messages 0..4
+       (+0x1014..+0x1024: 0 instructions, 1 hints, 2 victory, 3 loss,
+       4 history; the Mission Dialog shows 0, 1 and 4) and the four
+       file names +0x1508 (the intro video), +0x15e8, +0x16c8, +0x17a8. */
+    char *texts[SCN_TEXTS];
     ScnPlayerSetup player_setup[16];
     ScnPlayerResources resources[8];
     ScnPlayerUnits player_units[9]; /* Index 0 is the neutral/Gaia player. */

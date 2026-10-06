@@ -635,11 +635,11 @@ add_library(aoe_port_registry STATIC src/port_registry.c)
 target_include_directories(aoe_port_registry PUBLIC include)
 target_compile_options(aoe_port_registry PRIVATE -Wall -Wextra)
 
-add_library(aoe_ui_director STATIC src/ui_director.c)
+add_library(aoe_ui_director STATIC src/ui_director.c src/ui_director_game.c src/game_screen_host.c)
 target_include_directories(aoe_ui_director PUBLIC include)
 target_compile_options(aoe_ui_director PRIVATE -Wall -Wextra)
 target_link_libraries(aoe_ui_director PUBLIC aoe_ui_host aoe_game_ui aoe_scenario_info aoe_scn
-  aoe_campaign_progress aoe_deflate_writer aoe_port_registry ZLIB::ZLIB)
+  aoe_campaign_progress aoe_deflate_writer aoe_port_registry aoe_demo_app ZLIB::ZLIB)
 
 add_library(aoe_shell_app STATIC src/shell_app.c)
 target_include_directories(aoe_shell_app PUBLIC include)
@@ -893,6 +893,16 @@ else()
       ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_test"
       PASS_REGULAR_EXPRESSION
       "c:320,288 -> Select Scenario Screen\nk:27 -> Single Player Menu\nc:320,188 -> Single Player Menu modal New Name Dialog\nt:Tester -> Single Player Menu modal New Name Dialog\nk:13 -> Campaign Selection Screen")
+    # Campaign -> Birth of Rome -> OK: the scenario's Mission Dialog (its
+    # instructions), then OK starts the game on the Game Screen.
+    add_test(NAME ror_campaign_start_real COMMAND ui_host_tool
+      "${CMAKE_SOURCE_DIR}/build/demo_root" "${CMAKE_BINARY_DIR}"
+      c:320,198 c:320,188 t:Tester k:13 c:100,240 c:190,455 c:560,460 i:5 d:39 i:5 u:39)
+    set_tests_properties(ror_campaign_start_real PROPERTIES
+      FIXTURES_REQUIRED ror_user
+      ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_test"
+      PASS_REGULAR_EXPRESSION
+      "c:190,455 -> Mission Dialog\nc:560,460 -> Game Screen\ni:5 -> Game Screen\nd:39 -> Game Screen")
     add_test(NAME ror_shell_touch_and_buttons_real COMMAND shell_app_real
       "${CMAKE_SOURCE_DIR}/build/demo_root" "${CMAKE_BINARY_DIR}/shell_frame.ppm")
     set_tests_properties(ror_shell_touch_and_buttons_real PROPERTIES

@@ -503,9 +503,11 @@ void aoe_ui_director_init_ror(AoeUiDirectorRor *d, AoeUiHostRor *host, const cha
     d->ui.settings = &d->settings;
     d->ui.ops = &d->ops;
     d->ui.picture_ops = &host->picture_ops;
+    aoe_ui_director_game_init_ror(d);
 }
 
 void aoe_ui_director_release_ror(AoeUiDirectorRor *d) {
+    aoe_ui_director_game_release_ror(d);
     free_scenarios(d);
     if (d->pif_loaded) {
         aoe_pif_free_ror(&d->pif, &d->campaign_ops);   /* saves, as 0x0043c810 */

@@ -813,8 +813,8 @@ int aoe_single_player_menu_init_ror(AoeSinglePlayerMenuRor *m, AoeGameUiRor *ui,
 /* The scenario's "Mission Dialog" (vtable 0x00547b94,
    0x0049ec00..0x0049f460): the scenario title (else string 9813), the
    message text with its scrollbar and three buttons switching it between
-   the instructions (message 0, 10802), the hints (4, 10801) and the
-   history (1, 10807), kept to the messages there are (no buttons with
+   the history (message 4, 10801 "History"), the instructions (0, 10802)
+   and the hints (1, 10807 "Hints"), kept to the messages there are (no buttons with
    only one, no text with none), OK, and a picture. Laid out for 640,
    800 and 1024 wide screens. 0x0049ec00 constructor ("scr9", 50060;
    `in_game` +0x494, the picture +0x498); 0x0049f2c0 destructor
@@ -828,7 +828,7 @@ typedef struct {
     AoeUiTextRor *text;               /* +0x47c */
     AoeUiScrollbarRor *scrollbar;     /* +0x480 */
     AoeUiButtonRor *ok;               /* +0x484 */
-    AoeUiButtonRor *buttons[3];       /* +0x488: hints, instructions, history */
+    AoeUiButtonRor *buttons[3];       /* +0x488: history, instructions, hints */
     uint8_t in_game;                  /* +0x494 */
     void *picture;                    /* +0x498 */
     AoeGameUiRor *ui;

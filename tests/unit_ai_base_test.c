@@ -77,6 +77,47 @@ static void order_slot_tests(void) {
     free(q.records);
 }
 
+
+static int mem_saved, mem_loaded;
+static int ms(void *c, AoeOutcomeStream *o) { (void)c; aoe_stream_put_u8(o, 0xee); ++mem_saved; return 1; }
+static int ml(void *c, AoeOutcomeStream *i) { (void)c; ++mem_loaded; return aoe_stream_u8(i) == 0xee; }
+static void record_tests(void) {
+    AoeUnitAiRor a, b;
+    AoeUnitAiNotesRor na = {0}, nb = {0};
+    na.records = calloc(4, sizeof *na.records); na.capacity = 4;
+    AoeUnitAiOutRor qa = {0}, qb = {0};
+    AoeUnitAiRecordOpsRor o = {NULL, ms, ml};
+    uint8_t buf[1024];
+    AoeOutcomeStream s = {0};
+    int32_t vals[6] = {1, 2, 3, 4, 5, 6}, g[2] = {11, 11};
+    memset(&a, 0, sizeof a); memset(&b, 0, sizeof b);
+    a.field_8 = 8; a.action = 0x28; a.order = 0x30; a.target_id = 7; a.target_x = 1.5f; a.last_order = 0x54;
+    a.timer = 99; a.timer_base = 98; a.field_108 = 5; a.field_10c = 6; a.field_120 = 0x120; a.field_110[3] = 44;
+    a.group = g; a.group_count = 2; a.has_members = 1; a.byte_130 = 0x30;
+    assert(aoe_unit_ai_note_ror(&na, 9, 8, 7, vals, 0));
+    s.data = buf; s.size = sizeof buf;
+    assert(aoe_unit_ai_save_ror(&a, &na, &qa, &o, &s) && mem_saved == 1);
+    s.size = s.pos; s.pos = 0;
+    assert(aoe_unit_ai_load_ror(&b, &nb, &qb, 7.23f, &o, &s) && s.pos == s.size && mem_loaded == 1);
+    assert(b.field_8 == 8 && b.action == 0x28 && b.order == 0x30 && b.target_id == 7 && b.target_x == 1.5f &&
+           b.last_order == 0x54 && b.timer == 99 && b.timer_base == 98 && b.field_108 == 5 && b.field_10c == 6 &&
+           b.field_120 == 0x120 && b.field_110[3] == 44 && b.group_count == 1 && b.group[0] == 11 &&
+           b.has_members && b.byte_130 == 0x30 && nb.count == 1 && nb.records[0][0] == 9 && nb.records[0][8] == 6);
+    /* Old versions: +0x108/+0x10c default, no +0x130 byte. */
+    s.pos = 0; free(b.group); memset(&b, 0, sizeof b); free(nb.records); memset(&nb, 0, sizeof nb);
+    s.size -= 1 + 8; /* drop the byte and the two dwords that 6.9 lacks: handled by rebuilding */
+    {
+        AoeOutcomeStream t = {0}; uint8_t buf2[1024]; t.data = buf2; t.size = sizeof buf2;
+        a.has_members = 0;
+        assert(aoe_unit_ai_save_ror(&a, &na, &qa, &o, &t));
+        /* remove the +0x108/+0x10c dwords (offsets 19*4 .. 21*4) and the trailing byte */
+        memmove(buf2 + 19 * 4, buf2 + 21 * 4, t.pos - 21 * 4);
+        t.size = t.pos - 8 - 1; t.pos = 0;
+        assert(aoe_unit_ai_load_ror(&b, &nb, &qb, 6.9f, &o, &t) && t.pos == t.size && b.field_108 == 0 &&
+               b.field_10c == 1000 && b.byte_130 == 0 && !b.has_members);
+    }
+    free(nb.records); free(na.records); free(b.group); free(qb.records);
+}
 int main(void) {
     order_slot_tests();
     static AoeUnitAiRor ai;
@@ -271,5 +312,6 @@ int main(void) {
         aoe_unit_ai_post_ror(&p, rec);
         assert(post_d0_id == -2);
     }
+    record_tests();
     return 0;
 }

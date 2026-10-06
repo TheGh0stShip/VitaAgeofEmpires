@@ -476,6 +476,23 @@ static void player_changed_tests(void) {
     assert(pc_ref == 1 && pc_first == 3);
 }
 
+
+static void ht_string(void *c, int32_t id, char *o, int n) { (void)c; if (id == 5) snprintf(o, (size_t)n, "Axe"); else o[0] = 0; }
+static void ht_res(void *c, int32_t t, char *o, int n) { (void)c; snprintf(o, (size_t)n, "R%d", (int)t); }
+static void help_text_tests(void) {
+    AoeGameScreenHelpTextOpsRor o = {NULL, ht_string, ht_res};
+    AoeGameScreenCostRor costs[3] = {{0, 50.0f}, {-1, 0}, {3, 20.5f}};
+    char out[128];
+    aoe_game_screen_help_text_ror(&o, 5, costs, 1, out, sizeof out);
+    assert(strcmp(out, "Axe (R0: 50  R3: 20)") == 0);
+    aoe_game_screen_help_text_ror(&o, 5, costs, 0, out, sizeof out);
+    assert(strcmp(out, "Axe") == 0);
+    costs[0].type = 7; costs[2].type = -1;
+    aoe_game_screen_help_text_ror(&o, 5, costs, 1, out, sizeof out);
+    assert(strcmp(out, "Axe") == 0);
+    aoe_game_screen_help_text_ror(&o, 6, costs, 1, out, sizeof out);
+    assert(out[0] == 0);
+}
 int main(void) {
     AoeGameScreenRor s;
     AoeGameScreenButtonRor b;
@@ -846,5 +863,6 @@ int main(void) {
     paint_tests();
     command_tests();
     player_changed_tests();
+    help_text_tests();
     return 0;
 }

@@ -432,3 +432,131 @@ int aoe_unit_ai_order_ror(AoeUnitAiRor *ai, AoeUnitAiNotesRor *q, uint8_t unit_s
     if (ops && ops->handle_c8 && q->count) ops->handle_c8(ops->context, q->records[0], 0);
     return 1;
 }
+
+/* ---- 0x0040f040 / 0x0040f320 ---- */
+
+static void put_f(AoeOutcomeStream *s, float v) { aoe_stream_put_f32(s, v); }
+
+int aoe_unit_ai_save_ror(const AoeUnitAiRor *ai, const AoeUnitAiNotesRor *notes,
+                         const AoeUnitAiOutRor *q, const AoeUnitAiRecordOpsRor *o,
+                         AoeOutcomeStream *out) {
+    int32_t i, k;
+    if (!ai || !out) return 0;
+    aoe_stream_put_i32(out, ai->field_8);
+    aoe_stream_put_i32(out, ai->action);
+    aoe_stream_put_i32(out, ai->field_2c);
+    aoe_stream_put_i32(out, ai->order);
+    aoe_stream_put_i32(out, ai->target_id);
+    aoe_stream_put_i32(out, ai->target_type);
+    put_f(out, ai->target_x);
+    put_f(out, ai->target_y);
+    put_f(out, ai->target_z);
+    aoe_stream_put_i32(out, ai->field_48);
+    aoe_stream_put_i32(out, ai->last_order);
+    aoe_stream_put_i32(out, ai->last_action);
+    aoe_stream_put_i32(out, ai->last_target_id);
+    aoe_stream_put_i32(out, ai->last_target_type);
+    aoe_stream_put_i32(out, ai->field_f4);
+    aoe_stream_put_i32(out, ai->field_f8);
+    aoe_stream_put_i32(out, (int32_t)ai->timer_base);
+    aoe_stream_put_i32(out, (int32_t)ai->timer);
+    aoe_stream_put_i32(out, ai->field_104);
+    aoe_stream_put_i32(out, ai->field_108);
+    aoe_stream_put_i32(out, ai->field_10c);
+    aoe_stream_put_i32(out, ai->field_4c);
+    aoe_stream_put_i32(out, ai->field_120);
+    for (i = 0; i < 4; ++i) aoe_stream_put_i32(out, ai->field_110[i]);
+    aoe_stream_put_i32(out, notes ? notes->count : 0);
+    for (i = 0; notes && i < notes->count; ++i)
+        for (k = 0; k < 9; ++k) aoe_stream_put_i32(out, notes->records[i][k]);
+    aoe_stream_put_i32(out, q ? q->count : 0);
+    for (i = 0; q && i < q->count; ++i)
+        for (k = 0; k < 6; ++k) aoe_stream_put_i32(out, q->records[i][k]);
+    aoe_stream_put_i32(out, ai->group_count);
+    for (i = 0; i < ai->group_count; ++i) aoe_stream_put_i32(out, ai->group[i]);
+    if (ai->has_members) {
+        aoe_stream_put_i32(out, 1);
+        if (o && o->members_save && !o->members_save(o->context, out)) return 0;
+    } else {
+        aoe_stream_put_i32(out, 0);
+    }
+    aoe_stream_put_u8(out, ai->byte_130);
+    return !out->failed;
+}
+
+static int group_add(AoeUnitAiRor *ai, int32_t id) {
+    int32_t i, *g;
+    for (i = 0; i < ai->group_count; ++i)
+        if (ai->group[i] == id) return 1;
+    g = realloc(ai->group, (size_t)(ai->group_count + 1) * sizeof *g);
+    if (!g) return 0;
+    ai->group = g;
+    g[ai->group_count++] = id;
+    return 1;
+}
+
+int aoe_unit_ai_load_ror(AoeUnitAiRor *ai, AoeUnitAiNotesRor *notes, AoeUnitAiOutRor *q,
+                         float version, const AoeUnitAiRecordOpsRor *o, AoeOutcomeStream *in) {
+    int32_t i, k, n, rec[9];
+    if (!ai || !in) return 0;
+    ai->field_8 = aoe_stream_i32(in);
+    ai->action = aoe_stream_i32(in);
+    ai->field_2c = aoe_stream_i32(in);
+    ai->order = aoe_stream_i32(in);
+    ai->target_id = aoe_stream_i32(in);
+    ai->target_type = aoe_stream_i32(in);
+    ai->target_x = aoe_stream_f32(in);
+    ai->target_y = aoe_stream_f32(in);
+    ai->target_z = aoe_stream_f32(in);
+    ai->field_48 = aoe_stream_i32(in);
+    ai->last_order = aoe_stream_i32(in);
+    ai->last_action = aoe_stream_i32(in);
+    ai->last_target_id = aoe_stream_i32(in);
+    ai->last_target_type = aoe_stream_i32(in);
+    ai->field_f4 = aoe_stream_i32(in);
+    ai->field_f8 = aoe_stream_i32(in);
+    ai->timer_base = (uint32_t)aoe_stream_i32(in);
+    ai->timer = (uint32_t)aoe_stream_i32(in);
+    ai->field_104 = aoe_stream_i32(in);
+    if (version < 6.93f) {
+        ai->field_108 = 0;
+        ai->field_10c = 1000;
+    } else {
+        ai->field_108 = aoe_stream_i32(in);
+        ai->field_10c = aoe_stream_i32(in);
+    }
+    ai->field_4c = aoe_stream_i32(in);
+    ai->field_120 = aoe_stream_i32(in);
+    for (i = 0; i < 4; ++i) ai->field_110[i] = aoe_stream_i32(in);
+    n = aoe_stream_i32(in);
+    for (i = 0; i < n && !in->failed; ++i) {
+        for (k = 0; k < 9; ++k) rec[k] = aoe_stream_i32(in);
+        if (notes) {
+            int32_t (*grown)[9] = realloc(notes->records, (size_t)(notes->count + 1) * sizeof *grown);
+            if (!grown) return 0;
+            notes->records = grown;
+            memcpy(grown[notes->count], rec, sizeof rec);
+            notes->count++;
+            if (notes->capacity < notes->count) notes->capacity = notes->count;
+        }
+    }
+    n = aoe_stream_i32(in);
+    for (i = 0; i < n && !in->failed; ++i) {
+        for (k = 0; k < 6; ++k) rec[k] = aoe_stream_i32(in);
+        if (q) {
+            int32_t (*grown)[6] = realloc(q->records, (size_t)(q->count + 1) * sizeof *grown);
+            if (!grown) return 0;
+            q->records = grown;
+            memcpy(grown[q->count], rec, 6 * sizeof(int32_t));
+            q->count++;
+            if (q->capacity < q->count) q->capacity = q->count;
+        }
+    }
+    n = aoe_stream_i32(in);
+    for (i = 0; i < n && !in->failed; ++i)
+        if (!group_add(ai, aoe_stream_i32(in))) return 0;
+    ai->has_members = aoe_stream_i32(in) == 1;
+    if (ai->has_members && o && o->members_load && !o->members_load(o->context, in)) return 0;
+    if (version >= 7.02f) ai->byte_130 = aoe_stream_u8(in);
+    return !in->failed;
+}

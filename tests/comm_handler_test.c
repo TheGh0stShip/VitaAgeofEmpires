@@ -210,6 +210,67 @@ static void compact_tests(void) {
     assert(c.self == 1 && nposts >= 1 && posts[nposts - 1][0] == 0x17b8);
 }
 
+
+static int rs_elapsed; static void rs_log_elapsed(void *c) { (void)c; ++rs_elapsed; }
+static char cm_name[64], cm_text[64]; static int32_t cm_from, cm_a, cm_b; static int cm_zero, cm_53; static int32_t cm_stats[8];
+static void cm_chat(void *c, const char *n, const char *t) { (void)c; snprintf(cm_name, 64, "%s", n); snprintf(cm_text, 64, "%s", t); }
+static void cm_speed(void *c, int32_t from, uint8_t a, uint8_t b) { (void)c; cm_from = from; cm_a = a; cm_b = b; }
+static void cm_stat(void *c, int32_t from, const int32_t st[8]) { (void)c; cm_from = from; memcpy(cm_stats, st, sizeof cm_stats); }
+static void cm_speedzero(void *c) { (void)c; ++cm_zero; }
+static void cm_send53(void *c, int16_t a, int16_t b, uint32_t e) { (void)c; (void)e; cm_53 = a * 1000 + b; }
+static int32_t rr_reject_dpid, rr_reject_val, rr_dropped;
+static void rr_reject(void *c, int32_t dpid, int32_t v) { (void)c; rr_reject_dpid = dpid; rr_reject_val = v; }
+static void rr_drop(void *c, int32_t slot) { (void)c; rr_dropped = slot; }
+
+static void reset_message_resend_tests(void) {
+    static AoeCommRor c;
+    static char names[AOE_COMM_SLOTS][0x80], infos[AOE_COMM_SLOTS][0x80];
+    static AoeCommTxRor tx[AOE_COMM_TX_SLOTS];
+    static AoeCommRxRor rx[AOE_COMM_RX_SLOTS];
+    AoeCommResetOpsRor r = {NULL, rs_log_elapsed, 1, 0};
+    AoeCommMessageOpsRor m = {NULL, cm_chat, cm_speed, cm_stat, cm_speedzero, cm_send53};
+    AoeCommResendOpsRor rr = {NULL, rr_reject, rr_drop};
+    uint8_t d[64];
+    memset(&c, 0, sizeof c); c.ops = &ops; c.names = names; c.infos = infos; c.tx = tx; c.rx = rx;
+    c.count = 3; c.state = 5; c.is_host = 1; c.gtd = 1; c.multiplayer = 1; c.self = 2; c.field_12a8 = 9;
+    snprintf(c.label, sizeof c.label, "x");
+    aoe_comm_reset_ror(&c, &dops, &r);
+    assert(rs_elapsed == 1 && c.state == 3 && !c.is_host && c.lead == 2 && c.turn == 4 && c.field_155c == 4 &&
+           c.field_10dc == 0x32 && c.self == 0 && !c.multiplayer && c.low == 1 && c.high == 3 &&
+           c.field_8 == 1 && c.label[0] == 0 && c.field_12a8 == 0 && !c.gtd);
+    /* Messages. */
+    c.multiplayer = 1; c.is_host = 1; c.state = 5; c.turn = 10; c.lead = 2; c.self = 1;
+    memset(d, 0, sizeof d);
+    snprintf(names[2], 0x80, "Bob"); d[0] = 2; snprintf((char *)d + 0x11, 20, "hello");
+    c.state = 3;
+    assert(aoe_comm_handle_message_ror(&c, &m, 2, 0, 0x43, d, 40) == 1 && strcmp(cm_name, "Bob") == 0 && strcmp(cm_text, "hello") == 0);
+    c.state = 5;
+    d[4] = 12; d[8] = 7; d[9] = 8; /* turn 12 */
+    assert(aoe_comm_handle_message_ror(&c, &m, 2, 0, 0x44, d, 16) == 1 && cm_a == 8 && cm_b == 7 && c.last_turn[2] == 10);
+    c.turn = 20; d[4] = 12; c.state = 4;
+    assert(aoe_comm_handle_message_ror(&c, &m, 2, 0, 0x44, d, 16) == 0); /* regression */
+    c.dpid[3] = 77; c.low = 1; c.high = 3; memset(d, 0, 16); d[4] = 77;
+    assert(aoe_comm_handle_message_ror(&c, &m, 2, 0, 0x4b, d, 16) == 1 && c.dropped[3] == 1 && drops >= 1);
+    for (int i = 0; i < 8; ++i) d[i * 4] = (uint8_t)(i + 1);
+    assert(aoe_comm_handle_message_ror(&c, &m, 3, 0, 0x4d, d, 32) == 1 && cm_from == 3 && cm_stats[7] == 8);
+    assert(aoe_comm_handle_message_ror(&c, &m, 3, 0, 0x50, d, 8) == 1 && cm_zero == 1);
+    d[0] = 2; d[1] = 0; d[2] = 5; d[3] = 0;
+    assert(aoe_comm_handle_message_ror(&c, &m, 3, 0, 0x53, d, 8) == 1 && cm_53 == 2005);
+    assert(aoe_comm_handle_message_ror(&c, &m, 3, 0, 0x7f, d, 8) == 1);
+    c.multiplayer = 0;
+    assert(aoe_comm_handle_message_ror(&c, &m, 3, 0, 0x55, d, 8) == 0);
+    /* Resend: slot 2's serial 9 is stored twice; one send; too soon refused. */
+    c.multiplayer = 1; c.gtd = 1; c.state = 3; dp = 1; c.dpid[2] = 55; self_id = 42;
+    memset(tx, 0, sizeof tx);
+    tx[0].serial = 9; tx[0].data = calloc(8, 1); tx[0].size = 8; tx[0].pending[2] = 1;
+    tx[5].serial = 9; tx[5].data = calloc(4, 1); tx[5].size = 4; tx[5].pending[2] = 1;
+    c.bytes_sent = 0;
+    assert(aoe_comm_resend_ror(&c, &dops, &rr, 9, 2) == 1 && c.bytes_sent == 12 && tx[0].pending[2] == 0);
+    assert(aoe_comm_resend_ror(&c, &dops, &rr, 9, 2) == 0); /* too soon */
+    c.field_14e4 = 2001;
+    assert(aoe_comm_resend_ror(&c, &dops, &rr, 10, 2) == 1 && rr_reject_dpid == 55 && rr_reject_val == 2000 && rr_dropped == 2);
+    assert(aoe_comm_resend_ror(&c, &dops, &rr, 10, 4) == 0); /* no such player */
+}
 int main(void) {
     enable_new_players_tests();
     static AoeCommRor c;
@@ -460,5 +521,6 @@ int main(void) {
     session_tests();
     join_lobby_tests();
     compact_tests();
+    reset_message_resend_tests();
     return 0;
 }

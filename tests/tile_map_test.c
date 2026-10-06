@@ -150,6 +150,34 @@ static void sweep_tests(void) {
     assert(aoe_tilemap_sweep_tile_ror(&o, 1, 1, 1, 1, 20, 20) == 40);
     assert(sw_destroyed[1] == 1 && sw_destroyed[3] == 1 && sw_destroyed[4] == 0 && sw_destroyed[2] == 0);
 }
+
+static int32_t to_next[6] = {0, 2, 3, 0, 0, 0}; static int16_t to_tid[6] = {0, 10, 20, 30, 0, 0}; static int32_t to_owner[6] = {0, 1, 1, 2, 0, 0};
+static int to_removed[6], to_created, to_rand_i; static int32_t to_rands[8] = {0, 0x7fff, 0x4000, 0, 0x7fff, 0, 0, 0};
+static float to_cx[8], to_cy[8]; static int16_t to_cid[8];
+static int32_t to_first(void *c, int32_t x, int32_t y) { (void)c; (void)x; (void)y; return 1; }
+static int32_t to_nxt(void *c, int32_t o) { (void)c; return to_next[o]; }
+static int16_t to_t(void *c, int32_t o) { (void)c; return to_tid[o]; }
+static int32_t to_own(void *c, int32_t o) { (void)c; return to_owner[o]; }
+static uint8_t to_terrain(void *c, int32_t x, int32_t y) { (void)c; (void)x; (void)y; return 4; }
+static int16_t to_count(void *c, int32_t t) { (void)c; return t == 4 ? 2 : 0; }
+static int16_t to_id(void *c, int32_t t, int16_t i) { (void)c; (void)t; return i == 0 ? 300 : -1; }
+static int16_t to_den(void *c, int32_t t, int16_t i) { (void)c; (void)t; (void)i; return 1500; }
+static uint8_t to_mode(void *c, int32_t t, int16_t i) { (void)c; (void)t; (void)i; return 0; }
+static int to_has(void *c, int32_t p, int16_t id) { (void)c; (void)p; return id == 300; }
+static int to_can(void *c, int32_t p, int16_t id, float x, float y) { (void)c; (void)p; (void)id; (void)x; (void)y; return 0; }
+static void to_create(void *c, int32_t p, int16_t id, float x, float y) { (void)c; (void)p; if (to_created < 8) { to_cid[to_created] = id; to_cx[to_created] = x; to_cy[to_created] = y; } ++to_created; }
+static void to_remove(void *c, int32_t o) { (void)c; to_removed[o]++; }
+static void to_destroy(void *c, int32_t o) { (void)c; to_removed[o] += 10; }
+static int32_t to_rand(void *c) { (void)c; return to_rands[to_rand_i++ & 7]; }
+static void terrain_objects_tests(void) {
+    AoeTerrainObjectsOpsRor o = {NULL, to_first, to_nxt, to_t, to_own, to_terrain, to_count, to_id, to_den, to_mode, to_has, to_can, to_create, to_remove, to_destroy, to_rand};
+    /* Player 1 owns objects 1 (id 10) and 2 (id 20); 20..20 is kept; object 3 is player 2's.
+       Density 1500: the first at a random point (rands 0, 0x7fff -> x+0, y+1), the second
+       (500 left) placed when rand*1000/0x7fff (0x4000 -> 500) is below 500: no. */
+    aoe_tilemap_place_terrain_objects_ror(&o, 1, 6, 7, -1, 0, 20, 20);
+    assert(to_removed[1] == 1 && to_removed[2] == 0 && to_removed[3] == 0);
+    assert(to_created == 1 && to_cid[0] == 300 && to_cx[0] == 6.0f && to_cy[0] > 7.99f && to_cy[0] <= 8.0f);
+}
 int main(void) {
     clamp_footprint();
     AoeTileMapOpsRor ops = {NULL, t_resize, t_refresh, t_rect, t_cell, t_begin, t_end, t_border, t_used};
@@ -275,5 +303,6 @@ int main(void) {
     free(m.tiles);
     test_map_release_owned();
     sweep_tests();
+    terrain_objects_tests();
     return 0;
 }

@@ -611,4 +611,21 @@ typedef struct {
 void aoe_game_screen_player_changed_ror(int32_t *stored_id, int16_t *stored_civ,
                                         const AoeGameScreenPlayerOpsRor *o);
 
+
+/* 0x004834f0: a button's help text: the string `name_id` (game vtable
+   +0x20), then for each of up to three (type, amount) costs whose type
+   is 0..3 the resource name (game +0x28 format kind 100) as "%s: %d"
+   (the first) / "  %s: %d" (the others), joined as "(%s%s%s)"; the
+   result is "%s %s" (name and costs), "%s" (the name alone) or empty
+   without a name. */
+typedef struct {
+    void *context;
+    void (*string)(void *context, int32_t id, char *out, int size);         /* vtable +0x20 */
+    void (*resource_name)(void *context, int32_t type, char *out, int size);/* +0x28(100, type) */
+} AoeGameScreenHelpTextOpsRor;
+typedef struct { int16_t type; float amount; } AoeGameScreenCostRor;
+void aoe_game_screen_help_text_ror(const AoeGameScreenHelpTextOpsRor *o, int32_t name_id,
+                                   const AoeGameScreenCostRor costs[3], int has_costs,
+                                   char *out, int size);
+
 #endif

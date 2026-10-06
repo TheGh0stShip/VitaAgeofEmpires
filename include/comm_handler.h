@@ -144,6 +144,20 @@ typedef struct {
     uint32_t rx_bytes;                /* +0x12b8 */
     uint32_t rx_messages;             /* +0x1334 */
     char (*infos)[0x80];              /* +0x12cc: per slot, the second name */
+    /* The reset 0x00422a70 clears these too (offsets): */
+    uint32_t field_8, field_c, field_10;           /* +0x08 (1 after a reset), +0x0c, +0x10 */
+    uint32_t field_10dc, field_10e8, field_10ec;   /* +0x10dc (0x32), +0x10e8, +0x10ec */
+    uint32_t field_10f0, field_10f4;               /* +0x10f0, +0x10f4 */
+    uint32_t field_1288, field_128c, field_1294;   /* +0x1288, +0x128c, +0x1294 */
+    uint32_t field_1298, field_12a0, field_12bc;   /* +0x1298, +0x12a0, +0x12bc */
+    uint32_t field_12c4, field_12d0, field_1328;   /* +0x12c4, +0x12d0, +0x1328 */
+    uint32_t field_132c, field_1330, field_1338;   /* +0x132c, +0x1330, +0x1338 */
+    uint32_t field_1340, field_1518, field_1718;   /* +0x1340, +0x1518, +0x1718 */
+    uint32_t field_1748;                           /* +0x1748 */
+    int32_t field_13c0[9];                         /* +0x13c0 */
+    int32_t field_136c[AOE_COMM_SLOTS];            /* +0x136c */
+    int32_t field_149c[AOE_COMM_SLOTS];            /* +0x149c */
+    int32_t dropped[AOE_COMM_SLOTS];               /* +0x174c: a kill message seen */
     const AoeCommOpsRor *ops;
 } AoeCommRor;
 
@@ -519,5 +533,64 @@ typedef struct {
 } AoeCommLobbyOpsRor;
 int32_t aoe_comm_lobby_connect_ror(AoeCommRor *c, const AoeCommLobbyOpsRor *l,
                                    int *has_interface);
+
+
+/* 0x00422a70 reset ("Initialize Player List"): our player destroyed
+   (0x004257a0); the receive/transmit counters, labels and names
+   cleared; the elapsed-time log line (0x0042c100); the active slot range
+   (+0x1710 the count, +0x1712 1); state 3, hosting off, lead 2, the turn
+   and +0x155c 4, +0x10dc 0x32, our slot 0, multiplayer off; every slot
+   1..count initialised (0x00424330 with ID 0 and empty names); the data
+   time 0; the serials (0x004219d0) and both stores (0x00421a20) emptied;
+   +0x08 1; the ping times (0x00423970); +0x151c 0; both queues flushed
+   (0x00427f30) when present; the three per-slot arrays zeroed. */
+typedef struct {
+    void *context;
+    void (*log_elapsed)(void *context);       /* 0x0042c100 */
+    int has_queue_a, has_queue_b;             /* +0x14c4, +0x14c8 */
+} AoeCommResetOpsRor;
+void aoe_comm_reset_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp, const AoeCommResetOpsRor *r);
+
+/* 0x00420120 a game message by kind (the data after the 8-byte header):
+   'Y' with the host: resume requested (0x00423a40(0), 0x00423a00);
+   '>' queued as a local command; 'C' a name change (chat 0x0041c900 of
+   slot data[0]'s name and data + 0x11) when data[self + 1] is 'Y' or the
+   state is 3; 'D' the speed sample (0x00428b40(from, data[9], data[8])),
+   a regression warning when the turn in data+4 is below ours (state
+   below 5 or turn below 6), else the sender's last turn raised to the
+   turn less the lead; 'K' a kill: the slot with that DirectPlay ID
+   (data+4) is marked dropped, dropped (0x00420820) when not stopping,
+   and when it is ours 0x17aa posts, else 0x17b3 with the slot; 'M' the
+   eight stats (0x004293e0); 'P' a pause request (0x00423a20, then
+   0x004296f0 zeros); 'Q' a stop turn (0x00420510); 'S' 0x00428bc0 of two
+   shorts; 'U' resume; 'W' with the host: pause request (0x00423a40(1),
+   0x00423a20). Unknown kinds are logged. Returns 1, or 0 for the
+   regression and without multiplayer. */
+typedef struct {
+    void *context;
+    void (*chat_name)(void *context, const char *name, const char *text);
+    void (*speed_sample)(void *context, int32_t from, uint8_t a, uint8_t b);
+    void (*stats)(void *context, int32_t from, const int32_t stats[8]);
+    void (*speed_zero)(void *context);
+    void (*send_53)(void *context, int16_t a, int16_t b, uint32_t extra);
+} AoeCommMessageOpsRor;
+int aoe_comm_handle_message_ror(AoeCommRor *c, const AoeCommMessageOpsRor *m, int32_t from,
+                                uint32_t extra, uint8_t kind, const uint8_t *data, uint32_t size);
+
+/* 0x00422330 a resend request (serial, slot): with guaranteed delivery,
+   a known slot and our ID; the same serial within 500 ms is refused
+   ("Res reply too soon"); every stored message with that serial is sent
+   again to the slot (its pending count dropped; failures reported
+   "Resend TX"); with none sent nor failed in state 3 the "Did not have
+   requested Ser#" line, an 8-byte 'Y' with +0x14e4 - 1 (0x0041f6e0) and
+   the sender's received messages dropped (0x00421b30); finally the
+   acknowledged messages are purged (0x00421ec0). */
+typedef struct {
+    void *context;
+    void (*send_reject)(void *context, int32_t dpid, int32_t value);
+    void (*drop_received)(void *context, int32_t slot);
+} AoeCommResendOpsRor;
+int aoe_comm_resend_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp, const AoeCommResendOpsRor *r,
+                        int32_t serial, int32_t slot);
 
 #endif

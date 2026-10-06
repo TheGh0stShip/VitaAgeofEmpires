@@ -447,7 +447,8 @@ int aoe_map_clamp_footprint_ror(float half_w, float half_h, int32_t map_w,
 }
 
 int32_t aoe_tilemap_sweep_tile_ror(const AoeTileSweepOpsRor *o, int32_t x, int32_t y,
-                                   int32_t player, int32_t delete_them, int32_t lo, int32_t hi) {
+                                   int32_t terrain, int32_t delete_them, int32_t lo, int32_t hi) {
+    int32_t player = terrain;
     int32_t obj, next, last = -1;
     if (!o) return -1;
     for (obj = o->first(o->context, x, y); obj; obj = next) {
@@ -466,4 +467,55 @@ int32_t aoe_tilemap_sweep_tile_ror(const AoeTileSweepOpsRor *o, int32_t x, int32
         if (delete_them) o->destroy(o->context, obj); else o->remove(o->context, obj);
     }
     return last;
+}
+
+void aoe_tilemap_place_terrain_objects_ror(const AoeTerrainObjectsOpsRor *o, int32_t player,
+                                           int32_t x, int32_t y, int32_t filter,
+                                           int32_t delete_them, int32_t lo, int32_t hi) {
+    uint8_t terrain;
+    int16_t count, i;
+    int32_t obj, next;
+    if (!o) return;
+    terrain = o->terrain_at(o->context, x, y);
+    count = o->table_count(o->context, terrain);
+    if (count <= 0) return;
+    for (obj = o->first(o->context, x, y); obj; obj = next) {
+        int16_t id;
+        int go = 0;
+        next = o->next(o->context, obj);
+        if (o->owner(o->context, obj) != player) continue;
+        id = o->template_id(o->context, obj);
+        if (id >= lo && id <= hi) continue;
+        if (filter < 0) {
+            go = 1;
+        } else {
+            int16_t k, n = o->table_count(o->context, filter);
+            for (k = n; k >= 0; --k)
+                if (o->table_id(o->context, filter, k) == id) { go = 1; break; }
+        }
+        if (!go) continue;
+        if (delete_them) o->destroy(o->context, obj); else o->remove(o->context, obj);
+    }
+    for (i = 0; i < count; ++i) {
+        int16_t id = o->table_id(o->context, terrain, i);
+        int32_t density, left;
+        uint8_t mode;
+        if (id == -1) continue;
+        density = o->table_density(o->context, terrain, i);
+        mode = o->table_mode(o->context, terrain, i);
+        if (!o->player_has_template(o->context, player, id) || density <= 0) continue;
+        for (left = density; left > 0; left -= 1000) {
+            float px = 0.0f, py = 0.0f;
+            if (mode == 0) {
+                px = (float)o->rand(o->context) * 3.0518509447574615e-05f + (float)x;
+                py = (float)o->rand(o->context) * 3.0518509447574615e-05f + (float)y;
+            } else if (mode == 1) {
+                px = (float)x + 0.5f;
+                py = (float)y + 0.5f;
+            }
+            if ((left > 999 || (o->rand(o->context) * 1000) / 0x7fff < left) &&
+                !o->can_place(o->context, player, id, px, py))
+                o->create(o->context, player, id, px, py);
+        }
+    }
 }

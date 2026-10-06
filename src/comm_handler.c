@@ -1,4 +1,5 @@
 #include "comm_handler.h"
+#include "le_bytes.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -1297,4 +1298,191 @@ void aoe_comm_compact_players_ror(AoeCommRor *c) {
         if (c->infos) c->infos[j][0] = '\0';
     }
     aoe_comm_find_self_ror(c);
+}
+
+/* ---- 0x00422a70 ---- */
+void aoe_comm_reset_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp, const AoeCommResetOpsRor *r) {
+    uint32_t i;
+    if (!c) return;
+    aoe_comm_dp_release_player_ror(c, dp);
+    c->data_time = OPS->now_ms(CTX);
+    c->rx_bytes = c->field_12bc = c->bytes_sent = c->field_12c4 = 0;
+    c->field_10f0 = c->field_10f4 = c->field_1748 = 0;
+    c->field_1340 = c->field_1338 = c->rx_messages = 0;
+    c->gtd = 0;
+    c->field_1328 = c->field_132c = c->field_1330 = 0;
+    c->lobby_joined = c->field_14e4 = c->field_10ec = c->field_10e8 = 0;
+    if (r && r->log_elapsed) r->log_elapsed(r->context);
+    c->field_1298 = c->field_12a0 = c->field_1288 = c->field_1518 = 0;
+    c->label[0] = c->name[0] = c->info[0] = 0;
+    c->field_c = c->field_10 = c->field_12d0 = 0;
+    c->low = 1;
+    c->high = c->count;
+    c->field_1718 = 0;
+    c->state = 3;
+    c->is_host = 0;
+    c->field_20 = 0;
+    c->lead = 2;
+    c->turn = 4;
+    c->field_155c = 4;
+    c->dirty = 0;
+    c->field_10dc = 0x32;
+    c->self = 0;
+    c->multiplayer = 0;
+    c->field_128c = c->field_1294 = 0;
+    OPS->log(CTX, "Initialize Player List");
+    for (i = 1; i <= c->count && i < AOE_COMM_SLOTS; ++i) aoe_comm_init_player_ror(c, i, 0);
+    c->dirty = 0;
+    c->data_time = 0;
+    aoe_comm_clear_serials_ror(c);
+    aoe_comm_gtd_reset_ror(c);
+    memset(c->field_13c0, 0, sizeof c->field_13c0);
+    c->field_8 = 1;
+    aoe_comm_reset_ping_times_ror(c);
+    c->tx_pending = 0;
+    if (r && (r->has_queue_a || r->has_queue_b) && OPS->flush_queues) OPS->flush_queues(CTX);
+    c->field_12a8 = 0;
+    memset(c->field_136c, 0, sizeof c->field_136c);
+    memset(c->field_149c, 0, sizeof c->field_149c);
+    memset(c->dropped, 0, sizeof c->dropped);
+}
+
+/* ---- 0x00420120 ---- */
+int aoe_comm_handle_message_ror(AoeCommRor *c, const AoeCommMessageOpsRor *m, int32_t from,
+                                uint32_t extra, uint8_t kind, const uint8_t *data, uint32_t size) {
+    char line[128];
+    if (!c || !c->multiplayer) return 0;
+    switch (kind) {
+    case 0x2b:
+        if (c->is_host) {
+            aoe_comm_request_ror(c, 0);
+            OPS->log(CTX, "Non-host requested resume");
+            aoe_comm_running_ror(c, (uint32_t)from);
+        }
+        return 1;
+    case 0x3e:
+        if (OPS->queue_local) OPS->queue_local(CTX, extra, data, size, (uint32_t)from, 0, 0);
+        return 1;
+    case 0x43:
+        if ((c->self + 1 < size && data[c->self + 1] == 'Y') || c->state == 3) {
+            if (m && m->chat_name && c->names) m->chat_name(m->context, c->names[data[0]],
+                                                            (const char *)data + 0x11);
+        }
+        return 1;
+    case 0x44: {
+        uint32_t turn = aoe_le_u32(data + 4), t;
+        if (m && m->speed_sample) m->speed_sample(m->context, from, data[9], data[8]);
+        if ((c->state < 5 || c->turn < 6) && turn < c->turn) {
+            snprintf(line, sizeof line, "*** REGRESSION WARNING: Current=%lu, received=%lu",
+                     (unsigned long)c->turn, (unsigned long)turn);
+            OPS->log(CTX, line);
+            return 0;
+        }
+        t = turn - c->lead;
+        if (t > c->last_turn[from]) c->last_turn[from] = t;
+        return 1;
+    }
+    case 0x4b: {
+        int32_t dpid = (int32_t)aoe_le_u32(data + 4);
+        uint32_t slot;
+        snprintf(line, sizeof line, "KILL Message recieved from %d to %ld", (int)from,
+                 (long)(int32_t)aoe_le_u32(data));
+        OPS->log(CTX, line);
+        if (dpid == 0) return 1;
+        for (slot = c->low; slot <= c->high && slot < AOE_COMM_SLOTS; ++slot) {
+            if (c->dpid[slot] != dpid) continue;
+            if (slot == 0) return 1;
+            c->dropped[slot] = 1;
+            if (c->stop_turn[slot] == 0 && OPS->drop) OPS->drop(CTX, slot, dpid);
+            if (slot == c->self) post(c, 0x17aa, 0);
+            else if (c->stop_turn[slot] == 0) post(c, 0x17b3, slot);
+            return 1;
+        }
+        return 1;
+    }
+    case 0x4d: {
+        int32_t st[8];
+        int i;
+        for (i = 0; i < 8; ++i) st[i] = (int32_t)aoe_le_u32(data + 4 * i);
+        if (m && m->stats) m->stats(m->context, from, st);
+        return 1;
+    }
+    case 0x4e:
+        return 1;
+    case 0x50:
+        OPS->log(CTX, "P %d Requested pause");
+        aoe_comm_paused_ror(c, (uint32_t)from);
+        if (m && m->speed_zero) m->speed_zero(m->context);
+        return 1;
+    case 0x51:
+        aoe_comm_set_stop_turn_ror(c, (uint32_t)from, (int32_t)aoe_le_u32(data));
+        return 1;
+    case 0x53:
+        if (m && m->send_53) m->send_53(m->context, (int16_t)aoe_le_u16(data),
+                                        (int16_t)aoe_le_u16(data + 2), extra);
+        return 1;
+    case 0x55:
+        OPS->log(CTX, "Resume msg rcvd");
+        aoe_comm_running_ror(c, (uint32_t)from);
+        return 1;
+    case 0x57:
+        if (c->is_host) {
+            aoe_comm_request_ror(c, 1);
+            aoe_comm_paused_ror(c, (uint32_t)from);
+        }
+        return 1;
+    default:
+        snprintf(line, sizeof line, "Unknown message... %d (%c)", kind, kind >= 0x20 ? kind : '?');
+        OPS->log(CTX, line);
+        return 1;
+    }
+}
+
+/* ---- 0x00422330 ---- */
+int aoe_comm_resend_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp, const AoeCommResendOpsRor *r,
+                        int32_t serial, int32_t slot) {
+    uint32_t now, i;
+    int32_t sent = 0, failed = 0, self_dpid;
+    char line[128];
+    (void)dp;
+    if (!c || !c->gtd) return 0;
+    if (slot < 0 || slot >= AOE_COMM_SLOTS || c->dpid[slot] == 0) {
+        OPS->log(CTX, "Invalid player req!");
+        return 0;
+    }
+    self_dpid = OPS->self_dpid ? OPS->self_dpid(CTX) : 0;
+    if (self_dpid == 0) return 0;
+    now = OPS->now_ms(CTX);
+    if (serial == c->serial_1434[slot] && now - (uint32_t)c->serial_145c[slot] < 500) {
+        snprintf(line, sizeof line, "Res reply too soon!! %u %u", (unsigned)serial,
+                 (unsigned)(now - (uint32_t)c->serial_145c[slot]));
+        OPS->log(CTX, line);
+        return 0;
+    }
+    c->serial_1434[slot] = serial;
+    c->serial_145c[slot] = (int32_t)now;
+    for (i = 0; c->tx && i < AOE_COMM_TX_SLOTS; ++i) {
+        AoeCommTxRor *t = &c->tx[i];
+        int32_t hr;
+        if (t->serial != serial) continue;
+        t->pending[slot]--;
+        if (self_dpid == 0) return 0;
+        hr = OPS->dp_send(CTX, c->dpid[slot], t->data, t->size);
+        if (hr == 0) {
+            ++sent;
+            c->bytes_sent += t->size;
+        } else {
+            OPS->report(CTX, hr, "Resend TX");
+            ++failed;
+        }
+    }
+    if (sent == 0 && failed == 0 && c->state == 3) {
+        snprintf(line, sizeof line, "*** Did not have requested Ser#%d for player %d", (int)serial,
+                 (int)slot);
+        OPS->log(CTX, line);
+        if (r && r->send_reject) r->send_reject(r->context, c->dpid[slot], c->field_14e4 - 1);
+        if (r && r->drop_received) r->drop_received(r->context, slot);
+    }
+    aoe_comm_tx_purge_ror(c);
+    return 1;
 }

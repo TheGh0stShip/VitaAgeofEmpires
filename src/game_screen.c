@@ -975,3 +975,32 @@ void aoe_game_screen_player_changed_ror(int32_t *stored_id, int16_t *stored_civ,
     }
     o->first_page(o->context);
 }
+
+void aoe_game_screen_help_text_ror(const AoeGameScreenHelpTextOpsRor *o, int32_t name_id,
+                                   const AoeGameScreenCostRor costs[3], int has_costs,
+                                   char *out, int size) {
+    char name[0x200], part[3][0x200], all[0x200], res[0x200];
+    int i;
+    if (!o || !out || size <= 0) return;
+    name[0] = all[0] = 0;
+    o->string(o->context, name_id, name, (int)sizeof name);
+    for (i = 0; i < 3; ++i) part[i][0] = 0;
+    if (has_costs) {
+        for (i = 0; i < 3; ++i) {
+            if (costs[i].type == -1 || costs[i].type > 3) continue;
+            res[0] = 0;
+            o->resource_name(o->context, costs[i].type, res, (int)sizeof res);
+            snprintf(part[i], sizeof part[i], i == 0 ? "%s: %d" : "  %s: %d", res,
+                     (int)costs[i].amount);
+        }
+        if (part[0][0] || part[1][0] || part[2][0])
+            snprintf(all, sizeof all, "(%.160s%.160s%.160s)", part[0], part[1], part[2]);
+    }
+    if (!name[0]) {
+        out[0] = 0;
+    } else if (all[0]) {
+        snprintf(out, (size_t)size, "%.255s %.255s", name, all);
+    } else {
+        snprintf(out, (size_t)size, "%s", name);
+    }
+}

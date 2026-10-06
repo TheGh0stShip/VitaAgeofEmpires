@@ -231,23 +231,58 @@ int aoe_map_clamp_footprint_ror(float half_w, float half_h, int32_t map_w,
 /* 0x00447670 (map method): the objects on tile (x, y) swept (the terrain
    byte 0x00447de0 is read first, unused). Each object whose template ID
    lies in lo..hi stays; otherwise it goes (vtable +0x68 when `delete` is
-   0, else deleted) when `player` is negative, when the player's class
-   table (+0x220 + player * 0x198 count, +0x18a + player * 0x198 entries)
-   lists the ID, or when its template's placement check (+0x20 at the
-   object's position with flags 0, 0, 1, 1, 1, 0, 0) answers nonzero.
+   0, else deleted) when `terrain` is negative, when that terrain's
+   object table (the 0x198-byte terrain record: count at +0x194, IDs at
+   +0xfe) lists the ID, or when its template's placement check (+0x20 at
+   the object's position with flags 0, 0, 1, 1, 1, 0, 0) answers nonzero.
    Returns the last template ID considered (-1 for none). */
 typedef struct {
     void *context;
     int32_t (*first)(void *context, int32_t x, int32_t y);     /* an object or 0 */
     int32_t (*next)(void *context, int32_t object);
     int16_t (*template_id)(void *context, int32_t object);
-    int16_t (*player_class_count)(void *context, int32_t player);
-    int16_t (*player_class)(void *context, int32_t player, int16_t i);
+    int16_t (*player_class_count)(void *context, int32_t terrain); /* the terrain's +0x194 */
+    int16_t (*player_class)(void *context, int32_t terrain, int16_t i); /* its +0xfe table */
     int (*can_place)(void *context, int32_t object);
     void (*remove)(void *context, int32_t object);             /* +0x68 */
     void (*destroy)(void *context, int32_t object);            /* delete */
 } AoeTileSweepOpsRor;
 int32_t aoe_tilemap_sweep_tile_ror(const AoeTileSweepOpsRor *o, int32_t x, int32_t y,
-                                   int32_t player, int32_t delete_them, int32_t lo, int32_t hi);
+                                   int32_t terrain, int32_t delete_them, int32_t lo, int32_t hi);
+
+/* 0x00447390 (map method): the terrain objects of tile (x, y) for a
+   player. The tile's terrain (0x00447de0) picks the terrain record;
+   with a positive object count: every object on the tile owned by the
+   player whose template ID is outside lo..hi goes (as the sweep above:
+   always with `filter` negative, else when terrain `filter`'s table
+   lists it; removed or deleted by `delete_them`); then for every table
+   entry (IDs at +0xfe, densities per mille at +0x13a, modes at +0x176)
+   whose template the player has: per 1000 of density one object, each
+   placed at a random point in the tile (mode 0: tile + rand() / 32767)
+   or its centre (mode 1), when the remaining density is above 999 or
+   rand() * 1000 / 32767 is below it, and the template's placement check
+   (+0x20 with flags 0, 0, 1, 0, 1, 0, 1) answers 0: the template's +0x18
+   makes it (player, x, y, 0). */
+typedef struct {
+    void *context;
+    int32_t (*first)(void *context, int32_t x, int32_t y);
+    int32_t (*next)(void *context, int32_t object);
+    int16_t (*template_id)(void *context, int32_t object);
+    int32_t (*owner)(void *context, int32_t object);
+    uint8_t (*terrain_at)(void *context, int32_t x, int32_t y);          /* 0x00447de0 */
+    int16_t (*table_count)(void *context, int32_t terrain);
+    int16_t (*table_id)(void *context, int32_t terrain, int16_t i);
+    int16_t (*table_density)(void *context, int32_t terrain, int16_t i);
+    uint8_t (*table_mode)(void *context, int32_t terrain, int16_t i);
+    int (*player_has_template)(void *context, int32_t player, int16_t id);
+    int (*can_place)(void *context, int32_t player, int16_t id, float x, float y);
+    void (*create)(void *context, int32_t player, int16_t id, float x, float y);
+    void (*remove)(void *context, int32_t object);
+    void (*destroy)(void *context, int32_t object);
+    int32_t (*rand)(void *context);                                      /* 0..0x7fff */
+} AoeTerrainObjectsOpsRor;
+void aoe_tilemap_place_terrain_objects_ror(const AoeTerrainObjectsOpsRor *o, int32_t player,
+                                           int32_t x, int32_t y, int32_t filter,
+                                           int32_t delete_them, int32_t lo, int32_t hi);
 
 #endif

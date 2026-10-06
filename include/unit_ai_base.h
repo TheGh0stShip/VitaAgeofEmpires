@@ -1,6 +1,7 @@
 #ifndef VITA_AOE_UNIT_AI_BASE_H
 #define VITA_AOE_UNIT_AI_BASE_H
 
+#include "aoe_stream.h"
 #include <stdint.h>
 
 /* Patched Rise of Rome 1.0a unit AI base (vtable 0x00542d10,
@@ -44,6 +45,14 @@ typedef struct {
     /* +0x18 table (count +0x10) of 0x24-byte entries, +4 an object ID. */
     const int32_t *table_ids;
     int32_t table_count;
+    /* The saved record's other fields (0x0040f040 / 0x0040f320). */
+    int32_t field_8;                   /* +0x08 */
+    int32_t field_f4, field_f8;        /* +0xf4, +0xf8 */
+    int32_t field_104, field_108, field_10c; /* +0x104, +0x108 (0 before 6.93), +0x10c (1000) */
+    int32_t field_110[4];              /* +0x110 */
+    int32_t field_120;                 /* +0x120 */
+    uint8_t byte_130;                  /* +0x130 (saves from 7.02) */
+    int has_members;                   /* +0x12c: the members record (ai_tactics.h) */
 } AoeUnitAiRor;
 
 /* What the order methods read of an object (world 0x005206d0). */
@@ -263,5 +272,27 @@ int aoe_unit_ai_order_ror(AoeUnitAiRor *ai, AoeUnitAiNotesRor *q, uint8_t unit_s
                           int32_t now, int32_t requeue, int32_t extra,
                           const AoeUnitAiOrderOpsRor *ops);
 int aoe_unit_ai_send_ror(AoeUnitAiOutRor *q, const int32_t values[6]);
+
+
+/* The unit AI record, save 0x0040f040 and load 0x0040f320 (version
+   0x0055f804): +0x08, then +0x28..+0x48, +0x54, +0x50, +0x58, +0x5c,
+   +0xf4, +0xf8, +0x100, +0xfc, +0x104, +0x108, +0x10c (the last two read
+   only from 6.93, else 0 / 1000), +0x4c, +0x120, the 16 bytes at +0x110,
+   the notification queue (count, 0x24-byte records, each unpacked on
+   load by 0x00414ac0), the outgoing queue (count, 0x18-byte records,
+   0x00414d60), the group IDs (count then each; duplicates skipped on
+   load), a 1 and the members record (0x0040d2f0 / 0x0040d4f0 /
+   0x0040d5b0, ai_tactics.h) or 0, and the +0x130 byte (from 7.02). The
+   members record goes through `members_save` / `members_load`. */
+typedef struct {
+    void *context;
+    int (*members_save)(void *context, AoeOutcomeStream *out);
+    int (*members_load)(void *context, AoeOutcomeStream *in);
+} AoeUnitAiRecordOpsRor;
+int aoe_unit_ai_save_ror(const AoeUnitAiRor *ai, const AoeUnitAiNotesRor *notes,
+                         const AoeUnitAiOutRor *out_queue, const AoeUnitAiRecordOpsRor *o,
+                         AoeOutcomeStream *out);
+int aoe_unit_ai_load_ror(AoeUnitAiRor *ai, AoeUnitAiNotesRor *notes, AoeUnitAiOutRor *out_queue,
+                         float version, const AoeUnitAiRecordOpsRor *o, AoeOutcomeStream *in);
 
 #endif

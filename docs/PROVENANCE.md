@@ -117,12 +117,14 @@ engine's source.
    `building_frame`, `state6_graphic`; the graphic's `reference_speed`,
    `loop_delay`, `sequence_flags`, `mirror_limit`; the terrain's
    `object_ids` / `object_amounts`; the border's `draw_base` and
-   `base_terrain`). Fields no translated function reads now carry neutral
-   offset names (`field_2c`, `field_176`, `sound_164`, ...). Generic
-   names that match their use (`hit_points`, `line_of_sight`, `train_time`)
-   were kept. Still to check the same way: the effect command
-   (`target_unit` is a unit, a resource or an attribute by command type),
-   the tech record and the sound record.
+   `base_terrain`; the effect command's `template_id` / `class_id` from the
+   applier 0x0045d6a0; the sound variant's `chance` and the item's
+   `stop_time` from 0x004a2370 / 0x004a2310). Fields no translated function
+   reads now carry neutral offset names (`field_2c`, `field_176`,
+   `sound_164`, the tech's `field_22` / `field_24`, ...). Generic names that
+   match their use (`hit_points`, `line_of_sight`, `train_time`) were kept.
+   The colour table and the random-map records keep their earlier names
+   (the latter were already offset-named from 0x0046da10).
 2. **Background knowledge.** The assistant that wrote much of this code has
    general knowledge of Genie-engine formats from its training, which cannot
    be separated out. Where a layout mattered it was confirmed against the

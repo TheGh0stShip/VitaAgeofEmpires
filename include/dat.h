@@ -25,18 +25,27 @@ typedef struct {
     size_t next_offset;
 } DatIntro;
 
+/* Sound item (loader 0x004a2000; runtime offsets in the comments). The
+   play method 0x004a2370 (and the pick 0x004a24a0) draws rand * 100 /
+   32767 and takes the first variant whose shares, summed, reach it; the
+   variant's object (+0x18, from 0x004a2be0 with the file name and the DRS
+   resource) then plays, and the tick 0x004a2310 stops it once it has
+   played longer than the item's stop time. */
 typedef struct {
-    char filename[14];
-    uint32_t resource_id;
-    uint16_t weight;
+    char filename[14];     /* variant +0x00 (13 file bytes) */
+    uint32_t resource_id;  /* variant +0x10: the DRS resource */
+    uint16_t chance;       /* variant +0x14: its share of the 0..100 draw */
 } DatSoundVariant;
 
 typedef struct {
-    uint16_t ordinal;
-    uint16_t unknown;
-    uint32_t pointer_placeholder;
-    uint16_t variant_count;
-    DatSoundVariant *variants;
+    uint16_t field_0c;     /* item +0x0c (file bytes 0..1): equals the index
+                              in the installed data; no translated reader */
+    uint16_t field_00;     /* item +0x00 (file bytes 2..3): only cleared */
+    /* Item +0x08 (file bytes 6..9): milliseconds after which a playing
+       variant is stopped (0x004a2310); 0 never. */
+    uint32_t stop_time;
+    uint16_t variant_count; /* item +0x02 */
+    DatSoundVariant *variants; /* item +0x04, 0x24 bytes each at runtime */
 } DatSound;
 
 typedef struct {
@@ -274,12 +283,20 @@ typedef struct {
     size_t next_offset;
 } DatRandomMaps;
 
+/* Effect command (11 file bytes: type, then four values). Named by the
+   attribute applier 0x0045d6a0(template, class, attribute, amount), which
+   types 0 / 4 / 5 call: a template ID in range applies to that template,
+   otherwise to every template of the class. The other types read the
+   values differently (tech_tree.c): type 1 the resource (+0x01) and the
+   mode (+0x03: 0 sets, else adds; 0x0045cfc0); type 2 the template and
+   its enabled flag (0x0045d010 -> 0x00443130); type 3 the source and
+   target templates (0x0045d9a0); type 102 the tech in `amount`. */
 typedef struct {
-    int8_t type;
-    int16_t target_unit;
-    int16_t unit_class;
-    int16_t attribute;
-    float amount;
+    int8_t type;          /* +0x00 */
+    int16_t template_id;  /* +0x01 */
+    int16_t class_id;     /* +0x03 */
+    int16_t attribute;    /* +0x05 */
+    float amount;         /* +0x07 */
 } DatEffectCommand;
 
 typedef struct {
@@ -505,14 +522,22 @@ typedef struct {
     int8_t paid;
 } DatTechCost;
 
+/* Tech record (reader 0x004e9c60; runtime offsets in the comments). The
+   research check 0x0045d9a0 reads the prerequisites, the required count
+   and the research time; 0x004ea3bc applies the effect; the help text
+   0x004eba87 shows the name and description strings. */
 typedef struct {
-    int16_t required_techs[4];
-    DatTechCost costs[3];
-    int16_t required_count, research_location, research_time;
-    int16_t effect_id, type, icon_id;
-    uint16_t language_name, language_description;
-    int8_t button_id;
-    int32_t language_help, language_tree, hotkey;
+    int16_t required_techs[4];       /* +0x00 */
+    DatTechCost costs[3];            /* +0x08, 5 file bytes each */
+    int16_t required_count;          /* +0x1c */
+    int16_t research_location;       /* +0x28: the building that researches */
+    int16_t research_time;           /* +0x1e */
+    int16_t effect_id;               /* +0x20 */
+    int16_t field_22;                /* +0x22: no translated function reads it */
+    int16_t field_24;                /* +0x24: no translated function reads it */
+    uint16_t language_name, language_description; /* +0x2a, +0x2c */
+    int8_t button_id;                /* +0x26: the research button slot */
+    int32_t language_help, language_tree, hotkey; /* +0x30, +0x34, +0x38 */
     char *name;
 } DatTech;
 

@@ -40,8 +40,8 @@ int aoe_effects_read_ror(DatEffects *effects, AoeOutcomeStream *in) {
         for (j = 0; j < n; ++j) {
             DatEffectCommand *c = &e->commands[j];
             c->type = (int8_t)aoe_stream_u8(in);
-            c->target_unit = get16(in);
-            c->unit_class = get16(in);
+            c->template_id = get16(in);
+            c->class_id = get16(in);
             c->attribute = get16(in);
             c->amount = aoe_stream_f32(in);
         }
@@ -92,8 +92,8 @@ int aoe_effects_read_text_ror(DatEffects *effects, const char *text) {
                     break;
                 p += used;
                 e->commands[j].type = (int8_t)type;
-                e->commands[j].target_unit = unit;
-                e->commands[j].unit_class = cls;
+                e->commands[j].template_id = unit;
+                e->commands[j].class_id = cls;
                 e->commands[j].attribute = attribute;
                 e->commands[j].amount = amount;
                 e->command_count = (uint16_t)(j + 1);
@@ -117,8 +117,8 @@ void aoe_effects_write_ror(const DatEffects *effects, AoeOutcomeStream *out) {
         for (j = 0; j < e->command_count; ++j) {
             const DatEffectCommand *c = &e->commands[j];
             aoe_stream_put_u8(out, (uint8_t)c->type);
-            put16(out, c->target_unit);
-            put16(out, c->unit_class);
+            put16(out, c->template_id);
+            put16(out, c->class_id);
             put16(out, c->attribute);
             aoe_stream_put_f32(out, c->amount);
         }

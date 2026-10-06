@@ -35,11 +35,11 @@ int main(void) {
     CHECK(e.count == 3 && e.effects[0].command_count == 0);
     CHECK(strcmp(e.effects[1].name, "Bronze Shields") == 0);
     CHECK(e.effects[1].command_count == 2);
-    CHECK(e.effects[1].commands[0].target_unit == 7 &&
+    CHECK(e.effects[1].commands[0].template_id == 7 &&
           e.effects[1].commands[0].attribute == 8 &&
           e.effects[1].commands[0].amount == 1.5f);
     CHECK(e.effects[1].commands[1].type == 4 &&
-          e.effects[1].commands[1].unit_class == 2 &&
+          e.effects[1].commands[1].class_id == 2 &&
           e.effects[1].commands[1].amount == -2.0f);
     CHECK(strcmp(e.effects[2].name, "Empty") == 0);
 

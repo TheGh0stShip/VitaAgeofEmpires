@@ -65,8 +65,8 @@ int dat_parse_techs(const DatBlob *blob, const DatCivilizations *civilizations,
         tech->language_description = le16(p + 29);
         tech->research_time = (int16_t)le16(p + 31);
         tech->effect_id = (int16_t)le16(p + 33);
-        tech->type = (int16_t)le16(p + 35);
-        tech->icon_id = (int16_t)le16(p + 37);
+        tech->field_22 = (int16_t)le16(p + 35);
+        tech->field_24 = (int16_t)le16(p + 37);
         tech->button_id = (int8_t)p[39];
         tech->language_help = (int32_t)le32(p + 40);
         tech->language_tree = (int32_t)le32(p + 44);

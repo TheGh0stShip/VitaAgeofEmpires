@@ -157,12 +157,12 @@ int dat_parse_sounds(const DatBlob *blob, const DatIntro *intro, DatSounds *soun
         const uint8_t *header;
         if (blob->size - offset < 10) goto fail;
         header = blob->bytes + offset;
-        sound->ordinal = le16(header);
-        sound->unknown = le16(header + 2);
+        sound->field_0c = le16(header);
+        sound->field_00 = le16(header + 2);
         sound->variant_count = le16(header + 4);
-        sound->pointer_placeholder = le32(header + 6);
+        sound->stop_time = le32(header + 6);
         offset += 10;
-        if (sound->ordinal != i || sound->variant_count > 64 ||
+        if (sound->field_0c != i || sound->variant_count > 64 ||
             sound->variant_count > (blob->size - offset) / 19)
             goto fail;
         if (!sound->variant_count) continue;
@@ -174,7 +174,7 @@ int dat_parse_sounds(const DatBlob *blob, const DatIntro *intro, DatSounds *soun
             if (!memchr(item, 0, 13)) goto fail;
             memcpy(variant->filename, item, 13);
             variant->resource_id = le32(item + 13);
-            variant->weight = le16(item + 17);
+            variant->chance = le16(item + 17);
             offset += 19;
             ++sounds->variant_count;
         }
@@ -682,8 +682,8 @@ int dat_parse_effects(const DatBlob *blob, const DatRandomMaps *maps,
             const uint8_t *p = blob->bytes + offset + (size_t)j * 11;
             DatEffectCommand *command = &effect->commands[j];
             command->type = (int8_t)p[0];
-            command->target_unit = (int16_t)le16(p + 1);
-            command->unit_class = (int16_t)le16(p + 3);
+            command->template_id = (int16_t)le16(p + 1);
+            command->class_id = (int16_t)le16(p + 3);
             command->attribute = (int16_t)le16(p + 5);
             command->amount = lefloat(p + 7);
         }

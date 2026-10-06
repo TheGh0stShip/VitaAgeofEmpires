@@ -623,44 +623,44 @@ int aoe_effect_apply_ror(const DatEffects *effects, int16_t effect_id,
         const DatEffectCommand *c = &e->commands[i];
         switch ((uint8_t)c->type) {
         case 0:
-            if (!attribute_command(o, AOE_ATTRIBUTE_SET, c->target_unit,
-                                   c->unit_class, (uint8_t)c->attribute,
+            if (!attribute_command(o, AOE_ATTRIBUTE_SET, c->template_id,
+                                   c->class_id, (uint8_t)c->attribute,
                                    c->amount))
                 return 0;
             break;
         case 4:
-            if (!attribute_command(o, AOE_ATTRIBUTE_ADD, c->target_unit,
-                                   c->unit_class, (uint8_t)c->attribute,
+            if (!attribute_command(o, AOE_ATTRIBUTE_ADD, c->template_id,
+                                   c->class_id, (uint8_t)c->attribute,
                                    c->amount))
                 return 0;
             break;
         case 5:
-            if (!attribute_command(o, AOE_ATTRIBUTE_MUL, c->target_unit,
-                                   c->unit_class, (uint8_t)c->attribute,
+            if (!attribute_command(o, AOE_ATTRIBUTE_MUL, c->template_id,
+                                   c->class_id, (uint8_t)c->attribute,
                                    c->amount))
                 return 0;
             break;
         case 1: /* 0x0045cfc0 set, or +0x78(a, amount, 0) */
-            if (c->target_unit > -1) {
-                if (c->unit_class == 0) {
-                    if (c->target_unit < o->resources->count)
-                        o->resources->values[c->target_unit] = c->amount;
+            if (c->template_id > -1) {
+                if (c->class_id == 0) {
+                    if (c->template_id < o->resources->count)
+                        o->resources->values[c->template_id] = c->amount;
                 } else {
-                    o->resource_add(o->context, c->target_unit, c->amount);
+                    o->resource_add(o->context, c->template_id, c->amount);
                 }
             }
             break;
         case 2: { /* 0x0045d010 -> template 0x00443130 */
             DatUnit *t;
-            if (c->target_unit > -1 &&
-                (uint16_t)c->target_unit < o->templates->count &&
+            if (c->template_id > -1 &&
+                (uint16_t)c->template_id < o->templates->count &&
                 (t = aoe_player_templates_get(o->templates,
-                                              (uint16_t)c->target_unit)))
-                t->enabled = (uint8_t)c->unit_class;
+                                              (uint16_t)c->template_id)))
+                t->enabled = (uint8_t)c->class_id;
             break;
         }
         case 3: { /* 0x0045d9a0 */
-            int16_t a = c->target_unit, b = c->unit_class;
+            int16_t a = c->template_id, b = c->class_id;
             DatUnit *ta, *tb;
             if (a < 0 || (uint16_t)a >= o->templates->count || b < 0 ||
                 (uint16_t)b >= o->templates->count)

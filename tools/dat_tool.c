@@ -131,11 +131,11 @@ int main(int argc, char **argv) {
     for (uint16_t i = 0; i < sounds.count; ++i) {
         const DatSound *sound = &sounds.sounds[i];
         if (i != 0 && sound->variant_count <= 1 && i != sounds.count - 1) continue;
-        printf("sound %u:", sound->ordinal);
+        printf("sound %u:", sound->field_0c);
         for (uint16_t j = 0; j < sound->variant_count; ++j) {
             const DatSoundVariant *variant = &sound->variants[j];
             printf(" %s=%u (%u)", variant->filename,
-                   variant->resource_id, variant->weight);
+                   variant->resource_id, variant->chance);
         }
         putchar('\n');
     }

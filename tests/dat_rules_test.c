@@ -50,8 +50,8 @@ int main(void) {
     assert(strcmp(effects.effects[0].name, "Test Effect") == 0);
     assert(effects.effects[0].command_count == 1);
     assert(effects.effects[0].commands[0].type == 4);
-    assert(effects.effects[0].commands[0].target_unit == 12);
-    assert(effects.effects[0].commands[0].unit_class == 3);
+    assert(effects.effects[0].commands[0].template_id == 12);
+    assert(effects.effects[0].commands[0].class_id == 3);
     assert(effects.effects[0].commands[0].attribute == 9);
     assert(effects.effects[0].commands[0].amount == 1.5f);
     dat_free_effects(&effects);
@@ -222,7 +222,7 @@ int main(void) {
         assert(techs.techs[0].costs[0].amount == 50);
         assert(techs.techs[0].research_time == 30);
         assert(techs.techs[0].effect_id == 7);
-        assert(techs.techs[0].icon_id == 12);
+        assert(techs.techs[0].field_24 == 12);
         dat_free_techs(&techs);
         tech_blob.size--;
         assert(!dat_parse_techs(&tech_blob, &before_techs, &techs));

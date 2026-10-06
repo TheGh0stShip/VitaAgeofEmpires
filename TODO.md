@@ -54,6 +54,7 @@ The objective is a faithful, native PS Vita port of *Age of Empires I*, with Ris
 - [ ] Game Screen (the port's `src/game_screen_host.c`): done — bars, resource bar, minimap, object panel, command buttons with training/research, selection and orders, menu/quit. Remaining: building placement (edit mode 0x15), the other button handlers (stop, groups, pages beyond the first), drag-box selection, message and chat lines, timers, scores, the head action in the object panel (training progress), fog of war, the scenario's victory/defeat and the Achievements Screen, the Mission Dialog's briefing picture; scenario intro videos are skipped.
 - [ ] Integrate the translations: replace the callback ("ops") seams with the reconstructed game/world/player/unit/panel objects and run them from one game loop and state machine.
 - [ ] Native equivalents for the assembly module (shape rasterizers, copy kernels), audited against the existing sprite/draw code.
+- [x] Vita text entry: the shell's on-screen keyboard for the game's EDIT fields (touch and pad; host-tested on the user's data). The system IME dialog is not used (it needs a GXM display path).
 - [ ] Vita platform layer for the translated screens: panel/surface rendering, fonts, input mapping, audio (effects, MIDI, user-extracted CD music), settings persistence, string resources from the user's `language.dll`.
 - [ ] Saved games and campaign progress on Vita storage; decide the multiplayer transport (or exclude multiplayer).
 - [ ] Base AoE 1.0c translation coverage (the worklist counts RoR 1.0a only).

@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "shell_osk.h"
+
 /* The console shell around the translated game: the UI host and screen
    director at the original 640 x 480, shown letterboxed in a larger
    32-bit framebuffer, with touch and buttons turned into the mouse and
@@ -21,7 +23,11 @@
      L                      - held Ctrl, R - held Shift (for the original's
                               key combinations)
      Start                  - Escape; in a game the menu key (F10)
-     In a game the pointer at a screen edge scrolls the view. */
+     In a game the pointer at a screen edge scrolls the view.
+   While a text field has the focus the on-screen keyboard (shell_osk.h)
+   covers the bottom of the screen: touch its keys, or move the highlight
+   with the stick / D-pad and press Cross; Circle deletes, Triangle is
+   Done (Enter), Square Shift, L / R move the caret, Start is Escape. */
 
 enum {
     AOE_SHELL_GAME_W = 640,
@@ -64,6 +70,10 @@ int aoe_shell_frame(AoeShell *s, const AoeShellInput *in, uint32_t *out, int32_t
 /* Diagnostics for tests and the overlay. */
 const char *aoe_shell_screen_name(const AoeShell *s);
 void aoe_shell_pointer(const AoeShell *s, int32_t *x, int32_t *y);
+/* The on-screen keyboard (shown while a text field has the focus). */
+const AoeOskRor *aoe_shell_osk(const AoeShell *s);
+/* The text of the focused text field, NULL when none has the focus. */
+const char *aoe_shell_text_field(AoeShell *s);
 /* The game rectangle inside the output (x, y, w, h). */
 void aoe_shell_viewport(const AoeShell *s, int32_t rect[4]);
 

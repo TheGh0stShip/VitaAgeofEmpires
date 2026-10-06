@@ -1308,11 +1308,11 @@ static const uint8_t *glyph(char c) {
     return unknown;
 }
 
-void aoe_demo_fill_rect(uint32_t *fb, size_t stride, int x, int y, int w,
-                        int h, uint32_t color, int blend_half) {
+void aoe_demo_fill_rect_in(uint32_t *fb, size_t stride, int width, int height, int x, int y,
+                           int w, int h, uint32_t color, int blend_half) {
     int x0 = x < 0 ? 0 : x, y0 = y < 0 ? 0 : y;
-    int x1 = x + w > AOE_DEMO_WIDTH ? AOE_DEMO_WIDTH : x + w;
-    int y1 = y + h > AOE_DEMO_HEIGHT ? AOE_DEMO_HEIGHT : y + h;
+    int x1 = x + w > width ? width : x + w;
+    int y1 = y + h > height ? height : y + h;
     for (int j = y0; j < y1; ++j)
         for (int i = x0; i < x1; ++i) {
             uint32_t *p = &fb[(size_t)j * stride + (size_t)i];
@@ -1322,8 +1322,14 @@ void aoe_demo_fill_rect(uint32_t *fb, size_t stride, int x, int y, int w,
         }
 }
 
-void aoe_demo_draw_text(uint32_t *fb, size_t stride, int x, int y, int scale,
-                        uint32_t color, const char *text) {
+void aoe_demo_fill_rect(uint32_t *fb, size_t stride, int x, int y, int w,
+                        int h, uint32_t color, int blend_half) {
+    aoe_demo_fill_rect_in(fb, stride, AOE_DEMO_WIDTH, AOE_DEMO_HEIGHT, x, y, w, h, color,
+                          blend_half);
+}
+
+void aoe_demo_draw_text_in(uint32_t *fb, size_t stride, int width, int height, int x, int y,
+                           int scale, uint32_t color, const char *text) {
     int cx = x;
     for (; *text; ++text) {
         const uint8_t *rows;
@@ -1338,16 +1344,19 @@ void aoe_demo_draw_text(uint32_t *fb, size_t stride, int x, int y, int scale,
                 for (int c = 0; c < 5; ++c)
                     if (rows[r] & (0x10 >> c)) {
                         /* One-pixel drop shadow keeps text legible. */
-                        aoe_demo_fill_rect(fb, stride, cx + c * scale + 1,
-                                           y + r * scale + 1, scale, scale,
-                                           0xff000000u, 0);
-                        aoe_demo_fill_rect(fb, stride, cx + c * scale,
-                                           y + r * scale, scale, scale,
-                                           color, 0);
+                        aoe_demo_fill_rect_in(fb, stride, width, height, cx + c * scale + 1,
+                                              y + r * scale + 1, scale, scale, 0xff000000u, 0);
+                        aoe_demo_fill_rect_in(fb, stride, width, height, cx + c * scale,
+                                              y + r * scale, scale, scale, color, 0);
                     }
         }
         cx += 6 * scale;
     }
+}
+
+void aoe_demo_draw_text(uint32_t *fb, size_t stride, int x, int y, int scale,
+                        uint32_t color, const char *text) {
+    aoe_demo_draw_text_in(fb, stride, AOE_DEMO_WIDTH, AOE_DEMO_HEIGHT, x, y, scale, color, text);
 }
 
 /* ------------------------------------------------------------------ */

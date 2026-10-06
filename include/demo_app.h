@@ -218,5 +218,10 @@ void aoe_demo_draw_text(uint32_t *framebuffer, size_t stride, int x, int y,
                         int scale, uint32_t color, const char *text);
 void aoe_demo_fill_rect(uint32_t *framebuffer, size_t stride, int x, int y,
                         int w, int h, uint32_t color, int blend_half);
+/* The same clipped to a `width` x `height` frame. */
+void aoe_demo_draw_text_in(uint32_t *framebuffer, size_t stride, int width, int height, int x,
+                           int y, int scale, uint32_t color, const char *text);
+void aoe_demo_fill_rect_in(uint32_t *framebuffer, size_t stride, int width, int height, int x,
+                           int y, int w, int h, uint32_t color, int blend_half);
 
 #endif

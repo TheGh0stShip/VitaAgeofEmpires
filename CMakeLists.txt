@@ -643,7 +643,7 @@ target_link_libraries(aoe_ui_director PUBLIC aoe_ui_host aoe_game_ui aoe_scenari
   aoe_tribe_player_commands aoe_research_manager
   ZLIB::ZLIB)
 
-add_library(aoe_shell_app STATIC src/shell_app.c)
+add_library(aoe_shell_app STATIC src/shell_app.c src/shell_osk.c)
 target_include_directories(aoe_shell_app PUBLIC include)
 target_compile_options(aoe_shell_app PRIVATE -Wall -Wextra)
 target_link_libraries(aoe_shell_app PUBLIC aoe_ui_director)
@@ -918,6 +918,20 @@ else()
       ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_test"
       PASS_REGULAR_EXPRESSION
       "k:27 -> Game Screen\nk:121 -> Game Screen modal Menu Dialog\nk:27 -> Game Screen\nk:121 -> Game Screen modal Menu Dialog\nc:320,65 -> Game Screen modal QuitGameDialog\nc:230,268 -> Main Menu")
+    # The on-screen keyboard: a fresh user folder (no players), so
+    # Campaign asks for a name.
+    add_test(NAME ror_osk_dir_reset COMMAND ${CMAKE_COMMAND} -E
+      rm -rf "${CMAKE_BINARY_DIR}/userdata_osk")
+    add_test(NAME ror_osk_dir_make COMMAND ${CMAKE_COMMAND} -E
+      make_directory "${CMAKE_BINARY_DIR}/userdata_osk")
+    set_tests_properties(ror_osk_dir_reset PROPERTIES FIXTURES_SETUP ror_osk_reset)
+    set_tests_properties(ror_osk_dir_make PROPERTIES FIXTURES_SETUP ror_osk
+      FIXTURES_REQUIRED ror_osk_reset)
+    add_test(NAME ror_shell_keyboard_real COMMAND shell_osk_real
+      "${CMAKE_SOURCE_DIR}/build/demo_root")
+    set_tests_properties(ror_shell_keyboard_real PROPERTIES
+      FIXTURES_REQUIRED ror_osk
+      ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_osk")
     add_test(NAME ror_shell_touch_and_buttons_real COMMAND shell_app_real
       "${CMAKE_SOURCE_DIR}/build/demo_root" "${CMAKE_BINARY_DIR}/shell_frame.ppm")
     set_tests_properties(ror_shell_touch_and_buttons_real PROPERTIES
@@ -934,6 +948,13 @@ else()
   target_compile_options(port_registry_test PRIVATE -UNDEBUG)
   add_test(NAME port_registry_values COMMAND port_registry_test
     "${CMAKE_BINARY_DIR}/port_registry_test.txt")
+  add_executable(shell_osk_test tests/shell_osk_test.c)
+  target_link_libraries(shell_osk_test PRIVATE aoe_shell_app)
+  target_compile_options(shell_osk_test PRIVATE -UNDEBUG)
+  add_test(NAME shell_on_screen_keyboard COMMAND shell_osk_test)
+  add_executable(shell_osk_real tests/shell_osk_real.c)
+  target_link_libraries(shell_osk_real PRIVATE aoe_shell_app)
+  target_compile_options(shell_osk_real PRIVATE -UNDEBUG)
   add_executable(shell_app_real tests/shell_app_real.c)
   target_link_libraries(shell_app_real PRIVATE aoe_shell_app)
   target_compile_options(shell_app_real PRIVATE -UNDEBUG)

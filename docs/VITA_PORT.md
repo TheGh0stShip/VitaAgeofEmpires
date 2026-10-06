@@ -50,6 +50,13 @@ Copy your own files to `ux0:data/VitaAoE/` (names match ignoring case):
 | Triangle | Enter |
 | L / R (held) | Ctrl / Shift (e.g. L + typing C opens the credits) |
 
+While a text field has the focus (a player name, a scenario name) an
+on-screen keyboard covers the bottom of the screen: touch its keys, or
+move the highlight with the D-pad / stick and press Cross. Circle
+deletes, Triangle (or the DONE key) enters, Square toggles Shift (on for
+an empty field), L / R move the caret and Start cancels (Escape). The
+keys send what a PC keyboard would (`src/shell_osk.c`).
+
 The 640 x 480 game picture is shown at 725 x 544 in the middle of the
 screen with the game's own pointer (Interfac 51001) on top.
 

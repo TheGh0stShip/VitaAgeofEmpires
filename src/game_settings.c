@@ -254,3 +254,56 @@ void aoe_settings_set_option_ae5_ror(AoeGameSettingsRor *g, uint8_t v) { g->opti
 void aoe_settings_set_population_ror(AoeGameSettingsRor *g, uint8_t v) { g->population_ae6 = v; }
 void aoe_settings_set_byte_1190_ror(AoeGameSettingsRor *g, uint8_t v) { g->byte_1190 = v; }
 void aoe_settings_set_int_1194_ror(AoeGameSettingsRor *g, int32_t v) { g->int_1194 = v; }
+
+void aoe_settings_defaults_ror(AoeGameSettingsRor *g) {
+    int i;
+    /* The base constructor's settings calls, in order. */
+    aoe_settings_set_speed_ror(g, 1.0f);
+    aoe_settings_set_flag_8fc_ror(g, 0);
+    aoe_settings_set_int_9a0_ror(g, 0);
+    aoe_settings_set_int_9a4_ror(g, 0);
+    aoe_settings_set_flag_97d_ror(g, 1);
+    aoe_settings_set_flag_97e_ror(g, 0);
+    aoe_settings_set_map_ror(g, 0x60, 0x60, 8);
+    aoe_settings_set_byte_982_ror(g, 0);
+    aoe_settings_set_byte_984_ror(g, 1);
+    aoe_settings_set_byte_985_ror(g, 0);
+    aoe_settings_set_byte_986_ror(g, 1);
+    aoe_settings_set_byte_987_ror(g, 1);
+    aoe_settings_set_byte_989_ror(g, 0);
+    aoe_settings_set_byte_993_ror(g, 0);
+    for (i = 0; i < 9; ++i) {
+        aoe_settings_set_player_98a_ror(g, i, 0);
+        aoe_settings_set_player_flag_ror(g, i, 0);
+        aoe_settings_set_player_version_ror(g, i, 0);
+        aoe_settings_set_player_994_ror(g, i, 1);
+    }
+    aoe_settings_set_byte_a14_ror(g, 0);
+    aoe_settings_set_byte_983_ror(g, 0);
+    aoe_settings_set_byte_988_ror(g, 4);
+    aoe_settings_set_float_a0c_ror(g, 1.0f);
+    aoe_settings_set_int_a10_ror(g, 2);
+    aoe_settings_set_map_size_ror(g, 2);
+    aoe_settings_set_int_a80_ror(g, 2);
+    aoe_settings_set_int_a84_ror(g, 1);
+    aoe_settings_set_int_a88_ror(g, 1);
+    aoe_settings_set_a8c_a90_ror(g, 1, 1);
+    aoe_settings_set_option_ad6_ror(g, 1);
+    aoe_settings_set_option_ad7_ror(g, 0);
+    aoe_settings_set_option_ad8_ror(g, 0);
+    aoe_settings_set_option_ad9_ror(g, 0);
+    aoe_settings_set_resource_level_ror(g, 0);
+    aoe_settings_set_starting_age_ror(g, 0);
+    aoe_settings_set_option_ae4_ror(g, 0);
+    aoe_settings_set_option_ae5_ror(g, 0);
+    aoe_settings_set_population_ror(g, 0x32);
+    aoe_settings_set_byte_1190_ror(g, 0);
+    aoe_settings_set_int_1194_ror(g, -1);
+    for (i = 0; i < 9; ++i) {
+        aoe_settings_set_byte_a94_ror(g, i, (uint8_t)(i + 1));
+        aoe_settings_set_int_aa0_ror(g, i, i);
+        aoe_settings_set_byte_ac4_ror(g, i, 1);
+        aoe_settings_set_byte_acd_ror(g, i, 0);
+    }
+    aoe_settings_set_byte_988_ror(g, 4);
+}

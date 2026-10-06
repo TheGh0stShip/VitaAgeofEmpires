@@ -4,7 +4,9 @@
    Steps: c:X,Y click; r:X,Y right click; k:VK key press (decimal or 0x);
    d:VK / u:VK key down / up (to hold Ctrl 0x11 or Shift 0x10);
    t:TEXT typed characters; i:N idle N times; p:NAME paint and write
-   OUTDIR/NAME.ppm. After each step the current screen's name is printed. */
+   OUTDIR/NAME.ppm. After each step the current screen's name is printed.
+   AOE_USER_DIR names the folder for registry.txt and game<N>.nfo (default:
+   the data root). */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -61,7 +63,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "%s\n", error);
         return 1;
     }
-    aoe_ui_director_init_ror(&dir, &host);
+    aoe_ui_director_init_ror(&dir, &host, getenv("AOE_USER_DIR"));
     if (!aoe_ui_director_start_ror(&dir)) {
         fprintf(stderr, "the main menu did not build\n");
         return 1;
@@ -102,10 +104,21 @@ int main(int argc, char **argv) {
             fprintf(stderr, "unknown step %s\n", a);
             return 2;
         }
+        /* The game repaints continuously; so does the tool after every
+           step (an edit field shows its control from its draw). */
+        if (!dir.quit) aoe_ui_host_paint_ror(&host);
         printf("%s -> %s%s%s\n", a, dir.quit ? "(quit)" : aoe_ui_director_screen_name_ror(&dir),
                host.system.modal ? " modal " : "",
                host.system.modal && host.system.modal->name ? host.system.modal->name : "");
     }
+    printf("screens built: %u\n", (unsigned)dir.opened);
+    if (getenv("AOE_LIST_PANELS")) {
+        int32_t k;
+        for (k = 0; k < host.system.panel_count; ++k)
+            printf("registered: %s\n", host.system.panels[k] && host.system.panels[k]->name
+                                           ? host.system.panels[k]->name : "(none)");
+    }
     aoe_ui_host_close_ror(&host);
+    aoe_ui_director_release_ror(&dir);
     return 0;
 }

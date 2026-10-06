@@ -625,16 +625,21 @@ add_library(aoe_game_ui STATIC src/screens/menu_dialog.c
 target_include_directories(aoe_game_ui PUBLIC include)
 target_link_libraries(aoe_game_ui PUBLIC aoe_ui_panel aoe_game_base aoe_game_settings aoe_campaign_progress aoe_tribute)
 
-add_library(aoe_ui_host STATIC src/ui_host.c)
+add_library(aoe_ui_host STATIC src/ui_host.c src/soft_edit.c)
 target_include_directories(aoe_ui_host PUBLIC include)
 target_compile_options(aoe_ui_host PRIVATE -Wall -Wextra)
 target_link_libraries(aoe_ui_host PUBLIC aoe_ui_panel aoe_soft_draw aoe_ui_font aoe_pe_strings
   aoe_drs aoe_slp aoe_palette aoe_shape aoe_draw_system)
 
+add_library(aoe_port_registry STATIC src/port_registry.c)
+target_include_directories(aoe_port_registry PUBLIC include)
+target_compile_options(aoe_port_registry PRIVATE -Wall -Wextra)
+
 add_library(aoe_ui_director STATIC src/ui_director.c)
 target_include_directories(aoe_ui_director PUBLIC include)
 target_compile_options(aoe_ui_director PRIVATE -Wall -Wextra)
-target_link_libraries(aoe_ui_director PUBLIC aoe_ui_host aoe_game_ui)
+target_link_libraries(aoe_ui_director PUBLIC aoe_ui_host aoe_game_ui aoe_scenario_info aoe_scn
+  aoe_campaign_progress aoe_deflate_writer aoe_port_registry ZLIB::ZLIB)
 
 add_library(aoe_shell_app STATIC src/shell_app.c)
 target_include_directories(aoe_shell_app PUBLIC include)
@@ -854,6 +859,8 @@ else()
      EXISTS "${CMAKE_SOURCE_DIR}/build/demo_root/languagex.dll")
     add_test(NAME ror_main_menu_render_real COMMAND ui_host_tool
       "${CMAKE_SOURCE_DIR}/build/demo_root" "${CMAKE_BINARY_DIR}" p:main_menu)
+    set_tests_properties(ror_main_menu_render_real PROPERTIES FIXTURES_REQUIRED ror_user
+      ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_test")
     set_tests_properties(ror_main_menu_render_real PROPERTIES
       PASS_REGULAR_EXPRESSION "frame main_menu: [1-9][0-9][0-9] colours")
     # Clicking through the translated menus: Single Player and back,
@@ -863,15 +870,45 @@ else()
       "${CMAKE_SOURCE_DIR}/build/demo_root" "${CMAKE_BINARY_DIR}"
       c:320,198 c:320,388 c:320,348 k:27 c:320,298 k:13 d:0x11 k:0x43 u:0x11 k:27
       c:320,248)
-    set_tests_properties(ror_menu_navigation_real PROPERTIES PASS_REGULAR_EXPRESSION
+    set_tests_properties(ror_menu_navigation_real PROPERTIES FIXTURES_REQUIRED ror_user
+      ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_test" PASS_REGULAR_EXPRESSION
       "c:320,198 -> Single Player Menu\nc:320,388 -> Main Menu\nc:320,348 -> Scenario Editor Menu\nk:27 -> Main Menu\nc:320,298 -> Main Menu modal OKDialog\nk:13 -> Main Menu\nd:0x11 -> Main Menu\nk:0x43 -> Credits Screen\nu:0x11 -> Credits Screen\nk:27 -> Main Menu\nc:320,248 -> MP Startup Screen")
+    # The game's own files (registry.txt, game<N>.nfo) go to a fresh
+    # scratch folder, never the user's data.
+    add_test(NAME ror_user_dir_reset COMMAND ${CMAKE_COMMAND} -E
+      rm -rf "${CMAKE_BINARY_DIR}/userdata_test")
+    add_test(NAME ror_user_dir_make COMMAND ${CMAKE_COMMAND} -E
+      make_directory "${CMAKE_BINARY_DIR}/userdata_test")
+    set_tests_properties(ror_user_dir_reset PROPERTIES FIXTURES_SETUP ror_user_reset)
+    set_tests_properties(ror_user_dir_make PROPERTIES FIXTURES_SETUP ror_user
+      FIXTURES_REQUIRED ror_user_reset)
+    # Single player: Scenario (the index from scenario/) and Escape back;
+    # Campaign with no players asks for a name; typing one and Enter adds
+    # the player (game<N>.nfo written) and opens the campaigns.
+    add_test(NAME ror_single_player_routes_real COMMAND ui_host_tool
+      "${CMAKE_SOURCE_DIR}/build/demo_root" "${CMAKE_BINARY_DIR}"
+      c:320,198 c:320,288 k:27 c:320,188 t:Tester k:13)
+    set_tests_properties(ror_single_player_routes_real PROPERTIES
+      FIXTURES_REQUIRED ror_user
+      ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_test"
+      PASS_REGULAR_EXPRESSION
+      "c:320,288 -> Select Scenario Screen\nk:27 -> Single Player Menu\nc:320,188 -> Single Player Menu modal New Name Dialog\nt:Tester -> Single Player Menu modal New Name Dialog\nk:13 -> Campaign Selection Screen")
     add_test(NAME ror_shell_touch_and_buttons_real COMMAND shell_app_real
       "${CMAKE_SOURCE_DIR}/build/demo_root" "${CMAKE_BINARY_DIR}/shell_frame.ppm")
+    set_tests_properties(ror_shell_touch_and_buttons_real PROPERTIES
+      FIXTURES_REQUIRED ror_user
+      ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_test")
     add_test(NAME ror_menu_exit_real COMMAND ui_host_tool
       "${CMAKE_SOURCE_DIR}/build/demo_root" "${CMAKE_BINARY_DIR}" c:320,398)
-    set_tests_properties(ror_menu_exit_real PROPERTIES PASS_REGULAR_EXPRESSION
+    set_tests_properties(ror_menu_exit_real PROPERTIES FIXTURES_REQUIRED ror_user
+      ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_test" PASS_REGULAR_EXPRESSION
       "c:320,398 -> \\(quit\\)")
   endif()
+  add_executable(port_registry_test tests/port_registry_test.c)
+  target_link_libraries(port_registry_test PRIVATE aoe_port_registry)
+  target_compile_options(port_registry_test PRIVATE -UNDEBUG)
+  add_test(NAME port_registry_values COMMAND port_registry_test
+    "${CMAKE_BINARY_DIR}/port_registry_test.txt")
   add_executable(shell_app_real tests/shell_app_real.c)
   target_link_libraries(shell_app_real PRIVATE aoe_shell_app)
   target_compile_options(shell_app_real PRIVATE -UNDEBUG)

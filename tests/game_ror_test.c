@@ -560,6 +560,17 @@ static void comm_command_tests(void) {
     assert(aoe_game_ror_comm_command_ror(&o, 0x17bd, 3) == 1 && gcc_log[0] == '\0');
     o.mode = 7; assert(aoe_game_ror_comm_command_ror(&o, 0x17a2, 0) == 1 && gcc_log[0] == '\0');
 }
+static void settings_defaults_tests(void) {
+    static AoeGameSettingsRor g;
+    memset(&g, 0x5a, sizeof g);
+    aoe_settings_defaults_ror(&g);
+    assert(aoe_settings_float_a0c_ror(&g) == 1.0f && aoe_settings_int_a10_ror(&g) == 2);
+    assert(aoe_settings_map_size_ror(&g) == 2 && aoe_settings_int_a80_ror(&g) == 2 &&
+           aoe_settings_int_a8c_ror(&g) == 1 && aoe_settings_int_a90_ror(&g) == 1);
+    assert(aoe_settings_population_limit_ror(&g) == 50 && aoe_settings_starting_age_ror(&g) == 0 &&
+           aoe_settings_resource_level_ror(&g) == 0 && aoe_settings_option_ae5_ror(&g) == 0);
+}
+
 int main(void) {
     char coded[64];
     AoeGameRorCommandOpsRor cops = {NULL, ns, sp, bc};
@@ -768,5 +779,6 @@ int main(void) {
     init_tests();
     random_game_tests();
     comm_command_tests();
+    settings_defaults_tests();
     return 0;
 }

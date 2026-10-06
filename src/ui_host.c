@@ -56,6 +56,19 @@ static int find_in(const AoeUiHostRor *h, const char *sub, const char *name, cha
     return find_file(dir, name, out, size);
 }
 
+int aoe_ui_host_find_ror(const AoeUiHostRor *h, const char *sub, const char *name, char *out,
+                         size_t size) {
+    if (!name) {
+        if (!sub || !sub[0]) {
+            if (strlen(h->root) + 1 > size) return 0;
+            memcpy(out, h->root, strlen(h->root) + 1);
+            return 1;
+        }
+        return find_file(h->root, sub, out, size);
+    }
+    return find_in(h, sub, name, out, size);
+}
+
 static void open_archive(AoeUiHostRor *h, const char *sub, const char *name) {
     char path[700];
     DrsArchive *a;
@@ -516,6 +529,9 @@ int aoe_ui_host_open_ror(AoeUiHostRor *h, const char *root, int32_t width, int32
     h->picture_ops.draw_bitmap = pic_draw_bitmap;
     h->picture_ops.draw_shape = pic_draw_shape;
 
+    aoe_soft_edit_init_ror(&h->edits, &h->edit_ops, &h->system, h, key_down, h, h->draw.palette);
+    h->ez_ops.edit_ops = &h->edit_ops;
+
     /* The game's default palette: base Interfac.drs 50500. */
     h->default_palette = create_palette(h, "palette", 50500);
     if (h->default_palette) ez_set_area_palette(h, &h->area, h->default_palette);
@@ -538,9 +554,42 @@ void aoe_ui_host_close_ror(AoeUiHostRor *h) {
     memset(h, 0, sizeof *h);
 }
 
+/* The focused EDIT control paints itself (Windows did): its background
+   brush, the text in the panel's focus colour, and the caret. */
+static void paint_focused_edit(AoeUiHostRor *h) {
+    AoeSoftEditWindowRor *w = aoe_soft_edit_focus_window_ror(&h->edits);
+    AoeUiEditRor *e = w ? w->owner : NULL;
+    AoeDrawSurfaceRor *s = h->area.surface;
+    const AoeUiFontRor *font;
+    uint8_t *bits;
+    int32_t clip[4], r[4], tx, ty, caret_x, y;
+    if (!e || !w->shown || !s || !e->panel.active || !e->panel.visible) return;
+    font = (const AoeUiFontRor *)(w->font ? w->font : e->font);
+    r[0] = w->x; r[1] = w->y; r[2] = w->x + w->w - 1; r[3] = w->y + w->h - 1;
+    aoe_surface_set_clip_ror(s, 0, 0, h->area.width - 1, h->area.height - 1);
+    aoe_surface_fill_ror(s, r, aoe_ui_nearest_index_ror(h->draw.palette, e->background));
+    bits = aoe_surface_lock_ror(s, 1);
+    if (!bits) return;
+    clip[0] = r[0]; clip[1] = r[1]; clip[2] = r[2]; clip[3] = r[3];
+    tx = w->x + 1;
+    ty = font ? w->y + (w->h - font->height) / 2 : w->y;
+    if (font) {
+        aoe_ui_font_draw_ror(font, bits, s->view.pitch, s->view.width, s->view.height, clip, tx, ty,
+                             w->text, (int32_t)strlen(w->text),
+                             aoe_ui_nearest_index_ror(h->draw.palette, e->focus_color));
+        caret_x = tx + aoe_ui_font_text_width_ror(font, w->text, w->sel_end);
+        for (y = ty; y < ty + font->height; ++y)
+            if (caret_x >= clip[0] && caret_x <= clip[2] && y >= clip[1] && y <= clip[3])
+                bits[(size_t)y * (size_t)s->view.pitch + (size_t)caret_x] =
+                    aoe_ui_nearest_index_ror(h->draw.palette, e->focus_color);
+    }
+    aoe_surface_unlock_ror(s);
+}
+
 void aoe_ui_host_paint_ror(AoeUiHostRor *h) {
     AoeUiPanelRor *screen = h->system.screen;
     if (screen) screen->vt->handle_paint(screen);
+    paint_focused_edit(h);
     aoe_draw_present_ror(&h->draw, NULL);
 }
 
@@ -548,8 +597,13 @@ void aoe_ui_host_paint_ror(AoeUiHostRor *h) {
 
 int32_t aoe_ui_host_message_ror(AoeUiHostRor *h, uint32_t msg, uint32_t wparam, uint32_t lparam) {
     AoeUiPanelRor *screen = h->system.screen;
+    AoeUiEditRor *edit;
     if (msg == 0x100 || msg == 0x104) h->keys[wparam & 0xff] = 1;
     if (msg == 0x101 || msg == 0x105) h->keys[wparam & 0xff] = 0;
+    /* Keys go to the focused window: an edit field's EDIT control is
+       subclassed by the panel (0x004623a0), as Windows delivered them. */
+    if (msg >= 0x100 && msg <= 0x105 && (edit = aoe_soft_edit_focused_ror(&h->edits)) != NULL)
+        return aoe_ui_edit_class_proc_ror(edit, msg, wparam, lparam);
     if (!screen) return 0;
     return screen->vt->handle_message(screen, h->area.window, msg, wparam, lparam);
 }

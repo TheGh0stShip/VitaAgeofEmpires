@@ -13,6 +13,7 @@
 #include "ui_font.h"
 #include "ui_panel.h"
 #include "ui_picture.h"
+#include "soft_edit.h"
 
 /* The platform beneath the translated panel system (ui_panel.h, ui_ez.h):
    the user's original data (DRS archives, language libraries, TrueType
@@ -54,6 +55,8 @@ typedef struct AoeUiHostRor {
     AoeShapeOpsRor shape_ops;
     AoeShapeDrawOpsRor shape_draw;
     AoeUiPictureOpsRor picture_ops;
+    AoeUiEditOpsRor edit_ops;
+    AoeSoftEditRor edits;       /* the software EDIT controls */
     uint8_t keys[256];          /* GetKeyState: held virtual keys */
     uint32_t buttons;           /* MK_LBUTTON 1, MK_RBUTTON 2 */
     int32_t mouse_x, mouse_y;
@@ -88,6 +91,12 @@ void aoe_ui_host_close_ror(AoeUiHostRor *h);
    NULL. `type` is the executable's constant ('slp ' 0x736c7020, 'bina'
    0x62696e61, 'wav ' 0x77617620). */
 uint8_t *aoe_ui_host_resource_ror(AoeUiHostRor *h, uint32_t type, int32_t id, uint32_t *size);
+
+/* `sub`/`name` under the data root matched case-insensitively (`sub` may
+   be NULL or "" for the root; `name` NULL for the folder itself) into
+   `out`; 0 when missing. */
+int aoe_ui_host_find_ror(const AoeUiHostRor *h, const char *sub, const char *name, char *out,
+                         size_t size);
 
 /* Paints the current screen (its handle_paint) and presents the back
    buffer to the primary. */

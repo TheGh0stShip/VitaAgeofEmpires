@@ -1179,10 +1179,16 @@ void aoe_ui_system_release_ror(AoeUiSystemRor *s) {
     int32_t i;
     if (!s) return;
     aoe_ui_system_restore_colors_ror(s);
-    for (i = 0; i < s->panel_count; ++i) {
-        if (!s->panels[i]) continue;
-        s->panels[i]->vt->destroy(s->panels[i]);
-        free(s->panels[i]);
+    /* A panel's destruction may unregister others (the array shifts), so
+       the last one is taken off until none are left. */
+    while (s->panel_count > 0) {
+        AoeUiPanelRor *p = s->panels[s->panel_count - 1];
+        unregister_panel(s, p);
+        if (!p) continue;
+        if (s->screen == p) s->screen = NULL;
+        if (s->modal == p) s->modal = NULL;
+        p->vt->destroy(p);
+        free(p);
     }
     free(s->panels);
     s->panels = NULL;

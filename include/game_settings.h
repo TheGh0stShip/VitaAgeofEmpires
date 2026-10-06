@@ -190,4 +190,17 @@ void aoe_settings_set_population_ror(AoeGameSettingsRor *g, uint8_t v); /* 0x005
 void aoe_settings_set_byte_1190_ror(AoeGameSettingsRor *g, uint8_t v); /* 0x005055b0 */
 void aoe_settings_set_int_1194_ror(AoeGameSettingsRor *g, int32_t v); /* 0x005055c0 */
 
+
+/* The settings defaults of a new game object: the base constructor
+   (0x4162b0: its settings calls 0x0041ba10..0x0041bc00 in order: speed
+   1.0, flags and bytes, map 0x60 x 0x60 for 8, +0x993 0, per player
+   +0x98a / flags / version 0 and +0x994 1, path finding 0; then game
+   speed +0xa0c 1.0, difficulty +0xa10 2) and the tribe
+   game constructor (0x4fdfa0: map size 2, map type +0xa80 2, +0xa84 1,
+   +0xa88 1, victory 1 / 1, option +0xad6 1, +0xad7..+0xad9 0, resources
+   and starting age 0, +0xae4 / +0xae5 0, population 50, +0x1190 0,
+   +0x1194 -1, per player i (0..8): colour i + 1, +0xaa0 i, +0xac4 1,
+   +0xacd 0; +0x988 4). Only the settings part of those constructors. */
+void aoe_settings_defaults_ror(AoeGameSettingsRor *g);
+
 #endif

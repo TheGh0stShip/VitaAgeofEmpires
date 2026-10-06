@@ -61,7 +61,9 @@ AoeShell *aoe_shell_open(const char *root, int32_t out_w, int32_t out_h,
         free(s);
         return NULL;
     }
-    aoe_ui_director_init_ror(&s->director, &s->host);
+    /* The game's own files go to the data root (AOE_USER_DIR overrides it
+       for host tests). */
+    aoe_ui_director_init_ror(&s->director, &s->host, getenv("AOE_USER_DIR"));
     if (!aoe_ui_director_start_ror(&s->director)) {
         snprintf(error, error_size, "the main menu could not be built from the data");
         aoe_shell_close(s);
@@ -78,6 +80,7 @@ void aoe_shell_close(AoeShell *s) {
     if (!s) return;
     if (s->pointer_ok) slp_free_frame(&s->pointer);
     aoe_ui_host_close_ror(&s->host);
+    aoe_ui_director_release_ror(&s->director);
     free(s->scaled_x);
     free(s);
 }

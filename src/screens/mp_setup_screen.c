@@ -1,7 +1,10 @@
-#include "mp_setup_screen.h"
+#include "game_ui.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+
+#include "../ui_ez_slots.h"
 
 #define OPS (m->ops)
 #define CTX (m->ops->context)
@@ -1063,3 +1066,289 @@ int aoe_mp_setup_screen_command_ror(AoeMpSetupScreenRor *m, const AoeMpSetupComm
         return 1;
     }
 }
+
+
+/* ---- 0x00487f40: the screen as panels (game_ui.h) ---- */
+
+#define MU(p) ((AoeMpSetupUiRor *)(p))
+
+static const char *const NAME = "MP Setup Screen";
+
+static void drop(AoeUiPanelRor **slot) {
+    if (*slot) {
+        (*slot)->vt->destroy(*slot);
+        free(*slot);
+        *slot = NULL;
+    }
+}
+#define DROP(x) drop((AoeUiPanelRor **)&(x))
+
+static void help(void *panel, int32_t id, int32_t page) {
+    aoe_ui_panel_set_help_ror((AoeUiPanelRor *)panel, id, page);
+}
+
+/* 0x004891a0 (deleting 0x00488c20): the scenario freed and the dialogs
+   closed through the ops, then every panel. */
+static void mu_destroy(AoeUiPanelRor *p) {
+    AoeMpSetupUiRor *u = MU(p);
+    int i;
+    aoe_mp_setup_screen_destroy_ror(&u->state);
+    DROP(u->title);
+    DROP(u->name_label);
+    DROP(u->civ_label);
+    DROP(u->settings_label);
+    DROP(u->color_label);
+    DROP(u->team_label);
+    for (i = 0; i < AOE_MP_SETUP_PLAYERS; ++i) {
+        DROP(u->texts_490[i]);
+        DROP(u->texts_4b0[i]);
+        DROP(u->texts_4d0[i]);
+        DROP(u->ready_texts[i]);
+        DROP(u->texts_510[i]);
+        DROP(u->texts_530[i]);
+        DROP(u->texts_550[i]);
+        DROP(u->color_buttons[i]);
+        DROP(u->team_buttons[i]);
+        DROP(u->kind_lists[i]);
+        DROP(u->civ_lists[i]);
+        DROP(u->pos_lists[i]);
+    }
+    DROP(u->chat_input);
+    DROP(u->chat_label);
+    DROP(u->chat);
+    DROP(u->chat_bar);
+    DROP(u->settings);
+    DROP(u->info_title);
+    for (i = 0; i < AOE_MP_SETUP_INFO_LINES; ++i) DROP(u->info[i]);
+    DROP(u->count_label);
+    DROP(u->count);
+    DROP(u->start);
+    DROP(u->cancel);
+    DROP(u->help);
+    DROP(u->ready);
+    DROP(u->hidden);
+    DROP(u->ready_label);
+    DROP(u->addresses);
+    aoe_ui_ez_release_ror(&u->ez);
+}
+
+/* The creators on the screen's own panel. */
+#define TEXT_ID(out, ...) aoe_ui_ez_create_text_id_ror(ez, &ez->panel, &(out), __VA_ARGS__)
+#define TEXT(out, ...) aoe_ui_ez_create_text_ror(ez, &ez->panel, &(out), __VA_ARGS__)
+#define DROPDOWN(out, ...) aoe_ui_ez_create_dropdown_ror(ez, &ez->panel, &(out), __VA_ARGS__)
+#define BUTTON(out, ...) aoe_ui_ez_create_button_ror(ez, &ez->panel, &(out), __VA_ARGS__)
+#define BUTTON_ID(out, ...) aoe_ui_ez_create_button_id_ror(ez, &ez->panel, &(out), __VA_ARGS__)
+#define CHECK(out, ...) aoe_ui_ez_create_check_ror(ez, &ez->panel, &(out), __VA_ARGS__)
+
+/* 0x00487f40 */
+int aoe_mp_setup_ui_init_ror(AoeMpSetupUiRor *u, AoeGameUiRor *ui, AoeUiAreaRor *area,
+                             const AoeMpSetupScreenOpsRor *ops) {
+    AoeMpSetupScreenRor *m = &u->state;
+    AoeUiEzRor *ez = &u->ez;
+    AoeGameSettingsRor *st = ui->settings;
+    AoeUiPanelRor *tab[4], *focus;
+    int net, single, host, i, k, n;
+    memset(u, 0, sizeof *u);
+    u->ui = ui;
+    m->settings = st;
+    m->ops = ops;
+    /* "$$$ CHAT SCREEN: CONSTRUCTOR BEGIN" (0x0042c330) is empty in this
+       build, as are the two logs further down. */
+    aoe_ui_screen_init_ror(ez, ui->system, ui->ez_ops, NAME);
+    ez->panel.vt = &aoe_mp_setup_ui_vtable_ror.base;
+    aoe_mp_setup_screen_reset_ror(m); /* 0x00488c40 */
+    OPS->chat_drop(CTX);              /* 0x0041ca10 */
+    for (i = 1; i <= AOE_MP_SETUP_PLAYERS; ++i) OPS->chat_recipient(CTX, i); /* 0x0041ca50(i, 1) */
+    net = aoe_settings_flag_97e_ror(st) != 0;
+    single = aoe_settings_flag_97d_ror(st) != 0;
+    host = OPS->host(CTX) != 0;
+    if (!aoe_ui_screen_setup_ror(ez, area, net ? "scr3" : "scr2", net ? 0xc385 : 0xc384, 1)) {
+        ez->panel.field_d8 = 1;
+        return 0;
+    }
+    aoe_ui_ez_shadow_area_ror(ez, 0);
+    aoe_ui_ez_set_reference_slot_ror(ez, 0x280, 0x1e0);
+    if (!TEXT_ID(u->title, net ? 0x25ce : 0x25cf, 0x14, 6, 600, 0x1e, 1, 1, 0, 0) ||
+        !TEXT_ID(u->name_label, 0x25d0, 0x1a, 0x32, 0xa0, 0x1e, 0, 0, 1, 0) ||
+        !TEXT_ID(u->civ_label, 0x25d1, 0xbd, 0x32, 0xa0, 0x1e, 0, 0, 1, 0))
+        return 1;
+    if (!single && !host &&
+        !TEXT_ID(u->settings_label, 0x25d2, 0x1a4, 0x32, 0xd2, 0x1e, 0, 0, 1, 0))
+        return 1;
+    if (!TEXT_ID(u->color_label, 0x25ae, 0xf0, 0x32, 100, 0x1e, 0, 0, 1, 0)) return 1;
+    aoe_ui_text_set_alignment_ror(u->color_label, 0, 2);
+    if (!TEXT_ID(u->team_label, 0x25af, 0x136, 0x32, 100, 0x1e, 0, 0, 1, 0)) return 1;
+    aoe_ui_text_set_alignment_ror(u->team_label, 0, 2);
+    for (i = 0; i < AOE_MP_SETUP_PLAYERS; ++i) {
+        int32_t y = 0x55 + 0x18 * i;
+        AoeUiDropdownRor *d;
+        AoeUiButtonRor *b;
+        if (!DROPDOWN(u->kind_lists[i], 0x9e, 100, 7, y - 1, 0x9e, 0x18, 0xb)) return 1;
+        d = u->kind_lists[i];
+        aoe_ui_dropdown_set_button_left_ror(d, 1);
+        aoe_ui_dropdown_set_border_ror(d, 0);
+        help(d, 0x75f9, -1);
+        aoe_ui_dropdown_clear_ror(d);
+        aoe_ui_dropdown_append_id_ror(d, 0x25d3, 4);
+        if (net) aoe_ui_dropdown_append_id_ror(d, 0x25d4, 1);
+        aoe_ui_dropdown_append_id_ror(d, net ? 0x25d5 : 0x25d6, 0);
+        if (!DROPDOWN(u->civ_lists[i], 0x80, 100, 0xaa, y - 1, 0x80, 0x18, 0xb)) return 1;
+        d = u->civ_lists[i];
+        aoe_ui_dropdown_set_button_left_ror(d, 1);
+        aoe_ui_dropdown_set_border_ror(d, 0);
+        help(d, 0x75fa, 0x25f09);
+        aoe_ui_dropdown_clear_ror(d);
+        for (k = 0; k < 12; ++k) aoe_ui_dropdown_append_id_ror(d, 0x27f7 + k, k + 1);
+        aoe_ui_dropdown_append_id_ror(d, 0x2806, 13);
+        aoe_ui_dropdown_append_id_ror(d, 0x2807, 14);
+        aoe_ui_dropdown_append_id_ror(d, 0x2809, 15);
+        aoe_ui_dropdown_append_id_ror(d, 0x2808, 16);
+        aoe_ui_dropdown_append_id_ror(d, 0x280a, 17);
+        if (!DROPDOWN(u->pos_lists[i], 0x28, 100, 0x144, y - 1, 0x28, 0x18, 0xb)) return 1;
+        d = u->pos_lists[i];
+        aoe_ui_dropdown_set_button_left_ror(d, 1);
+        aoe_ui_dropdown_set_border_ror(d, 0);
+        help(d, 0x75fb, -1);
+        if (!BUTTON(u->color_buttons[i], "", NULL, 0x136, y, 0x1e, 0x14, 0xb, 0, 1)) return 1;
+        help(u->color_buttons[i], 0x7604, -1);
+        if (!TEXT(u->texts_530[i], "", 0x131, y, 0x28, 0x16, 0xb, 1, 1, 0)) return 1;
+        if (!BUTTON_ID(u->team_buttons[i], 0x25b0, 0, 0x17c, y, 0x1e, 0x14, 0xb, 0, 1)) return 1;
+        b = u->team_buttons[i];
+        help(b, 0x7603, -1);
+        aoe_ui_button_set_cycle_ror(b, 5);
+        for (k = 1; k <= 4; ++k) {
+            char text[8];
+            snprintf(text, sizeof text, "%d", k);
+            aoe_ui_button_set_text_ror(b, (int16_t)k, text);
+            aoe_ui_button_set_id_ror(b, (int16_t)k, k + 1, 0);
+        }
+        if (!TEXT(u->texts_550[i], "", 0x177, y, 0x28, 0x16, 0xb, 1, 1, 0) ||
+            !TEXT(u->texts_490[i], "", 0x1c, y + 2, 0x8b, 0x16, 0xb, 0, 0, 0) ||
+            !TEXT(u->texts_4b0[i], "", 0xbf, y + 2, 0x6d, 0x16, 0xb, 0, 0, 0) ||
+            !TEXT(u->texts_4d0[i], "", 0x159, y + 2, 0x28, 0x16, 0xb, 0, 0, 0) ||
+            !TEXT_ID(u->ready_texts[i], 0x25df, 0x151, y + 3, 0x14, 0x16, 6, 0, 0, 0) ||
+            !TEXT(u->texts_510[i], "", 0x161, y + 3, 0x1d, 0x16, 6, 0, 0, 0))
+            return 1;
+        u->ready_texts[i]->panel.vt->set_active(&u->ready_texts[i]->panel, 0);
+    }
+    if (single || host) {
+        if (!BUTTON_ID(u->settings, 0x25d2, 0, 0x1a4, 0x32, 0xd2, 0x1e, 0, 0, 0)) return 1;
+        help(u->settings, 0x75fc, -1);
+    }
+    if (!TEXT(u->info_title, "", 0x1a4, 0x54, 0xdc, 0x44, 0xb, 0, 0, 1)) return 1;
+    for (k = 0; k < AOE_MP_SETUP_INFO_LINES; ++k)
+        if (!TEXT(u->info[k], "", 0x1a4, 0x53 + 0x18 * k, 0xdc, 0x14, 0xb, 0, 0, 0)) return 1;
+    if (net) {
+        if (!TEXT_ID(u->chat_label, 0x25d7, 10, 0x118, 100, 0x14, 4, 0, 1, 0) ||
+            !TEXT(u->chat, "", 10, 300, 400, 0x60, 10, 0, 0, 0) ||
+            !aoe_ui_ez_create_text_scrollbar_ror(ez, &u->chat_bar, u->chat, 0x14) ||
+            !aoe_ui_ez_create_edit_ror(ez, &ez->panel, &u->chat_input, "", 0xf7, 0, 10, 0x192,
+                                       400, 0x17, 10, 1, 0))
+            return 1;
+        help(u->chat_input, 0x75fe, -1);
+        ((const AoeUiTextVtblRor *)u->chat->panel.vt)->set_bevel(u->chat, 3, ez->bevel);
+        help(u->chat, 0x75fd, -1);
+        aoe_ui_text_clear_ror(u->chat);
+    }
+    if (single) {
+        if (!TEXT_ID(u->count_label, 0x25d8, 0x1a, 0x127, 0x14f, 0x14, 0, 0, 1, 0) ||
+            !DROPDOWN(u->count, 0x46, 100, 0x1f, 0x142, 0x46, 0x18, 0xb))
+            return 1;
+        help(u->count, 0x7600, -1);
+    }
+    m->field_85c = 0;
+    if (!single) {
+        if (host) {
+            if (!CHECK(u->ready, 10, 0x1b8, 0x1e, 0x1e, 0, 0) ||
+                !TEXT_ID(u->ready_label, 0x25bf, 0x2d, 0x1b8, 0x96, 0x1e, 0, 0, 1, 0))
+                return 1;
+            help(u->ready_label, 0x7602, -1);
+            if (!BUTTON(u->start, "", NULL, 0xc3, 0x1b8, 200, 0x1e, 0, 0, 0)) return 1;
+            aoe_ui_button_set_text_id_ror(u->start, 0, 0x25ee);
+            help(u->start, 0x75ff, -1);
+            aoe_ui_button_set_disabled_ror(u->start, 1);
+            if (!BUTTON_ID(u->cancel, 0xfa2, 0, 0x195, 0x1b8, 0xb4, 0x1e, 0, 0, 0)) return 1;
+            help(u->cancel, 0x7532, -1);
+            if (!BUTTON_ID(u->addresses, 0x25ef, 0, 600, 400, 0x1e, 0x1e, 0, 0, 0)) return 1;
+            help(u->addresses, 0x7601, -1);
+            OPS->send_ready(CTX, 0, 0, 0, 0, 0, 0, 0, 0); /* 0x004251c0 */
+        } else {
+            if (!CHECK(u->ready, 100, 0x1b8, 0x1e, 0x1e, 0, 0) ||
+                !TEXT_ID(u->ready_label, 0x25bf, 0x87, 0x1b8, 0x96, 0x1e, 0, 0, 1, 0))
+                return 1;
+            help(u->ready_label, 0x7602, -1);
+            if (!BUTTON_ID(u->cancel, 0xfa2, 0, 0x14a, 0x1b8, 0xf0, 0x1e, 0, 0, 0)) return 1;
+            help(u->cancel, 0x7532, -1);
+        }
+    } else {
+        if (!BUTTON(u->start, "", NULL, 0x46, 0x1b8, 0xf0, 0x1e, 0, 0, 0)) return 1;
+        aoe_ui_button_set_text_id_ror(u->start, 0, 0x25ee);
+        help(u->start, 0x75ff, -1);
+        aoe_ui_panel_set_current_ror(&ez->panel, &u->start->panel);
+        if (!BUTTON_ID(u->cancel, 0xfa2, 0, 0x14a, 0x1b8, 0xf0, 0x1e, 0, 0, 0)) return 1;
+        help(u->cancel, 0x7532, -1);
+    }
+    if (!BUTTON_ID(u->help, 0xfa9, 0, 600, 0x1b8, 0x1e, 0x1e, 0, 0, 0) ||
+        !BUTTON_ID(u->hidden, 0x3ea, 0, 0, 0, 0, 0, -1, -1, 0))
+        return 1;
+    u->hidden->panel.vt->set_active(&u->hidden->panel, 1);
+    u->hidden->panel.vt->set_position_mode(&u->hidden->panel, 9, 4, 4, 4, 4, 0x11, 0x11, 0x11,
+                                           0x11, NULL, NULL, NULL, NULL);
+    u->cancel->hotkey = 0x1b;
+    u->cancel->hotkey_shift = 0;
+    /* The state's slots for the handlers that take panels. */
+    m->panel_610 = u->chat_input;
+    m->panel_620 = u->settings;
+    m->panel_700 = u->start;
+    m->panel_70c = u->cancel;
+    m->panel_710 = u->help;
+    m->panel_714 = u->ready;
+    m->panel_718 = u->hidden;
+    m->panel_6e0 = u->count;
+    m->panel_858 = u->addresses;
+    for (i = 0; i < AOE_MP_SETUP_PLAYERS; ++i) {
+        m->color_buttons[i] = u->color_buttons[i];
+        m->team_buttons[i] = u->team_buttons[i];
+        m->kind_lists[i] = u->kind_lists[i];
+        m->civ_lists[i] = u->civ_lists[i];
+        m->pos_lists[i] = u->pos_lists[i];
+    }
+    /* 0x0048ced0, the tab order, on the panels themselves. */
+    n = 0;
+    if (single) {
+        tab[n++] = &u->start->panel;
+        tab[n++] = &u->cancel->panel;
+        tab[n++] = &u->settings->panel;
+        focus = &u->start->panel;
+    } else if (u->settings) {
+        tab[n++] = &u->chat_input->panel;
+        tab[n++] = &u->start->panel;
+        tab[n++] = &u->cancel->panel;
+        tab[n++] = &u->settings->panel;
+        focus = &u->chat_input->panel;
+    } else {
+        tab[n++] = &u->chat_input->panel;
+        tab[n++] = &u->ready->panel;
+        tab[n++] = &u->cancel->panel;
+        focus = &u->chat_input->panel;
+    }
+    aoe_ui_panels_tab_cycle_ror(tab, (int16_t)n);
+    aoe_ui_panel_set_current_ror(&ez->panel, focus);
+    /* 0x0048c010 (the summary; "$$$ CHAT SCREEN: UPDATE SUMMARY" logged
+       first) and 0x0048b640 (the rows) need their panel ops
+       (aoe_mp_setup_screen_info_ror / _rows_ror) and are not run here. */
+    if (single) aoe_mp_setup_screen_players_ror(m); /* 0x0048cfb0 */
+    OPS->send_chat(CTX, "\x03\x02\x01");            /* 0x004213e0: the bytes 3, 2, 1 */
+    /* "$$$ CHAT SCREEN: CONSTRUCTOR DONE" is the third empty log. */
+    return 1;
+}
+
+const AoeUiEzVtblRor aoe_mp_setup_ui_vtable_ror = {
+    AOE_UI_EZ_SLOTS_MDU(mu_destroy, aoe_ui_ez_draw_slot_ror, aoe_ui_panel_handle_idle_ror,
+                        aoe_ui_panel_handle_paint_ror, aoe_ui_ez_no_key_action_ror,
+                        aoe_ui_panel_zero_ror, aoe_ui_ez_action_slot_ror,
+                        aoe_ui_screen_focus_slot_ror, aoe_ui_ez_mouse_down_slot_ror,
+                        aoe_ui_panel_ignore_ror),
+    aoe_ui_ez_draw_background_slot_ror,
+    aoe_ui_ez_set_reference_slot_ror,
+};

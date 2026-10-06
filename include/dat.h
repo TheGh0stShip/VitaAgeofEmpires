@@ -9,11 +9,21 @@ typedef struct {
     size_t size;
 } DatBlob;
 
+/* Player colour record (36 file bytes; loader 0x0041cf00, one object per
+   record from the world's table 0x0051c3c0). The name (30 bytes) names
+   the palette file read into the object; then two words and two bytes. */
 typedef struct {
     char name[31];
-    uint16_t ordinal;
-    uint16_t unknown;
-    uint16_t value;
+    /* File +30 -> +0x26: the colour number, equal to the record's index
+       (the text form sets it from the index, 0x0051b9f0); the player's
+       colour 0x0045d400, the palette fill 0x004f75b0 ((n + 1) * 16). */
+    uint16_t color_id;
+    uint16_t field_22;      /* file +32 -> +0x22: no reader */
+    /* File +34 -> +0x25: the diamond map's colour byte (0x0042d710,
+       0x00431470); file +35 -> +0x24: a player may be given this colour
+       (0x0051d060 / 0x0051d1a0 take the next free one with 1). */
+    uint8_t minimap_color;
+    uint8_t selectable;
 } DatColorRecord;
 
 typedef struct {
@@ -61,10 +71,12 @@ typedef struct {
     int16_t graphic_id;
     const struct DatGraphic *graphic; /* resolved after the full table loads */
     uint32_t pointer_placeholder;
-    int16_t offset_x;
+    int16_t offset_x;       /* +0x08, +0x0a: added to the draw point (0x004a5a50) */
     int16_t offset_y;
+    /* +0x0c: the walks 0x004a5a50 / 0x004a5b50 draw the delta only for this
+       angle (-1 for all); +0x0e has no reader. */
     int16_t display_angle;
-    int16_t unknown;
+    int16_t field_0e;
 } DatGraphicDelta;
 
 typedef struct {
@@ -80,7 +92,11 @@ typedef struct DatGraphic {
     int32_t slp_id;
     uint8_t layer;           /* +0x29 */
     int16_t player_color;    /* +0x2a */
-    int16_t coordinates[4];
+    /* +0x2e..+0x34 (record bytes 46..53): an explicit screen box about the
+       draw point, x0 y0 x1 y1; the bounds 0x004a5d60 return it unless a pair
+       is zero, and the draw 0x004a55e0 hands it to the deferred part's rect
+       (0x00516390). */
+    int16_t box[4];
     int16_t sound_id;
     uint16_t frame_count;
     uint16_t angle_count;

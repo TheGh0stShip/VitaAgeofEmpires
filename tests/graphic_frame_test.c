@@ -116,7 +116,7 @@ static void hit_tests(void) {
     DatGraphic part = {.present = 1, .angle_count = 16, .layer = 20};
     DatGraphicDelta deltas[2] = {{.graphic = &part, .offset_x = 10, .offset_y = 4, .display_angle = -1},
                                  {.graphic = &part, .offset_x = 1, .offset_y = 1, .display_angle = 3}};
-    DatGraphic g = {.present = 1, .angle_count = 8, .coordinates = {-5, -20, 5, 0}};
+    DatGraphic g = {.present = 1, .angle_count = 8, .box = {-5, -20, 5, 0}};
     PixCtx p = {.hit_x = 1000};
     /* box: inclusive, no pixel test */
     assert(aoe_graphic_hit_test_ror(&g, 5, 0, 2, 1, pix, &p) == 1 && p.calls == 0);
@@ -178,11 +178,11 @@ static void graphic_bounds(void) {
     DatGraphic g = {.present = 1, .frame_count = 1, .angle_count = 8};
     int16_t x0 = 9, y0 = 9, x1 = 9, y1 = 9;
     /* own box wins */
-    g.coordinates[0] = -1; g.coordinates[1] = -2; g.coordinates[2] = 3; g.coordinates[3] = 4;
+    g.box[0] = -1; g.box[1] = -2; g.box[2] = 3; g.box[3] = 4;
     assert(aoe_graphic_bounds_ror(&g, 0, 0, fb, NULL, &x0, &y0, &x1, &y1));
     assert(x0 == -1 && y0 == -2 && x1 == 3 && y1 == 4);
     /* empty box: grown from 0 by the delta at its offset, angle 4 -> 2 */
-    g.coordinates[2] = 0; g.coordinates[0] = 0;
+    g.box[2] = 0; g.box[0] = 0;
     g.delta_count = 1; g.deltas = &d;
     /* selection mode 0 skips every delta (0x004a5d60 +0x2c gate) */
     assert(!aoe_graphic_bounds_ror(&g, 4, 0, fb, NULL, &x0, &y0, &x1, &y1));
@@ -283,7 +283,7 @@ static void slp_tests(void) {
     /* an owning graphic without a shape: 0 even with a coordinate box */
     {
         DatGraphic h = {.present = 1, .frame_count = 1, .angle_count = 1,
-                        .coordinates = {-1, -1, 1, 1}};
+                        .box = {-1, -1, 1, 1}};
         assert(!aoe_graphic_bounds_slp_ror(&h, 0, 0, &ops, &x0, &y0, &x1, &y1));
         assert(!slots[1].loaded);
     }

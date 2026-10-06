@@ -861,7 +861,7 @@ static uint8_t mm_player_color(void *c, const void *player) {
     uint8_t k;
     if (i < 0) return 0;
     k = d->resolver.colors[i];
-    return k < d->intro.color_count ? (uint8_t)(d->intro.colors[k].value & 0xff) : 0;
+    return k < d->intro.color_count ? d->intro.colors[k].minimap_color : 0;
 }
 static void mm_center(void *c, const void *player, float *x, float *y) {
     (void)player;

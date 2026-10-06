@@ -181,7 +181,16 @@ static int build(AoeInflateRor *z, Code *c) {
 static uint32_t decode(AoeInflateRor *z, const Code *c) {
     int32_t entry = c->table[z->bits & 0xff];
     if (entry >= 0) {
-        drop(z, (int)(c->lengths[entry >> 2] & 0xff));
+        /* A complete code puts only lengths of at most 8 in the table; a
+           one-symbol code of 9..15 bits leaves empty slots that decode as
+           symbol 0 (above), so its length is consumed as `take` would,
+           keeping drop's shift counts in range. */
+        int n = (int)(c->lengths[entry >> 2] & 0xff);
+        if (n > 8) {
+            drop8(z);
+            n -= 8;
+        }
+        drop(z, n);
         return (uint32_t)entry >> 2;
     }
     drop8(z);
@@ -452,7 +461,7 @@ int aoe_inflate_buffer_ror(const uint8_t *src, size_t size, size_t max_size, uin
     do {
         uint32_t in_len = (uint32_t)(size - consumed), out_len;
         if (produced == capacity) {
-            size_t next = capacity ? capacity * 2 : 0x10000;
+            size_t next = capacity ? (capacity > max_size / 2 ? max_size : capacity * 2) : 0x10000;
             uint8_t *grown;
             if (capacity >= max_size) break;
             if (next > max_size) next = max_size;

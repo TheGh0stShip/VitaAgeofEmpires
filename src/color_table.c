@@ -73,7 +73,7 @@ int aoe_color_table_set_load_directory(const DatIntro *intro,
     if (!next) return 0;
     next->count = intro->color_count;
     for (uint16_t i = 0; i < intro->color_count; ++i) {
-        uint16_t ordinal = intro->colors[i].ordinal;
+        uint16_t ordinal = intro->colors[i].color_id;
         const char *name = intro->colors[i].name;
         char path[1024];
         int written;

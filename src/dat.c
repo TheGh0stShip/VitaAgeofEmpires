@@ -92,7 +92,9 @@ int dat_parse_intro(const DatBlob *blob, DatIntro *intro) {
     if (!intro->restriction_count || intro->restriction_count > 64 ||
         !intro->terrain_count || intro->terrain_count > 256) return 0;
     values = (size_t)intro->restriction_count * intro->terrain_count;
-    /* This release stores one 32-bit pointer placeholder per table. */
+    /* One 32-bit word per table: the loader 0x0051c320 reads a row's
+       floats only when its word is nonzero; the installed file has every
+       row present, and this reader assumes so. */
     offset = 12 + (size_t)intro->restriction_count * 4;
     if (offset > blob->size || values > (blob->size - offset) / 4) return 0;
     intro->terrain_restrictions = malloc(values * sizeof(float));
@@ -115,10 +117,11 @@ int dat_parse_intro(const DatBlob *blob, DatIntro *intro) {
         memcpy(color->name, item, 30);
         color->name[30] = 0;
         if (!memchr(color->name, 0, 30)) goto fail;
-        color->ordinal = le16(item + 30);
-        color->unknown = le16(item + 32);
-        color->value = le16(item + 34);
-        if (color->ordinal != i) goto fail;
+        color->color_id = le16(item + 30);
+        color->field_22 = le16(item + 32);
+        color->minimap_color = item[34];
+        color->selectable = item[35];
+        if (color->color_id != i) goto fail;
     }
     intro->next_offset = offset + (size_t)intro->color_count * 36;
     return 1;
@@ -234,7 +237,7 @@ int dat_parse_graphics(const DatBlob *blob, const DatSounds *sounds,
         graphic->slp_loadable = item[38];
         graphic->selection_mode = item[43];
         for (unsigned j = 0; j < 4; ++j)
-            graphic->coordinates[j] = (int16_t)le16(item + 44 + j * 2);
+            graphic->box[j] = (int16_t)le16(item + 44 + j * 2);
         graphic->delta_count = le16(item + 52);
         graphic->sound_id = (int16_t)le16(item + 54);
         uint8_t attack_sound_used = item[56];
@@ -260,7 +263,7 @@ int dat_parse_graphics(const DatBlob *blob, const DatSounds *sounds,
                 out->offset_x = (int16_t)le16(delta + 8);
                 out->offset_y = (int16_t)le16(delta + 10);
                 out->display_angle = (int16_t)le16(delta + 12);
-                out->unknown = (int16_t)le16(delta + 14);
+                out->field_0e = (int16_t)le16(delta + 14);
                 offset += 16;
             }
         }

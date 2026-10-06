@@ -117,8 +117,8 @@ int main(int argc, char **argv) {
     printf("terrain restrictions: %u x %u\ncolor records: %u\n",
            intro.restriction_count, intro.terrain_count, intro.color_count);
     for (uint16_t i = 0; i < intro.color_count; ++i)
-        printf("color %u: %s (value %u)\n", intro.colors[i].ordinal,
-               intro.colors[i].name, intro.colors[i].value);
+        printf("color %u: %s (minimap %u, selectable %u)\n", intro.colors[i].color_id,
+               intro.colors[i].name, intro.colors[i].minimap_color, intro.colors[i].selectable);
     printf("next section offset: 0x%zx\n", intro.next_offset);
     if (!dat_parse_sounds(&blob, &intro, &sounds)) {
         fprintf(stderr, "cannot parse sound table\n");

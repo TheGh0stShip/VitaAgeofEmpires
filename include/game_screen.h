@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-/* Patched Rise of Rome 1.0a game screen (vtable 0x005468cc; methods in
+/* Patched Rise of Rome 1.0a game screen (vtable 0x0054679c; methods in
    0x00480620..0x00485b90): the message lines, the age title, the command
    buttons, the timer panels, and the hotkey handlers that act on the
    viewed player. The child panels are opaque handles and their virtual

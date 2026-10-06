@@ -295,6 +295,36 @@ Next:
      step. What orders artifacts in a game is unconfirmed.
    Then: the active player's view-code refresh and the type-50 visibility
    spotting.
+   **Compressed streams and DAT field names (2026-10-06).** Against
+   patched RoR 1.0a:
+   - **Decoder.** "Translate the executable's stream decoder; drop zlib
+     from reading": the game's own raw-deflate decoder `0x00525b0b`
+     (hand-written assembly, tables at `0x00525060`), reached only from
+     the stream read `0x0046b800`, is `src/inflate.c`, with the same
+     states, bit reader, 32 KB window and results. The DAT loader, the
+     scenario body reader and the player file use it.
+   - **Encoder.** "Translate the executable's stream encoder; remove zlib
+     from the build": the encoder `0x005223e0`, as the stream write
+     `0x0046ba40` configures it (75, 2, 1, a 64 KB output buffer), is
+     `src/deflate_writer.c`. It reproduces the installed DAT and all 20
+     campaign scenario bodies byte for byte
+     (`ror_original_deflate_roundtrip_real`). zlib is no longer linked
+     anywhere; the Vita ABI gate checks only the compiler probe.
+   - **DAT fields.** "DAT fields: names from the executable's use, offsets
+     cited" and "DAT fields: the effect command, tech and sound records
+     from their uses": every field in `include/dat.h` is named from its
+     translated reader, with the offset and function in the header, or
+     carries a neutral offset name (`field_2c`, `sound_164`, ...) when
+     nothing translated reads it. `docs/PROVENANCE.md` open item 1 lists
+     them.
+   **Screens (2026-10-06).** In progress: the MP Setup Screen's panel
+   constructor `0x00487f40` as `aoe_mp_setup_ui_init_ror`
+   (`include/game_ui.h`: `AoeMpSetupUiRor` over the state and methods of
+   `mp_setup_screen.h`; test `original_mp_setup_screen_constructor`). The
+   translation audit had it only partly translated (its state and
+   non-panel methods). Next: the Load Saved Game Screen's constructor
+   `0x00485c90` (`include/load_game_screen.h` has its list fill, teardown
+   and actions; the panels still go through ops).
 2. Replace placeholder bindings (diplomacy, zones, sounds, victory
    conditions, player +0x30 lists).
 3. The remaining action classes.
@@ -916,7 +946,9 @@ real scenario placements to the live factory/registration chain.
 
 Current reconstruction: portable DRS/SLP/palette readers, `Empires.dat`
 decompression plus terrain restriction/color/sound/graphic/terrain tables,
-and a portable `1.11` scenario header/decompressor/map/unit reader. `scn_tool`
+and a portable `1.11` scenario header/decompressor/map/unit reader (since
+2026-10-06 both decompress through the executable's own decoder
+`0x00525b0b`, `src/inflate.c`, not zlib). `scn_tool`
 follows the original `1.15` player-data layout in all 24 installed scenarios and
 rendered a terrain-color PPM inspection image. Its terrain palette selection
 now follows the original shape-color dispatch in both executables; it is not

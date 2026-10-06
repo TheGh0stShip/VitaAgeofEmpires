@@ -6,6 +6,7 @@
 #include "game_base.h"
 #include "campaign_progress.h"
 #include "game_settings.h"
+#include "mp_setup_screen.h"
 #include "ui_dialog.h"
 #include "ui_ez.h"
 #include "ui_picture.h"
@@ -543,6 +544,84 @@ extern const AoeUiEzVtblRor aoe_join_screen_vtable_ror;
 int aoe_join_screen_init_ror(AoeJoinScreenRor *j, AoeGameUiRor *ui, AoeUiAreaRor *area);
 /* 0x0047ba60 */
 void aoe_join_screen_refresh_ror(AoeJoinScreenRor *j);
+
+/* The "MP Setup Screen" (vtable 0x00546d7c) as panels: its constructor
+   0x00487f40 over the state and methods of mp_setup_screen.h. In the
+   constructor's order: the base screen named, the settings reset
+   (0x00488c40), the chat log dropped (0x0041ca10) and players 1..8 made
+   chat recipients (0x0041ca50); 640 x 480 on "scr3" 50053 in multiplayer
+   (+0x97e) else "scr2" 50052, shadow 0; the title (9678 multiplayer,
+   9679), the name (9680) and civilisation (9681) column labels, the
+   settings label (9682; neither +0x97d nor hosting), the colour (9646) and
+   team (9647) labels, right-aligned (0x004f7cf0); eight rows 24 apart
+   from y 85 (the lists a pixel above the row, the row texts two and
+   three below it): the kind list (width 158 at x 7: 9683 -> 4, in multiplayer
+   9684 -> 1, then 9685 / 9686 -> 0), the civilisation list (128 at 170:
+   10231..10242 -> 1..12, 10246 -> 13, 10247 -> 14, 10249 -> 15, 10248 ->
+   16, 10250 -> 17) and the position list (40 at 324), each with its
+   button on the left and no border; the colour button (30 x 20 at 310,
+   command 1) with a text behind it, the team button (9648, at 380) cycling
+   five states ("1".."4" with IDs 2..5) with its text, three row texts,
+   the ready text (9695, font 6, inactive) and one more; the settings
+   button (9682 at 420, 50; +0x97d or hosting), the summary title (at 420,
+   84; 220 x 68) and 20 lines (at 420, from y 83, 24 apart); in multiplayer the chat label (9687), the
+   chat text (400 x 96 at 10, 300, font 10) with its scrollbar, bevel 3
+   and the input (247 characters, at 10, 402); in single player the player
+   count label (9688) and list (at 31, 322); then the bottom row at y 440:
+   hosting, the ready check (at 10) and text (9663), Start (9710, disabled
+   until everyone is ready), Cancel (4002 at 405) and the addresses button
+   (9711 at 600, 400), and the ready message (0x004251c0) with zeros; a
+   guest the check (at 100), its text, and Cancel (at 330); single player
+   Start (9710 at 70, focused) and Cancel (at 330); Help (4009 at 600) and
+   the hidden 1002 button (active, position mode 9); Cancel's hotkey is
+   Escape. Then the tab order (0x0048ced0), the summary refresh
+   (0x0048c010) and, single player, the players (0x0048cfb0) and rows
+   (0x0048b640), and the chat marker 3, 2, 1 sent (0x004213e0).
+
+   The state's game and comm ops are the caller's; the two panel
+   refreshes (aoe_mp_setup_screen_info_ror / _rows_ror) need their own
+   ops and are not run here. The idle, action and user slots are the base
+   ones until the translated handlers are bound to these panels. */
+enum { AOE_MP_SETUP_INFO_LINES = 20 };
+
+typedef struct {
+    AoeUiEzRor ez;
+    AoeMpSetupScreenRor state;
+    AoeUiTextRor *title;                        /* +0x478 */
+    AoeUiTextRor *name_label, *civ_label;       /* +0x47c, +0x480 */
+    AoeUiTextRor *settings_label;               /* +0x484 */
+    AoeUiTextRor *color_label, *team_label;     /* +0x488, +0x48c */
+    /* Row texts filled by the rows refresh 0x0048b640. */
+    AoeUiTextRor *texts_490[AOE_MP_SETUP_PLAYERS], *texts_4b0[AOE_MP_SETUP_PLAYERS];
+    AoeUiTextRor *texts_4d0[AOE_MP_SETUP_PLAYERS], *ready_texts[AOE_MP_SETUP_PLAYERS]; /* +0x4f0 */
+    AoeUiTextRor *texts_510[AOE_MP_SETUP_PLAYERS];
+    AoeUiTextRor *texts_530[AOE_MP_SETUP_PLAYERS], *texts_550[AOE_MP_SETUP_PLAYERS];
+    AoeUiButtonRor *color_buttons[AOE_MP_SETUP_PLAYERS]; /* +0x570 */
+    AoeUiButtonRor *team_buttons[AOE_MP_SETUP_PLAYERS];  /* +0x590 */
+    AoeUiDropdownRor *kind_lists[AOE_MP_SETUP_PLAYERS];  /* +0x5b0 */
+    AoeUiDropdownRor *civ_lists[AOE_MP_SETUP_PLAYERS];   /* +0x5d0 */
+    AoeUiDropdownRor *pos_lists[AOE_MP_SETUP_PLAYERS];   /* +0x5f0 */
+    AoeUiEditRor *chat_input;                   /* +0x610 */
+    AoeUiTextRor *chat_label, *chat;            /* +0x614, +0x618 */
+    AoeUiScrollbarRor *chat_bar;                /* +0x61c */
+    AoeUiButtonRor *settings;                   /* +0x620 */
+    AoeUiTextRor *info_title;                   /* +0x624 */
+    AoeUiTextRor *info[AOE_MP_SETUP_INFO_LINES]; /* +0x62c.. */
+    AoeUiTextRor *count_label;                  /* +0x6dc */
+    AoeUiDropdownRor *count;                    /* +0x6e0 */
+    AoeUiButtonRor *start, *cancel, *help;      /* +0x700, +0x70c, +0x710 */
+    AoeUiButtonRor *ready, *hidden;             /* +0x714, +0x718 */
+    AoeUiTextRor *ready_label;                  /* +0x71c */
+    AoeUiButtonRor *addresses;                  /* +0x858 */
+    AoeGameUiRor *ui;
+} AoeMpSetupUiRor;
+
+extern const AoeUiEzVtblRor aoe_mp_setup_ui_vtable_ror;
+
+/* 0x00487f40 with the state's ops (required). 0 when the screen could
+   not be set up (+0xd8 set), else 1, even when a panel failed. */
+int aoe_mp_setup_ui_init_ror(AoeMpSetupUiRor *u, AoeGameUiRor *ui, AoeUiAreaRor *area,
+                             const AoeMpSetupScreenOpsRor *ops);
 
 /* The "Create Dialog" over the join screen (vtable 0x00546334,
    0x0047beb0..0x0047c510): 500 x 230, a title (9638), a label (9642),

@@ -129,7 +129,7 @@ static void draw_slots(void) {
     assert(drawn_frame == 2);
     {
         int16_t x0, y0, x1, y1;
-        g.coordinates[0] = -1; g.coordinates[1] = -1; g.coordinates[2] = 1; g.coordinates[3] = 1;
+        g.box[0] = -1; g.box[1] = -1; g.box[2] = 1; g.box[3] = 1;
         assert(aoe_sprite_instance_bounds_ror(&s, 0, NULL, NULL, &x0, &y0, &x1, &y1));
         assert(x0 == -1 && y1 == 1);
     }

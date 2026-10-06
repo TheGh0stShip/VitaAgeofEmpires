@@ -13,10 +13,13 @@ enum {
     CL = 0x13,
     MAX_SYMBOLS = 0x3000,
     OUT_SIZE = 0x10000,
-    CHAIN_LIMIT = 75, /* 0x0046ba40's argument */
-    OPEN = 0x12345678,
-    DONE = 0xabcd1234
+    CHAIN_LIMIT = 75 /* 0x0046ba40's argument */
 };
+
+/* The state magics (+0x38178): kept out of the enum so its size
+   constants stay int. */
+#define OPEN 0x12345678u
+#define DONE 0xabcd1234u
 
 /* The scratch the code builders keep in globals (0x007d24b0..0x007d3370). */
 typedef struct {
@@ -264,10 +267,10 @@ static void fixed_code(AoeDeflateWriterRor *w) {
     for (i = 0; i < 0x90; ++i) w->lit_len[i] = 8;
     for (; i < 0x100; ++i) w->lit_len[i] = 9;
     for (; i < 0x118; ++i) w->lit_len[i] = 7;
-    for (; i < (int32_t)LIT; ++i) w->lit_len[i] = 8;
+    for (; i < LIT; ++i) w->lit_len[i] = 8;
     sort_lengths(&w->h, LIT, w->lit_len);
     assign_codes(&w->h, LIT, w->lit_len, 15, w->lit_code);
-    for (i = 0; i < (int32_t)DIST; ++i) w->dist_len[i] = 5;
+    for (i = 0; i < DIST; ++i) w->dist_len[i] = 5;
     sort_lengths(&w->h, DIST, w->dist_len);
     assign_codes(&w->h, DIST, w->dist_len, 15, w->dist_code);
 }
@@ -648,8 +651,10 @@ static void hook(AoeDeflateWriterRor *w, uint32_t from, int32_t n) {
 /* 0x00524dc0: input into the step; 1 while the step is not full. */
 static int take_input(AoeDeflateWriterRor *w) {
     int32_t n = w->in_left < w->room ? w->in_left : w->room;
-    if (n) memcpy(w->window + w->fill, w->in, (size_t)n);
-    w->in += n;
+    if (n) {
+        memcpy(w->window + w->fill, w->in, (size_t)n);
+        w->in += n;
+    }
     w->in_left -= n;
     w->fill = (w->fill + (uint32_t)n) & 0x7fff;
     w->room -= n;

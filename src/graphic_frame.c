@@ -88,7 +88,7 @@ int aoe_graphic_hit_test_ror(const DatGraphic *graphic, int32_t x, int32_t y,
     const int16_t *c;
     uint16_t i;
     if (!graphic || !pixel) return 0;
-    c = graphic->coordinates;
+    c = graphic->box;
     if ((c[0] != 0 || c[2] != 0) && (c[1] != 0 || c[3] != 0) &&
         c[0] <= x && x <= c[2] && c[1] <= y && y <= c[3])
         return 1;
@@ -209,7 +209,7 @@ int aoe_graphic_bounds_ror(const DatGraphic *graphic, int32_t angle,
     const int16_t *c;
     uint16_t i;
     if (!graphic || !x0 || !y0 || !x1 || !y1) return 0;
-    c = graphic->coordinates;
+    c = graphic->box;
     if ((c[0] != 0 || c[2] != 0) && (c[1] != 0 || c[3] != 0)) {
         *x0 = c[0]; *y0 = c[1]; *x1 = c[2]; *y1 = c[3];
         return 1;

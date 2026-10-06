@@ -174,6 +174,10 @@ typedef struct {
     const char *(*panel_name)(void *context, void *panel);
     void (*delete_panel)(void *context, void *panel);
     int (*base_action)(void *context, void *panel, int32_t action, int32_t a, int32_t b);
+    /* The constructor's chat setup: the chat log dropped (0x0041ca10) and
+       a player made a recipient (0x0041ca50(player, 1)). */
+    void (*chat_drop)(void *context);
+    void (*chat_recipient)(void *context, int32_t player);
 } AoeMpSetupScreenOpsRor;
 
 typedef struct {

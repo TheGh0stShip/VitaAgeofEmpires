@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
     synthetic();
     {
         DatColorRecord records[2] = {
-            {.ordinal = 0}, {.ordinal = 1}
+            {.color_id = 0}, {.color_id = 1}
         };
         DatIntro intro = {.color_count = 2, .colors = records};
         AoeColorTableSet set;
@@ -50,7 +50,7 @@ int main(int argc, char **argv) {
     {
         const char *directory = getenv("AOE_COLOR_DIR");
         if (directory) {
-            DatColorRecord record = {.ordinal = 0};
+            DatColorRecord record = {.color_id = 0};
             DatIntro intro = {.color_count = 1, .colors = &record};
             AoeColorTableSet set;
             memcpy(record.name, "shadow.col", 11);

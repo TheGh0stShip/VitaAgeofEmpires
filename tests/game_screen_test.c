@@ -356,6 +356,43 @@ static void lifecycle_tests(void) {
     assert(pal_count == 0 && base_idles == 3);
 }
 
+
+static int keys_down[256]; static void *cur_child; static int asked_close, backs; static uint32_t base_msg;
+static int gkey(void *c, int32_t vk) { (void)c; return keys_down[vk & 255]; }
+static void *gcur(void *c) { (void)c; return cur_child; }
+static void gask(void *c) { (void)c; ++asked_close; }
+static void gback(void *c) { (void)c; ++backs; }
+static int32_t gbase_msg(void *c, uint32_t m, uint32_t w, uint32_t l) { (void)c; (void)w; (void)l; base_msg = m; return 7; }
+
+static void message_tests(void) {
+    AoeGameScreenRor s;
+    AoeGameScreenOpsRor o = ops;
+    int32_t quit = 0;
+    o.key_down = gkey; o.current_child = gcur; o.ask_close = gask; o.view_back = gback;
+    o.base_message = gbase_msg; o.game_state = gstate2;
+    setup(&s);
+    s.ops = &o;
+    s.field_78 = 1;
+    /* 'Y' with Alt opens the menu only while the view is current. */
+    cur_child = (void *)2;
+    assert(aoe_game_screen_message_ror(&s, 0x104, 0x79, 0, &quit, 0) == 7 && base_msg == 0x104);
+    cur_child = s.view;
+    assert(aoe_game_screen_message_ror(&s, 0x104, 0x79, 0, &quit, 0) == 1);
+    /* F3 pauses unless a modifier is held or the view lacks focus. */
+    vfocus = 1;
+    aoe_game_screen_message_ror(&s, 0x101, 0x72, 0, &quit, 0);
+    assert(base_msg == 0x101);
+    /* WM_CLOSE asks once in states 4..7 and not iconic. */
+    idle_state = 5;
+    assert(aoe_game_screen_message_ror(&s, 0x10, 0, 0, &quit, 0) == 1 && quit == 1 && asked_close == 1);
+    assert(aoe_game_screen_message_ror(&s, 0x10, 0, 0, &quit, 0) == 7 && asked_close == 1);
+    quit = 0;
+    assert(aoe_game_screen_message_ror(&s, 0x10, 0, 0, &quit, 1) == 7 && quit == 1 && asked_close == 1);
+    quit = 0; idle_state = 2;
+    assert(aoe_game_screen_message_ror(&s, 0x10, 0, 0, &quit, 0) == 7 && quit == 1);
+    /* Middle button up steps the view back. */
+    assert(aoe_game_screen_message_ror(&s, 0x208, 0, 0, &quit, 0) == 7 && backs == 1);
+}
 int main(void) {
     AoeGameScreenRor s;
     AoeGameScreenButtonRor b;
@@ -722,5 +759,6 @@ int main(void) {
     assert(map_flag == 0 && help_y == 4 && f.active[56] == 0);
     is_net = 0;
     lifecycle_tests();
+    message_tests();
     return 0;
 }

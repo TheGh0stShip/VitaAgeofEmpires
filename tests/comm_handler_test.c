@@ -96,6 +96,56 @@ static void enable_new_players_tests(void) {
     assert(aoe_comm_enable_new_players_ror(&iface, 0, &o) == (int32_t)0x80004002u && en_arg == 1);
 }
 
+
+static int32_t oc_hr; static uint32_t oc_players; static char oc_label[64]; static int chat_cleared, posted;
+static int lob_ok = 1, lob_has = 1, lob_named = 1, lob_host = 1;
+static int32_t d_open_create(void *c, const uint32_t g[4], uint32_t n, const char *label) {
+    (void)c; (void)g; oc_players = n; snprintf(oc_label, sizeof oc_label, "%s", label); return oc_hr;
+}
+static void d_chat_clear(void *c) { (void)c; ++chat_cleared; }
+static void d_post_error(void *c, uint32_t code) { (void)c; posted = (int)code; }
+static int d_lobby_connect(void *c, int *has) { (void)c; *has = lob_has; return lob_ok; }
+static int d_lobby_name(void *c, char *o, int n) { (void)c; snprintf(o, (size_t)n, "Lobby"); return lob_named; }
+static const char *d_lobby_ptr(void *c) { (void)c; return "LobbyName"; }
+static int d_lobby_host(void *c) { (void)c; return lob_host; }
+
+static void session_tests(void) {
+    static AoeCommRor c;
+    AoeCommDpOpsRor d = dops;
+    d.open_create = d_open_create; d.chat_clear = d_chat_clear; d.post_error = d_post_error;
+    d.lobby_connect = d_lobby_connect; d.lobby_player_name = d_lobby_name;
+    d.lobby_name_pointer = d_lobby_ptr; d.lobby_hosting = d_lobby_host;
+    memset(&c, 0, sizeof c);
+    c.ops = &ops;
+    c.count = 4;
+    snprintf(c.label, sizeof c.label, "me [x]");
+    oc_hr = 0;
+    assert(aoe_comm_create_session_ror(&c, &d, 123) == 1);
+    assert(c.multiplayer == 1 && c.lead == 2 && c.turn == 4 && c.field_155c == 4 &&
+           chat_cleared == 1 && c.is_host == 1 && oc_players == 4 &&
+           strcmp(oc_label, "me [x]") == 0 && c.self == 1 && c.field_1714 == 1 &&
+           c.player_state[1] == 2 && c.field_20 == 1 && c.state == 3 && c.field_14e4 == 0x7d1);
+    oc_hr = (int32_t)0x887700aa;
+    memset(&c, 0, sizeof c); c.ops = &ops;
+    assert(aoe_comm_create_session_ror(&c, &d, 1) == 0 && posted == 0x17ae && c.state != 1);
+    oc_hr = (int32_t)0x80004005;
+    memset(&c, 0, sizeof c); c.ops = &ops;
+    assert(aoe_comm_create_session_ror(&c, &d, 1) == 0 && c.state == 1);
+    /* The lobby join: hosting makes slot 1 ours; no name fails (0). */
+    memset(&c, 0, sizeof c); c.ops = &ops;
+    assert(aoe_comm_join_lobby_ror(&c, &d, 5) == 1 && c.lobby_joined == 1 && c.multiplayer == 1 &&
+           c.state == 3 && c.is_host == 1 && c.self == 1 && c.player_state[1] == 2 &&
+           c.field_14e4 == 0x7d1 && strcmp(c.name, "LobbyName") == 0);
+    lob_host = 0; lob_named = 0;
+    memset(&c, 0, sizeof c); c.ops = &ops;
+    assert(aoe_comm_join_lobby_ror(&c, &d, 5) == 0 && c.lobby_joined == 0 && c.is_host == 0 &&
+           c.state == 3 && c.multiplayer == 1);
+    lob_has = 0;
+    memset(&c, 0, sizeof c); c.ops = &ops;
+    assert(aoe_comm_join_lobby_ror(&c, &d, 5) == 0 && c.multiplayer == 0);
+    lob_ok = 0;
+    assert(aoe_comm_join_lobby_ror(&c, &d, 5) == 0);
+}
 int main(void) {
     enable_new_players_tests();
     static AoeCommRor c;
@@ -343,5 +393,6 @@ int main(void) {
         c.ops = &ops;
     }
     puts("comm_handler_test: ok");
+    session_tests();
     return 0;
 }

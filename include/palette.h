@@ -32,4 +32,18 @@ enum {
 void palette_water_cycle_apply(Palette *palette, int start);
 int palette_water_cycle_next(int start);
 
+
+/* 0x0042f6a0: the game palette installed over the system palette. The
+   system's 256 entries are read (GetSystemPaletteEntries) and the game
+   palette's (GetPaletteEntries); entries 10..245 of the result take the
+   game colours with PC_RESERVED (flag 1). When either read failed, the
+   Windows static colours (indexes 0..9 and 246..255: black, maroon,
+   green, olive, navy, purple, teal, silver, 0xc0dcc0, 0xf0caa6, 0xf0fbff,
+   0xa4a0a0, grey, red, lime, yellow, blue, fuchsia, aqua, white) are
+   written with flag 0. The palette is resized to 256 and every entry
+   set (ResizePalette, SetPaletteEntries). `system` and `game` are RGBA
+   quads; the result goes to `out`. */
+void palette_install_system_ror(const uint8_t system[256][4], const uint8_t game[256][4],
+                                int got_system, int got_game, uint8_t out[256][4]);
+
 #endif

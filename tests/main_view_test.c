@@ -1006,6 +1006,27 @@ static void test_place_click(void) {
     assert(aoe_main_view_place_click_ror(&o, 3, 4, 1) == 0);
 }
 
+
+static AoeViewClassNodeRor cn_nodes[4] = {{10, 0, 1, 5, 5}, {11, 0, 2, 7, 5}, {12, 0, 1, 20, 20}, {13, 0, 9, 5, 6}};
+static AoeViewClassListRor cn_list = {cn_nodes, 4};
+static const AoeViewClassListRor *cn_get(void *c, int32_t player, int32_t cls) { (void)c; return player == 1 && cls == 3 ? &cn_list : NULL; }
+static uint8_t cn_dist[16][16];
+
+static void test_collect_nearby(void)
+{
+    AoeViewClassListsRor l = {NULL, 2, cn_dist, cn_get};
+    static AoeViewNearbyRor out;
+    uint8_t kinds[256];
+    int32_t classes[2] = {3, 4}, dx, dy;
+    for (dy = 0; dy < 16; ++dy) for (dx = 0; dx < 16; ++dx) cn_dist[dy][dx] = (uint8_t)(dx > dy ? dx : dy);
+    memset(kinds, 0, sizeof kinds); kinds[1] = 0; kinds[2] = 4; kinds[9] = 7; /* 7: no bucket */
+    assert(aoe_view_collect_nearby_ror(&l, 5, 5, 3, 1, classes, 2, kinds, &out) == 2);
+    assert(out.count[0] == 1 && out.entry[0][0].object == 10 && out.entry[0][0].byte_4 == 0 &&
+           out.count[4] == 1 && out.entry[4][0].object == 11 && out.entry[4][0].byte_4 == 2);
+    assert(aoe_view_collect_nearby_ror(&l, 5, 5, 1, 1, classes, 2, kinds, &out) == 1 && out.count[4] == 0);
+    assert(aoe_view_collect_nearby_ror(&l, 5, 5, 3, 2, classes, 2, kinds, &out) == 0);
+    assert(aoe_view_collect_nearby_ror(&l, 5, 5, 3, 1, classes, 0, kinds, &out) == 0);
+}
 int main(void)
 {
     AoeMainViewRor v;
@@ -1188,5 +1209,6 @@ int main(void)
     test_place_click();
     test_c3l_tile_object();
     puts("main_view_test: ok");
+    test_collect_nearby();
     return 0;
 }

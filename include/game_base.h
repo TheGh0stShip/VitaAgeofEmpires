@@ -198,4 +198,12 @@ void aoe_game_cursor_software_ror(AoeGameBaseRor *game, int32_t on,
 void aoe_game_cursor_set_ror(AoeGameBaseRor *game, uintptr_t cursor,
                              const AoeGameBaseOps *ops);
 
+
+/* 0x0041656c is not a function: Ghidra splits the game constructor's
+   field-reset loop (the 0x1e-iteration clear of the 32-byte records from
+   +0x528 onwards, then +0x8e8..+0x8f0, +0x9ac..+0xa20 and the 0x00418620
+   / 0x004186d0 / 0x004166b0 initialisers that follow) at a loop body
+   entered from 0x0041657f. It belongs to the constructor that owns the
+   fields above. */
+
 #endif

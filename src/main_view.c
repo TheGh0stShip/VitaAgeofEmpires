@@ -1429,3 +1429,36 @@ int aoe_main_view_place_click_ror(const AoeMainViewPlaceOpsRor *ops, int32_t x, 
     if (ack || ops->template_id == 0x6d) ops->game_10(ops->context);
     return ops->build(ops->context, ops->template_id, point[0], point[1]) != 0;
 }
+
+int32_t aoe_view_collect_nearby_ror(const AoeViewClassListsRor *l, int32_t cx, int32_t cy,
+                                    int32_t radius, int32_t player, const int32_t *classes,
+                                    int32_t class_count, const uint8_t kind_bucket[256],
+                                    AoeViewNearbyRor *out) {
+    int32_t added = 0, i;
+    if (!l || !out || class_count < 1 || player >= l->player_count) return 0;
+    if (radius > 15) radius = 15;
+    memset(out->count, 0, sizeof out->count);
+    for (i = 0; i < class_count; ++i) {
+        const AoeViewClassListRor *cl = l->list(l->context, player, classes[i]);
+        uint32_t n;
+        if (!cl) continue;
+        for (n = 0; n < cl->count; ++n) {
+            const AoeViewClassNodeRor *node = &cl->nodes[n];
+            int32_t dx = node->x, dy = node->y, d, b;
+            if (dx > cx + radius) continue;
+            if (dx < cx) { if (dx < cx - radius) continue; dx = cx - dx; } else dx -= cx;
+            if (dy > cy + radius) continue;
+            if (dy < cy) { if (dy < cy - radius) continue; dy = cy - dy; } else dy -= cy;
+            d = l->distance[dy & 0xf][dx & 0xf];
+            if (d > radius) continue;
+            b = kind_bucket[node->kind];
+            if (b < 0 || b >= AOE_VIEW_NEARBY_BUCKETS || out->count[b] >= AOE_VIEW_NEARBY_MAX)
+                continue;
+            out->entry[b][out->count[b]] = *node;
+            out->entry[b][out->count[b]].byte_4 = (uint8_t)d;
+            ++out->count[b];
+            ++added;
+        }
+    }
+    return added;
+}

@@ -1076,3 +1076,41 @@ int aoe_ai_unit_ai_kind_for_unit_ror(int16_t class_code, int16_t id,
     if (arg) *arg = a;
     return 1;
 }
+
+/* ---- 0x00410af0 ---- */
+int32_t aoe_ai_unit_ai_scan_ror(const AoeAiUnitAiRor *ai, int32_t order, int32_t target_id,
+                                int *scanned_flag, const AoeAiUnitAiScanOpsRor *o) {
+    int16_t owner;
+    float sight;
+    int has_ai;
+    int32_t x, y, radius;
+    if (!ai || !o || !scanned_flag || *scanned_flag == 1) return 0;
+    *scanned_flag = 1;
+    if (ai->class_count == 0 && ai->classes[0] == 0) return 0; /* +0x124 unset */
+    if (order == 0x2bd && target_id != -1 && o->target &&
+        o->target(o->context, target_id, &owner, &sight, &has_ai) && has_ai) {
+        radius = (int32_t)sight;
+    } else {
+        radius = (int32_t)o->own_sight(o->context);
+        if (o->own_type(o->context) == 0x76) radius *= 2;
+        owner = o->own_owner(o->context);
+    }
+    o->own_tile(o->context, &x, &y);
+    return o->collect(o->context, x, y, radius, owner, ai->classes, ai->class_count);
+}
+
+/* ---- 0x004118f0 ---- */
+int32_t aoe_ai_unit_ai_remembered_ror(const AoeAiUnitAiMemoryOpsRor *o, uint32_t *cost) {
+    int32_t excluded[100], n = 0, object = -1;
+    uint8_t c = 0;
+    if (!o) return -1;
+    for (n = 0; n < 100; ++n) {
+        uint8_t zone = o->zone(o->context, excluded, n);
+        if (!o->memory(o->context, zone, excluded, n, &object, &c)) return -1;
+        if (o->own_sight(o->context) + 5.0f < (float)c) return -1;
+        if (o->reachable(o->context, object) == 1) break;
+        excluded[n] = zone;
+    }
+    if (cost) *cost = c;
+    return object;
+}

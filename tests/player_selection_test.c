@@ -206,9 +206,33 @@ static void test_queries(void) {
     assert(p.field_124[4] == 9);
 }
 
+
+static void test_class_flags(void) {
+    AoePlayerSelectionRor p;
+    AoeSelectableUnitRor u[4];
+    int32_t priests = -1, last = -1;
+    int i;
+    aoe_player_selection_init_ror(&p);
+    p.player_id = 2;
+    for (i = 0; i < 4; ++i) { make_unit(&u[i], &p, 2); u[i].id = 100 + i; }
+    u[0].unit_class = 6;                       /* soldier: 7 */
+    u[1].unit_class = 0x12; u[1].carried_44 = 100.0f; /* priest at full faith */
+    u[2].unit_class = 4; u[2].template_id = 0x4f;     /* civilian + id 79: 0x67? no: class 4 -> 0x67 */
+    u[3].unit_class = 1; u[3].owner_id = 3;    /* not ours */
+    for (i = 0; i < 4; ++i) p.slots[i] = &u[i];
+    p.count = 4;
+    assert(aoe_player_selection_class_flags_ror(&p, &priests, &last) ==
+           (0x7u | 0x16u | 0x80u | 0x67u | 0x1u));
+    assert(priests == 1 && last == 101);
+    u[1].carried_44 = 99.0f;
+    assert((aoe_player_selection_class_flags_ror(&p, NULL, NULL) & 0x80u) == 0);
+    p.count = 0;
+    assert(aoe_player_selection_class_flags_ror(&p, &priests, NULL) == 0 && priests == 0);
+}
 int main(void) {
     test_init_add_remove();
     test_groups();
     test_queries();
+    test_class_flags();
     return 0;
 }

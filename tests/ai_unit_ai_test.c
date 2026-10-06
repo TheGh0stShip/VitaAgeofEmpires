@@ -543,6 +543,49 @@ static void ai_kind_for_unit_tests(void) {
     assert(aoe_ai_unit_ai_kind_for_unit_ror(-1, 1, &k, &a) && k == AOE_AI_UNIT_AI_KIND_5564);
 }
 
+
+static int16_t sc_owner = 3; static float sc_sight = 6.5f; static int sc_has_ai = 1, sc_found = 1;
+static int16_t sc_type = 0x76; static int32_t sc_x, sc_y, sc_r; static int16_t sc_from;
+static int sc_target(void *c, int32_t id, int16_t *o, float *s, int *h) { (void)c; (void)id; *o = 7; *s = 4.9f; *h = sc_has_ai; return sc_found; }
+static int16_t sc_own_owner(void *c) { (void)c; return sc_owner; }
+static float sc_own_sight(void *c) { (void)c; return sc_sight; }
+static int16_t sc_own_type(void *c) { (void)c; return sc_type; }
+static void sc_tile(void *c, int32_t *x, int32_t *y) { (void)c; *x = 11; *y = 12; }
+static int32_t sc_collect(void *c, int32_t x, int32_t y, int32_t r, int16_t owner, const int32_t *cl, int32_t n) {
+    (void)c; (void)cl; sc_x = x; sc_y = y; sc_r = r; sc_from = owner; return n * 10;
+}
+static int32_t mem_zone_calls, mem_fail_at = -1; static int reach_at = 2;
+static uint8_t mem_zone(void *c, const int32_t *ex, int32_t n) { (void)c; (void)ex; ++mem_zone_calls; return (uint8_t)(n + 1); }
+static int mem_lookup(void *c, uint8_t z, const int32_t *ex, int32_t n, int32_t *obj, uint8_t *cost) {
+    (void)c; (void)ex; if (n == mem_fail_at) return 0; *obj = 500 + z; *cost = (uint8_t)(n == 3 ? 50 : 4); return 1;
+}
+static float mem_sight(void *c) { (void)c; return 3.0f; }
+static int mem_reach(void *c, int32_t obj) { (void)c; return obj == 500 + reach_at + 1; }
+
+static void scan_tests(void) {
+    AoeAiUnitAiScanOpsRor o = {NULL, sc_target, sc_own_owner, sc_own_sight, sc_own_type, sc_tile, sc_collect};
+    AoeAiUnitAiMemoryOpsRor m = {NULL, mem_zone, mem_lookup, mem_sight, mem_reach};
+    AoeAiUnitAiRor ai = {0};
+    int flag = 0;
+    uint32_t cost = 0;
+    ai.classes[0] = 3; ai.classes[1] = 4; ai.class_count = 2;
+    /* Order 0x2bd on a target with an AI: its owner and sight. */
+    assert(aoe_ai_unit_ai_scan_ror(&ai, 0x2bd, 9, &flag, &o) == 20 && flag == 1 &&
+           sc_from == 7 && sc_r == 4 && sc_x == 11 && sc_y == 12);
+    assert(aoe_ai_unit_ai_scan_ror(&ai, 0x2bd, 9, &flag, &o) == 0); /* once only */
+    flag = 0; sc_has_ai = 0;
+    assert(aoe_ai_unit_ai_scan_ror(&ai, 0x2bd, 9, &flag, &o) == 20 && sc_from == 3 && sc_r == 12);
+    flag = 0; sc_type = 1;
+    assert(aoe_ai_unit_ai_scan_ror(&ai, 1, -1, &flag, &o) == 20 && sc_r == 6);
+    flag = 0; ai.class_count = 0; ai.classes[0] = 0;
+    assert(aoe_ai_unit_ai_scan_ror(&ai, 1, -1, &flag, &o) == 0 && flag == 1);
+    /* The remembered object: the third zone is reachable (cost 4). */
+    assert(aoe_ai_unit_ai_remembered_ror(&m, &cost) == 503 && cost == 4 && mem_zone_calls == 3);
+    reach_at = 10; /* the fourth try costs 50 > 3 + 5: -1 */
+    assert(aoe_ai_unit_ai_remembered_ror(&m, &cost) == -1);
+    mem_fail_at = 1; reach_at = 5;
+    assert(aoe_ai_unit_ai_remembered_ror(&m, NULL) == -1);
+}
 int main(void) {
     ai_kind_for_unit_tests();
     nearest_tests();
@@ -699,5 +742,6 @@ int main(void) {
                ai.field_f8 == 0);
     }
     puts("ai unit ai ok");
+    scan_tests();
     return 0;
 }

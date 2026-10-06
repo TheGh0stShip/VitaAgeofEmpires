@@ -31,6 +31,7 @@ typedef struct AoeSelectableUnitRor {
     uint8_t field_8d;     /* template +0x8d */
     uint8_t field_8f;     /* template +0x8f */
     uint8_t has_selection_sound; /* template +0x3c is non-null */
+    float carried_44;     /* +0x44 (a priest's faith) */
 } AoeSelectableUnitRor;
 
 struct AoePlayerSelectionRor {
@@ -139,5 +140,17 @@ void aoe_player_selection_reset_124_ror(AoePlayerSelectionRor *player);
 
 /* 0x0045e270: clear every selected unit's group number. */
 void aoe_player_selection_clear_groups_ror(AoePlayerSelectionRor *player);
+
+
+/* 0x004f6cd0: the selection's class flags (+0x19c), from the selected
+   units the player owns. A class 0..39 adds its entry of the table at
+   0x0055bdc8 (7 for the military classes, 4 for class 1, 0x67 class 2,
+   0x10 class 17, 0x96 class 18's neighbour 18... see the table in
+   player_selection.c); class 0x12 (priest) instead adds 0x16, counts the
+   priest (0x007c04f4), remembers its ID (0x007c04f0) and adds 0x80 when
+   its faith (+0x44) is 100 or more; template IDs 0x4f, 199, 0x45 and
+   0x116 add 1. `priests` / `last_priest` may be NULL. */
+uint32_t aoe_player_selection_class_flags_ror(const AoePlayerSelectionRor *player,
+                                              int32_t *priests, int32_t *last_priest);
 
 #endif

@@ -491,4 +491,46 @@ int32_t aoe_ai_unit_ai_villager_cc_ror(AoeAiUnitAiOrderRor *order,
                                        const AoeAiUnitAiMessageRor *msg, int32_t arg,
                                        const AoeAiUnitAiOpsRor *ops);
 
+
+/* 0x00410af0 (a unit AI slot): the nearby-object scan, once per pass (the
+   0x0056145c flag is set the first time and the count kept at
+   0x00561460). With target classes: for order 0x2bd on a resolvable
+   target that has a unit AI the scan runs from the target's owner with
+   the target type's line of sight (+0x28); otherwise from our owner
+   with our line of sight, doubled for type 0x76. The scan is 0x00516c10
+   at our tile with the owner's kind map (+0x8c). */
+typedef struct {
+    void *context;
+    /* The object of an ID (0x00414f40, 0 when none): its owner, its
+       type's +0x28 and whether it has a unit AI (+0x74, 0x00407a60). */
+    int (*target)(void *context, int32_t id, int16_t *owner, float *sight, int *has_ai);
+    /* Our owner (+0x4a), our type's +0x28 and type ID, our tile. */
+    int16_t (*own_owner)(void *context);
+    float (*own_sight)(void *context);
+    int16_t (*own_type)(void *context);
+    void (*own_tile)(void *context, int32_t *x, int32_t *y);
+    /* 0x00516c10 from `owner`'s lists with its kind map. */
+    int32_t (*collect)(void *context, int32_t x, int32_t y, int32_t radius, int16_t owner,
+                       const int32_t *classes, int32_t class_count);
+} AoeAiUnitAiScanOpsRor;
+int32_t aoe_ai_unit_ai_scan_ror(const AoeAiUnitAiRor *ai, int32_t order, int32_t target_id,
+                                int *scanned_flag, const AoeAiUnitAiScanOpsRor *ops);
+
+/* 0x004118f0: a reachable remembered object. Up to 100 times: the zone
+   of our tile excluding the zones tried so far (0x004aba60), the player
+   memory's entry for it (0x00517290: an object ID and a cost byte; none
+   fails with -1); a cost above our type's +0x28 plus 5.0 fails with -1;
+   the unit's +0x194(object, 1.0, 0, 0, -1, -1) returning 1 accepts it
+   (`cost` set when given), else the zone is excluded and the search
+   goes on. After 100 tries the last entry is returned. */
+typedef struct {
+    void *context;
+    uint8_t (*zone)(void *context, const int32_t *excluded, int32_t count);
+    int (*memory)(void *context, uint8_t zone, const int32_t *excluded, int32_t count,
+                  int32_t *object, uint8_t *cost);
+    float (*own_sight)(void *context);
+    int (*reachable)(void *context, int32_t object);
+} AoeAiUnitAiMemoryOpsRor;
+int32_t aoe_ai_unit_ai_remembered_ror(const AoeAiUnitAiMemoryOpsRor *ops, uint32_t *cost);
+
 #endif

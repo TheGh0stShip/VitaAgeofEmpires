@@ -843,3 +843,33 @@ void aoe_game_screen_idle_ror(AoeGameScreenRor *s) {
     }
     if (O(s)->base_idle) O(s)->base_idle(C(s));
 }
+
+int32_t aoe_game_screen_message_ror(AoeGameScreenRor *s, uint32_t msg, uint32_t wparam,
+                                    uint32_t lparam, int32_t *quit_requested, int iconic) {
+    if (!s || !s->ops) return 0;
+    if (msg == 0x104) {
+        if (wparam == 0x79 && s->field_78 && O(s)->current_child &&
+            O(s)->current_child(C(s)) == s->view) {
+            aoe_game_screen_menu_ror(s);
+            return 1;
+        }
+    } else if (msg == 0x101) {
+        if (s->field_78 && O(s)->view_focus && O(s)->view_focus(C(s)) &&
+            (wparam == 0x72 || wparam == 0x13) && O(s)->key_down &&
+            !O(s)->key_down(C(s), 0x12) && !O(s)->key_down(C(s), 0x11) &&
+            !O(s)->key_down(C(s), 0x10))
+            aoe_game_screen_pause_ror(s);
+    } else if (msg == 0x10) {
+        if (quit_requested && *quit_requested == 0) {
+            int32_t state = O(s)->game_state ? O(s)->game_state(C(s)) : 0;
+            *quit_requested = 1;
+            if (state >= 4 && state <= 7 && !iconic) {
+                if (O(s)->ask_close) O(s)->ask_close(C(s));
+                return 1;
+            }
+        }
+    } else if (msg == 0x208) {
+        if (O(s)->view_back) O(s)->view_back(C(s));
+    }
+    return O(s)->base_message ? O(s)->base_message(C(s), msg, wparam, lparam) : 0;
+}

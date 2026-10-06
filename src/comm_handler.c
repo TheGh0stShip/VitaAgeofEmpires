@@ -1089,3 +1089,85 @@ void aoe_comm_pump_flagged_ror(AoeCommRor *c) {
     c->field_12a8 = 1;
     aoe_comm_pump_ror(c);
 }
+
+/* ---- 0x004245e0 / 0x004241f0 ---- */
+
+static void became_host(AoeCommRor *c, int32_t game_seed) {
+    c->self = 1;
+    c->host_dpid = OPS->self_dpid ? OPS->self_dpid(CTX) : 0;
+    c->player_state[c->self] = 2;
+    c->field_20 = 1;
+    c->state = 3;
+    aoe_comm_set_seed_ror(c, game_seed);
+    c->field_14e4 = 0x7d1;
+}
+
+int aoe_comm_create_session_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp, int32_t game_seed) {
+    int32_t hr, players = 0;
+    if (!c || !dp) return 0;
+    c->multiplayer = 1;
+    c->field_20 = 0;
+    c->lead = 2;
+    c->turn = 4;
+    c->field_155c = 4;
+    if (dp->chat_clear) dp->chat_clear(dp->context);
+    hr = aoe_comm_dp_create_ror(c, dp);
+    OPS->report(CTX, hr, "DPCreateConv");
+    c->is_host = 1;
+    hr = dp->open_create ? dp->open_create(dp->context, c->session_guid, c->count, c->label)
+                         : (int32_t)0x80004005;
+    OPS->report(CTX, hr, "DP_Open_Create");
+    if (hr != 0) {
+        if ((uint32_t)hr == 0x887700aau) {
+            if (dp->post_error) dp->post_error(dp->context, 0x17ae);
+            return 0;
+        }
+        c->state = 1;
+        return 0;
+    }
+    aoe_comm_set_seed_ror(c, game_seed);
+    aoe_comm_dp_add_self_ror(c, dp);
+    aoe_comm_dp_caps_ror(c, dp);
+    aoe_comm_dp_session_ror(c, dp, &players);
+    c->self = 1;
+    c->field_1714 = 1;
+    c->host_dpid = OPS->self_dpid ? OPS->self_dpid(CTX) : 0;
+    c->player_state[c->self] = 2;
+    c->field_20 = 1;
+    c->state = 3;
+    c->field_14e4 = 0x7d1;
+    aoe_comm_refresh_all_ror(c);
+    return 1;
+}
+
+int aoe_comm_join_lobby_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp, int32_t game_seed) {
+    int has = 0, named = 0;
+    int32_t players = 0;
+    char name[0x50];
+    if (!c || !dp) return 0;
+    if (dp->lobby_connect && dp->lobby_connect(dp->context, &has)) {
+        if (OPS->dp_present(CTX)) {
+            char line[64];
+            int32_t left = dp->release ? dp->release(dp->context) : 0;
+            snprintf(line, sizeof line, "Release count = %d", (int)left);
+            OPS->log(CTX, line);
+        }
+        if (!has) {
+            c->lobby_joined = 0;
+            return 0;
+        }
+        name[0] = '\0';
+        named = dp->lobby_player_name ? dp->lobby_player_name(dp->context, name, (int)sizeof name) : 0;
+        aoe_comm_dp_caps_ror(c, dp);
+        c->multiplayer = 1;
+        aoe_comm_dp_session_ror(c, dp, &players);
+        if (dp->lobby_name_pointer) aoe_comm_set_own_name_ror(c, dp->lobby_name_pointer(dp->context));
+        c->state = 3;
+        aoe_comm_dp_add_self_ror(c, dp);
+        c->is_host = dp->lobby_hosting ? (dp->lobby_hosting(dp->context) != 0) : 0;
+        if (c->is_host) became_host(c, game_seed);
+        aoe_comm_refresh_all_ror(c);
+    }
+    c->lobby_joined = named ? 1 : 0;
+    return named ? 1 : 0;
+}

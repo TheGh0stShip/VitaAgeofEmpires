@@ -957,4 +957,44 @@ typedef struct {
 int aoe_main_view_place_click_ror(const AoeMainViewPlaceOpsRor *ops, int32_t x, int32_t y,
                                   int32_t ack);
 
+
+/* 0x00516c10: the objects of a player's class lists near a tile. The
+   lists (per player, per class: a node list and its count) hold 8-byte
+   nodes: the object (+0), a byte (+4), the kind (+5) and the tile x / y
+   (+6 / +7). For each class in `classes` every node within `radius`
+   (clamped to 15) of (cx, cy) by the 16 x 16 distance table is appended
+   to the bucket `kind_bucket[kind]` (five buckets of 256 at 0x007d2024 /
+   0x007d2038) with its byte +4 replaced by the distance; the buckets
+   are emptied first. Returns the number appended; 0 for an empty class
+   list or a player past the table. */
+typedef struct {
+    int32_t object;
+    uint8_t byte_4, kind, x, y;
+} AoeViewClassNodeRor;
+
+typedef struct {
+    const AoeViewClassNodeRor *nodes;
+    uint16_t count;
+} AoeViewClassListRor;
+
+typedef struct {
+    void *context;
+    int32_t player_count;                     /* +0x18 */
+    const uint8_t (*distance)[16];            /* +0x20: [dy][dx] */
+    /* The class list of a player (NULL when the class has none). */
+    const AoeViewClassListRor *(*list)(void *context, int32_t player, int32_t class_id);
+} AoeViewClassListsRor;
+
+#define AOE_VIEW_NEARBY_BUCKETS 5
+#define AOE_VIEW_NEARBY_MAX 0x100
+typedef struct {
+    int32_t count[AOE_VIEW_NEARBY_BUCKETS];
+    AoeViewClassNodeRor entry[AOE_VIEW_NEARBY_BUCKETS][AOE_VIEW_NEARBY_MAX];
+} AoeViewNearbyRor;
+
+int32_t aoe_view_collect_nearby_ror(const AoeViewClassListsRor *lists, int32_t cx, int32_t cy,
+                                    int32_t radius, int32_t player, const int32_t *classes,
+                                    int32_t class_count, const uint8_t kind_bucket[256],
+                                    AoeViewNearbyRor *out);
+
 #endif

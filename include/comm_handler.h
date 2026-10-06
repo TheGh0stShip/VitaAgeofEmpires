@@ -102,6 +102,7 @@ typedef struct {
     int32_t status;                   /* +0x12d4 */
     uint16_t count;                   /* +0x12d8: players */
     uint32_t guid_12dc[4];            /* +0x12dc */
+    uint32_t session_guid[4];         /* +0x12ec: the session's GUID */
     uint32_t guid_12fc[4];            /* +0x12fc */
     uint32_t guid_1318[4];            /* +0x1318: the null GUID */
     uint32_t window;                  /* +0x130c */
@@ -125,6 +126,10 @@ typedef struct {
     uint8_t lead;                     /* +0x1590 */
     int32_t stat[8][AOE_COMM_SLOTS];  /* +0x1594..+0x16ac */
     int32_t player_state[AOE_COMM_SLOTS]; /* +0x16d4: 2 human, 4 computer, 5 */
+    int32_t field_155c, field_1714, field_14e4; /* +0x155c, +0x1714, +0x14e4 */
+    int32_t host_dpid;                /* +0x1568: the host's DirectPlay ID */
+    int32_t lobby_joined;             /* +0x1310: the last lobby join result */
+    int32_t field_10c8_turn;          /* +0x10c8 as the session create sets it */
     uint8_t ready[AOE_COMM_SLOTS];    /* +0x16fc */
     int32_t seed;                     /* +0x170c */
     uint16_t high, low;               /* +0x1710, +0x1712: the active slot range */
@@ -307,6 +312,22 @@ typedef struct {
     uint8_t *(*take_turn)(void *context, uint32_t turn);
     /* 0x00422ce0 one unlink step (the new level). */
     int32_t (*unlink_step)(void *context);
+    /* Session create 0x004245e0: IDirectPlay::Open(desc, DPOPEN_CREATE 2)
+       with the DPSESSIONDESC2 (size 0x50, flags 0x44, the session GUID,
+       max players, current players 1, the "name [info]" label); the
+       chat log dropped (0x0041ca10); an error posted (0x004200d0).
+       Lobby join 0x004241f0: connect through the lobby (0x00425bb0:
+       nonzero with the DirectPlay interface, NULL when none), the
+       lobby's player name (0x00425e00, nonzero when given), its name
+       pointer (0x00425de0), whether we host (0x00425dc0). */
+    int32_t (*open_create)(void *context, const uint32_t guid[4], uint32_t max_players,
+                           const char *label);
+    void (*chat_clear)(void *context);
+    void (*post_error)(void *context, uint32_t code);
+    int (*lobby_connect)(void *context, int *has_interface);
+    int (*lobby_player_name)(void *context, char *out, int size);
+    const char *(*lobby_name_pointer)(void *context);
+    int (*lobby_hosting)(void *context);
 } AoeCommDpOpsRor;
 
 /* 0x004255e0 close the session (the GUID and turns cleared); 0x00425660
@@ -326,6 +347,21 @@ int aoe_comm_dp_add_self_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp);
 int32_t aoe_comm_dp_create_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp);
 int aoe_comm_dp_present_ror(const AoeCommRor *c);
 void aoe_comm_refresh_all_ror(AoeCommRor *c);
+/* 0x004245e0 create a session: multiplayer on, +0x20 0, lead 2, the turn
+   and +0x155c 4, the chat log dropped, DirectPlay created ("DPCreateConv"),
+   hosting; Open with DPOPEN_CREATE ("DP_Open_Create"): DPERR_SESSIONLOST
+   (0x887700aa) posts 0x17ae and fails, other errors set state 1 and
+   fail; then the host's seed from the game's +0x28, our player, the
+   caps, the session description, slot 1 ours (human) with our ID as the
+   host's, +0x1714 1, +0x20 1, state 3, +0x14e4 2001 and every slot
+   refreshed. 0x004241f0 join through the lobby: an existing interface is
+   released first ("Release count = %d"); none fails (0); else the lobby's
+   name, the caps, multiplayer on, the session description, the lobby's
+   name pointer as our name, state 3, our player; when hosting slot 1 is
+   ours, +0x20 1, the seed and 2001 as above; then the refresh. The
+   result (+0x1310) is whether the lobby gave a name. */
+int aoe_comm_create_session_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp, int32_t game_seed);
+int aoe_comm_join_lobby_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp, int32_t game_seed);
 /* 0x0041e9c0: playing slots whose data cannot be read are dropped
    (0x4b to everyone; dropped unless stopping). 0x0041ead0: the next
    command to run (alone or in the lobby: the first queued; else the one

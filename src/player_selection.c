@@ -326,3 +326,38 @@ void aoe_player_selection_clear_groups_ror(AoePlayerSelectionRor *player) {
         }
     }
 }
+
+/* 0x0055bdc8: per-class selection flags (40 entries). */
+static const uint32_t class_flags[40] = {
+    0x7, 0x0, 0x4, 0x0, 0x67, 0x0, 0x7, 0x0, 0x0, 0x0, 0x0, 0x0, 0x7, 0x7, 0x0, 0x0, 0x0, 0x10,
+    0x96, 0x0, 0x0, 0x0, 0x1, 0x7, 0x7, 0x7, 0x7, 0x0, 0x7, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x7,
+    0x7, 0x0, 0x0, 0x7};
+
+uint32_t aoe_player_selection_class_flags_ror(const AoePlayerSelectionRor *player,
+                                              int32_t *priests, int32_t *last_priest) {
+    uint32_t flags = 0;
+    int32_t n = 0, slot, seen = 0;
+    if (priests) *priests = 0;
+    if (!player || player->count == 0) return 0;
+    for (slot = 0; slot < AOE_PLAYER_SELECTION_SLOTS && seen < player->count; ++slot) {
+        const AoeSelectableUnitRor *u = player->slots[slot];
+        if (!u) continue;
+        ++seen;
+        if (u->owner_id != player->player_id) continue;
+        if (u->unit_class >= 0 && u->unit_class < 40) {
+            if (u->unit_class == 0x12) {
+                flags |= 0x16;
+                ++n;
+                if (last_priest) *last_priest = u->id;
+                if (u->carried_44 >= 100.0f) flags |= 0x80;
+            } else {
+                flags |= class_flags[u->unit_class];
+            }
+        }
+        if (u->template_id == 0x4f || u->template_id == 199 || u->template_id == 0x45 ||
+            u->template_id == 0x116)
+            flags |= 1;
+    }
+    if (priests) *priests = n;
+    return flags;
+}

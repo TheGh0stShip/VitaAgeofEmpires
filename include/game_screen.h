@@ -280,6 +280,15 @@ typedef struct {
     void (*base_idle)(void *context);
     void (*set_palette_entries)(void *context, int32_t first, int32_t count,
                                 const uint8_t (*rgb)[4]);
+    /* Window messages 0x00480440: GetKeyState < 0 for a virtual key; the
+       panel's current child (+0x3c); the close question (0x00457a30
+       string 3101 "CloseProgramDialog" 450 x 100); the view history's
+       step back (0x00506550); the panel's 0x00452fa0. */
+    int (*key_down)(void *context, int32_t vk);
+    void *(*current_child)(void *context);
+    void (*ask_close)(void *context);
+    void (*view_back)(void *context);
+    int32_t (*base_message)(void *context, uint32_t msg, uint32_t wparam, uint32_t lparam);
 } AoeGameScreenOpsRor;
 
 typedef struct {
@@ -532,5 +541,16 @@ void aoe_game_screen_idle_ror(AoeGameScreenRor *s);
    seven colours starting at the index (wrapping at 7), the index steps
    back one (6 after 0). */
 void aoe_game_screen_palette_cycle_ror(AoeGameScreenRor *s, uint32_t now);
+/* 0x00480440 (+0x48 window messages): WM_SYSKEYDOWN (0x104) of 'Y' with
+   +0x78 set while the view is the current child opens the menu dialog
+   (1); WM_KEYUP (0x101) of F3 (0x72) or Pause (0x13) with +0x78 set, the
+   view focused and no Alt / Ctrl / Shift pauses; WM_CLOSE (0x10) once
+   while no quit is pending sets the request and, in game states 4..7
+   with the window not iconic, asks (1); WM_MBUTTONUP (0x208) steps the
+   view history back; everything else (and the rest) goes to the panel's
+   handler. `quit_requested` is the 0x007c0338 flag; `iconic` the
+   window's. */
+int32_t aoe_game_screen_message_ror(AoeGameScreenRor *s, uint32_t msg, uint32_t wparam,
+                                    uint32_t lparam, int32_t *quit_requested, int iconic);
 
 #endif

@@ -1674,3 +1674,124 @@ int32_t aoe_ai_unit_ai_message_ror(const AoeAiUnitAiMsgOpsRor *o, const int32_t 
         return 2;
     }
 }
+
+/* ---- 0x00410c50 ---- */
+static int ct_candidate(const AoeAiTargetOpsRor *o, int32_t id, AoeAiTargetViewRor *t, int allow_1b,
+                        int target_1b, int ring) {
+    if (!o->object(o->context, id, t) || t->state >= 3) return 0;
+    if (o->stance(o->context, t->owner) == 1 || t->field_20 != 0) return 0;
+    if (!((allow_1b && target_1b) || t->type_class != 0x1b)) return 0;
+    if (!(t->type_class != 3 || t->field_30 > 1.0f ||
+          (o->own_type != 0x23 && o->own_type != 0x24 && o->own_type != 0x118)))
+        return 0;
+    if (!o->accepts(o->context, id)) return 0;
+    if (ring == 3 && !o->accepts_class(o->context, t->type_class)) return 0;
+    return 1;
+}
+
+int32_t aoe_ai_unit_ai_choose_target_ror(const AoeAiTargetOpsRor *o, int allow_1b, int32_t mode) {
+    int32_t radius, best = -1, nearest = -1, count_other = 0, count_non3 = 0, count_hp = 0, ring, i;
+    float best_score = 0.0f, nearest_d = 100000.0f;
+    int best_is3 = 0, target_1b = 0;
+    AoeAiTargetViewRor t;
+    o->refresh(o->context);
+    {
+        int32_t d = o->world_100;
+        int special = (o->setting_41b700 == 1 && o->setting_41b750 == 1 && d > 2 && o->own_owner != 1) ||
+                      (o->setting_41b750 == 1 && d > 2 && o->owner_48 == 3 &&
+                       (o->owner_attribute(o->context, 0xdb) != 100 ||
+                        o->owner_attribute(o->context, 0xda) != 100));
+        if (special) {
+            int32_t pct = o->own_owner > 1 ? o->owner_attribute(o->context, d == 3 ? 0xdb : 0xda)
+                                           : (d == 3 ? 75 : 50);
+            radius = (int32_t)((float)pct * o->own_sight * 0.01f);
+            if (radius < 1) radius = 1;
+        } else {
+            radius = (int32_t)o->own_sight * 2;
+        }
+    }
+    if (o->target != -1 && o->object(o->context, o->target, &t) && t.type_class == 0x1b) target_1b = 1;
+    for (ring = 4; ring >= 2; --ring) {
+        int32_t n = o->nearby_count(o->context, ring);
+        for (i = 0; i < n; ++i) {
+            int32_t id;
+            uint8_t dist;
+            float d;
+            o->nearby(o->context, ring, i, &id, &dist);
+            if (!ct_candidate(o, id, &t, allow_1b, target_1b, ring)) continue;
+            d = o->distance(o->context, id);
+            if (o->min_range(o->context) <= d && (int32_t)dist <= radius) {
+                if (t.id != o->target) ++count_other;
+                if (t.type_class != 3) ++count_non3;
+                if (o->hit_points(o->context, id) > 0.0f) ++count_hp;
+                if (t.type_class != 3) {
+                    o->range_10c(o->context);
+                    if (d < nearest_d) { nearest = id; nearest_d = d; }
+                }
+            }
+        }
+    }
+    if (o->target != -1 && mode == 0 && o->order == 600 && o->object(o->context, o->target, &t)) {
+        uint8_t seen = o->tile_seen(o->context, (int32_t)t.x, (int32_t)t.y);
+        int ok = 1;
+        if (count_other != 0) {
+            if (seen != 0x0f) ok = 0;
+            else if (o->in_range(o->context, o->target) != 1 &&
+                     o->can_reach(o->context, o->target, o->attack_range(o->context)) != 1)
+                ok = 0;
+        }
+        if (ok && o->object(o->context, o->target, &t) && t.state == 2 &&
+            o->stance(o->context, t.owner) == 0) {
+            float score, d;
+            if (t.type_id == 0x114) return t.id;
+            best = o->target;
+            score = o->hit_points(o->context, best) * 50.0f;
+            score += (float)o->damage(o->context, best) * 100.0f;
+            if (t.field_30 > 0.0f) score /= t.field_30;
+            d = o->distance(o->context, best);
+            if (count_non3 < 2) {
+                if (d != 0.0f) score /= d;
+            } else if (d != 0.0f) {
+                score /= (float)count_non3 * d * 0.5f;
+            }
+            if (t.type_class != 3) { best_is3 = 0; ++count_non3; } else best_is3 = 1;
+            if (o->hit_points(o->context, best) > 0.0f) ++count_hp;
+            best_score = score;
+        }
+    }
+    if (count_non3 > 1 && nearest != -1 && o->object(o->context, nearest, &t)) {
+        if (o->in_range(o->context, nearest) == 1) return nearest;
+        if (o->can_reach(o->context, nearest, o->attack_range(o->context)) == 1) return nearest;
+    }
+    for (ring = 4; ring >= 2; --ring) {
+        int32_t n = o->nearby_count(o->context, ring);
+        for (i = 0; i < n; ++i) {
+            int32_t id;
+            uint8_t dist;
+            float d, hp, score;
+            int is3;
+            o->nearby(o->context, ring, i, &id, &dist);
+            if (!ct_candidate(o, id, &t, allow_1b, target_1b, ring)) continue;
+            d = o->distance(o->context, id);
+            if (!(o->min_range(o->context) <= d && (int32_t)dist <= radius)) continue;
+            if (mode == 1) {
+                if (!o->in_range(o->context, id)) continue;
+            } else if (mode == 0 && !o->in_range(o->context, id)) {
+                if (!o->can_reach(o->context, id, o->attack_range(o->context))) continue;
+            }
+            hp = o->hit_points(o->context, id) * 50.0f;
+            if (count_hp >= 1 && hp == 0.0f) continue;
+            score = (float)o->damage(o->context, id) * 100.0f + hp;
+            if (t.field_30 > 0.0f) score /= t.field_30;
+            if (dist != 0) score /= (float)dist;
+            if (count_non3 > 1) score /= (float)((uint32_t)dist * dist * dist);
+            is3 = t.type_class == 3;
+            if (best == -1 || ((best_is3 || !is3) && ((best_is3 && !is3) || best_score < score))) {
+                best = id;
+                best_is3 = is3;
+                best_score = score;
+            }
+        }
+    }
+    return best;
+}

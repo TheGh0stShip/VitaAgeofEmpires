@@ -908,6 +908,66 @@ static void message_tests(void) {
     mg_n = 0; msg[2] = 0x25a;
     assert(aoe_ai_unit_ai_message_ror(&o, msg, 30) == 2 && mg_n == 0);
 }
+
+/* 0x00410c50: objects by ID: 10 (ring 4, dist 3, class 5, hp 2, dmg 1), 11 (ring 3, class 3, +0x30 2, hp 1, dmg 3),
+   12 (ring 2, dist 1, class 7, hp 0, dmg 9), 20 the current target (class 5, hp 4, dmg 2, state 2). */
+typedef struct { int32_t id; uint8_t state; int16_t owner; int16_t cls; float f30; float hp; int32_t dmg; int ring; uint8_t dist; } ct_obj;
+static ct_obj ct_objs[4] = {{10, 2, 2, 5, 0.0f, 2.0f, 1, 4, 3}, {11, 2, 2, 3, 2.0f, 1.0f, 3, 3, 2}, {12, 2, 2, 7, 0.0f, 0.0f, 9, 2, 1}, {20, 2, 2, 5, 0.0f, 4.0f, 2, 0, 0}};
+static int ct_in_range_id = -1, ct_reach = 0; static uint8_t ct_seen = 0x0f; static char ct_log[256];
+static ct_obj *ct_find(int32_t id) { int i; for (i = 0; i < 4; ++i) if (ct_objs[i].id == id) return &ct_objs[i]; return NULL; }
+static int32_t ct_attr(void *c, int32_t id) { (void)c; return id == 0xdb ? 60 : 100; }
+static void ct_refresh(void *c) { (void)c; }
+static int ct_object(void *c, int32_t id, AoeAiTargetViewRor *out) { ct_obj *p = ct_find(id); (void)c; if (!p) return 0; memset(out, 0, sizeof *out); out->id = id; out->state = p->state; out->owner = p->owner; out->type_class = p->cls; out->field_30 = p->f30; out->x = 4.5f; out->y = 6.5f; out->type_id = (int16_t)(id == 20 ? 0x50 : 0x40); return 1; }
+static int ct_stance(void *c, int16_t owner) { (void)c; return owner == 1 ? 1 : 0; }
+static int ct_yes1(void *c, int32_t id) { (void)c; (void)id; return 1; }
+static int ct_yes_class(void *c, int16_t cls) { (void)c; (void)cls; return 1; }
+static float ct_distance(void *c, int32_t id) { (void)c; return id == 20 ? 4.0f : (float)(id - 8); }
+static float ct_min_range(void *c) { (void)c; return 1.0f; }
+static void ct_range_10c(void *c) { (void)c; }
+static float ct_hp(void *c, int32_t id) { (void)c; return ct_find(id)->hp; }
+static int32_t ct_dmg(void *c, int32_t id) { (void)c; return ct_find(id)->dmg; }
+static int32_t ct_count(void *c, int ring) { int i, n = 0; (void)c; for (i = 0; i < 4; ++i) if (ct_objs[i].ring == ring) ++n; return n; }
+static void ct_nearby(void *c, int ring, int32_t index, int32_t *id, uint8_t *dist) { int i; (void)c; for (i = 0; i < 4; ++i) if (ct_objs[i].ring == ring && index-- == 0) { *id = ct_objs[i].id; *dist = ct_objs[i].dist; return; } *id = -1; *dist = 0; }
+static int ct_in_range(void *c, int32_t id) { (void)c; return id == ct_in_range_id; }
+static float ct_attack_range(void *c) { (void)c; return 7.0f; }
+static int ct_can_reach(void *c, int32_t id, float r) { (void)c; size_t n = strlen(ct_log); snprintf(ct_log + n, sizeof ct_log - n, "reach(%d,%g) ", (int)id, (double)r); return ct_reach; }
+static uint8_t ct_tile_seen(void *c, int32_t x, int32_t y) { (void)c; (void)x; (void)y; return ct_seen; }
+static void choose_target_tests(void) {
+    AoeAiTargetOpsRor o = {NULL, 2, 0, 0, 2, 0, 0x30, 4.0f, -1, 600, ct_attr, ct_refresh, ct_object, ct_stance, ct_yes1, ct_yes_class, ct_distance, ct_min_range, ct_range_10c, ct_hp, ct_dmg, ct_count, ct_nearby, ct_in_range, ct_attack_range, ct_can_reach, ct_tile_seen};
+    int32_t r;
+    /* Radius 8 (twice the sight); mode 1 wants objects in range: only 10. */
+    ct_in_range_id = 10; ct_log[0] = '\0';
+    assert(aoe_ai_unit_ai_choose_target_ror(&o, 0, 1) == 10 && ct_log[0] == '\0');
+    /* Mode 0 with 12 out of the picture (state 3): 10 and 11 reachable; 10 scores 200 / 3, 11 (class 3)
+       scores 350 / 2 / 2 but a class-3 object never beats a non-3 best. */
+    ct_in_range_id = -1; ct_reach = 1; ct_objs[2].state = 3; ct_log[0] = '\0';
+    r = aoe_ai_unit_ai_choose_target_ror(&o, 0, 0);
+    assert(r == 10 && strcmp(ct_log, "reach(10,7) reach(11,7) ") == 0);
+    /* With more than one non-3 object (10 and 12) the nearest non-3 (10, distance 2) wins when reachable. */
+    ct_objs[2].state = 2; ct_objs[2].hp = 1.0f; ct_log[0] = '\0';
+    r = aoe_ai_unit_ai_choose_target_ror(&o, 0, 0);
+    assert(r == 10 && strcmp(ct_log, "reach(10,7) ") == 0);
+    /* Not reachable: the scored pass finds nothing in range; with 12 in range it scores 950 / 1 / 1. */
+    ct_reach = 0; ct_log[0] = '\0';
+    assert(aoe_ai_unit_ai_choose_target_ror(&o, 0, 0) == -1);
+    ct_in_range_id = 12;
+    assert(aoe_ai_unit_ai_choose_target_ror(&o, 0, 0) == 12);
+    /* A current target (order 600) in state 2 is the candidate to beat: 20 scores 400 / (2 x 4 x 0.5) = 100.
+       The target's tile must be seen when others exist. */
+    o.target = 20; ct_in_range_id = 10; ct_objs[2].hp = 0.0f; ct_log[0] = '\0';
+    r = aoe_ai_unit_ai_choose_target_ror(&o, 0, 0);
+    assert(r == 10 && strstr(ct_log, "reach(20,7) "));
+    ct_seen = 0; ct_log[0] = '\0';
+    r = aoe_ai_unit_ai_choose_target_ror(&o, 0, 0);
+    assert(r == 10 && !strstr(ct_log, "reach(20,7) "));
+    /* Radius with the special settings: 60 % of sight 4 -> 2: only 12 (ring distance 1) qualifies. */
+    o.setting_41b700 = o.setting_41b750 = 1; o.world_100 = 3; o.target = -1; ct_in_range_id = 12; ct_seen = 0x0f; ct_objs[2].hp = 1.0f;
+    assert(aoe_ai_unit_ai_choose_target_ror(&o, 0, 1) == 12);
+    o.own_owner = 1; o.owner_48 = 3; /* the second form: attribute 0xdb is 60, not 100 */
+    assert(aoe_ai_unit_ai_choose_target_ror(&o, 0, 1) == 12);
+    o.setting_41b750 = 0; ct_in_range_id = 10; /* no special settings: radius 8 again */
+    assert(aoe_ai_unit_ai_choose_target_ror(&o, 0, 1) == 10);
+}
 int main(void) {
     free_tile_tests();
     ai_kind_for_unit_tests();
@@ -1071,5 +1131,6 @@ int main(void) {
     check_tests();
     play_tests();
     message_tests();
+    choose_target_tests();
     return 0;
 }

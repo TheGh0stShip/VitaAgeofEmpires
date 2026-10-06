@@ -848,4 +848,69 @@ typedef struct {
    the base. 2 unless said otherwise. */
 int32_t aoe_ai_unit_ai_message_ror(const AoeAiUnitAiMsgOpsRor *o, const int32_t *msg, int32_t elapsed);
 
+
+/* ---- 0x00410c50: the attack target choice ---- */
+typedef struct {
+    int32_t id;              /* +0x04 */
+    uint8_t state;           /* +0x48 */
+    int16_t owner;           /* owner (+0x0c) +0x4a */
+    int32_t field_20;        /* +0x20 */
+    int16_t type_id, type_class; /* type (+0x08) +0x10, +0x14 */
+    float field_30;          /* +0x30 */
+    float x, y;              /* +0x38, +0x3c */
+} AoeAiTargetViewRor;
+typedef struct {
+    void *context;
+    int32_t world_100;          /* 0x00520660 on the owner's world (+0x3c) */
+    int setting_41b700, setting_41b750; /* the game's 0x0041b700 / 0x0041b750 == 1 */
+    int16_t own_owner;          /* owner +0x4a */
+    uint8_t owner_48;           /* owner +0x48 */
+    int16_t own_type;           /* type +0x10 */
+    float own_sight;            /* type +0x28 */
+    int32_t target, order;      /* ai +0x34, +0x30 */
+    int32_t (*owner_attribute)(void *context, int32_t id);  /* owner vtable +0x3c (0xda / 0xdb) */
+    void (*refresh)(void *context);                         /* our vtable +0x20 */
+    int (*object)(void *context, int32_t id, AoeAiTargetViewRor *out); /* 0x005206d0 / 0x00414f40 */
+    int (*stance)(void *context, int16_t owner);            /* owner vtable +0x1c(owner id) */
+    int (*accepts)(void *context, int32_t id);              /* our vtable +0x50 */
+    int (*accepts_class)(void *context, int16_t type_class);/* our vtable +0x54 */
+    float (*distance)(void *context, int32_t id);           /* 0x004aaeb0 */
+    float (*min_range)(void *context);                      /* unit vtable +0x110 */
+    void (*range_10c)(void *context);                       /* unit vtable +0x10c (result unused) */
+    float (*hit_points)(void *context, int32_t id);         /* object vtable +0x108 */
+    int32_t (*damage)(void *context, int32_t id);           /* its type's vtable +0x28(our type) */
+    int32_t (*nearby_count)(void *context, int ring);       /* 0x007d2024[ring] */
+    void (*nearby)(void *context, int ring, int32_t index, int32_t *id, uint8_t *dist); /* 0x007d2038[ring] */
+    int (*in_range)(void *context, int32_t id);             /* unit vtable +0xe4 */
+    float (*attack_range)(void *context);                   /* unit vtable +0x10c(0, 0, -1, -1) */
+    int (*can_reach)(void *context, int32_t id, float range); /* unit vtable +0x194 */
+    uint8_t (*tile_seen)(void *context, int32_t x, int32_t y); /* 0x00412fd0 on the owner's +0x38 */
+} AoeAiTargetOpsRor;
+/* 0x00410c50(allow_1b, mode): after our vtable +0x20, the search radius:
+   with the settings (0x0041b700 and 0x0041b750 set, world +0x100 above
+   2 and our owner not player 1; or 0x0041b750 set, world +0x100 above
+   2, the owner's +0x48 == 3 and an attribute 0xdb / 0xda other than
+   100) it is attribute 0xdb (world +0x100 == 3) / 0xda of an owner above
+   1, else 75 / 50, as a percentage of our sight (at least 1); otherwise
+   twice the truncated sight. Candidates come from nearby rings 4, 3, 2:
+   state below 3, owner not allied (+0x1c != 1), +0x20 clear, class 0x1b
+   only when `allow_1b` and the current target is class 0x1b, class 3
+   only with +0x30 above 1.0 or our type not 0x23 / 0x24 / 0x118,
+   accepted by +0x50 (and by +0x54 in ring 3), at least our minimum
+   range away and within the radius: they count the others, the
+   non-class-3 ones (the nearest kept) and those with hit points. With a
+   current target, mode 0 and order 600: when others exist its tile must
+   be seen (0x0f) and it in range or reachable; a target in state 2 of a
+   non-allied owner (stance 0) is returned at once for type 0x114, else
+   scored (hit points x 50 + damage x 100, over +0x30 when positive, over
+   the distance (times half the non-3 count when that is above 1)) as the
+   candidate to beat. With more than one non-class-3 object the nearest
+   one is returned when in range or reachable. Then every candidate in
+   range (mode 1) or in range / reachable (mode 0), skipping those without
+   hit points once any has some, scores hit points x 50 + damage x 100,
+   over +0x30, over its ring distance (cubed again with more than one
+   non-3); a class-3 object only beats a class-3 best, and a non-3 one
+   beats a class-3 best outright. Returns the best ID, -1 when none. */
+int32_t aoe_ai_unit_ai_choose_target_ror(const AoeAiTargetOpsRor *o, int allow_1b, int32_t mode);
+
 #endif

@@ -1247,6 +1247,49 @@ static void mouse_move_tests(void) {
     mv_n = 0; o.kind = 9; lx = 200;
     assert(aoe_view_mouse_move_ror(&o, 210, 205) == 0 && strcmp(mv_log, "4(200,200,210,205) 6(1,0,0,0) ") == 0);
 }
+
+/* 0x005145a0: four nodes in one row: A id 1 box 0..10 (a skip run at the point: class 2, depth 5),
+   B id 2 box 0..10 (a colour run: class 1, depth 3), C id 1 again box 14..20 (class 4 by the
+   slack, depth 9, dropped for A's better class), D id 3 box 2..8 (class 4 by the slack, depth 7). */
+typedef struct { int32_t id; int16_t l, t, r, b, depth; uint8_t px; const void *next; } po_node;
+static po_node po_nodes[4];
+static uint8_t po_data[2][162]; /* 20 row offsets (all 160), 20 outlines (0), then one command */
+static const void *po_head(void *c, int32_t row) { (void)c; return row == 7 ? &po_nodes[0] : NULL; }
+static void po_item(void *c, const void *n, AoeViewDrawItemRor *o) {
+    const po_node *p = (const po_node *)n; static AoeShapeHitFrameRor fr; int k;
+    (void)c;
+    for (k = 0; k < 20; ++k) { po_data[0][k * 4] = po_data[1][k * 4] = 160; }
+    po_data[0][160] = 0x51; po_data[1][160] = 0x50; /* skip 20 / colour run 20 */
+    memset(o, 0, sizeof *o); o->next = p->next; o->object_id = p->id; o->left = p->l; o->top = p->t; o->right = p->r; o->bottom = p->b; o->depth = p->depth;
+    fr.cmd_table_offset = 0; fr.outline_offset = 80; fr.width = 20; fr.height = 20; o->frame = &fr;
+    o->shape = po_data[p->px]; o->shape_size = sizeof po_data[0]; o->key = 0;
+}
+static void point_objects_tests(void) {
+    AoeMainViewRor v; AoeViewDrawRowsOpsRor rows = {NULL, po_head, po_item, NULL};
+    static AoeViewHitEntryRor store[5][64]; AoeViewHitListsRor lists; AoeViewPickedRor out[64];
+    int c, n;
+    memset(&v, 0, sizeof v); v.left = 100; v.top = 50; v.right = 300; v.bottom = 250;
+    for (c = 0; c < 5; ++c) lists.lists[c] = store[c];
+    po_nodes[0] = (po_node){1, 0, 0, 10, 10, 5, 0, &po_nodes[1]};
+    po_nodes[1] = (po_node){2, 0, 0, 10, 10, 3, 1, &po_nodes[2]};
+    po_nodes[2] = (po_node){1, 14, 14, 20, 20, 9, 0, &po_nodes[3]};
+    po_nodes[3] = (po_node){3, 2, 2, 8, 8, 7, 0, NULL};
+    assert(aoe_main_view_point_objects_ror(&v, &rows, &lists, 130, 90, 0, 7, 0, 4, 0, out) == 0);
+    n = (int)aoe_main_view_point_objects_ror(&v, &rows, &lists, 110, 60, 0, 7, 5, 4, 0, out);
+    assert(n == 3 && out[0].id == 2 && out[0].count == 1 && out[0].field_6 == 3 && out[1].id == 1 && out[1].count == 2 && out[1].field_6 == 5 && out[2].id == 3 && out[2].count == 4 && out[2].field_6 == 7);
+    assert(lists.counts[1] == 1 && lists.counts[2] == 1 && lists.counts[3] == 0 && lists.counts[4] == 1);
+    /* Class limit 2 drops D; without the slack A, B and D are class 3 (D's box misses the point); a
+       reversed row range or a point outside gives 0. */
+    assert(aoe_main_view_point_objects_ror(&v, &rows, &lists, 110, 60, 0, 7, 5, 2, 0, out) == 2);
+    n = (int)aoe_main_view_point_objects_ror(&v, &rows, &lists, 110, 60, 0, 7, 0, 4, 0, out);
+    assert(n == 2 && out[0].id == 2 && out[1].id == 1);
+    assert(aoe_main_view_point_objects_ror(&v, &rows, &lists, 110, 60, 8, 7, 5, 4, 0, out) == 0);
+    assert(aoe_main_view_point_objects_ror(&v, &rows, &lists, 99, 60, 0, 7, 5, 4, 0, out) == 0);
+    /* Two nodes of one ID in the same class keep the deeper one: a copy of B at depth 8 replaces B. */
+    po_nodes[3] = (po_node){2, 0, 0, 10, 10, 8, 1, NULL};
+    n = (int)aoe_main_view_point_objects_ror(&v, &rows, &lists, 110, 60, 0, 7, 0, 4, 0, out);
+    assert(n == 2 && out[0].id == 2 && out[0].field_6 == 8 && lists.counts[1] == 1); /* the freed slot is reused */
+}
 int main(void)
 {
     AoeMainViewRor v;
@@ -1437,5 +1480,6 @@ int main(void)
     game_view_default_tests();
     edit_click_tests();
     mouse_move_tests();
+    point_objects_tests();
     return 0;
 }

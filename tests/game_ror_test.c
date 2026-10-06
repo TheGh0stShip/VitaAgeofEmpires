@@ -526,6 +526,40 @@ static void random_game_tests(void) {
     assert(aoe_game_ror_setup_random_game_ror(&o) == 0 && strstr(rg_log, "wstop "));
     rg_wplayers = 3; rg_scn_ok = 0; assert(aoe_game_ror_setup_random_game_ror(&o) == 0);
 }
+
+static char gcc_log[512]; static int32_t gcc_e24, gcc_e28, gcc_dropped[9]; static int gcc_odd = 1, gcc_present = 1;
+static void gcc_step(void *c, int id, int32_t a, const char *t) { (void)c; size_t n = strlen(gcc_log); snprintf(gcc_log + n, sizeof gcc_log - n, "s%d(%d%s%s) ", id, (int)a, t ? "," : "", t ? t : ""); }
+static int32_t gcc_own(void *c) { (void)c; return 2; }
+static int gcc_oddf(void *c, int32_t ours, int32_t slot) { (void)c; size_t n = strlen(gcc_log); snprintf(gcc_log + n, sizeof gcc_log - n, "odd(%d,%d) ", (int)ours, (int)slot); return gcc_odd; }
+static int gcc_pres(void *c) { (void)c; return gcc_present; }
+static int32_t gcc_slot_player(void *c, int32_t slot) { (void)c; return slot == 3 ? 4 : slot == 5 ? 1 : 0; }
+static const char *gcc_name(void *c, int32_t p) { (void)c; return p == 4 ? "Zed" : "?"; }
+static void gcc_string(void *c, int32_t id, char *out, int size) { (void)c; snprintf(out, (size_t)size, "lost %%s (%d)", (int)id); }
+static void comm_command_tests(void) {
+    AoeGameCommCommandOpsRor o = {NULL, 4, 1, &gcc_e24, &gcc_e28, gcc_dropped, 1, gcc_own, gcc_oddf, gcc_pres, gcc_slot_player, gcc_name, gcc_string, gcc_step};
+    gcc_log[0] = '\0';
+    assert(aoe_game_ror_comm_command_ror(&o, 0x17a2, 0) == 1 && aoe_game_ror_comm_command_ror(&o, 0x17a3, 0) == 1 && strcmp(gcc_log, "s0(0) s1(0) ") == 0);
+    gcc_log[0] = '\0';
+    assert(aoe_game_ror_comm_command_ror(&o, 0x17b0, 7) == 1 && gcc_e24 == 1 && gcc_e28 == 1 && strcmp(gcc_log, "odd(2,7) s2(0) s3(1) s4(0) s5(0) s6(2406) s7(0) ") == 0);
+    gcc_log[0] = '\0';
+    assert(aoe_game_ror_comm_command_ror(&o, 0x17b0, 7) == 1 && gcc_log[0] == '\0'); /* only once */
+    gcc_log[0] = '\0';
+    assert(aoe_game_ror_comm_command_ror(&o, 0x17bd, 3) == 1 && strcmp(gcc_log, "s8(2) s9(0,lost Zed (1217)) s10(0,Zed) ") == 0);
+    gcc_log[0] = '\0';
+    assert(aoe_game_ror_comm_command_ror(&o, 0x17bd, 5) == 1 && gcc_log[0] == '\0'); /* the viewed player */
+    gcc_dropped[3] = 1; assert(aoe_game_ror_comm_command_ror(&o, 0x17bd, 3) == 1 && gcc_log[0] == '\0');
+    gcc_log[0] = '\0'; gcc_present = 0;
+    assert(aoe_game_ror_comm_command_ror(&o, 0x17b2, 0) == 1 && strcmp(gcc_log, "s4(0) s5(0) ") == 0);
+    gcc_log[0] = '\0';
+    assert(aoe_game_ror_comm_command_ror(&o, 0x17d5, 6) == 1 && strcmp(gcc_log, "s8(2) s11(6) ") == 0);
+    o.mode = 3; gcc_present = 1; gcc_log[0] = '\0';
+    assert(aoe_game_ror_comm_command_ror(&o, 0x17ac, 0) == 1 && strcmp(gcc_log, "s13(0) s14(1) s12(0) s7(1) s7(2) s6(9673) ") == 0);
+    gcc_log[0] = '\0';
+    assert(aoe_game_ror_comm_command_ror(&o, 0x17b6, 0) == 1 && strcmp(gcc_log, "s12(0) s7(1) s7(2) s6(9673) ") == 0);
+    gcc_log[0] = '\0';
+    assert(aoe_game_ror_comm_command_ror(&o, 0x17bd, 3) == 1 && gcc_log[0] == '\0');
+    o.mode = 7; assert(aoe_game_ror_comm_command_ror(&o, 0x17a2, 0) == 1 && gcc_log[0] == '\0');
+}
 int main(void) {
     char coded[64];
     AoeGameRorCommandOpsRor cops = {NULL, ns, sp, bc};
@@ -733,5 +767,6 @@ int main(void) {
     notify_tests();
     init_tests();
     random_game_tests();
+    comm_command_tests();
     return 0;
 }

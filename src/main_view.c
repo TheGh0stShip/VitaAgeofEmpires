@@ -1839,3 +1839,108 @@ int32_t aoe_view_mouse_move_ror(const AoeViewMoveOpsRor *o, int32_t x, int32_t y
     o->step(o->context, AOE_VIEW_MOVE_REDRAW, 1, 0, 0, 0);
     return 1;
 }
+
+/* ---- 0x005145a0 ---- */
+int32_t aoe_main_view_point_objects_ror(const AoeMainViewRor *v, const AoeViewDrawRowsOpsRor *rows,
+                                        AoeViewHitListsRor *lists, int32_t x, int32_t y, int32_t lo,
+                                        int32_t hi, int32_t slack, int32_t max_class,
+                                        int positive_only,
+                                        AoeViewPickedRor out[AOE_VIEW_PICKED_MAX_ROR])
+{
+    AoeViewHitEntryRor *heads[5] = {0}, *tails[5] = {0}, *free_list[5] = {0};
+    const void *node;
+    AoeViewDrawItemRor it;
+    int32_t row, c, n = 0;
+
+    if (slack < 0 || hi < lo || x < v->left || v->right < x || y < v->top ||
+        v->bottom < y || lo > 0x28 || hi < 0)
+        return 0;
+    if (lo < 0) lo = 0;
+    if (hi > 0x28) hi = 0x28;
+    y -= v->top;
+    x -= v->left;
+    for (c = 1; c <= 4; c++) lists->counts[c] = 0;
+    for (row = hi; row >= lo; row--) {
+        for (node = rows->row_head(rows->context, row); node != NULL;
+             node = it.next) {
+            int32_t cls, fc = 0;
+            AoeViewHitEntryRor *found = NULL, *e, *cur;
+            rows->item(rows->context, node, &it);
+            if (it.key != 0 || (positive_only && it.object_id < 0))
+                continue;
+            if (it.left - slack > x || it.top - slack > y ||
+                x > it.right + slack || y > it.bottom + slack)
+                continue;
+            cls = 4;
+            if (it.left <= x && it.top <= y && x <= it.right && y <= it.bottom) {
+                int hit = aoe_shape_hit_ror(it.shape, it.shape_size, it.frame,
+                                            (it.flags & 2) ? it.right - x : x - it.left,
+                                            y - it.top);
+                cls = hit == 1 ? 2 : hit == 2 ? 1 : 3;
+            }
+            if (cls > max_class)
+                continue;
+            for (c = 1; c <= 4 && !found; c++)
+                for (cur = heads[c]; cur; cur = cur->next)
+                    if (cur->id == it.object_id) { found = cur; fc = c; break; }
+            if (found) {
+                if (fc < cls || (fc == cls && it.depth < found->depth))
+                    continue;
+                if (heads[fc] == found) heads[fc] = found->next;
+                if (tails[fc] == found) tails[fc] = found->prev;
+                if (found->next) found->next->prev = found->prev;
+                if (found->prev) found->prev->next = found->next;
+                found->next = free_list[fc];
+                found->prev = NULL;
+                free_list[fc] = found;
+            }
+            if (free_list[cls]) {
+                e = free_list[cls];
+                free_list[cls] = e->next;
+            } else {
+                if (lists->counts[cls] == AOE_MAIN_VIEW_LIST_CAPACITY_ROR)
+                    continue;
+                e = &lists->lists[cls][lists->counts[cls]++];
+            }
+            e->id = it.object_id;
+            e->hit_class = (int16_t)cls;
+            e->depth = it.depth;
+            e->field_14 = it.field_14;
+            e->field_18 = it.field_18;
+            e->next = e->prev = NULL;
+            if (!heads[cls]) {
+                heads[cls] = tails[cls] = e;
+                continue;
+            }
+            for (cur = heads[cls];; cur = cur->next) {
+                if (cur->depth <= it.depth) {
+                    e->next = cur;
+                    e->prev = cur->prev;
+                    if (cur->prev) cur->prev->next = e; else heads[cls] = e;
+                    cur->prev = e;
+                    break;
+                }
+                if (!cur->next) {
+                    cur->next = e;
+                    e->prev = cur;
+                    tails[cls] = e;
+                    break;
+                }
+            }
+        }
+    }
+    for (c = 1; c <= 4; c++) {
+        AoeViewHitEntryRor *cur;
+        for (cur = heads[c]; cur; cur = cur->next) {
+            if (n >= AOE_VIEW_PICKED_MAX_ROR)
+                return AOE_VIEW_PICKED_MAX_ROR;
+            out[n].id = cur->id;
+            out[n].count = cur->hit_class;
+            out[n].field_6 = cur->depth;
+            out[n].field_14 = cur->field_14;
+            out[n].field_18 = cur->field_18;
+            n++;
+        }
+    }
+    return n;
+}

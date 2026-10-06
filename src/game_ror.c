@@ -1379,3 +1379,74 @@ int aoe_game_ror_setup_random_game_ror(const AoeGameRorRandomOpsRor *o) {
     for (s = 1; s < 9; ++s) o->slot_types[s - 1] = o->slot_type(o->context, s);
     return ok;
 }
+
+/* ---- 0x00505a30 ---- */
+const char *const aoe_game_ror_comm_screen_names_ror[3] = {"Temp Screen", "Multiplayer Wait Screen",
+                                                           "Status Screen"};
+#define GCC(id, a, t) o->step(o->context, (id), (int32_t)(a), (t))
+int aoe_game_ror_comm_command_ror(const AoeGameCommCommandOpsRor *o, int32_t code, int32_t slot) {
+    if (o->mode != 3) {
+        if (o->mode == 4 || o->mode == 5 || o->mode == 6) {
+            switch (code) {
+            case 0x17a2: if (o->has_game_screen) GCC(AOE_GCC_SHOW_PAUSED, 0, NULL); break;
+            case 0x17a3: if (o->has_game_screen) GCC(AOE_GCC_HIDE_PAUSED, 0, NULL); break;
+            case 0x17b0:
+                if (*o->global_580e24 == 0 &&
+                    o->odd_one_out(o->context, o->own_slot(o->context), slot)) {
+                    *o->global_580e24 = 1;
+                    *o->global_580e28 = 1;
+                    GCC(AOE_GCC_TEMP_SCREEN, 0, NULL);
+                    GCC(AOE_GCC_DELETE_SCREENS, 1, NULL);
+                    GCC(AOE_GCC_PLAYER_45D440, 0, NULL);
+                    GCC(AOE_GCC_LEAVE, 0, NULL);
+                    if (o->screen_present(o->context)) GCC(AOE_GCC_OK_DIALOG, 0x966, NULL);
+                    GCC(AOE_GCC_REMOVE_SCREEN, 0, NULL);
+                }
+                break;
+            case 0x17b2:
+                if (o->has_game_screen) {
+                    GCC(AOE_GCC_PLAYER_45D440, 0, NULL);
+                    GCC(AOE_GCC_LEAVE, 0, NULL);
+                    if (o->screen_present(o->context)) GCC(AOE_GCC_OK_DIALOG, 0x25c9, NULL);
+                }
+                break;
+            case 0x17bd: {
+                int32_t p = o->slot_player(o->context, slot);
+                if (p != o->viewed_player && o->has_game_screen && p > 0 && o->dropped[slot] == 0) {
+                    char fmt[0x100], text[0x100];
+                    const char *name = o->player_name(o->context, p);
+                    GCC(AOE_GCC_SOUND, 2, NULL);
+                    fmt[0] = '\0';
+                    o->string(o->context, 0x4c1, fmt, sizeof fmt);
+                    snprintf(text, sizeof text, fmt, name);
+                    GCC(AOE_GCC_CHAT, 0, text);
+                    GCC(AOE_GCC_LOG, 0, name);
+                }
+                break;
+            }
+            case 0x17d5:
+                if (o->has_game_screen) {
+                    GCC(AOE_GCC_SOUND, 2, NULL);
+                    GCC(AOE_GCC_CHAT_LINE, slot, NULL);
+                }
+                break;
+            default: break;
+            }
+        }
+        return 1;
+    }
+    switch (code) {
+    case 0x17ac: case 0x17b7:
+        GCC(AOE_GCC_VTABLE_44, 0, NULL);
+        GCC(AOE_GCC_FLAG_97D, 1, NULL);
+        /* fall through */
+    case 0x17a8: case 0x17a9: case 0x17aa: case 0x17ab: case 0x17b2: case 0x17b6:
+        GCC(AOE_GCC_TO_MENUS, 0, NULL);
+        GCC(AOE_GCC_REMOVE_SCREEN, 1, NULL);
+        GCC(AOE_GCC_REMOVE_SCREEN, 2, NULL);
+        if (o->screen_present(o->context)) GCC(AOE_GCC_OK_DIALOG, 0x25c9, NULL);
+        break;
+    default: break;
+    }
+    return 1;
+}

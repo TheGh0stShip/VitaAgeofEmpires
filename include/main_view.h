@@ -661,6 +661,7 @@ typedef struct {
     size_t shape_size;
     int32_t key;                 /* +0x2c */
     int16_t left, top, right, bottom; /* +0x30..+0x36 */
+    int16_t depth;               /* +0x3a (0x005145a0 only) */
 } AoeViewDrawItemRor;
 
 typedef struct {
@@ -1293,5 +1294,40 @@ typedef struct {
     int32_t (*step)(void *context, int32_t id, int32_t a, int32_t b, int32_t c, int32_t d);
 } AoeViewMoveOpsRor;
 int32_t aoe_view_mouse_move_ror(const AoeViewMoveOpsRor *o, int32_t x, int32_t y);
+
+
+/* ---- 0x005145a0: the objects under a point, by hit class ---- */
+/* The view's hit lists +0x2fc + class * 4 (0x40 entries of 0x14 bytes each,
+   counts +0x310 + class * 4), classes 1..4 used. */
+typedef struct AoeViewHitEntryRor {
+    int32_t id;                              /* +0x00 */
+    int16_t hit_class, depth;                /* +0x04, +0x06 */
+    int16_t field_14, field_18;              /* +0x08, +0x0a */
+    struct AoeViewHitEntryRor *next, *prev;  /* +0x0c, +0x10 */
+} AoeViewHitEntryRor;
+typedef struct {
+    AoeViewHitEntryRor *lists[AOE_MAIN_VIEW_LISTS_ROR];
+    int32_t counts[AOE_MAIN_VIEW_LISTS_ROR];
+} AoeViewHitListsRor;
+/* 0x005145a0(x, y, lo, hi, slack, max_class, positive_only): nothing (0)
+   unless slack >= 0, lo <= hi, (x, y) is inside the panel rectangle
+   (inclusive), lo <= 0x28 and hi >= 0; the rows are then clamped to
+   0..0x28 and the point made panel-relative. The lists' counts are reset.
+   Rows hi down to lo of `rows` (the view's +0x334): a node with key 0
+   (and, with `positive_only`, a non-negative ID) whose box widened by
+   `slack` holds the point is class 4; inside the box itself class 3,
+   and by the pixel (0x005149d0, mirrored at right - x) class 2 for a
+   skip run and 1 for a colour run. A class at most `max_class` is
+   listed: an entry already listed for the ID in a better (lower) class,
+   or the same class with a greater depth (+0x3a), wins; otherwise the
+   old entry is unlinked and the new one (from the class's 0x40-entry
+   store, nothing when full) is inserted by descending depth. The
+   entries of classes 1..4 then fill `out` (ID, class, depth, +0x14,
+   +0x18); returns their number (at most 0x40). */
+int32_t aoe_main_view_point_objects_ror(const AoeMainViewRor *v, const AoeViewDrawRowsOpsRor *rows,
+                                        AoeViewHitListsRor *lists, int32_t x, int32_t y, int32_t lo,
+                                        int32_t hi, int32_t slack, int32_t max_class,
+                                        int positive_only,
+                                        AoeViewPickedRor out[AOE_VIEW_PICKED_MAX_ROR]);
 
 #endif

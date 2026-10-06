@@ -897,4 +897,54 @@ typedef struct {
    and the slot types are kept. */
 int aoe_game_ror_setup_random_game_ror(const AoeGameRorRandomOpsRor *o);
 
+
+/* ---- 0x00505a30: the tribe game's comm command ---- */
+enum {
+    AOE_GCC_SHOW_PAUSED,    /* 0x00480640 on the game screen */
+    AOE_GCC_HIDE_PAUSED,    /* 0x00480690 */
+    AOE_GCC_TEMP_SCREEN,    /* a new status screen 0x0049e7a0("Temp Screen", "", 0, -1), shown 0x00451be0(.., 0) */
+    AOE_GCC_DELETE_SCREENS, /* 0x004fe490(1) */
+    AOE_GCC_PLAYER_45D440,  /* 0x45d440 on the viewed player (world +0x40[+0x7c]) */
+    AOE_GCC_LEAVE,          /* 0x00503060 */
+    AOE_GCC_OK_DIALOG,      /* 0x004578d0(a, 0, 0x1c2, 100), only with a screen present (0x00451ab0) */
+    AOE_GCC_REMOVE_SCREEN,  /* 0x00451df0(name a: 0 "Temp Screen", 1 "Multiplayer Wait Screen", 2 "Status Screen") */
+    AOE_GCC_SOUND,          /* 0x0041c120(a) */
+    AOE_GCC_CHAT,           /* 0x00480760(text) on the game screen */
+    AOE_GCC_LOG,            /* 0x0042c330(0x00580db8, "$$$ PROBLEM COMMUNICATING WITH %s", text) */
+    AOE_GCC_CHAT_LINE,      /* 0x004806d0(a) on the game screen */
+    AOE_GCC_TO_MENUS,       /* 0x00500d80 */
+    AOE_GCC_VTABLE_44,      /* the game's vtable +0x44 */
+    AOE_GCC_FLAG_97D        /* 0x0041ba70(1) */
+};
+extern const char *const aoe_game_ror_comm_screen_names_ror[3];
+typedef struct {
+    void *context;
+    int32_t mode;                 /* +0x1b0 */
+    int has_game_screen;          /* +0xc24 */
+    int32_t *global_580e24, *global_580e28;
+    const int32_t *dropped;       /* 0x007c0500[] */
+    int16_t viewed_player;        /* world (+0x3f4) +0x7c */
+    int32_t (*own_slot)(void *context);                            /* 0x00423c10 */
+    int (*odd_one_out)(void *context, int32_t ours, int32_t slot); /* 0x004259f0 */
+    int (*screen_present)(void *context);                          /* 0x00451ab0 */
+    int32_t (*slot_player)(void *context, int32_t slot);           /* 0x0041c080 */
+    const char *(*player_name)(void *context, int32_t player);     /* world +0x40[p] +0x44 */
+    void (*string)(void *context, int32_t id, char *out, int size); /* +0x20 */
+    void (*step)(void *context, int id, int32_t a, const char *text);
+} AoeGameCommCommandOpsRor;
+/* 0x00505a30(code, slot): in modes 4..6: 0x17a2 / 0x17a3 show / hide
+   the paused text (with a game screen); 0x17b0, once (0x00580e24): when
+   we are the odd one out (0x004259f0 with our slot) both globals are
+   set, a "Temp Screen" is made and shown, the dialogs deleted, the
+   viewed player's 0x45d440, the leave, dialog 0x966 (screen present)
+   and the temp screen removed; 0x17b2 (game screen): 0x45d440, leave,
+   dialog 0x25c9; 0x17bd: the slot's player, when not the viewed one,
+   above 0 and not dropped: sound 2, string 0x4c1 formatted with its
+   name as chat, the log line; 0x17d5 (game screen): sound 2, chat line
+   `slot`. Mode 3: 0x17a8..0x17ab, 0x17b2, 0x17b6 go to the menus,
+   remove the wait and status screens and show dialog 0x25c9 (screen
+   present); 0x17ac / 0x17b7 first the vtable +0x44 and 0x0041ba70(1).
+   Other modes and codes do nothing. Returns 1. */
+int aoe_game_ror_comm_command_ror(const AoeGameCommCommandOpsRor *o, int32_t code, int32_t slot);
+
 #endif

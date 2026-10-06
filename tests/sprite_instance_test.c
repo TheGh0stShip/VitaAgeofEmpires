@@ -98,8 +98,46 @@ static int real_dat(const char *path) {
     return ok;
 }
 
+static int32_t drawn_frame, drawn_x, drawn_y, played;
+static void part_draw(void *c, const DatGraphic *g, int32_t a, int32_t f,
+                      int32_t x, int32_t y) {
+    (void)c; (void)g; (void)a;
+    drawn_frame = f; drawn_x = x; drawn_y = y;
+}
+static void play_sound(void *c, int16_t id) { (void)c; (void)id; ++played; }
+
+static void draw_slots(void) {
+    DatGraphic g = {.present = 1, .frame_count = 4, .angle_count = 1,
+                    .layer = 20, .sound_id = 7};
+    AoeSpriteInstance s;
+    memset(&s, 0, sizeof(s));
+    s.graphic = &g; s.kind = 1; s.offset_x = 3; s.offset_y = -2;
+    /* static: frame 0, offset added */
+    assert(aoe_sprite_instance_draw_top_ror(&s, 0, 10, 20, part_draw, play_sound, NULL) == 1);
+    assert(drawn_frame == 0 && drawn_x == 13 && drawn_y == 18 && played == 0);
+    assert(aoe_sprite_instance_draw_lower_ror(&s, 0, 10, 20, 0, part_draw, NULL) == 0);
+    /* animated: current frame, no offset; changed frame plays sounds once */
+    s.kind = 2; s.animation.frame = 1; s.animation.previous_frame = 0;
+    s.animation.frame_changed = 1;
+    assert(aoe_sprite_instance_draw_top_ror(&s, 0, 10, 20, part_draw, play_sound, NULL) == 1);
+    assert(drawn_x == 10 && drawn_y == 20 && played == 1);
+    assert(s.animation.frame_changed == 0);
+    aoe_sprite_instance_draw_top_ror(&s, 0, 10, 20, part_draw, play_sound, NULL);
+    assert(played == 1);
+    g.layer = 5; s.animation.frame = 2;
+    assert(aoe_sprite_instance_draw_lower_ror(&s, 0, 1, 1, 0, part_draw, NULL) == 1);
+    assert(drawn_frame == 2);
+    {
+        int16_t x0, y0, x1, y1;
+        g.coordinates[0] = -1; g.coordinates[1] = -1; g.coordinates[2] = 1; g.coordinates[3] = 1;
+        assert(aoe_sprite_instance_bounds_ror(&s, 0, NULL, NULL, &x0, &y0, &x1, &y1));
+        assert(x0 == -1 && y1 == 1);
+    }
+}
+
 int main(int argc, char **argv) {
     synthetic();
+    draw_slots();
     for (int i = 1; i < argc; ++i)
         if (!real_dat(argv[i])) return 1;
     {

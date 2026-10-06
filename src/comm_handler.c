@@ -960,6 +960,30 @@ void aoe_comm_gtd_rx_log_ror(const AoeCommRor *c, const AoeCommOpsRor *ops, int3
 
 void aoe_comm_post_ror(const AoeCommOpsRor *ops, uint32_t w) { ops->post(ops->context, w, 0); }
 
+int aoe_comm_set_ready_ror(AoeCommRor *c, const int32_t stats[8]) {
+    char line[160];
+    uint8_t msg[0x28];
+    uint32_t self = c->self;
+    int i;
+    if (self >= AOE_COMM_SLOTS) return 0;
+    snprintf(line, sizeof line,
+             "SET-MY-READINESS: P#%d RDY=%d O1=%d O2=%d O3=%d O4=%d O5=%d O6=%d O7=%d ",
+             (int)self, (int)c->stat[0][self], (int)c->stat[1][self], (int)c->stat[2][self],
+             (int)c->stat[3][self], (int)c->stat[4][self], (int)c->stat[5][self],
+             (int)c->stat[6][self], (int)c->stat[7][self]);
+    logf_(c, line);
+    for (i = 0; i < 8; ++i) c->stat[i][self] = stats[i];
+    memset(msg, 0, sizeof msg);
+    msg[0] = 0x52;
+    msg[1] = (uint8_t)stats[0];
+    for (i = 1; i < 8; ++i) put32(msg + 4 * i, (uint32_t)stats[i]);
+    put32(msg + 0x20, (uint32_t)c->field_12a4);
+    msg[0x24] = c->gtd;
+    if (!c->is_host) (void)aoe_comm_fast_send_ror(c, 0, msg, sizeof msg);
+    aoe_comm_post_ror(c->ops, 0x17a6);
+    return 1;
+}
+
 int32_t aoe_comm_enable_new_players_ror(void *iface, int32_t enable,
                                         const AoeCommEnableOpsRor *ops) {
     void *dplay = NULL;
@@ -974,4 +998,94 @@ int32_t aoe_comm_enable_new_players_ror(void *iface, int32_t enable,
     snprintf(line, sizeof line, "Released to links=%d", (int)refs);
     if (ops->log) ops->log(ops->context, line);
     return hr;
+}
+
+void aoe_comm_receive_ror(AoeCommRor *c) {
+    const AoeCommOpsRor *ops = c->ops;
+    char line[96];
+    uint32_t start, t0, t1, count = 0;
+    if (!ops->dp_present || !ops->dp_present(ops->context) || !ops->dp_receive) return;
+    start = ops->now_ms(ops->context);
+    if (ops->dp_message_count &&
+        ops->dp_message_count(ops->context, ops->self_dpid(ops->context), &count) == 0 &&
+        count > 10) {
+        snprintf(line, sizeof(line), "!!! DPMsgCount = %u", (unsigned)count);
+        logf_(c, line);
+    }
+    for (;;) {
+        int32_t from = 0, to = 0, hr;
+        uint32_t size = 0;
+        t0 = ops->now_ms(ops->context);
+        hr = ops->dp_receive(ops->context, 8, &from, &to, NULL, &size);
+        t1 = ops->now_ms(ops->context);
+        if (t1 - t0 > 50) {
+            snprintf(line, sizeof(line), "!!! Receive Peek slow - %u msec", (unsigned)(t1 - t0));
+            logf_(c, line);
+        }
+        if (hr == 0) {
+            if (size >= 4000) {
+                snprintf(line, sizeof(line), "True overflow %d requested.  Max = %d", (int)size,
+                         4000);
+                logf_(c, line);
+                return;
+            }
+        } else {
+            size = 4000;
+        }
+        t0 = ops->now_ms(ops->context);
+        hr = ops->dp_receive(ops->context, 1, &from, &to, c->rx_buf, &size);
+        t1 = ops->now_ms(ops->context);
+        if (t1 - t0 > 50) {
+            snprintf(line, sizeof(line), "!!! Receive slow - %u msec", (unsigned)(t1 - t0));
+            logf_(c, line);
+        }
+        t1 = ops->now_ms(ops->context);
+        if (t1 - start > 500) {
+            snprintf(line, sizeof(line), "!!! In Receive Loop for %u ms", (unsigned)(t1 - start));
+            logf_(c, line);
+        }
+        if ((uint32_t)hr == 0x887700beu || size == 0) return;
+        if (hr != 0) {
+            if (ops->report) ops->report(ops->context, hr, "Rcv MSG");
+            return;
+        }
+        if (size > 4000) size = 4000;
+        c->rx_bytes += size;
+        c->rx_messages++;
+        c->rx_buf[size] = 0;
+        if (from == 0) {
+            if (ops->system_message) ops->system_message(ops->context, size, c->rx_buf, to);
+            return;
+        }
+        if (ops->run) ops->run(ops->context, (int32_t)size, c->rx_buf, from, to, 0);
+    }
+}
+
+void aoe_comm_pump_ror(AoeCommRor *c) {
+    const AoeCommOpsRor *ops = c->ops;
+    int32_t self;
+    if (!c->multiplayer) return;
+    if (c->gtd) aoe_comm_rx_deliver_ror(c);
+    self = ops->self_dpid ? ops->self_dpid(ops->context) : 0;
+    if (self != 0) {
+        uint32_t count = 0;
+        int32_t hr = ops->dp_message_count ? ops->dp_message_count(ops->context, self, &count) : 0;
+        if (hr != 0) {
+            if (ops->report) ops->report(ops->context, hr, "MsgWait");
+            goto store;
+        }
+        if (count == 0) goto store;
+    }
+    aoe_comm_receive_ror(c);
+    if (!c->gtd) goto ping;
+    aoe_comm_rx_deliver_ror(c);
+store:
+    if (c->gtd && ops->gtd_send_store) ops->gtd_send_store(ops->context);
+ping:
+    aoe_comm_ping_quiet_ror(c, 0);
+}
+
+void aoe_comm_pump_flagged_ror(AoeCommRor *c) {
+    c->field_12a8 = 1;
+    aoe_comm_pump_ror(c);
 }

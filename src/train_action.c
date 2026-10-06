@@ -2,6 +2,7 @@
 #include <math.h>
 #include <limits.h>
 #include <stdlib.h>
+#include <string.h>
 
 int16_t aoe_train_spawn_direction_ror(uint16_t random, int late_attempt) {
     int32_t value=(int32_t)((uint32_t)random<<1);
@@ -383,4 +384,18 @@ int aoe_train_action_update_base(AoeTrainAction *a, float delta,
                                  int fast, const AoeTrainActionOps *ops,
                                  uint8_t *result) {
     return aoe_train_action_update_ror(a,delta,fast,ops,result);
+}
+
+int aoe_train_action_readout_ror(const AoeTrainAction *a,
+                                 int16_t *unit_id, int16_t *percent,
+                                 char *name, int16_t size) {
+    if (name && size < 1) return 0;
+    if (!aoe_train_action_progress_ror(a, unit_id, percent)) return 0;
+    if (name) {
+        const char *src = a->trained_template && a->trained_template->name ?
+                          a->trained_template->name : "";
+        strncpy(name, src, (size_t)size);
+        name[size - 1] = '\0';
+    }
+    return 1;
 }

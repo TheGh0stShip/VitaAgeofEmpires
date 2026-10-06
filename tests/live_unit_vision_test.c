@@ -135,5 +135,9 @@ int main(void) {
     def.size[0] = 1.2f;
 
     for (unsigned i = 0; i < 16; ++i) aoe_object_update_list_clear(&lists[i]);
+    /* 0x004ad070: unfinished buildings see with their rectangle. */
+    assert(aoe_live_unit_vision_building_mode_ror(0, 0) == 1 &&
+           aoe_live_unit_vision_building_mode_ror(1, 0) == 0 &&
+           aoe_live_unit_vision_building_mode_ror(1, 1) == 1);
     return 0;
 }

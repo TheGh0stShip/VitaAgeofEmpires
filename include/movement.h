@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "pathfinder_search.h"
+#include "zone_map.h"
 
 /* Patched Rise of Rome 1.0a moving-unit movement state (semantic
    storage for live fields +0xa4..+0x178). */
@@ -24,6 +25,8 @@ typedef struct {
     float blocked_wait;            /* +0x130: >0 waiting, -1 expired */
     int32_t retry_baseline;        /* +0x144, read by the pathfinder */
     int32_t status;                /* +0x148: 1 stopped, 2 moving */
+    /* +0x14c/+0x150: terrains passable for the current search (-1 none). */
+    int32_t free_terrain_a, free_terrain_b;
     uint8_t use_alternate_path;    /* +0x154 */
     uint8_t hold_155;              /* +0x155 (0x0044eb30 sets it) */
     int32_t field_a0;              /* live +0xa0 */
@@ -249,5 +252,139 @@ int32_t aoe_movement_step_to_ror(AoeLiveUnit *unit, AoeMovementRor *movement,
 int aoe_movement_tick_ror(AoeLiveUnit *unit, AoeMovementRor *movement,
                           AoePathBudgetRor *budget,
                           const AoeMovementTickOps *ops);
+
+typedef struct {
+    void *context;
+    /* Map +0x08/+0x0c (world +0x3c, map +0x28). */
+    int32_t map_width, map_height;
+    /* Pathfinder 0x00583bc8 when `second` is nonzero, else 0x006a1cc0:
+       the search counter 0x0045a4e0 and the search 0x00458930 (its 0/1
+       result). The request's unit path is the alternate one (+0x154). */
+    void (*count_search)(void *context, int second);
+    int32_t (*find)(void *context, int second, const AoePathRequestRor *request);
+} AoeMovementPathToOps;
+
+/* 0x0044e350 (11 arguments, the third unused): a goal tile outside the
+   map (or negative) returns 0 untouched. Otherwise +0x14c/+0x150 take the
+   two free terrains and +0x154 is set while the chosen pathfinder counts a
+   search and runs it from the unit's position (ftol x, y) to the goal
+   with `range`, `target_id`, mode 1, `budget_limited`, argument 1,
+   occupancy checked, step 1, the float argument pushed as the integer 1,
+   `query_filter` and `budget_base`. Afterwards +0x154 is cleared and both
+   free terrains reset to -1; the search result is returned. -1 for
+   missing dependencies (host-only). */
+int32_t aoe_movement_path_to_ror(AoeLiveUnit *unit, AoeMovementRor *m,
+                                 int32_t x2, int32_t y2, float range,
+                                 int32_t target_id, int32_t budget_limited,
+                                 int32_t free_terrain_a,
+                                 int32_t free_terrain_b, int second,
+                                 int32_t query_filter, int32_t budget_base,
+                                 const AoeMovementPathToOps *ops);
+
+typedef struct {
+    void *context;
+    /* 0x00521b50 on the map's zone manager (+0x8dc4) with the world's
+       passability table for the unit's restriction (+0x54[template
+       +0x66], count +0x52); and 0x00521c60, the map of an index. */
+    int32_t (*zone_index)(void *context, AoeLiveUnit *unit);
+    const AoeZoneMapRor *(*zone_map)(void *context, int32_t index);
+    /* The second pathfinder 0x00583bc8: search 0x00458930 (its 0/1 result
+       is discarded) and penalty fill 0x00458820(0). */
+    int32_t (*find)(void *context, const AoePathRequestRor *request);
+    void (*clear_penalty)(void *context);
+} AoeMovementReachOps;
+
+/* 0x0044ede0: the unit's zone map index (unit +0x7c, `zone_index`) is
+   looked up once while -1. When the zone at the unit's tile (ftol x, y)
+   differs from the goal tile's and 0x00521640(unit tile, goal, range) finds
+   no tile of the unit's zone within `range` of the goal, NULL. Otherwise, with +0x154 set, the
+   second pathfinder searches from the unit's tile to the goal with
+   `range`, `target_id`, mode 1, no budget limit, argument 0, occupancy
+   checked, step 1, the float argument pushed as the integer 1, filter -1
+   and budget base -1; +0x154 is cleared, the penalties filled with 0 and
+   the alternate path (+0xd8) returned. NULL for missing dependencies or
+   tiles outside the zone map (the original reads unchecked; host-only). */
+AoeUnitPathRor *aoe_movement_reach_path_ror(AoeLiveUnit *unit,
+                                            AoeMovementRor *m,
+                                            int32_t *zone_index,
+                                            const int32_t goal[2],
+                                            float range, int32_t target_id,
+                                            const AoeMovementReachOps *ops);
+
+/* Unit vtable +0x114(x, y, arg): nonzero when the unit may stand at the
+   point. */
+typedef int32_t (*AoeMovementPassableFn)(void *context, AoeLiveUnit *unit,
+                                         float x, float y, int32_t arg);
+
+/* 0x0044e7a0 (moving-unit slot: x1, y1, x2, y2, range, arg): 0 for
+   equal ends. Otherwise steps = 2 * max(|dx|, |dy|) of the float increments
+   dx / steps, dy / steps (rounded to float); from (x1, y1) each step's
+   float point is checked with `passable` whenever its ftol tile differs
+   from the last checked one (initially -999, -999): blocked returns 0,
+   and a point within `range` of the end (x87 sqrt, compared <=) ends the
+   walk with 1. 1 after the last step. 0x0044e600 is the same over
+   from/to points, also storing the blocked tile in `blocked` (when
+   non-NULL here). -1 without `passable` (host-only). */
+int32_t aoe_movement_line_passable_ror(AoeLiveUnit *unit, int32_t x1,
+                                       int32_t y1, int32_t x2, int32_t y2,
+                                       float range, int32_t arg,
+                                       AoeMovementPassableFn passable,
+                                       void *context, int32_t blocked[2]);
+/* 0x0044e600: from/to as tile points; see above. */
+int32_t aoe_movement_line_first_block_ror(AoeLiveUnit *unit,
+                                          const int32_t from[2],
+                                          const int32_t to[2], float range,
+                                          int32_t blocked[2], int32_t arg,
+                                          AoeMovementPassableFn passable,
+                                          void *context);
+
+typedef struct {
+    AoeMovementPathToOps path;   /* map size, pathfinder count and search */
+    /* As in AoeMovementReachOps (0x00521b50 / 0x00521c60). */
+    int32_t (*zone_index)(void *context, AoeLiveUnit *unit);
+    const AoeZoneMapRor *(*zone_map)(void *context, int32_t index);
+} AoeMovementZonePathOps;
+
+/* 0x0044da90 (9 arguments, the third unused): a goal outside the map
+   returns 0. The zone map index (unit +0x7c) is looked up once while -1;
+   without a map, 0. When the goal's zone differs from the unit's tile's
+   and 0x00521640(unit tile, goal, range) finds no tile of the unit's zone
+   within `range` of the goal, 0. Otherwise the chosen pathfinder counts a
+   search and runs it from the unit's tile with `range`, `target_id`, mode
+   0, `budget_limited`, argument 1, occupancy checked, step 1, the float
+   argument pushed as the integer 1, `query_filter` and `budget_base`,
+   returning its result (the normal path, +0x154 untouched). -1 for
+   missing dependencies (host-only). */
+int32_t aoe_movement_zone_path_ror(AoeLiveUnit *unit, int32_t *zone_index,
+                                   int32_t x2, int32_t y2, float range,
+                                   int32_t target_id, int32_t budget_limited,
+                                   int second, int32_t query_filter,
+                                   int32_t budget_base,
+                                   const AoeMovementZonePathOps *ops);
+
+/* 0x0044dc40 (target_id, range, budget_limited, second, query_filter,
+   budget_base): 0x0044da90 toward an object. The caller resolves the ID
+   (0x005206d0; NULL gives 0). There is no map-bounds check; the goal is
+   the object's tile (ftol x, y). The zone test and the search (mode 0,
+   the object's ID as target) are those of 0x0044da90, whose result is
+   returned (0 when the zone test fails or there is no zone map). */
+int32_t aoe_movement_object_path_ror(AoeLiveUnit *unit, int32_t *zone_index,
+                                     const AoeLiveUnit *target, int32_t target_id, float range,
+                                     int32_t budget_limited, int second, int32_t query_filter,
+                                     int32_t budget_base, const AoeMovementZonePathOps *ops);
+
+/* 0x0044e130 (target_id, range, budget_limited, second, query_filter,
+   budget_base, met): as 0x0044dc40 but mode 1 with +0x154 set around the
+   search (the alternate path); with `budget_base` not -1 the chosen
+   pathfinder's met IDs are then collected into `met` (0x0045ade0,
+   `collect`). +0x154 is cleared; the search result is returned. */
+typedef void (*AoeMovementCollectFn)(void *context, int second, void *met);
+int32_t aoe_movement_object_path_alt_ror(AoeLiveUnit *unit, AoeMovementRor *m,
+                                         int32_t *zone_index, const AoeLiveUnit *target,
+                                         int32_t target_id, float range,
+                                         int32_t budget_limited, int second,
+                                         int32_t query_filter, int32_t budget_base, void *met,
+                                         AoeMovementCollectFn collect,
+                                         const AoeMovementZonePathOps *ops);
 
 #endif

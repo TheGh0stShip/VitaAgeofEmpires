@@ -136,3 +136,54 @@ void aoe_player_cost_queue_refund_ror(void *binding, int16_t unit_id) {
         (void)aoe_player_cost_refund_ror(b->resources,
                                          bound_template(b, unit_id));
 }
+
+/* 0x004f0830 */
+int aoe_player_cost_shown_ror(const AoePlayerResources *r, const DatUnit *t, float mult,
+                              int16_t types[3], int16_t amounts[3]) {
+    int affordable = 0;
+    int16_t extra = 0;
+    int i;
+    for (i = 0; i < 3; ++i) {
+        types[i] = -1;
+        amounts[i] = 0;
+    }
+    if (!aoe_player_cost_check_ror(r, t, 1.0f, 0, NULL, &affordable)) return 0;
+    if (!t || t->type < 70) return 1;
+    for (i = 0; i < 3; ++i) {
+        int16_t type = t->costs[i].resource_type;
+        int16_t amount;
+        if (!(uint8_t)t->costs[i].paid) continue;
+        types[i] = type;
+        if (type < 0) continue;
+        if (!index_ok(r, type)) return 0;
+        amount = (int16_t)(int32_t)((double)t->costs[i].amount * mult);
+        amounts[i] = amount;
+        if ((double)r->values[type] < (double)amount && affordable) {
+            int16_t held = (int16_t)(int32_t)r->values[type];
+            extra = (int16_t)(extra + (amount - held));
+            amounts[i] = held;
+        }
+    }
+    if (extra > 0) {
+        if (types[0] == 3 || types[0] == -1) {
+            types[0] = 3;
+            amounts[0] = (int16_t)(amounts[0] + extra);
+        } else if (types[1] == 3 || types[1] == -1) {
+            types[1] = 3;
+            amounts[1] = (int16_t)(amounts[1] + extra);
+        } else if (types[2] == 3 || types[2] == -1) {
+            types[2] = 3;
+            amounts[2] = extra;
+        }
+    }
+    for (i = 0; i < 3; ++i)
+        if (amounts[i] < 1) types[i] = -1;
+    return 1;
+}
+
+/* 0x004f1ff0 */
+int32_t aoe_player_cost_shown_total_ror(const AoePlayerResources *r, const DatUnit *t) {
+    int16_t types[3], amounts[3];
+    aoe_player_cost_shown_ror(r, t, 1.0f, types, amounts);
+    return (int32_t)amounts[0] + amounts[1] + amounts[2];
+}

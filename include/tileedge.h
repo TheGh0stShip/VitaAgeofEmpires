@@ -12,8 +12,8 @@ typedef struct {
     uint32_t offsets[TILEEDGE_SHAPES][TILEEDGE_PATTERNS][2];
 } TileEdgeIndex;
 
-/* Parses the original TILEEDGE.DAT offset tables. Empiresx.exe 0x00511d70
-   and Empires.exe 0x004b5e50 relocate 17 shape-table offsets, then 47 pairs
+/* Parses the original TILEEDGE.DAT offset tables. Empiresx.exe disc 0x00511d70
+   (patched 0x0050f5c0) and Empires.exe 0x004b5e50 relocate 17 shape-table offsets, then 47 pairs
    of optional data offsets per shape. This validates and exposes those
    offsets but does not render the edge pixel streams. */
 int tileedge_parse(const uint8_t *bytes, size_t size, TileEdgeIndex *index);

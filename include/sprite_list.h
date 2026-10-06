@@ -62,6 +62,12 @@ void aoe_sprite_list_each_ror(const AoeSpriteList *list, void (*fn)(void *contex
 void *aoe_sprite_list_first_ror(const AoeSpriteList *list, const void *graphic);
 void aoe_sprite_list_each_of_ror(const AoeSpriteList *list, const void *graphic,
                                  void (*fn)(void *context, void *sprite), void *context);
+/* Live-unit slots 0x004a9e70 / 0x004a9e90: add a graphic at `priority`
+   with a zero offset (0x00415640) / remove it (0x004156f0) on the unit's
+   sprite manager (+0x18). */
+int aoe_live_unit_sprite_add_ror(AoeSpriteList *unit_sprites, const void *graphic,
+                                 uint8_t priority);
+int aoe_live_unit_sprite_remove_ror(AoeSpriteList *unit_sprites, const void *graphic);
 size_t aoe_sprite_list_count(const AoeSpriteList *list);
 const void *aoe_sprite_list_graphic_at(const AoeSpriteList *list, size_t index);
 const void *aoe_sprite_list_sprite_at(const AoeSpriteList *list, size_t index);

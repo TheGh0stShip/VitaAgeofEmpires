@@ -411,3 +411,26 @@ int aoe_live_unit_repair_ror(AoeLiveUnit *u, float amount, AoeRepairPayFn pay,
     if (!repair_paid(u, amount, 0, pay, context, &gain)) return 2;
     return repair_tribe(u, gain, pay, context);
 }
+
+int aoe_unit_path_terrain_point_ror(AoeLiveUnit *unit, AoeUnitPathRor *path,
+                                    int terrain, float *x, float *y,
+                                    const AoeLineSearchOps *ops) {
+    int32_t i;
+    if (!path || !path->points || path->count < 2 || !x || !y) return 0;
+    for (i = 0; i + 1 < path->count; ++i) {
+        const AoePathWaypointRor *a = &path->points[i];
+        const AoePathWaypointRor *b = &path->points[i + 1];
+        int32_t from[2], to[2], out[2] = {0, 0};
+        from[0] = (int32_t)a->x; from[1] = (int32_t)a->y;
+        to[0] = (int32_t)b->x; to[1] = (int32_t)b->y;
+        path->cursor = i + 1;
+        if (aoe_unit_line_terrain_point_ror(unit, from, to, out, terrain,
+                                            terrain, 1, ops) == 1) {
+            *x = *y = (float)out[0] + 0.5f; /* 0x00542468 */
+            return 1;
+        }
+    }
+    *x = -1.0f;
+    *y = -1.0f;
+    return 0;
+}

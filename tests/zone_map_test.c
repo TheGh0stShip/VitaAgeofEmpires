@@ -96,5 +96,20 @@ int main(void) {
         assert(!aoe_zone_nearest_terrain_ror(&a, 0, 5, at, 1, 99, 1, terrain_at, NULL));
         aoe_zone_map_free_ror(&a);
     }
+    {
+        /* 0x004aba60 / 0x004abae0: a unit's zone with a cached map index. */
+        AoeZoneManagerRor mg;
+        AoeUnitZoneWorldRor w = {&mg, N, N, t, boat, 2};
+        int32_t idx = -1, at[2] = {1, 1};
+        aoe_zone_manager_init_ror(&mg);
+        assert(aoe_unit_zone_ror(&w, &idx, 5.9f, 2.2f) == 1 && idx == 0);
+        w.table = NULL; /* the cached index is used from now on */
+        assert(aoe_unit_zone_ror(&w, &idx, 2.5f, 0.0f) == 1);
+        assert(aoe_unit_zone_near_ror(&w, &idx, 1, at, 1.0f) &&
+               !aoe_unit_zone_near_ror(&w, &idx, 1, at, 0.5f));
+        idx = -1;
+        assert(aoe_unit_zone_ror(&w, &idx, 0, 0) == 0 && idx == -1);
+        aoe_zone_manager_free_ror(&mg);
+    }
     return 0;
 }

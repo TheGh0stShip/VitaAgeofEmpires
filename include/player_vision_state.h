@@ -39,7 +39,7 @@ int aoe_visibility_mask_map_init(AoeVisibilityMaskMap *map,
                                  uint32_t width, uint32_t height);
 void aoe_visibility_mask_map_destroy(AoeVisibilityMaskMap *map);
 
-/* RoR 0x00519e10 per-player count grid and owner masks, plus the two
+/* RoR disc 0x00519e10 (patched 0x005173d0) per-player count grid and owner masks, plus the two
    +0x58/+0x6c vectors from player constructor 0x0045c650. `view_codes`
    is a semantic row-major adapter for runtime tile +9 and should be set
    only while this player is the active player. */

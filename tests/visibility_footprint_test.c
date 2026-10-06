@@ -15,7 +15,21 @@ static void record(void *context, int32_t x, int32_t y) {
     trace->last_y = y;
 }
 
+static void test_sight_rows(void) {
+    int r = -5, hw;
+    const uint8_t *rows;
+    /* 0x004aa9e0: no owner gives NULL; LOS truncates and clamps. */
+    assert(!aoe_unit_sight_footprint_rows_ror(0, 4.0f, &r) && r == -5);
+    rows = aoe_unit_sight_footprint_rows_ror(1, 4.9f, &r);
+    assert(rows && r == 4 && rows[0] == 4 && rows[4] == 1);
+    assert(aoe_visibility_footprint_half_width(4, -3, &hw) && hw == rows[3]);
+    assert(aoe_unit_sight_footprint_rows_ror(1, 99.0f, &r) ==
+           aoe_visibility_footprint_rows(16, NULL) && r == 16);
+    assert(aoe_unit_sight_footprint_rows_ror(1, -2.5f, &r) && r == 0);
+}
+
 int main(void) {
+    test_sight_rows();
     int8_t counts[25];
     uint32_t masks[25] = {0};
     uint8_t view[25] = {0};

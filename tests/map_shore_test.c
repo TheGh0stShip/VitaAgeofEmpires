@@ -146,5 +146,10 @@ int main(void) {
     assert(aoe_cliff_at_ror(&map, &ops, 2, 1, &found) && found.type == 0x108);
     aoe_cliff_press_ror(&table, &ops, 0, 0, 0, 0, 0, 0);
     assert(table.last_x == -1 && table.cell_x == -1);
+    {
+        AoeMapExtraRor x = {0, 0, 0};
+        aoe_map_extra_set_ror(&x, 3, -4, 99, 7);
+        assert(x.v8dd4 == 3 && x.v8dd8 == -4 && x.v8de0 == 7);
+    }
     return 0;
 }

@@ -211,3 +211,24 @@ void aoe_game_font_desc_ror(const char *face, int32_t points, int32_t weight, ui
     out->pitch_family = 2;
     snprintf(out->face, sizeof out->face, "%s", face ? face : "");
 }
+
+int aoe_game_font_from_strings_ror(void *context,
+                                   void (*load_string)(void *context, int32_t id, char *buf,
+                                                       int32_t size),
+                                   int32_t id, uint8_t flag, const char *charset_text,
+                                   AoeLogFontRor *out) {
+    char face[256], points[10], style[10];
+    if (!load_string || !out) return 0;
+    face[0] = points[0] = style[0] = '\0';
+    load_string(context, id, face, (int32_t)sizeof face);
+    face[sizeof face - 1] = '\0';
+    if (face[0] == '\0') return 0;
+    load_string(context, id + 1, points, (int32_t)sizeof points);
+    points[sizeof points - 1] = '\0';
+    load_string(context, id + 2, style, (int32_t)sizeof style);
+    style[sizeof style - 1] = '\0';
+    aoe_game_font_desc_ror(face, (int32_t)atoi(points),
+                           (strchr(style, 'B') || strchr(style, 'b')) ? 700 : 400, flag,
+                           charset_text, out);
+    return 1;
+}

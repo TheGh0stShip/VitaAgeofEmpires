@@ -1,5 +1,6 @@
 #include "action_convert.h"
 
+#include <math.h>
 #include <string.h>
 
 #include "aoe_ftol.h"
@@ -291,4 +292,29 @@ int aoe_convert_action_update_ror(AoeConvertActionRor *a,
     default:
         return 1;
     }
+}
+
+int aoe_convert_action_complete_ror(AoeConvertActionRor *a,
+                                    const AoeConvertActionOps *o,
+                                    int *converted) {
+    AoeLiveUnit *u, *t;
+    void *c;
+    if (converted) *converted = 0;
+    if (!a || !ops_ok(o) || !(u = a->base.unit)) return 0;
+    t = a->base.target;
+    if (!t || !t->core.unit_template || t->core.unit_template->unit_class == 0x12)
+        return 1;
+    c = o->move.context;
+    if (a->base.state != 7) {
+        double dx = (double)t->core.position.x38 - u->core.position.x38;
+        double dy = (double)t->core.position.y3c - u->core.position.y3c;
+        if (!(sqrt(dx * dx + dy * dy) - 0.5 <= (double)a->range)) return 1;
+    }
+    o->event(c, 0x7b, u->runtime_owner_index, t->runtime_owner_index,
+             aoe_ftol32(t->core.position.x38), aoe_ftol32(t->core.position.y3c));
+    if (!o->change_owner(c, t, u->runtime_owner_index)) return 0;
+    o->resource_add(c, u, 41, 1.0f);
+    o->set_carried(c, u, FAITH, 0.0f);
+    if (converted) *converted = 1;
+    return aoe_convert_action_set_state_ror(a, 3, o);
 }

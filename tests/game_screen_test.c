@@ -119,6 +119,83 @@ static void gtoggle(void *c) { (void)c; ++toggles; }
 static void gchat(void *c, const char *t) { (void)c; ++chats; snprintf(chat_text, sizeof chat_text, "%s", t); }
 static uint32_t gnow(void *c) { (void)c; return clock_ms; }
 
+static int refreshes, sounds, selects, zooms = -1, orders, emode, esub, owned;
+static void grefresh(void *c) { (void)c; ++refreshes; }
+static int32_t gemode(void *c, int32_t *sub) { (void)c; *sub = esub; return emode; }
+static int gowned(void *c, int32_t id) { (void)c; (void)id; return owned; }
+static void gselect(void *c, int32_t id) { (void)c; selects = id; }
+static void gsound(void *c, int32_t id) { (void)c; sounds = id; }
+static int gorders(void *c) { (void)c; return orders; }
+static void gzoom(void *c, int in) { (void)c; zooms = in; }
+static float speed = 1.0f, sent_speed, stored_speed;
+static int fast;
+static float gspeed(void *c) { (void)c; return speed; }
+static int gfast(void *c) { (void)c; return fast; }
+static void gsend_speed(void *c, float v) { (void)c; sent_speed = v; }
+static void gstore_speed(void *c, float v) { (void)c; stored_speed = v; }
+static int armed, disarms, vcancels, outlines, set_modes, runs, cpauses;
+static char dialog_name[32];
+static int garmed(void *c) { (void)c; return armed; }
+static void gdisarm(void *c) { (void)c; ++disarms; }
+static void gvcancel(void *c, void *v) { (void)c; (void)v; ++vcancels; }
+static void goutline(void *c) { (void)c; ++outlines; }
+static void gsetmode(void *c, int32_t m, int32_t sub) { (void)c; assert(m == 0 && sub == 0); ++set_modes; }
+static void grun(void *c) { (void)c; ++runs; }
+static void gcpause(void *c, int32_t on, int32_t fl) { (void)c; assert(on == 1 && fl == 1); ++cpauses; }
+static void gdialog(void *c, const char *n) { (void)c; snprintf(dialog_name, sizeof dialog_name, "%s", n); }
+static int32_t type_asked = -1, after_asked = -1, type_found;
+static int16_t trained = -1, researched = -1, instant_id = -1;
+static int can_res, inst;
+static void gtrain_at(void *c, int16_t id) { (void)c; trained = id; }
+static void gresearch_at(void *c, int16_t id) { (void)c; researched = id; }
+static int gcan_res(void *c, int16_t id, int16_t *fl) { (void)c; (void)id; *fl = 2; return can_res; }
+static int ginstant(void *c) { (void)c; return inst; }
+static void ginstant_train(void *c, int16_t id, int32_t a) { (void)c; (void)a; instant_id = id; }
+static int sfreed, bcasts;
+static void gfree_sound(void *c, void *p) { (void)c; assert(p == (void *)9); ++sfreed; }
+static void gbcast(void *c) { (void)c; ++bcasts; }
+static int32_t gnext_type(void *c, int32_t t, int32_t a) { (void)c; type_asked = t; after_asked = a; return type_found; }
+
+static int fg = 1, vfocus = 1, modal_on, keeps, mx, my, overmap, hit_btn = -1;
+static int gfg(void *c) { (void)c; return fg; }
+static int gvfocus(void *c) { (void)c; return vfocus; }
+static int gmodal(void *c) { (void)c; return modal_on; }
+static void gmouse(void *c, int32_t *x, int32_t *y) { (void)c; *x = mx; *y = my; }
+static int gkeeps(void *c) { (void)c; return keeps; }
+static int govermap(void *c, int32_t x, int32_t y) { (void)c; (void)x; (void)y; return overmap; }
+static int ghit(void *c, void *b, int32_t x, int32_t y) { (void)c; (void)x; (void)y; return ix(b) == hit_btn; }
+static const char *ghelp_text(void *c, void *b) { (void)c; return ix(b) == 52 ? "tip52" : "tip"; }
+static int sready = 1, mplaying, mstops;
+static int16_t ncues;
+static uint8_t cue_on[4], cue_pri[4];
+static char played[32];
+static int16_t gcue_count(void *c) { (void)c; return ncues; }
+static void gcue(void *c, int32_t i, uint8_t *on, uint8_t *p, void **e) {
+    (void)c; *on = cue_on[i]; *p = cue_pri[i]; *e = (void *)(intptr_t)(100 + i);
+}
+static const char *gchoose(void *c, void *e) { (void)c; return ix(e) == 102 ? "cue2" : "cue"; }
+static void gmstop(void *c) { (void)c; ++mstops; }
+static void gmplay(void *c, const char *n) { (void)c; snprintf(played, sizeof played, "%s", n); }
+static int gmplaying(void *c) { (void)c; return mplaying; }
+static int sready_f(void *c) { (void)c; return sready; }
+static int map_flag = -1, help_y;
+static int ngame = 3, kinds[9], lost_slot = -1;
+static int32_t scores_v[9];
+static uint32_t lat[9], pings[9];
+static AoeGameScoreLineRor lines_out[64];
+static void gmapflag(void *c, uint8_t on) { (void)c; map_flag = on; }
+static void ghelp_place(void *c, void *p, int32_t y) { (void)c; assert(ix(p) == 55); help_y = y; }
+static int32_t ggame_players(void *c) { (void)c; return ngame; }
+static int32_t gwslot(void *c, int32_t p) { (void)c; return p; }
+static int32_t gscore(void *c, int32_t s) { (void)c; return scores_v[s]; }
+static int16_t gcolour(void *c, int32_t s) { (void)c; return (int16_t)s; }
+static int glost(void *c, int32_t s) { (void)c; return s == lost_slot; }
+static int32_t gkind(void *c, int32_t p) { (void)c; return kinds[p]; }
+static uint32_t glat(void *c, int32_t p) { (void)c; return lat[p]; }
+static uint32_t gping(void *c, int32_t p) { (void)c; return pings[p]; }
+static const char *gpname(void *c, int32_t p) { (void)c; static const char *n[] = {"", "A", "B", "C", "D"}; return n[p]; }
+static void gscore_line(void *c, void *p, const AoeGameScoreLineRor *l) { (void)c; lines_out[ix(p)] = *l; }
+
 static const AoeGameScreenOpsRor ops = {
     NULL, set_active, redraw, set_text_id, set_text, active, text, help, message, message_hide,
     b_dis, b_set_dis, b_id, b_val, b_none, b_none, b_pic, b_state, b_lines, b_help_line,
@@ -126,7 +203,14 @@ static const AoeGameScreenOpsRor ops = {
     set_alt, chat_line, wonder, wmode, pcount, palive, ptimer, stance, age, afford, tflag,
     sel_count, selected, current, set_current, object, g_int, g_int, g_none, g_none, g_none,
     vpos, vtile, sel_ids, free_ids, pcall, busy, lcount, lid, whas, ready, base_mouse,
-    pcommand, gstate, gpaused, gnet, gtoggle, gchat, gnow};
+    pcommand, gstate, gpaused, gnet, gtoggle, gchat, gnow, grefresh, gemode, gowned, gselect,
+    gsound, gorders, gzoom, gspeed, gfast, gsend_speed, gstore_speed,
+    garmed, gdisarm, gvcancel, goutline, gsetmode, grun, gcpause, gdialog, gnext_type,
+    gtrain_at, gresearch_at, gcan_res, ginstant, ginstant_train, gfree_sound, gbcast,
+    gfg, gvfocus, gmodal, gmouse, gkeeps, govermap, ghit, ghelp_text,
+    sready_f, gcue_count, gcue, gchoose, gmstop, gmplay, gmplaying,
+    gmapflag, ghelp_place, ggame_players, gwslot, gscore, gcolour, glost, gkind, glat, gping,
+    gpname, gscore_line};
 
 static void setup(AoeGameScreenRor *s) {
     int i;
@@ -142,6 +226,12 @@ static void setup(AoeGameScreenRor *s) {
     for (i = 0; i < 6; ++i) s->lines[i] = (void *)(intptr_t)(24 + i);
     for (i = 0; i < 8; ++i) s->chat[i] = (void *)(intptr_t)(30 + i);
     for (i = 0; i < 10; ++i) s->timers[i] = (void *)(intptr_t)(40 + i);
+    for (i = 0; i < 5; ++i) s->more_buttons[i] = (void *)(intptr_t)(50 + i);
+    s->help_panel = (void *)55;
+    for (i = 0; i < 8; ++i) s->scores[i] = (void *)(intptr_t)(56 + i);
+    s->ping_picture = (void *)7;
+    s->width = 640;
+    s->height = 480;
 }
 
 int main(void) {
@@ -308,5 +398,206 @@ int main(void) {
     clock_ms = 9000;
     aoe_game_screen_pause_ror(&s);
     assert(toggles == 2 && s.pause_time == 9000);
+
+    /* Button pages. */
+    s.button_pages = 3; s.shown_page = 1; s.button_page = 1;
+    aoe_game_screen_next_page_ror(&s);
+    assert(s.button_page == 2 && refreshes == 1);
+    s.shown_page = 2;
+    aoe_game_screen_next_page_ror(&s);
+    assert(s.button_page == 0 && refreshes == 2);
+    emode = 6; esub = 1;
+    aoe_game_screen_next_page_ror(&s);
+    assert(s.button_page == 10);
+    aoe_game_screen_next_page_ror(&s);
+    assert(s.button_page == 0 && refreshes == 4);
+    s.button_page = 5;
+    f.comm = 1;
+    aoe_game_screen_cancel_page_ror(&s);
+    assert(s.button_page == 5 && refreshes == 4);
+    f.comm = 0;
+    aoe_game_screen_cancel_page_ror(&s);
+    assert(s.button_page == 0 && refreshes == 5 && f.last_action == 6 && f.last_arg == 1);
+    s.button_page = 4;
+    aoe_game_screen_first_page_ror(&s);
+    assert(s.button_page == 0 && refreshes == 6);
+
+    /* Go to idle: list 1..5 as above; the current owned idle unit 1
+       starts the search, so 5 is next after... 1 -> 2,3 not idle. */
+    f.current = 1; owned = 1; s.idle_id = 5;
+    aoe_game_screen_goto_idle_ror(&s);
+    assert(selects == 5 && f.last_action == 0 && s.view && f.redraws[1] > 0);
+    owned = 0; s.idle_id = 5;
+    aoe_game_screen_goto_idle_ror(&s);
+    assert(selects == 1);
+    f.list_n = 0;
+    aoe_game_screen_goto_idle_ror(&s);
+    assert(sounds == 3);
+
+    /* Zoom keys. */
+    assert(aoe_game_screen_zoom_key_ror(&s, '+') == 0 && zooms == -1);
+    orders = 1;
+    aoe_game_screen_zoom_key_ror(&s, '=');
+    assert(zooms == 1);
+    aoe_game_screen_zoom_key_ror(&s, '-');
+    assert(zooms == 0);
+    zooms = -1;
+    aoe_game_screen_zoom_key_ror(&s, 'a');
+    assert(zooms == -1);
+    /* Game speed step (0x00484c60). */
+    state5 = 0; is_paused = 0; is_net = 0; chats = 0; s.speed_time = 0; clock_ms = 20000;
+    speed = 1.0f;
+    aoe_game_screen_speed_step_ror(&s, 1);
+    assert(sent_speed == 1.5f && stored_speed == 0.0f && s.speed_time == 20000);
+    sent_speed = 0; clock_ms = 20500; speed = 1.5f;
+    aoe_game_screen_speed_step_ror(&s, 1);
+    assert(sent_speed == 0.0f);                 /* rate limited */
+    clock_ms = 22000; speed = 2.0f;
+    aoe_game_screen_speed_step_ror(&s, 1);
+    assert(sent_speed == 0.0f);                 /* no fast speeds */
+    is_paused = 1; fast = 1; is_net = 1; clock_ms = 23000;
+    aoe_game_screen_speed_step_ror(&s, 1);
+    assert(sent_speed == 4.0f && stored_speed == 4.0f && chats == 1);
+    speed = 16.0f;
+    aoe_game_screen_speed_step_ror(&s, 0);
+    assert(sent_speed == 8.0f);
+    speed = 1.0f; sent_speed = 0;
+    aoe_game_screen_speed_step_ror(&s, 0);
+    assert(sent_speed == 0.0f);
+    state5 = 1; speed = 1.5f;
+    aoe_game_screen_speed_step_ror(&s, 0);
+    assert(sent_speed == 0.0f);
+    state5 = 0;
+    aoe_game_screen_speed_step_ror(&s, 0);
+    assert(sent_speed == 1.0f);
+    /* Escape (0x00484900). */
+    armed = 1;
+    aoe_game_screen_escape_ror(&s);
+    assert(disarms == 1 && set_modes == 0);
+    armed = 0; emode = 0x15; f.redraws[1] = 0;
+    aoe_game_screen_escape_ror(&s);
+    assert(vcancels == 1 && outlines == 1 && set_modes == 1 && f.redraws[1] == 0);
+    emode = 3;
+    aoe_game_screen_escape_ror(&s);
+    assert(vcancels == 1 && set_modes == 2);
+    emode = 0;
+    aoe_game_screen_escape_ror(&s);
+    assert(set_modes == 2 && f.redraws[1] == 1);
+    f.comm = 1;
+    aoe_game_screen_escape_ror(&s);
+    assert(f.redraws[1] == 1);
+    /* Diplomacy (0x00484b60) and menu (0x004850b0). */
+    aoe_game_screen_diplomacy_ror(&s);
+    assert(dialog_name[0] == 0);
+    f.comm = 0; is_paused = 1;
+    aoe_game_screen_diplomacy_ror(&s);
+    assert(!strcmp(dialog_name, "Diplomacy Dialog") && cpauses == 1);
+    is_paused = 0; state5 = 0;
+    aoe_game_screen_menu_ror(&s);
+    assert(!strcmp(dialog_name, "Menu Dialog") && cpauses == 1 && runs == 0);
+    /* Building keys (0x00485390). */
+    f.current = 2; f.objs[2].template_id = 0x0c; f.objs[3].x = 7.5f; f.objs[3].y = 3.0f;
+    type_found = 0;
+    aoe_game_screen_building_key_ror(&s, 1);
+    assert(type_asked == 0x0c && after_asked == 2);
+    aoe_game_screen_building_key_ror(&s, 0);
+    assert(type_asked == 0x6d && after_asked == 0);
+    type_asked = -1;
+    aoe_game_screen_building_key_ror(&s, 8);
+    assert(type_asked == -1);
+    type_found = 3; f.redraws[1] = 0;
+    aoe_game_screen_building_key_ror(&s, 6);
+    assert(type_asked == 0x68 && selects == 3 && f.redraws[1] == 1 && f.last_action == 7 && f.last_arg == 3);
+    /* Train (0x00485520) and research (0x004852f0) buttons. */
+    f.comm = 0; f.afford = 1; inst = 0;
+    aoe_game_screen_train_button_ror(&s, 83, 0);
+    assert(trained == 83 && f.place == 83);
+    f.afford = 0; f.msg_color[24] = 0;
+    aoe_game_screen_train_button_ror(&s, 84, 0);
+    assert(trained == 83 && f.msg_color[24] == 0x56 && !strcmp(f.msg[24], "67:1:2"));
+    inst = 1;
+    aoe_game_screen_train_button_ror(&s, 85, 1);
+    assert(instant_id == 85 && trained == 83);
+    can_res = 1;
+    aoe_game_screen_research_button_ror(&s, 40);
+    assert(researched == 40);
+    can_res = 0; f.msg_color[24] = 0;
+    aoe_game_screen_research_button_ror(&s, 41);
+    assert(researched == 40 && f.msg_color[24] == 0x56);
+    /* Chat (0x00484a70 / 0x004849b0). */
+    dialog_name[0] = 0; state5 = 1; s.dialog = 0; f.msg_color[24] = 0;
+    aoe_game_screen_quick_chat_ror(&s);
+    assert(dialog_name[0] == 0 && f.msg_color[24] == 0x32);
+    state5 = 0;
+    aoe_game_screen_quick_chat_ror(&s);
+    assert(!strcmp(dialog_name, "Send Quick Message Dialog"));
+    is_paused = 0;
+    aoe_game_screen_chat_ror(&s);
+    assert(!strcmp(dialog_name, "Send Message Dialog"));
+    is_paused = 1;
+    aoe_game_screen_chat_ror(&s);
+    assert(!strcmp(dialog_name, "Send Quick Message Dialog"));
+    state5 = 1; s.dialog = 1; dialog_name[0] = 0; is_paused = 0;
+    aoe_game_screen_chat_ror(&s);
+    assert(!strcmp(dialog_name, "Send Message Dialog"));
+    /* Broadcast (0x00485a50). */
+    s.sound = (void *)9;
+    aoe_game_screen_broadcast_ror(&s);
+    aoe_game_screen_broadcast_ror(&s);
+    assert(sfreed == 1 && bcasts == 2 && s.sound == NULL);
+    /* Event cue (0x004844a0). */
+    setup(&s);
+    s.cue_interval = 500; clock_ms = 1000; ncues = 3;
+    cue_on[0] = 1; cue_pri[0] = 3; cue_on[1] = 0; cue_pri[1] = 9; cue_on[2] = 1; cue_pri[2] = 5;
+    aoe_game_screen_cue_ror(&s);
+    assert(s.cue_playing == 1 && !strcmp(played, "cue2") && mstops == 1 && s.cue_start == 1000);
+    clock_ms = 1999; aoe_game_screen_cue_ror(&s);
+    assert(s.cue_time == 1000 && s.cue_playing == 1);
+    mplaying = 1; clock_ms = 2000; aoe_game_screen_cue_ror(&s);
+    assert(s.cue_playing == 1 && s.cue_time == 2000);
+    clock_ms = 7000; aoe_game_screen_cue_ror(&s);
+    assert(s.cue_playing == 0 && mstops == 2);
+    clock_ms = 7400; played[0] = 0; aoe_game_screen_cue_ror(&s);
+    assert(!s.cue_playing && played[0] == 0);
+    sready = 0; clock_ms = 9000; aoe_game_screen_cue_ror(&s);
+    assert(!s.cue_playing && s.cue_time == 7000);
+    sready = 1; s.cue_playing = 1; s.cue_time = 0; mplaying = 0; aoe_game_screen_cue_ror(&s);
+    assert(!s.cue_playing && mstops == 2);
+    /* Hover help (0x00484620). */
+    setup(&s);
+    mx = 100; my = 480; hit_btn = 52; f.active[52] = 1; f.active[10] = 1;
+    aoe_game_screen_hover_ror(&s);
+    assert(s.mouse_x == 100 && s.mouse_y == 480 && f.hidden[55] && !strcmp(f.msg[55], "tip52"));
+    f.msg[55][0] = 0; aoe_game_screen_hover_ror(&s);
+    assert(f.msg[55][0] == 0);
+    my = 481; aoe_game_screen_hover_ror(&s);
+    assert(f.msg[55][0] == 0 && s.mouse_y == 481);
+    my = 10; overmap = 1; aoe_game_screen_hover_ror(&s);
+    assert(f.msg[55][0] == 0);
+    overmap = 0; my = 11; f.id[52] = -1; aoe_game_screen_hover_ror(&s);
+    assert(f.msg[55][0] == 0);
+    modal_on = 1; my = 12; aoe_game_screen_hover_ror(&s);
+    assert(s.mouse_y == 11);
+    modal_on = 0;
+    /* Map scores (0x00484f90 / 0x00483c40): players 1 and 3 allied. */
+    setup(&s);
+    f.players = 4; ngame = 3;
+    for (i = 1; i <= 3; ++i) f.alive[i] = 1;
+    f.stance[1][2] = f.stance[2][1] = 1; f.stance[2][3] = f.stance[3][2] = 1;
+    scores_v[1] = 100; scores_v[2] = 50; scores_v[3] = 300;
+    is_net = 1; kinds[1] = 2; kinds[2] = 2; kinds[3] = 0;
+    lat[1] = 200; lat[2] = 20; pings[1] = 1200; pings[2] = 400; lost_slot = 2;
+    aoe_game_screen_map_scores_ror(&s, 1);
+    assert(map_flag == 1 && help_y == 0xb8 && f.active[56] == 1 && f.redraws[1] == 1);
+    assert(!strcmp(lines_out[56].text, "C: 300/200") && lines_out[56].font == 8);
+    assert(!strcmp(lines_out[57].text, "A: 100/200") && lines_out[57].font == 0xb);
+    assert(lines_out[57].colour == 0x2139c6 && lines_out[57].icon2 == (void *)7 && lines_out[57].frame2 == 0x11);
+    assert(lines_out[57].icon1 == (void *)7 && lines_out[57].frame1 == 0x14);
+    assert(!strcmp(lines_out[58].text, "B: 50/50") && lines_out[58].font == 8);
+    assert(lines_out[58].icon2 == NULL && lines_out[58].frame1 == 0x13);
+    assert(f.active[59] == 0);
+    aoe_game_screen_map_scores_ror(&s, 0);
+    assert(map_flag == 0 && help_y == 4 && f.active[56] == 0);
+    is_net = 0;
     return 0;
 }

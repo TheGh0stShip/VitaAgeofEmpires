@@ -23,7 +23,7 @@ typedef struct {
     void (*state_7_plus)(void *context, void *unit);
 } AoeScenarioSpawnMethods;
 
-/* Scenario-load placement dispatch: RoR 0x00522be0 -> player +0x60
+/* Scenario-load placement dispatch: RoR disc 0x00522be0 (patched 0x00520170) -> player +0x60
    (0x0045d1c0), base 0x00505da0 -> player +0x60 (0x00516af0).
    Sets world loading state around each player call, constructs from the
    original object ID/X/Y/Z, then invokes exactly one state category.

@@ -464,7 +464,88 @@ static void priest_search_tests(void) {
     }
 }
 
+static const uint8_t nn_b1[16] = {10, 0, 0, 0, 5, 2, 0, 0, 11, 0, 0, 0, 3, 3, 0, 0};
+static const uint8_t nn_b3[8] = {12, 0, 0, 0, 1, 2, 0, 0};
+static int32_t nn_nearby(void *c, int b, const uint8_t **e) {
+    (void)c;
+    if (b == 1) { *e = nn_b1; return 2; }
+    if (b == 3) { *e = nn_b3; return 1; }
+    return 0;
+}
+static int nn_view(void *c, int32_t id, int16_t *cls, float *hp, int16_t *mx, uint8_t *st) {
+    (void)c; (void)hp; (void)mx;
+    *cls = id == 11 ? 4 : 3;
+    *st = id == 12 ? 7 : 2;
+    return 1;
+}
+static int nn_type(void *c, int32_t id, int16_t *t) { (void)c; *t = (int16_t)(id + 100); return id != 13; }
+static void nn_self(void *c, AoeAiUnitViewRor *o) { (void)c; memset(o, 0, sizeof *o); o->id = 99; }
+static int32_t nn_gcount(void *c) { (void)c; return 3; }
+static int32_t nn_gat(void *c, int32_t i) { (void)c; return 11 + i; }
+static double nn_dist(void *c, int32_t id) { (void)c; return id == 12 ? 2.0 : 4.0; }
+
+static int pm_ready = 1, pm_runs[4], pm_value;
+static int pm_ready_f(void *c) { (void)c; return pm_ready; }
+static void pm_set(void *c, int32_t v) { (void)c; pm_value = v; }
+static int pm_trig(void *c, int i, uint8_t *k, uint32_t *v, uint8_t *ix) {
+    (void)c;
+    *k = (uint8_t)(i == 0 ? 5 : i == 1 ? 4 : 4);
+    *v = i == 1 ? 7u : 8u;
+    *ix = (uint8_t)i;
+    return 1;
+}
+static uint8_t pm_cat(void *c, int32_t id) { (void)c; return (uint8_t)(id == 42 ? 7 : 0xff); }
+static void pm_run(void *c, uint8_t ix, int32_t a) { (void)c; (void)a; ++pm_runs[ix]; }
+
+static void play_message_tests(void) {
+    AoeAiUnitAiPlayOpsRor o = {NULL, pm_ready_f, pm_set, pm_trig, pm_cat, pm_run};
+    int32_t m[3] = {9, 42, 500};
+    aoe_ai_unit_ai_play_message_ror(m, &o);
+    assert(pm_value == 9 && pm_runs[0] == 1 && pm_runs[1] == 1 && pm_runs[2] == 0);
+    m[2] = 501;
+    aoe_ai_unit_ai_play_message_ror(m, &o);
+    assert(pm_runs[0] == 1);
+    m[2] = 500;
+    pm_ready = 0;
+    aoe_ai_unit_ai_play_message_ror(m, &o);
+    assert(pm_runs[0] == 1);
+}
+
+static void nearest_tests(void) {
+    play_message_tests();
+    AoeAiUnitAiOpsRor o;
+    int32_t d, pl;
+    float f;
+    memset(&o, 0, sizeof o);
+    o.nearby = nn_nearby; o.target_view = nn_view; o.world_type = nn_type; o.self = nn_self;
+    o.group_count = nn_gcount; o.group_at = nn_gat; o.distance_to = nn_dist;
+    assert(aoe_ai_unit_ai_nearest_nearby_ror(&o, -1, 0, -1, -1, &d, &pl) == 11 && d == 3 && pl == 2);
+    assert(aoe_ai_unit_ai_nearest_nearby_ror(&o, 3, 0, -1, -1, &d, NULL) == 10 && d == 5);
+    assert(aoe_ai_unit_ai_nearest_nearby_ror(&o, -1, 0, -1, 110, &d, NULL) == 10);
+    assert(aoe_ai_unit_ai_nearest_nearby_ror(&o, -1, 1, -1, -1, &d, NULL) == -1 && d == -1);
+    assert(aoe_ai_unit_ai_nearest_listed_ror(&o, &f) == 12 && f == 2.0f);
+}
+
+static void ai_kind_for_unit_tests(void) {
+    int k = -1; int32_t a = 0;
+    /* 0x004afbe0 */
+    assert(!aoe_ai_unit_ai_kind_for_unit_ror(1, 99, &k, &a) && k == -1);
+    assert(aoe_ai_unit_ai_kind_for_unit_ror(1, 83, &k, &a) && k == AOE_AI_UNIT_AI_KIND_5644 && a == 5);
+    assert(aoe_ai_unit_ai_kind_for_unit_ror(0x1b, 0x17c, &k, &a) && k == AOE_AI_UNIT_AI_KIND_5724 && a == 10);
+    assert(aoe_ai_unit_ai_kind_for_unit_ror(3, 5, &k, &a) && k == AOE_AI_UNIT_AI_KIND_5804);
+    assert(aoe_ai_unit_ai_kind_for_unit_ror(10, 0x9d, &k, &a) && k == AOE_AI_UNIT_AI_CLASS_9);
+    assert(aoe_ai_unit_ai_kind_for_unit_ror(10, 0x7e, &k, &a) && k == AOE_AI_UNIT_AI_TYPE_7E);
+    assert(aoe_ai_unit_ai_kind_for_unit_ror(10, 1, &k, &a) && k == AOE_AI_UNIT_AI_CLASS_10);
+    assert(aoe_ai_unit_ai_kind_for_unit_ror(0x12, 1, &k, &a) && k == AOE_AI_UNIT_AI_PRIEST);
+    assert(!aoe_ai_unit_ai_kind_for_unit_ror(0x21, 1, &k, &a));
+    assert(!aoe_ai_unit_ai_kind_for_unit_ror(0xb, 1, &k, &a));
+    assert(aoe_ai_unit_ai_kind_for_unit_ror(0x22, 1, &k, &a) && k == AOE_AI_UNIT_AI_KIND_5564);
+    assert(aoe_ai_unit_ai_kind_for_unit_ror(-1, 1, &k, &a) && k == AOE_AI_UNIT_AI_KIND_5564);
+}
+
 int main(void) {
+    ai_kind_for_unit_tests();
+    nearest_tests();
     base_method_tests();
     priest_search_tests();
     d4_5564_tests();

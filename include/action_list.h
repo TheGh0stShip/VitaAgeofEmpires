@@ -62,6 +62,13 @@ int aoe_action_list_update_ror(AoeActionList *list, const AoeActionTickOps *ops,
    "Explore", 5 "Gather", 8 "Missile", 9 "Attack", 10 "Bird", 0x14
    "RunAway", 0x15 "Make", others "Unknown". */
 const char *aoe_action_type_name_ror(int has_head, int16_t type, char *out);
+/* 0x004b4c80 (the tribe list's vtable 0x005488a8 slot +0x10): 3 "Enter",
+   12 "Transport", 0x65 "Build", 0x66 "MakeObject", 0x67 "MakeTech", 0x68
+   "Convert", 0x69 "Heal", 0x6a "Repair", 0x6b "Artifact", 0x6c
+   "DiscoveryArtifact", 0x6e "Hunt", 0x6f "Trade"; other types defer to
+   0x00404630; "None" without a head. */
+const char *aoe_tribe_action_type_name_ror(int has_head, int16_t type,
+                                           char *out);
 /* 0x00427b80 (a unit slot): the head action's target (+0x4c) ID (its
    +4); -1 with an empty list or no target. `target_id` stands for the
    head's +0x4c and the ID read (-1 for none). */

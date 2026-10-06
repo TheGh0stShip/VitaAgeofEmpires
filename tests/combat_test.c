@@ -134,7 +134,150 @@ static void template_damage_tests(void) {
     assert(aoe_combat_attack_total_ror(&attacker) == 1);
 }
 
+static int rec_calls;
+static int32_t rec_x, rec_y, rec_count;
+static void rec(void *c, int32_t id, int16_t owner, int32_t x, int32_t y,
+                int16_t w, int32_t count, uint8_t *const memory[9]) {
+    (void)c; (void)memory;
+    assert(id == 12 && owner == 3 && w == 83);
+    rec_x = x; rec_y = y; rec_count = count; ++rec_calls;
+}
+
+static void type50_lifecycle(void) {
+    AoeCombatType50Ror u;
+    DatUnit t;
+    uint8_t e = 0;
+    memset(&t, 0, sizeof(t));
+    t.reload_time = 2.5f;
+    memset(&u, 0xff, sizeof(u));
+    assert(aoe_combat_type50_init_ror(&u, &t, 0) == 0x32);
+    assert(!u.memory[0] && !u.memory[8] && u.memory_count == 0 &&
+           u.reload_timer == 2.5f && u.field_1b8 == 0);
+    u.field_1b8 = 1; u.memory[0] = &e; u.memory_count = 1; t.reload_time = 1.0f;
+    aoe_combat_type50_init_ror(&u, &t, 1);
+    assert(!u.memory[0] && u.reload_timer == 1.0f && u.field_1b8 == 1);
+    u.memory_count = 4;
+    aoe_combat_type50_destroy_ror(&u, -1, 3, 1.0f, 1.0f, 83, rec, NULL);
+    assert(rec_calls == 0);
+    aoe_combat_type50_destroy_ror(&u, 12, 3, 7.9f, 2.2f, 83, rec, NULL);
+    assert(rec_calls == 1 && rec_x == 7 && rec_y == 2 && rec_count == 4);
+}
+
+static AoeLiveUnit co_target;
+static void *co_head_v;
+static int16_t co_head_type;
+static int co_retargets, co_clears, co_adopts;
+static AoeCombatOrderKindRor co_kind;
+static int16_t co_graphic;
+static float co_x;
+static AoeLiveUnit *co_resolve(void *c, int32_t id) { (void)c; return id == 7 ? &co_target : NULL; }
+static void *co_head(void *c, AoeLiveUnit *u) { (void)c; (void)u; return co_head_v; }
+static int16_t co_type(void *c, void *a) { (void)c; (void)a; return co_head_type; }
+static AoeLiveUnit *co_atarget(void *c, void *a) { (void)c; (void)a; return &co_target; }
+static void co_retarget(void *c, void *a, AoeLiveUnit *t, float x, float y, float z) {
+    (void)c; (void)a; (void)t; (void)y; (void)z; co_x = x; ++co_retargets;
+}
+static const DatUnitTask co_task_v;
+static const DatUnitTask *co_task(void *c, AoeLiveUnit *u, AoeLiveUnit *t, float x, float y) {
+    (void)c; (void)u; (void)t; (void)x; (void)y; return &co_task_v;
+}
+static void *co_build(void *c, AoeLiveUnit *u, AoeCombatOrderKindRor k, const DatUnitTask *t,
+                      AoeLiveUnit *tg, float x, float y, float z, float s, int16_t g) {
+    (void)c; (void)u; (void)t; (void)tg; (void)y; (void)z; (void)s;
+    co_kind = k; co_graphic = g; co_x = x; return &co_head_v;
+}
+static void co_clear(void *c, AoeLiveUnit *u) { (void)c; (void)u; ++co_clears; }
+static void co_adopt(void *c, AoeLiveUnit *u, void *a) { (void)c; (void)u; (void)a; ++co_adopts; }
+
+static int co_changed;
+static DatUnit co_base;
+static const DatUnit *co_owner_t(void *c, AoeLiveUnit *u, int16_t i) {
+    (void)c; (void)u; co_changed = i; return &co_base;
+}
+static void co_change(void *c, AoeLiveUnit *u, const DatUnit *t) { (void)c; (void)u; (void)t; }
+static void co_point(void *c, void *a, float *x, float *y, float *z) {
+    (void)c; (void)a; *x = 1; *y = 2; *z = 3;
+}
+
+static void combat_order_tests(void) {
+    AoeCombatOrderOpsRor o = {NULL, co_resolve, co_head, co_type, co_atarget, co_retarget,
+                              co_task, co_build, co_clear, co_adopt};
+    AoeLiveUnit u;
+    DatUnit t;
+    memset(&u, 0, sizeof u);
+    memset(&t, 0, sizeof t);
+    memset(&co_target, 0, sizeof co_target);
+    co_target.core.position.x38 = 3.0f;
+    t.walking_graphic = 4;
+    t.walking_graphic2 = -1;
+    u.core.unit_template = &t;
+    assert(aoe_combat_order_ror(&u, AOE_COMBAT_ORDER_MOVE_ROR, 8, 0, 0, 1.0f, 0, &o) == 0);
+    assert(aoe_combat_order_ror(&u, AOE_COMBAT_ORDER_MOVE_ROR, 7, 0, 0, 1.0f, 0, &o) == 1);
+    assert(co_kind == AOE_COMBAT_ORDER_MOVE_ROR && co_graphic == 4 && co_x == 3.0f &&
+           co_clears == 1 && co_adopts == 1);
+    co_head_v = &co_head_type;
+    co_head_type = 5;
+    assert(aoe_combat_order_ror(&u, AOE_COMBAT_ORDER_GATHER_ROR, 7, 0, 0, 0, 0, &o) == 1 &&
+           co_retargets == 0 && co_adopts == 1);
+    assert(aoe_combat_order_ror(&u, AOE_COMBAT_ORDER_GATHER_ROR, 7, 0, 0, 0, 1, &o) == 1 &&
+           co_retargets == 1 && co_adopts == 1);
+    co_head_type = 4;
+    assert(aoe_combat_order_ror(&u, AOE_COMBAT_ORDER_EXPLORE_ROR, 0, 9, 2, 0, 1, &o) == 1 &&
+           co_retargets == 2 && co_x == 9.0f);
+    assert(aoe_combat_order_ror(&u, AOE_COMBAT_ORDER_ENTER_ROR, 7, 0, 0, 0, 0, &o) == 1 &&
+           co_kind == AOE_COMBAT_ORDER_ENTER_ROR && co_adopts == 2);
+    co_head_type = 7;
+    assert(aoe_combat_order_ror(&u, AOE_COMBAT_ORDER_ATTACK_ROR, 7, 0, 0, 0, 0, &o) == 1 &&
+           co_adopts == 2 && co_retargets == 2);
+    co_head_type = 9;
+    assert(aoe_combat_order_ror(&u, AOE_COMBAT_ORDER_ATTACK_ROR, 7, 0, 0, 0, 1, &o) == 1 &&
+           co_retargets == 3);
+    co_head_type = 1;
+    t.unit_class = 4;
+    o.owner_template = co_owner_t;
+    o.change_template = co_change;
+    assert(aoe_combat_order_ror(&u, AOE_COMBAT_ORDER_ATTACK_ROR, 7, 0, 0, 0, 0, &o) == 1 &&
+           co_changed == 83 && co_kind == AOE_COMBAT_ORDER_ATTACK_ROR && co_adopts == 3);
+    o.action_point = co_point;
+    co_head_type = 7;
+    assert(aoe_combat_order_point_ror(&u, 1, 2, 3, 0, &o) == 1 && co_adopts == 3);
+    assert(aoe_combat_order_point_ror(&u, 1, 2, 4, 0, &o) == 1 && co_adopts == 4 &&
+           co_kind == AOE_COMBAT_ORDER_ATTACK_POINT_ROR);
+}
+
+typedef struct { int32_t xs[64], ys[64]; int n; int hit_x; } HgLog;
+static int hg_probe(void *c, int32_t tx, int32_t ty, float fx, float fy,
+                    float tox, float toy, float *best, int32_t *count) {
+    HgLog *l = c; (void)fx; (void)fy; (void)tox; (void)toy;
+    assert(*best == -1.0f);
+    l->xs[l->n] = tx; l->ys[l->n++] = ty;
+    if (tx == l->hit_x) { ++*count; return 1; }
+    return 0;
+}
+static void high_ground_tests(void) {
+    HgLog l;
+    memset(&l, 0, sizeof(l)); l.hit_x = -100;
+    /* 0x004b01c0: higher attacker wins outright; same spot is 0. */
+    assert(aoe_combat_high_ground_ror(1, 1, 2, 5, 5, 1, hg_probe, &l) && l.n == 0);
+    assert(!aoe_combat_high_ground_ror(1, 1, 0, 1, 1, 0, hg_probe, &l));
+    /* Mostly-x walk from (0.5,0.5) to (2.5,0.5): n = 4, steps of 0.5,
+       new tiles 1 and 2 (repeats skipped), y neighbours probed. */
+    assert(!aoe_combat_high_ground_ror(0.5f, 0.5f, 0, 2.5f, 0.5f, 0, hg_probe, &l));
+    assert(l.n == 6 && l.xs[0] == 1 && l.ys[0] == 0 && l.ys[1] == -1 && l.ys[2] == 1 &&
+           l.xs[3] == 2 && l.xs[5] == 2);
+    memset(&l, 0, sizeof(l)); l.hit_x = 2;
+    assert(aoe_combat_high_ground_ror(0.5f, 0.5f, 0, 2.5f, 0.5f, 0, hg_probe, &l));
+    assert(l.n == 4);
+    /* Mostly-y walk probes x neighbours. */
+    memset(&l, 0, sizeof(l)); l.hit_x = -100;
+    assert(!aoe_combat_high_ground_ror(0.5f, 0.5f, 0, 0.5f, 1.5f, 0, hg_probe, &l));
+    assert(l.n == 3 && l.xs[0] == 0 && l.xs[1] == -1 && l.xs[2] == 1 && l.ys[0] == 1);
+}
+
 int main(void) {
+    high_ground_tests();
+    combat_order_tests();
+    type50_lifecycle();
     template_damage_tests();
     DatUnit at, tt;
     AoeLiveUnit attacker, target;

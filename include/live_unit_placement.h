@@ -47,4 +47,26 @@ int aoe_live_unit_place_ror(AoeLiveUnitCore *unit,
                             float x, float y, float requested_z,
                             const AoeLiveUnitPlacementHooks *hooks);
 
+typedef struct {
+    void *context;
+    /* Vtable +0x34(x, y, z): place the unit again at its position. */
+    void (*place)(void *context, AoeLiveUnitCore *unit, float x, float y,
+                  float z);
+    /* (patched 0x4a94d0, not translated here) the live unit with this ID in any player's lists (the
+       unit's owner first), NULL for none or a negative ID. */
+    AoeLiveUnitCore *(*find)(void *context, AoeLiveUnitCore *unit,
+                             int32_t unit_id);
+    /* Vtable +0xd0: attach the unit to `target`. */
+    void (*attach)(void *context, AoeLiveUnitCore *unit,
+                   AoeLiveUnitCore *target);
+} AoeLiveUnitRelinkOps;
+
+/* 0x004a9490 (post-load link slot): the unit is placed again at its own
+   +0x38/+0x3c/+0x40, then a saved attached-unit ID (+0x20 held as an ID
+   after loading; zero means none) is cleared and, when the unit is found,
+   attached through +0xd0. Returns 0 for missing dependencies. */
+int aoe_live_unit_relink_ror(AoeLiveUnitCore *unit,
+                             int32_t *saved_attached_id,
+                             const AoeLiveUnitRelinkOps *ops);
+
 #endif

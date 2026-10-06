@@ -45,7 +45,7 @@ uint8_t terrain_minimap_palette_index(const DatTerrain *terrain, uint8_t shape);
 int terrain_shape_frame_span(const DatTerrain *terrain, uint8_t shape,
                              uint16_t *first_frame, uint16_t *frame_count);
 
-/* Empiresx.exe 0x00517790 / Empires.exe 0x004bbbd0. Selects the SLP frame
+/* Empiresx.exe disc 0x00517790 (patched 0x00514ee0) / Empires.exe 0x004bbbd0. Selects the SLP frame
    from an elevation shape and nonnegative tile coordinates. For multi-frame
    shapes, the DAT frame_grid low bytes tile variants by row/column; an
    out-of-range variant falls back to the first frame. This only selects a
@@ -144,12 +144,12 @@ uint8_t terrain_view_visibility_code(uint32_t tile_mask,
                                       int bypass_exploration_gate,
                                       int fog_enabled);
 
-/* Empiresx.exe 0x00511d70 / Empires.exe 0x004b5e50 generate a 256-entry
+/* Empiresx.exe disc 0x00511d70 (patched 0x0050f5c0) / Empires.exe 0x004b5e50 generate a 256-entry
    lookup that canonicalizes the eight-neighbor visibility edge mask to one
    of 47 edge patterns. The renderer stores it at +0x1a0 (base +0x19c). */
 int terrain_build_visibility_edge_table(uint8_t table[256]);
 
-/* Empiresx.exe 0x00516590 / Empires.exe 0x004ba7a0: inspect the eight
+/* Empiresx.exe disc 0x00516590 (patched 0x00513d30) / Empires.exe 0x004ba7a0: inspect the eight
    in-map neighbors of (x,y), set bits where owner_mask is absent, and map
    the resulting mask through the generated edge table. tile_masks is a
    row-major runtime visibility grid; out-of-map neighbors contribute zero. */
@@ -163,7 +163,7 @@ int terrain_visibility_edge_pattern(const uint32_t *tile_masks,
 /* Recomputes the viewport camera and sweep fields from original camera tile
    floats and viewport rectangle. Expansion 0x005125a0 (base 0x004b6670)
    derives tile counts by dividing viewport width/height by DAT tile width/
-   height; expansion 0x00513440 (base 0x004b76b0) uses those counts. The
+   height; expansion disc 0x00513440 (patched 0x00510c70; base 0x004b76b0) uses those counts. The
    caller must supply actual runtime camera floats; scenario defaults alone
    are not a live game camera. Returns false for out-of-map or numerically
    unsafe inputs. */

@@ -7,7 +7,7 @@
 #include "unit_storage.h"
 #include "visibility_watch.h"
 
-/* Directly recoverable semantic fields of RoR 0x004a8200 / base
+/* Directly recoverable semantic fields of RoR disc 0x004a8200 (patched 0x004a6a40) / base
    0x00412c20. This is not either original 32-bit object layout. */
 typedef struct {
     const DatUnit *unit_template; /* original unit +0x08 */

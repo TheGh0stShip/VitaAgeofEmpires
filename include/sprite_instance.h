@@ -53,6 +53,38 @@ int aoe_sprite_instance_looped_ror(const AoeSpriteInstance *instance);
 /* 0x00415d60, the animated sprite's deleting destructor: the destructor
    (0x00415e30, vtables only) and, with bit 0 of `flags`, the allocator's
    free. Returns the instance (freed or not, as the original does). */
+/* One graphic part drawn at (x, y) with the sprite's frame (0x004a55e0). */
+typedef void (*AoeSpritePartDrawFn)(void *context, const DatGraphic *graphic,
+                                    int32_t angle, int32_t frame, int32_t x,
+                                    int32_t y);
+
+/* Sprite draw slots over the graphic part walks. Static sprites (vtable
+   0x00543030) draw frame 0 at (x, y) plus their offset; animated sprites
+   (0x00543078) draw their current frame at (x, y) without the offset.
+   Top layer: static 0x00415b80 / animated 0x004160c0 over 0x004a5a50; the
+   animated one then, when the frame changed (restart or tick), plays the
+   frame sounds from the previous to the current frame at `angle`
+   (0x004a5430) and clears the flag. Lower layers: static 0x00415bc0 /
+   animated 0x00416110 over 0x004a5b50. Return the parts drawn. */
+int aoe_sprite_instance_draw_top_ror(AoeSpriteInstance *instance,
+                                     int16_t angle, int32_t x, int32_t y,
+                                     AoeSpritePartDrawFn draw,
+                                     void (*play)(void *context,
+                                                  int16_t sound_id),
+                                     void *context);
+int aoe_sprite_instance_draw_lower_ror(const AoeSpriteInstance *instance,
+                                       int16_t angle, int32_t x, int32_t y,
+                                       uint8_t skip_layer,
+                                       AoeSpritePartDrawFn draw,
+                                       void *context);
+/* Bounds slot: static 0x00415c40 (frame 0) / animated 0x004161f0 (current
+   frame) over 0x004a5d60 (aoe_graphic_bounds_ror); no offset applied. */
+int aoe_sprite_instance_bounds_ror(const AoeSpriteInstance *instance,
+                                   int16_t angle,
+                                   AoeGraphicFrameBoundsFn bounds,
+                                   void *context, int16_t *x0, int16_t *y0,
+                                   int16_t *x1, int16_t *y1);
+
 AoeSpriteInstance *aoe_sprite_instance_delete_ror(AoeSpriteInstance *instance, uint8_t flags);
 void aoe_sprite_instance_set_offset_ror(AoeSpriteInstance *instance,
                                         int32_t x, int32_t y);

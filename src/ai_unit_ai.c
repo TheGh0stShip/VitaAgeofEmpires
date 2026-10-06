@@ -918,6 +918,98 @@ int32_t aoe_ai_unit_ai_weakest_ror(const AoeAiUnitAiOpsRor *ops, float *out) {
     return best;
 }
 
+void aoe_ai_unit_ai_play_message_ror(const int32_t msg[3], const AoeAiUnitAiPlayOpsRor *ops) {
+    int i;
+    if (!msg || !ops || !ops->play_ready || !ops->play_ready(ops->context) || msg[2] != 500)
+        return;
+    if (ops->set_play_value) ops->set_play_value(ops->context, msg[0]);
+    for (i = 0; i < 3; ++i) {
+        uint8_t kind = 0, index = 0;
+        uint32_t value = 0;
+        if (!ops->trigger || !ops->trigger(ops->context, i, &kind, &value, &index) || kind == 0)
+            continue;
+        if (kind == 5 ||
+            (kind == 4 && ops->category && value == ops->category(ops->context, msg[1]))) {
+            if (ops->run) ops->run(ops->context, index, 0);
+        }
+    }
+}
+
+int32_t aoe_ai_unit_ai_nearest_listed_ror(const AoeAiUnitAiOpsRor *ops, float *out) {
+    int32_t n, i, best = -1;
+    float best_v = 0.0f;
+    if (!ops) return -1;
+    n = ops->group_count ? ops->group_count(ops->context) : 0;
+    for (i = 0; i < n; ++i) {
+        int32_t id = ops->group_at ? ops->group_at(ops->context, i) : -1;
+        int16_t type_id;
+        float d;
+        if (!ops->world_type || !ops->world_type(ops->context, id, &type_id)) continue;
+        d = (float)(ops->distance_to ? ops->distance_to(ops->context, id) : 0.0);
+        if (best == -1 || d < best_v) {
+            best = id;
+            best_v = d;
+        }
+    }
+    if (out) *out = best_v;
+    return best;
+}
+
+static int nearest_band_ok(int32_t mode, int band) {
+    switch (mode) {
+    case 0: return band == 1 || band == 2;
+    case 1: return band == 3;
+    case 2: return band == 4;
+    case 3: return band == 1;
+    default: return 1;
+    }
+}
+
+int32_t aoe_ai_unit_ai_nearest_nearby_ror(const AoeAiUnitAiOpsRor *ops, int32_t type_class,
+                                          int32_t mode, int32_t state, int32_t type_id,
+                                          int32_t *out, int32_t *players) {
+    int seen[9];
+    int band, p, count = 0;
+    int32_t best = -1, self_id;
+    float best_d = -1.0f;
+    AoeAiUnitViewRor me;
+    if (!ops) return -1;
+    memset(&me, 0, sizeof me);
+    if (ops->self) ops->self(ops->context, &me);
+    self_id = me.id;
+    memset(seen, 0, sizeof seen);
+    if (ops->refresh_nearby) ops->refresh_nearby(ops->context);
+    for (band = 0; band < 5; ++band) {
+        const uint8_t *e = NULL;
+        int32_t n = ops->nearby ? ops->nearby(ops->context, band, &e) : 0, i;
+        for (i = 0; i < n; ++i) {
+            const uint8_t *it = e + 8 * i;
+            int32_t id = near_id(it);
+            int16_t cls = 0, max_hp, tid = 0;
+            float hp;
+            uint8_t st = 0;
+            if (it[5] < 9) seen[it[5]] = 1;
+            if (id == self_id || !nearest_band_ok(mode, band)) continue;
+            if (!ops->target_view || !ops->target_view(ops->context, id, &cls, &hp, &max_hp, &st))
+                continue;
+            if (st >= 7) continue;
+            if (ops->world_type) ops->world_type(ops->context, id, &tid);
+            if (type_class != -1 && cls != type_class) continue;
+            if (type_id != -1 && tid != type_id) continue;
+            if (state != -1 && (int32_t)st != state) continue;
+            if (best == -1 || (float)it[4] < best_d) {
+                best_d = (float)it[4];
+                best = id;
+            }
+        }
+    }
+    for (p = 1; p <= 8; ++p)
+        if (seen[p]) ++count;
+    if (players) *players = count;
+    if (out) *out = (int32_t)best_d;
+    return best;
+}
+
 int32_t aoe_ai_unit_ai_report_nearby_ror(AoeAiUnitAiOrderRor *ai, const AoeAiUnitAiOpsRor *ops) {
     int band;
     int32_t r;
@@ -949,4 +1041,38 @@ int32_t aoe_ai_unit_ai_base_d4_ror(const AoeAiUnitAiOpsRor *ops, int32_t first) 
     t = ops->call_30_args ? ops->call_30_args(ops->context, 1, 0, 0) : -1;
     if (t != -1 && ops->call_5c_r && ops->call_5c_r(ops->context, t, 1) == 1) return 6;
     return 5;
+}
+
+int aoe_ai_unit_ai_kind_for_unit_ror(int16_t class_code, int16_t id,
+                                     int *kind, int32_t *arg) {
+    int k;
+    int32_t a = 10;
+    switch ((uint16_t)class_code) {
+    case 1:
+        if (id == 99 || id == 10) return 0;
+        k = AOE_AI_UNIT_AI_KIND_5644; a = 5; break;
+    case 2: k = AOE_AI_UNIT_AI_CLASS_2; break;
+    case 3: case 0x1b:
+        k = (id == 0x4f || id == 199 || id == 0x45 || id == 0x116 ||
+             id == 0x17f || id == 0x17c) ? AOE_AI_UNIT_AI_KIND_5724
+                                         : AOE_AI_UNIT_AI_KIND_5804;
+        break;
+    case 4: k = AOE_AI_UNIT_AI_CLASS_4; break;
+    case 5: case 7: case 8: case 0xb: case 0xe: case 0xf: case 0x10:
+    case 0x1d: case 0x1e: case 0x1f: case 0x20: case 0x21:
+        return 0;
+    case 9: k = AOE_AI_UNIT_AI_CLASS_9; break;
+    case 10:
+        k = id == 0x9d ? AOE_AI_UNIT_AI_CLASS_9 :
+            id == 0x30 ? AOE_AI_UNIT_AI_TYPE_30 :
+            id == 0x7e ? AOE_AI_UNIT_AI_TYPE_7E : AOE_AI_UNIT_AI_CLASS_10;
+        break;
+    case 0x12: k = AOE_AI_UNIT_AI_PRIEST; break;
+    case 0x14: k = AOE_AI_UNIT_AI_CLASS_14; break;
+    case 0x15: k = AOE_AI_UNIT_AI_CLASS_15; break;
+    default: k = AOE_AI_UNIT_AI_KIND_5564; break;
+    }
+    if (kind) *kind = k;
+    if (arg) *arg = a;
+    return 1;
 }

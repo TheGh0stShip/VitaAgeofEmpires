@@ -122,7 +122,8 @@ int aoe_building_terminal_cleanup_ror(AoeBuildingUpdate *building,
 int aoe_building_cleanup_type80_ror(
     AoeBuildingUpdate *building, uint32_t *owner_status_four_count,
     void *deallocator_context, void (*deallocate)(void *, void *));
-/* 004af7f0: consume one item, shift exhausted head entry, notify event 124.
+/* 004af7f0 (patched 1.0a 0x004adeb0, the same logic; a no-op on an empty
+   queue): consume one item, shift exhausted head entry, notify event 124.
    Does not clear the now-unused trailing entry, matching the original. */
 int aoe_building_queue_consume_ror(AoeBuildingUpdate *building,
                                     const AoeBuildingProductionOps *ops);
@@ -180,7 +181,9 @@ int aoe_building_state_queue_transition_ror(
     AoeBuildingUpdate *building, uint8_t new_state,
     uint32_t *owner_status_four_count,
     const AoeBuildingQueueCancelOps *ops);
-/* 004af900–004afb3a. Directly composes list push/pop and queue consumption.
+/* 004af900–004afb3a (patched 1.0a 0x004adfc0, the same flow: status 4 /
+   event 0x7d reason 4 or 0x20, 0x004b4f10 train action, 0x004adeb0 on a
+   finished head). Directly composes list push/pop and queue consumption.
    Valid finite owner resources are required on the empty-action gate.
    The original disc and 1.0a code pass -1 to their signed-subtract cancel
    routine in the 102/103 drain loop, which grows the queue forever. This

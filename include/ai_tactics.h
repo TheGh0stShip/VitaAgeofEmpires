@@ -117,10 +117,36 @@ typedef struct { uint8_t bytes[0x608]; } AoeAiPlayRor;
 typedef struct {
     int32_t count;
     AoeAiPlayRor *plays;
+    char name[0x41]; /* +8, 0x40 copied by the loader */
 } AoeAiPlayListRor;
 void aoe_ai_play_list_init_ror(AoeAiPlayListRor *list);
 void aoe_ai_play_list_release_ror(AoeAiPlayListRor *list);
 AoeAiPlayRor *aoe_ai_play_list_get_ror(AoeAiPlayListRor *list, int32_t i);
+
+/* Play file loader 0x0040d840 (list +8 name, +0x4c plays). The file
+   reached through the C runtime (fopen "r", fgets 256, rewind, fclose)
+   and the list's three name lookups (vtable +4 target type, +8 target
+   character, +0xc unit category, -1 refused) come through the ops. */
+typedef struct {
+    void *context;
+    void *(*open)(void *context, const char *path);
+    /* Nonzero when a line (at most size - 1 bytes) was read. */
+    int (*gets)(void *context, void *file, char *buf, int32_t size);
+    void (*rewind)(void *context, void *file);
+    void (*close)(void *context, void *file);
+    int32_t (*target_type)(void *context, const char *name);
+    int32_t (*target_char)(void *context, const char *name);
+    int32_t (*category)(void *context, const char *name);
+} AoeAiPlayLoadOpsRor;
+/* NULL names the list "NULL" and "NONE" keeps "NONE", both returning 0
+   without touching the plays; otherwise the name (0x40) is kept, the
+   file opened (0 on failure), the old plays freed, and a first pass
+   counts eight plays per line whose first word is "Play" (at most
+   16000; the word is not reset between lines). A second pass reads
+   the plays line by line (blank, whitespace-only and "//" lines
+   skipped); 0 when the plays cannot be allocated, else 1. */
+int aoe_ai_play_list_load_ror(AoeAiPlayListRor *list, const char *name,
+                              const AoeAiPlayLoadOpsRor *ops);
 
 /* Counters (vtable 0x00542c54): up to eight values (+0xc) with two
    companion arrays (+0x2c, +0x4c), count +0x6c. Init 0x0040eb80: used
@@ -139,6 +165,12 @@ void aoe_ai_counters_set_ror(AoeAiCountersRor *c, int32_t i, int32_t v);
 void aoe_ai_counters_add_ror(AoeAiCountersRor *c, int32_t i, int32_t v);
 void aoe_ai_counters_fill_ror(AoeAiCountersRor *c, int32_t v);
 int32_t aoe_ai_counters_count_ror(const AoeAiCountersRor *c);
+/* Tribe player 0x004f2040(tech, counters): the tech's shown costs
+   (research states +0x224, 0x004eabc1, aoe_research_costs_ror) added to
+   the counters pair by pair (0x0040ec40; type -1 adds nothing). This is
+   the adding half. */
+void aoe_ai_counters_add_costs_ror(AoeAiCountersRor *c, const int16_t types[3],
+                                   const int16_t amounts[3]);
 
 /* Strategy AI (0x3f0): 0x0040ec90, destructor 0x0040ece0 (deleting
    0x0040ecc0). TacAI (0x3f1): 0x0040ecf0, 0x0040ed40 (0x0040ed20).

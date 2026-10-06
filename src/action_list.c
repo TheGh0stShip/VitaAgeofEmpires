@@ -133,3 +133,26 @@ const char *aoe_action_type_name_ror(int has_head, int16_t type, char *out) {
     if (out) strcpy(out, name);
     return name;
 }
+
+const char *aoe_tribe_action_type_name_ror(int has_head, int16_t type,
+                                           char *out) {
+    const char *name;
+    if (!has_head) return aoe_action_type_name_ror(0, type, out);
+    switch (type) {
+    case 3: name = "Enter"; break;
+    case 0x0c: name = "Transport"; break;
+    case 0x65: name = "Build"; break;
+    case 0x66: name = "MakeObject"; break;
+    case 0x67: name = "MakeTech"; break;
+    case 0x68: name = "Convert"; break;
+    case 0x69: name = "Heal"; break;
+    case 0x6a: name = "Repair"; break;
+    case 0x6b: name = "Artifact"; break;
+    case 0x6c: name = "DiscoveryArtifact"; break;
+    case 0x6e: name = "Hunt"; break;
+    case 0x6f: name = "Trade"; break;
+    default: return aoe_action_type_name_ror(1, type, out);
+    }
+    if (out) strcpy(out, name);
+    return name;
+}

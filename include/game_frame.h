@@ -93,6 +93,17 @@ typedef struct {
 void aoe_game_font_desc_ror(const char *face, int32_t points, int32_t weight, uint8_t flag,
                             const char *charset_text, AoeLogFontRor *out);
 
+/* 0x00419390(unused, id, flag): a font from three strings: the face name
+   from string id (256 bytes; an empty face gives 0 and no font), the point
+   size from id + 1 (10 bytes, atoi) and the style from id + 2 (10 bytes):
+   weight 700 when it holds 'B' or 'b', else 400. The description is then
+   built by 0x00419460 with the flag. Returns 1 when `out` was filled. */
+int aoe_game_font_from_strings_ror(void *context,
+                                   void (*load_string)(void *context, int32_t id, char *buf,
+                                                       int32_t size),
+                                   int32_t id, uint8_t flag, const char *charset_text,
+                                   AoeLogFontRor *out);
+
 /* 0x00418080: the window procedure: the game's +0x08 (0 without a
    game). */
 int32_t aoe_game_frame_relay_ror(void *game, int32_t (*proc)(void *game, uint32_t window,

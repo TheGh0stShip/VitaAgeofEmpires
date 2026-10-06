@@ -46,8 +46,24 @@ static void release_test(void) {
            !p.list_11dc64_count);
 }
 
+static void delete_test(void) {
+    AoePathfinderRor kept, *heap;
+    memset(&kept, 0, sizeof(kept));
+    kept.nearby_ids = malloc(8);
+    kept.nearby_count = 2;
+    kept.nearby_capacity = 2;
+    assert(aoe_path_delete_ror(&kept, 0) == &kept);
+    assert(!kept.nearby_ids && !kept.nearby_count && !kept.nearby_capacity);
+    heap = calloc(1, sizeof(*heap));
+    assert(heap);
+    heap->list_11dc64 = malloc(16);
+    heap->list_11dc64_count = 1;
+    assert(aoe_path_delete_ror(heap, 1) == heap); /* freed (ASan checks) */
+}
+
 int main(void) {
     release_test();
+    delete_test();
     test_collect_nearby();
     int32_t table[256];
     AoePathfinderRor path;

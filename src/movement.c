@@ -925,3 +925,270 @@ int32_t aoe_unit_path_coord_sum_ror(AoeUnitPathRor *path) {
     aoe_unit_path_set_cursor_ror(path, saved);
     return aoe_ftol32(sum);
 }
+
+/* 0x0044e350 */
+int32_t aoe_movement_path_to_ror(AoeLiveUnit *unit, AoeMovementRor *m,
+                                 int32_t x2, int32_t y2, float range,
+                                 int32_t target_id, int32_t budget_limited,
+                                 int32_t free_terrain_a,
+                                 int32_t free_terrain_b, int second,
+                                 int32_t query_filter, int32_t budget_base,
+                                 const AoeMovementPathToOps *ops) {
+    AoePathRequestRor req;
+    uint32_t bits = 1u; /* pushed 1 as the float argument */
+    int32_t result;
+    if (!unit || !m || !ops || !ops->find || !ops->count_search) return -1;
+    if (x2 < 0 || y2 < 0 || x2 >= ops->map_width || y2 >= ops->map_height)
+        return 0;
+    m->free_terrain_b = free_terrain_b;
+    m->free_terrain_a = free_terrain_a;
+    m->use_alternate_path = 1;
+    ops->count_search(ops->context, second);
+    memset(&req, 0, sizeof(req));
+    req.x1 = aoe_ftol32(unit->core.position.x38);
+    req.y1 = aoe_ftol32(unit->core.position.y3c);
+    req.x2 = x2;
+    req.y2 = y2;
+    req.unit = unit;
+    req.range = range;
+    req.target_id = target_id;
+    req.mode = 1;
+    req.budget_limited = budget_limited;
+    req.argument_30 = 1;
+    req.check_occupancy = 1;
+    req.step = 1;
+    memcpy(&req.query_radius, &bits, sizeof(bits));
+    req.query_filter = query_filter;
+    req.budget_base = budget_base;
+    result = ops->find(ops->context, second, &req);
+    m->use_alternate_path = 0;
+    m->free_terrain_a = -1;
+    m->free_terrain_b = -1;
+    return result;
+}
+
+/* 0x0044ede0 */
+AoeUnitPathRor *aoe_movement_reach_path_ror(AoeLiveUnit *unit,
+                                            AoeMovementRor *m,
+                                            int32_t *zone_index,
+                                            const int32_t goal[2],
+                                            float range, int32_t target_id,
+                                            const AoeMovementReachOps *ops) {
+    const AoeZoneMapRor *map;
+    AoePathRequestRor req;
+    uint32_t bits = 1u; /* pushed 1 as the float argument */
+    int32_t ux, uy;
+    if (!unit || !m || !zone_index || !goal || !ops || !ops->zone_index ||
+        !ops->zone_map || !ops->find || !ops->clear_penalty)
+        return NULL;
+    if (*zone_index == -1) *zone_index = ops->zone_index(ops->context, unit);
+    map = ops->zone_map(ops->context, *zone_index);
+    if (!map) return NULL;
+    ux = aoe_ftol32(unit->core.position.x38);
+    uy = aoe_ftol32(unit->core.position.y3c);
+    if (!map->zones || ux < 0 || uy < 0 || ux >= map->width ||
+        uy >= map->height || goal[0] < 0 || goal[1] < 0 ||
+        goal[0] >= map->width || goal[1] >= map->height)
+        return NULL;
+    if (aoe_zone_at_ror(map, goal[0], goal[1]) != aoe_zone_at_ror(map, ux, uy) &&
+        !aoe_zone_near_tile_ror(map, ux, uy, goal[0], goal[1], range))
+        return NULL;
+    memset(&req, 0, sizeof(req));
+    req.x1 = ux;
+    req.y1 = uy;
+    req.x2 = goal[0];
+    req.y2 = goal[1];
+    req.unit = unit;
+    req.range = range;
+    req.target_id = target_id;
+    req.mode = 1;
+    req.budget_limited = 0;
+    req.argument_30 = 0;
+    req.check_occupancy = 1;
+    req.step = 1;
+    memcpy(&req.query_radius, &bits, sizeof(bits));
+    req.query_filter = -1;
+    req.budget_base = -1;
+    m->use_alternate_path = 1;
+    (void)ops->find(ops->context, &req);
+    m->use_alternate_path = 0;
+    ops->clear_penalty(ops->context);
+    return &m->alternate_path;
+}
+
+/* 0x0044e7a0 (and the body of 0x0044e600) */
+int32_t aoe_movement_line_passable_ror(AoeLiveUnit *unit, int32_t x1,
+                                       int32_t y1, int32_t x2, int32_t y2,
+                                       float range, int32_t arg,
+                                       AoeMovementPassableFn passable,
+                                       void *context, int32_t blocked[2]) {
+    int32_t dx = x2 - x1, dy = y2 - y1, ax, ay, steps, last_x = -999,
+            last_y = -999;
+    float sx, sy, fx, fy;
+    if (!passable) return -1;
+    if (dx == 0 && dy == 0) return 0;
+    ax = dx < 0 ? -dx : dx;
+    ay = dy < 0 ? -dy : dy;
+    steps = 2 * (ax < ay ? ay : ax);
+    sx = (float)((double)dx / (double)steps);
+    sy = (float)((double)dy / (double)steps);
+    fx = (float)x1;
+    fy = (float)y1;
+    for (int32_t i = 0; i < steps; ++i) {
+        int32_t tx, ty;
+        double ex, ey;
+        fx = fx + sx;
+        fy = fy + sy;
+        tx = aoe_ftol32(fx);
+        ty = aoe_ftol32(fy);
+        if (tx == last_x && ty == last_y) continue;
+        last_x = tx;
+        last_y = ty;
+        if (!passable(context, unit, fx, fy, arg)) {
+            if (blocked) {
+                blocked[0] = tx;
+                blocked[1] = ty;
+            }
+            return 0;
+        }
+        ex = (double)x2 - (double)fx;
+        ey = (double)y2 - (double)fy;
+        if (!(sqrt(ey * ey + ex * ex) > (double)range)) return 1;
+    }
+    return 1;
+}
+
+/* 0x0044e600 */
+int32_t aoe_movement_line_first_block_ror(AoeLiveUnit *unit,
+                                          const int32_t from[2],
+                                          const int32_t to[2], float range,
+                                          int32_t blocked[2], int32_t arg,
+                                          AoeMovementPassableFn passable,
+                                          void *context) {
+    if (!from || !to || !blocked) return -1;
+    return aoe_movement_line_passable_ror(unit, from[0], from[1], to[0],
+                                          to[1], range, arg, passable,
+                                          context, blocked);
+}
+
+/* 0x0044da90 */
+int32_t aoe_movement_zone_path_ror(AoeLiveUnit *unit, int32_t *zone_index,
+                                   int32_t x2, int32_t y2, float range,
+                                   int32_t target_id, int32_t budget_limited,
+                                   int second, int32_t query_filter,
+                                   int32_t budget_base,
+                                   const AoeMovementZonePathOps *ops) {
+    const AoeZoneMapRor *map;
+    AoePathRequestRor req;
+    uint32_t bits = 1u; /* pushed 1 as the float argument */
+    int32_t ux, uy;
+    if (!unit || !zone_index || !ops || !ops->zone_index || !ops->zone_map ||
+        !ops->path.find || !ops->path.count_search)
+        return -1;
+    if (x2 < 0 || y2 < 0 || x2 >= ops->path.map_width ||
+        y2 >= ops->path.map_height)
+        return 0;
+    if (*zone_index == -1) *zone_index = ops->zone_index(ops->path.context, unit);
+    map = ops->zone_map(ops->path.context, *zone_index);
+    if (!map) return 0;
+    ux = aoe_ftol32(unit->core.position.x38);
+    uy = aoe_ftol32(unit->core.position.y3c);
+    if (!map->zones || ux < 0 || uy < 0 || ux >= map->width ||
+        uy >= map->height || x2 >= map->width || y2 >= map->height)
+        return -1; /* host-only: the original reads unchecked */
+    if (aoe_zone_at_ror(map, x2, y2) != aoe_zone_at_ror(map, ux, uy) &&
+        !aoe_zone_near_tile_ror(map, ux, uy, x2, y2, range))
+        return 0;
+    ops->path.count_search(ops->path.context, second);
+    memset(&req, 0, sizeof(req));
+    req.x1 = ux;
+    req.y1 = uy;
+    req.x2 = x2;
+    req.y2 = y2;
+    req.unit = unit;
+    req.range = range;
+    req.target_id = target_id;
+    req.mode = 0;
+    req.budget_limited = budget_limited;
+    req.argument_30 = 1;
+    req.check_occupancy = 1;
+    req.step = 1;
+    memcpy(&req.query_radius, &bits, sizeof(bits));
+    req.query_filter = query_filter;
+    req.budget_base = budget_base;
+    return ops->path.find(ops->path.context, second, &req);
+}
+
+static int32_t object_path_common(AoeLiveUnit *unit, AoeMovementRor *m, int32_t *zone_index,
+                                  const AoeLiveUnit *target, int32_t target_id, float range,
+                                  int32_t budget_limited, int second, int32_t query_filter,
+                                  int32_t budget_base, int32_t mode,
+                                  const AoeMovementZonePathOps *ops) {
+    const AoeZoneMapRor *map;
+    AoePathRequestRor req;
+    uint32_t bits = 1u; /* pushed 1 as the float argument */
+    int32_t ux, uy, tx, ty, r;
+    if (!unit || !zone_index || !ops || !ops->zone_index || !ops->zone_map ||
+        !ops->path.find || !ops->path.count_search)
+        return -1;
+    if (!target) return 0;
+    if (*zone_index == -1) *zone_index = ops->zone_index(ops->path.context, unit);
+    map = ops->zone_map(ops->path.context, *zone_index);
+    if (!map) return 0;
+    ux = aoe_ftol32(unit->core.position.x38);
+    uy = aoe_ftol32(unit->core.position.y3c);
+    tx = aoe_ftol32(target->core.position.x38);
+    ty = aoe_ftol32(target->core.position.y3c);
+    if (!map->zones || ux < 0 || uy < 0 || tx < 0 || ty < 0 || ux >= map->width ||
+        uy >= map->height || tx >= map->width || ty >= map->height)
+        return -1; /* host-only: the original reads unchecked */
+    if (aoe_zone_at_ror(map, tx, ty) != aoe_zone_at_ror(map, ux, uy) &&
+        !aoe_zone_near_tile_ror(map, ux, uy, tx, ty, range))
+        return 0;
+    if (m) m->use_alternate_path = 1;
+    ops->path.count_search(ops->path.context, second);
+    memset(&req, 0, sizeof(req));
+    req.x1 = ux;
+    req.y1 = uy;
+    req.x2 = tx;
+    req.y2 = ty;
+    req.unit = unit;
+    req.range = range;
+    req.target_id = target_id;
+    req.mode = mode;
+    req.budget_limited = budget_limited;
+    req.argument_30 = 1;
+    req.check_occupancy = 1;
+    req.step = 1;
+    memcpy(&req.query_radius, &bits, sizeof(bits));
+    req.query_filter = query_filter;
+    req.budget_base = budget_base;
+    r = ops->path.find(ops->path.context, second, &req);
+    return r;
+}
+
+int32_t aoe_movement_object_path_ror(AoeLiveUnit *unit, int32_t *zone_index,
+                                     const AoeLiveUnit *target, int32_t target_id, float range,
+                                     int32_t budget_limited, int second, int32_t query_filter,
+                                     int32_t budget_base, const AoeMovementZonePathOps *ops) {
+    return object_path_common(unit, NULL, zone_index, target, target_id, range, budget_limited,
+                              second, query_filter, budget_base, 0, ops);
+}
+
+int32_t aoe_movement_object_path_alt_ror(AoeLiveUnit *unit, AoeMovementRor *m,
+                                         int32_t *zone_index, const AoeLiveUnit *target,
+                                         int32_t target_id, float range,
+                                         int32_t budget_limited, int second,
+                                         int32_t query_filter, int32_t budget_base, void *met,
+                                         AoeMovementCollectFn collect,
+                                         const AoeMovementZonePathOps *ops) {
+    int32_t r;
+    if (!m) return -1;
+    m->use_alternate_path = 0;
+    r = object_path_common(unit, m, zone_index, target, target_id, range, budget_limited, second,
+                           query_filter, budget_base, 1, ops);
+    if (!m->use_alternate_path) return r; /* no search was run */
+    if (budget_base != -1 && collect) collect(ops->path.context, second, met);
+    m->use_alternate_path = 0;
+    return r;
+}

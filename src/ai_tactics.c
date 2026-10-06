@@ -1,6 +1,7 @@
 #include "ai_tactics.h"
 
 #include <math.h>
+#include <stdio.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -218,6 +219,12 @@ void aoe_ai_counters_add_ror(AoeAiCountersRor *c, int32_t i, int32_t v) {
     if (c && i >= 0 && i < c->count && i < 8) c->values[i] += v;
 }
 
+/* 0x004f2040 (after 0x004eabc1) */
+void aoe_ai_counters_add_costs_ror(AoeAiCountersRor *c, const int16_t types[3],
+                                   const int16_t amounts[3]) {
+    for (int i = 0; i < 3; ++i) aoe_ai_counters_add_ror(c, types[i], amounts[i]);
+}
+
 void aoe_ai_counters_fill_ror(AoeAiCountersRor *c, int32_t v) {
     for (int i = 0; c && i < 8; ++i) c->values[i] = v;
 }
@@ -397,4 +404,252 @@ void aoe_ai_point_rotate_ror(const AoeAiPointRor *p, const AoeAiPointRor *origin
     dy = (double)(p->y - origin->y);
     out->x = aoe_ftol32(dx * cs - dy * sn);
     out->y = aoe_ftol32(dx * sn + dy * cs);
+}
+
+/* ---- 0x0040d840: the play file loader. ---- */
+
+#define PLAY_FILE_MAX 16000
+
+_Static_assert(sizeof(AoeAiGroupRor) <= sizeof(AoeAiPlayRor),
+               "a play holds a group template");
+
+static AoeAiGroupRor *play_at(AoeAiPlayListRor *list, int32_t i) {
+    if (i < 0 || i >= list->count) return NULL; /* the original indexes */
+    return (AoeAiGroupRor *)&list->plays[i];
+}
+
+static int32_t clamp_percent(int32_t v) {
+    return v < 0 ? 0 : v > 100 ? 100 : v;
+}
+
+/* 0x0040d840 first pass: eight plays per "Play" line, at most 16000. */
+static int32_t count_plays(const AoeAiPlayLoadOpsRor *ops, void *file) {
+    char line[256], word[256];
+    int32_t count = 0;
+    word[0] = '\0';
+    while (ops->gets(ops->context, file, line, sizeof line)) {
+        if (!line[0]) continue;
+        sscanf(line, "%255s ", word); /* kept when nothing is read */
+        if (!strcmp(word, "Play")) count += 8;
+    }
+    return count > PLAY_FILE_MAX ? PLAY_FILE_MAX : count;
+}
+
+/* "Play": the text between the first two '"' names the next play. */
+static void quoted_name(const char *line, char *out) {
+    const char *a = strchr(line, '"'), *b;
+    size_t n = 0;
+    if (a) {
+        b = strchr(a + 1, '"');
+        if (b) n = (size_t)(b - a - 1);
+        else n = strlen(a + 1); /* the original runs past the line */
+        memcpy(out, a + 1, n);
+    }
+    out[n] = '\0';
+}
+
+/* "EndPlay": an "HP" play is kept as it is (the seven spare plays are
+   dropped from the count); any other is copied into the next seven
+   plays named "<name>F1".."F7", with each Move action's point rotated
+   about (0, 0, 0) by k eighths of a turn. Returns the new play index. */
+static int32_t expand_play(AoeAiPlayListRor *list, int32_t play) {
+    AoeAiGroupRor *base = play_at(list, play);
+    char name[256];
+    int32_t k;
+    if (!base) return play;
+    strcpy(name, base->name);
+    if (name[0] == 'H' && name[1] == 'P') {
+        list->count -= 7;
+        return play;
+    }
+    for (k = 1; k < 8; k++) {
+        AoeAiGroupRor *dst = play_at(list, play + k);
+        char fname[300];
+        int32_t i, r, c;
+        if (!dst) break;
+        snprintf(fname, sizeof fname, "%sF%d", base->name, (int)k);
+        aoe_ai_group_set_name_ror(dst, fname);
+        dst->field_43 = base->field_43;
+        dst->field_41 = base->field_41;
+        dst->field_42 = base->field_42;
+        dst->field_4e = base->field_4e;
+        dst->mode = base->mode;
+        dst->field_51 = base->field_51;
+        dst->field_50 = base->field_50;
+        for (i = 0; i < 5; i++) {
+            aoe_ai_group_add_slot_44_ror(dst, aoe_ai_group_slot_44_ror(base, i));
+            aoe_ai_group_add_slot_49_ror(dst, aoe_ai_group_slot_49_ror(base, i));
+        }
+        dst->range_count = base->range_count;
+        for (r = 0; r < AOE_AI_GROUP_RANGES; r++) {
+            AoeAiCountRangeRor *from = aoe_ai_group_range_ror(base, r);
+            AoeAiCountRangeRor *to = aoe_ai_group_range_ror(dst, r);
+            for (c = 0; c < 6; c++) {
+                aoe_ai_range_set_min_ror(to, c, aoe_ai_range_min_ror(from, c));
+                aoe_ai_range_set_max_ror(to, c, aoe_ai_range_max_ror(from, c));
+            }
+        }
+        for (r = 0; r < AOE_AI_GROUP_RULES; r++) {
+            AoeAiRuleRor *from = aoe_ai_group_rule_ror(base, r);
+            AoeAiRuleRor *to = aoe_ai_group_rule_ror(dst, r);
+            for (i = 0; i < AOE_AI_RULE_ACTIONS; i++) {
+                const AoeAiActionRor *act = aoe_ai_rule_action_ror(from, i);
+                AoeAiActionRor moved;
+                if (act->code == 1) {
+                    AoeAiPointRor origin, out, p;
+                    aoe_ai_point_set_ror(&origin, 0, 0, 0);
+                    aoe_ai_point_zero_ror(&out);
+                    aoe_ai_point_set_ror(&p, act->a, act->b, act->c);
+                    aoe_ai_point_rotate_ror(&p, &origin, &out, (uint8_t)k);
+                    aoe_ai_action_set_ror(&moved, act->field_0, act->code,
+                                          out.x, out.y, out.z);
+                    act = &moved;
+                }
+                aoe_ai_rule_add_action_ror(to, act);
+            }
+            for (i = 0; i < AOE_AI_RULE_TRIGGERS; i++)
+                aoe_ai_rule_add_trigger_ror(to, aoe_ai_rule_trigger_ror(from, i));
+        }
+    }
+    return play + 7;
+}
+
+typedef struct {
+    int32_t play, rule; /* -1 outside a play / rule phase */
+    char c1, c2;        /* kept between lines, like the original */
+} PlayParse;
+
+/* One line of the second pass. Returns 0 when the play limit stops it. */
+static int parse_play_line(AoeAiPlayListRor *list,
+                           const AoeAiPlayLoadOpsRor *ops, PlayParse *st,
+                           const char *line) {
+    char word[256], text[256];
+    int v = 0, a = 0, b = 0, c = 0, d = 0;
+    int in_play = st->play != -1;
+    AoeAiGroupRor *play;
+    word[0] = text[0] = '\0';
+    if (sscanf(line, " %c%c", &st->c1, &st->c2) == EOF) return 1;
+    if (st->c1 == '/' && st->c2 == '/') return 1;
+    sscanf(line, "%255s ", word);
+    play = play_at(list, st->play);
+    if (!strcmp(word, "Play")) {
+        quoted_name(line, word);
+        if (++st->play > PLAY_FILE_MAX - 1) return 0;
+        play = play_at(list, st->play);
+        if (play) aoe_ai_group_set_name_ror(play, word);
+    } else if (in_play && !strcmp(word, "PlayType")) {
+        sscanf(line, "%*s %255s ", word);
+        if (play) play->field_43 = aoe_ai_attack_kind_ror(word);
+    } else if (in_play && !strcmp(word, "MinUnits")) {
+        sscanf(line, "%*s %d ", &v);
+        if (play) play->field_41 = (uint8_t)v;
+    } else if (in_play && !strcmp(word, "MaxUnits")) {
+        sscanf(line, "%*s %d ", &v);
+        if (play) play->field_42 = (uint8_t)v;
+    } else if (in_play && !strcmp(word, "Power")) {
+        sscanf(line, "%*s %d ", &v);
+        if (play) play->field_4e = (uint8_t)v;
+    } else if (in_play && !strcmp(word, "Overflow")) {
+        sscanf(line, "%*s %255s ", word);
+        if (play && !strcmp(word, "Balance")) play->mode = 1;
+        else if (play && !strcmp(word, "FirstGroup")) play->mode = 2;
+    } else if (in_play && !strcmp(word, "DeathPercentage")) {
+        sscanf(line, "%*s %d ", &v);
+        if (play) play->field_51 = (uint8_t)clamp_percent(v);
+    } else if (in_play && !strcmp(word, "Intelligence")) {
+        sscanf(line, "%*s %d ", &v);
+        if (play) play->field_50 = (uint8_t)clamp_percent(v);
+    } else if (in_play && !strcmp(word, "TargetChar")) {
+        int32_t id;
+        sscanf(line, "%*s %255s ", text);
+        id = ops->target_char ? ops->target_char(ops->context, text) : 0;
+        if (id && play) aoe_ai_group_add_slot_49_ror(play, (uint8_t)id);
+    } else if (in_play && !strcmp(word, "TargetType")) {
+        int32_t id;
+        sscanf(line, "%*s %255s ", text);
+        id = ops->target_type ? ops->target_type(ops->context, text) : 0;
+        if (id && play) aoe_ai_group_add_slot_44_ror(play, (uint8_t)id);
+    } else if (in_play && !strcmp(word, "NumberGroups")) {
+        sscanf(line, "%*s %d ", &v);
+        if (play) play->range_count = (uint8_t)v;
+    } else if (in_play && st->rule == -1 && !strcmp(word, "Group")) {
+        /* Group <range> <category> <min> - <max>: a negative maximum
+           also zeroes the minimum; the maximum is capped at 50. */
+        int32_t cat;
+        sscanf(line, "%*s %d %255s %d - %d ", &v, text, &a, &b);
+        if (v < 0 || v >= AOE_AI_GROUP_RANGES || !ops->category) return 1;
+        cat = ops->category(ops->context, text);
+        if (cat == -1 || !play) return 1;
+        aoe_ai_range_set_min_ror(aoe_ai_group_range_ror(play, v), cat,
+                                 (uint8_t)(b < 0 ? 0 : a));
+        aoe_ai_range_set_max_ror(aoe_ai_group_range_ror(play, v), cat,
+                                 (uint8_t)(b > 50 ? 50 : b));
+    } else if (in_play && !strcmp(word, "Phase")) {
+        sscanf(line, "%*s %d ", &v);
+        st->rule = v;
+    } else if (in_play && st->rule != -1 && !strcmp(word, "Group")) {
+        /* Group <field_0 0..4> <action> <a> <b> <c> into the phase. */
+        AoeAiRuleRor *rule = play ? aoe_ai_group_rule_ror(play, st->rule) : NULL;
+        AoeAiActionRor act;
+        sscanf(line, "%*s %d %255s %d %d %d ", &v, text, &a, &b, &c);
+        if (v < 0 || v >= 5 || !rule) return 1;
+        aoe_ai_action_set_named_ror(&act, (uint8_t)v, text, a, b, c);
+        aoe_ai_rule_add_action_ror(rule, &act);
+    } else if (in_play && st->rule != -1 &&
+               (!strcmp(word, "Trigger") || !strcmp(word, "RTrigger"))) {
+        /* [R]Trigger <n> <trigger> <a> <b> [<e>]: stored with the phase
+           number as its +0xc byte and n as +0xd. */
+        AoeAiRuleRor *rule = play ? aoe_ai_group_rule_ror(play, st->rule) : NULL;
+        AoeAiTriggerRor trig;
+        if (word[0] == 'R')
+            sscanf(line, "%*s %d %255s %d %d %d ", &v, text, &a, &d, &c);
+        else
+            sscanf(line, "%*s %d %255s %d %d ", &v, text, &a, &d);
+        if (!rule) return 1;
+        aoe_ai_trigger_set_named_ror(&trig, text, a, d, (uint8_t)st->rule,
+                                     (uint8_t)v, c);
+        aoe_ai_rule_add_trigger_ror(rule, &trig);
+    } else if (in_play && !strcmp(word, "EndPlay")) {
+        st->rule = -1;
+        st->play = expand_play(list, st->play);
+    }
+    return 1;
+}
+
+/* 0x0040d840 */
+int aoe_ai_play_list_load_ror(AoeAiPlayListRor *list, const char *name,
+                              const AoeAiPlayLoadOpsRor *ops) {
+    void *file;
+    int32_t i, count;
+    char path[256], line[256];
+    PlayParse st;
+    if (!list) return 0;
+    if (!name || !strcmp(name, "NONE")) {
+        strcpy(list->name, name ? "NONE" : "NULL");
+        return 0;
+    }
+    strncpy(list->name, name, 0x40);
+    list->name[0x40] = '\0';
+    snprintf(path, sizeof path, "%s", list->name);
+    if (!ops || !ops->open || !ops->gets) return 0;
+    file = ops->open(ops->context, path);
+    if (!file) return 0;
+    free(list->plays);
+    list->plays = NULL;
+    list->count = 0;
+    count = count_plays(ops, file);
+    list->count = count;
+    list->plays = calloc(count ? (size_t)count : 1u, sizeof(AoeAiPlayRor));
+    if (!list->plays) return 0; /* the file stays open, as in the original */
+    for (i = 0; i < count; i++)
+        aoe_ai_group_init_ror((AoeAiGroupRor *)&list->plays[i]);
+    if (ops->rewind) ops->rewind(ops->context, file);
+    st.play = st.rule = -1;
+    st.c1 = st.c2 = 0;
+    do {
+        if (!ops->gets(ops->context, file, line, sizeof line)) break;
+        if (line[0] && !parse_play_line(list, ops, &st, line)) break;
+    } while (st.play < PLAY_FILE_MAX);
+    if (ops->close) ops->close(ops->context, file);
+    return 1;
 }

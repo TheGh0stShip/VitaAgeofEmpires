@@ -79,7 +79,8 @@ typedef struct {
     void (*signal_failure)(void *, AoeTrainAction *);
 } AoeTrainActivationOps;
 
-/* 004b68c0–004b6995, vtable +0x1c. `active == 0` is an exact no-op.
+/* 004b68c0–004b6995, vtable +0x1c. Patched RoR 1.0a: 0x004b4fb0 (vtable
+   0x005488c4 +0x1c), the same code with charge 0x004f1750. `active == 0` is an exact no-op.
    A negative unit ID or absent trained-template slot only reports failure.
    A non-prepaid valid unit must pass the real resource charge; charge failure
    reports failure, signals 505, then enters state 1. Otherwise enter state 6.
@@ -124,6 +125,14 @@ int aoe_train_action_cancel_base(AoeTrainAction *action,
    translated. */
 int aoe_train_action_progress_ror(const AoeTrainAction *action,
                                   int16_t *unit_id, int16_t *percent);
+/* Patched RoR 1.0a 0x004b54c0 (the same readout, with its text part): the
+   ID and percent as above and, when `name` is given, the trained template's
+   name (owner template table +0x24[unit ID] +0x08) copied into `size`
+   bytes with strncpy semantics and the last byte cleared. Returns 0 if
+   the percent cannot be produced or size < 1. */
+int aoe_train_action_readout_ror(const AoeTrainAction *action,
+                                 int16_t *unit_id, int16_t *percent,
+                                 char *name, int16_t size);
 /* Base-game counterpart 004a5700 follows the same returned-ID and truncating
    percent contract as the RoR helper. */
 int aoe_train_action_progress_base(const AoeTrainAction *action,
@@ -208,7 +217,8 @@ struct AoeTrainSpawnOps {
                   int32_t *created_unit_id);
 };
 
-/* 004b6b40–004b6d75. Probe at most 60 candidates in each of three expanding
+/* 004b6b40–004b6d75 (patched RoR 1.0a: 0x004b5220, reached from the
+   update 0x004b5090). Probe at most 60 candidates in each of three expanding
    perimeter rings using the original RNG calls and integer direction
    reduction. `found` is original AL; API return 0 denotes invalid portable
    inputs/callback failure. Candidate fields retain the last probe. */
@@ -220,7 +230,8 @@ int aoe_train_action_spawn_base(AoeTrainAction *action, AoeRng *rng,
                                 const AoeTrainSpawnOps *ops,
                                 int32_t *created_unit_id, uint8_t *found);
 
-/* 004b69a0–004b6b35, vtable 0054db00 +0x28. Delta is owner->world +0x84;
+/* 004b69a0–004b6b35, vtable 0054db00 +0x28 (patched RoR 1.0a: 0x004b5090,
+   vtable 0x005488c4 +0x28; fast_train is global +0x9a8 there too). Delta is owner->world +0x84;
    fast_train is global +0x9a8. Fast mode assigns 1000, not infinity.
    Return 0 for unsupported inputs/dependencies; success writes original AL.
    Spawn and notification methods remain required real integration work.

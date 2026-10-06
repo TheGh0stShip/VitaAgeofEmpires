@@ -83,7 +83,8 @@ static int set_target(AoeGatherActionRor *a, AoeLiveUnit *t,
 }
 
 /* 0x00403b00 / 0x00403b30: the carrying graphic while holding the task's
-   resource, else the task's moving graphic / the template's standing. */
+   resource, else the task's moving graphic / the template's standing.
+   The hunting action's move-graphic slot 0x004b4030 is the same code. */
 static int carrying(const AoeGatherActionRor *a) {
     const AoeLiveUnit *u = a->base.unit;
     int16_t in = a->task->resource_in;

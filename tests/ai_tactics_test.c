@@ -2,6 +2,7 @@
 #include "ai_tactics.h"
 
 #include <assert.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -74,8 +75,159 @@ static void point_tests(void) {
     assert(out.x == 0 && out.y == 2 && out.z == 3);
 }
 
+
+/* 0x0040d840: an in-memory play file. */
+typedef struct {
+    const char *const *lines;
+    int pos, opened, rewound, closed;
+} PlayFile;
+
+static void *pf_open(void *c, const char *path) {
+    PlayFile *f = c;
+    if (strcmp(path, "plays.ai")) return NULL;
+    f->opened++;
+    f->pos = 0;
+    return f;
+}
+static int pf_gets(void *c, void *file, char *buf, int32_t size) {
+    PlayFile *f = c;
+    assert(file == f);
+    if (!f->lines[f->pos]) return 0;
+    strncpy(buf, f->lines[f->pos++], (size_t)size - 1);
+    buf[size - 1] = '\0';
+    return 1;
+}
+static void pf_rewind(void *c, void *file) {
+    PlayFile *f = c;
+    (void)file;
+    f->pos = 0;
+    f->rewound++;
+}
+static void pf_close(void *c, void *file) {
+    (void)file;
+    ((PlayFile *)c)->closed++;
+}
+static int32_t pf_type(void *c, const char *name) {
+    (void)c;
+    return !strcmp(name, "Tower") ? 7 : 0;
+}
+static int32_t pf_char(void *c, const char *name) {
+    (void)c;
+    return !strcmp(name, "Weak") ? 3 : 0;
+}
+static int32_t pf_category(void *c, const char *name) {
+    (void)c;
+    return !strcmp(name, "Archer") ? 2 : -1;
+}
+
+static void play_load_tests(void) {
+    static const char *const lines[] = {
+        "// a comment\n",
+        "\n",
+        "   \n",
+        "Play \"Rush\"\n",
+        "PlayType Flank\n",
+        "MinUnits 4\n",
+        "MaxUnits 12\n",
+        "Power 9\n",
+        "Overflow FirstGroup\n",
+        "DeathPercentage 130\n",
+        "Intelligence -5\n",
+        "TargetType Tower\n",
+        "TargetType Wall\n",
+        "TargetChar Weak\n",
+        "NumberGroups 2\n",
+        "Group 1 Archer 3 - 70\n",
+        "Group 0 Archer 5 - -1\n",
+        "Group 0 Cavalry 5 - 9\n",
+        "Group 7 Archer 5 - 9\n",
+        "Phase 2\n",
+        "Group 1 Move 10 0 5\n",
+        "Group 2 Attack 1 2 3\n",
+        "Group 6 Attack 1 2 3\n",
+        "Trigger 4 Death 6 7\n",
+        "RTrigger 1 Time 8 9 10\n",
+        "EndPlay\n",
+        "Play \"HPHold\"\n",
+        "MinUnits 2\n",
+        "EndPlay\n",
+        NULL};
+    static const char *const empty[] = {NULL};
+    PlayFile f = {lines, 0, 0, 0, 0};
+    AoeAiPlayLoadOpsRor ops = {&f, pf_open, pf_gets, pf_rewind, pf_close,
+                               pf_type, pf_char, pf_category};
+    AoeAiPlayListRor list;
+    AoeAiGroupRor *p, *q;
+    AoeAiRuleRor *r;
+    int k;
+
+    aoe_ai_play_list_init_ror(&list);
+    /* NULL and NONE only name the list. */
+    assert(aoe_ai_play_list_load_ror(&list, NULL, &ops) == 0 &&
+           !strcmp(list.name, "NULL") && f.opened == 0);
+    assert(aoe_ai_play_list_load_ror(&list, "NONE", &ops) == 0 &&
+           !strcmp(list.name, "NONE") && f.opened == 0);
+    assert(aoe_ai_play_list_load_ror(&list, "missing.ai", &ops) == 0 &&
+           !strcmp(list.name, "missing.ai") && !list.plays);
+
+    assert(aoe_ai_play_list_load_ror(&list, "plays.ai", &ops) == 1);
+    assert(f.opened == 1 && f.rewound == 1 && f.closed == 1);
+    /* Two Play lines reserve 16; the HP play gives back seven. */
+    assert(list.count == 9);
+    p = (AoeAiGroupRor *)aoe_ai_play_list_get_ror(&list, 0);
+    assert(!strcmp(p->name, "Rush") && p->field_43 == 3 &&
+           p->field_41 == 4 && p->field_42 == 12 && p->field_4e == 9 &&
+           p->mode == 2 && p->field_51 == 100 && p->field_50 == 0 &&
+           p->range_count == 2);
+    assert(p->slots_44[0] == 7 && p->slots_44[1] == 5 &&
+           p->slots_49[0] == 3 && p->slots_49[1] == 5);
+    assert(p->ranges[1].min[2] == 3 && p->ranges[1].max[2] == 50);
+    assert(p->ranges[0].min[2] == 0 && p->ranges[0].max[2] == 0xff);
+    r = &p->rules[2];
+    assert(r->actions[0].field_0 == 1 && r->actions[0].code == 1 &&
+           r->actions[0].a == 10 && r->actions[0].c == 5);
+    assert(r->actions[1].code == 2 && r->actions[1].b == 2 &&
+           r->actions[2].code == 0);
+    assert(r->triggers[0].code == 2 && r->triggers[0].a == 6 &&
+           r->triggers[0].b == 7 && r->triggers[0].c == 2 &&
+           r->triggers[0].d == 4 && r->triggers[0].e == 0);
+    assert(r->triggers[1].code == 11 && r->triggers[1].a == 8 &&
+           r->triggers[1].b == 9 && r->triggers[1].c == 2 &&
+           r->triggers[1].d == 1 && r->triggers[1].e == 10);
+    /* Seven rotated copies RushF1..RushF7. */
+    for (k = 1; k < 8; k++) {
+        char name[16];
+        q = (AoeAiGroupRor *)aoe_ai_play_list_get_ror(&list, k);
+        snprintf(name, sizeof name, "RushF%d", k);
+        assert(!strcmp(q->name, name) && q->field_43 == 3 &&
+               q->mode == 2 && q->field_42 == 12 && q->range_count == 2 &&
+               q->slots_44[0] == 7 && q->slots_49[0] == 3 &&
+               q->ranges[1].max[2] == 50 &&
+               q->rules[2].triggers[1].e == 10 &&
+               q->rules[2].actions[1].a == 1 && q->rules[2].actions[1].b == 2);
+        assert(q->rules[2].actions[0].c == 5);
+    }
+    q = (AoeAiGroupRor *)aoe_ai_play_list_get_ror(&list, 2); /* quarter turn */
+    assert(q->rules[2].actions[0].a == 0 && q->rules[2].actions[0].b == 10);
+    q = (AoeAiGroupRor *)aoe_ai_play_list_get_ror(&list, 4);
+    /* Half turn: cos(4 * (float)(pi / 4)) is just above -1, truncated. */
+    assert(q->rules[2].actions[0].a == -9 && q->rules[2].actions[0].b == 0);
+    q = (AoeAiGroupRor *)aoe_ai_play_list_get_ror(&list, 1); /* eighth */
+    assert(q->rules[2].actions[0].a == 7 && q->rules[2].actions[0].b == 7);
+    /* The HP play is not expanded. */
+    q = (AoeAiGroupRor *)aoe_ai_play_list_get_ror(&list, 8);
+    assert(!strcmp(q->name, "HPHold") && q->field_41 == 2);
+
+    /* Reloading frees the old plays; an empty file gives no plays. */
+    f.lines = empty;
+    assert(aoe_ai_play_list_load_ror(&list, "plays.ai", &ops) == 1 &&
+           list.count == 0 && list.plays);
+    aoe_ai_play_list_release_ror(&list);
+}
+
 int main(void) {
     point_tests();
+    play_load_tests();
     static AoeAiGroupRor group;
     static AoeAiMembersRor m, m2;
     AoeAiCountersRor c;
@@ -131,6 +283,11 @@ int main(void) {
            aoe_ai_counters_count_ror(&c) == 3);
     aoe_ai_counters_fill_ror(&c, 2);
     assert(c.values[7] == 2);
+    {
+        const int16_t ty[3] = {0, -1, 2}, am[3] = {10, 99, 4};
+        aoe_ai_counters_add_costs_ror(&c, ty, am);
+        assert(c.values[0] == 12 && c.values[1] == 2 && c.values[2] == 6);
+    }
 
     aoe_ai_play_list_init_ror(&plays);
     assert(!aoe_ai_play_list_get_ror(&plays, 0));

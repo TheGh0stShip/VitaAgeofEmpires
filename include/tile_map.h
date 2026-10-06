@@ -94,6 +94,32 @@ void aoe_tilemap_smooth_ror(AoeTileMapRor *m, int32_t x0, int32_t y0, int32_t x1
 int aoe_tilemap_paint_square_ror(AoeTileMapRor *m, int32_t x, int32_t y, int32_t r, int32_t terrain,
                                  const AoeTileMapOpsRor *ops);
 int aoe_tilemap_raise_square_ror(AoeTileMapRor *m, int32_t x, int32_t y, int32_t r, uint8_t elevation);
+/* Line brushes (vtable +0x10 0x00446050 terrain, +0x18 0x00446250
+   elevation): `width` is halved (arithmetic shift) into the square radius;
+   the start is clamped up to 0 and the end down to the last row/column.
+   Steps = ftol(sqrt(dx^2 + dy^2)); the brush (vtable +0x0c / +0x14, the
+   squares above) is applied at the start, at ftol of the double position
+   after each of the steps (dx/steps, dy/steps), and at the end unless the
+   last position already equals it exactly. The elevation line then runs
+   the clean-up 0x00445570 over the line's bounding box widened by the
+   radius (`cleanup`, may be NULL). Both return 1. */
+int aoe_tilemap_paint_line_ror(AoeTileMapRor *m, int32_t x0, int32_t y0, int32_t x1, int32_t y1,
+                               int32_t width, int32_t terrain, const AoeTileMapOpsRor *ops);
+int aoe_tilemap_raise_line_ror(AoeTileMapRor *m, int32_t x0, int32_t y0, int32_t x1, int32_t y1,
+                               int32_t width, int32_t elevation,
+                               void (*cleanup)(void *context, int32_t x0, int32_t y0,
+                                               int32_t x1, int32_t y1, int32_t value),
+                               void *context);
+/* 0x004433c0 (template method: world, x, y, then eight short outputs):
+   the screen offsets of a template footprint's four corners relative to
+   the tile holding (x, y). With fx = x - (int16)ftol(x) + size_x
+   (template +0x30) and fy likewise with size_y (+0x34), all rounded to
+   float, and the map's half_w / half_h: corner (fx, fy), then fx - 2
+   size_x, then fy - 2 size_y, then fx + 2 size_x again; each corner gives
+   x = ftol((fy + fx) * half_w) and y = ftol((fy + 1 - fx) * half_h).
+   `out` receives x0, y0, x1, y1, x2, y2, x3, y3. Returns 1. */
+int aoe_tilemap_footprint_corners_ror(const AoeTileMapRor *m, float size_x, float size_y,
+                                      float x, float y, int16_t out[8]);
 /* 0x00444cb0: the old map data: i32 width, height, then per tile
    terrain, elevation and an ignored byte (rows and columns both counted
    by the height, as in the original), then the shapes and a terrain
@@ -154,5 +180,51 @@ int aoe_tilemap_save_data_ror(const uint8_t image[AOE_MAP_RECORD_SIZE],
                               int32_t (*sound_id)(void *context, int border, int index),
                               void (*controller_save)(void *context, AoeOutcomeStream *s),
                               void *context, AoeOutcomeStream *s);
+
+
+/* What the map owns at destruction. */
+typedef struct {
+    void *zones;              /* +0x8dc4 (dtor 0x00521c80) */
+    void *random_map;         /* +0x8dbc (dtor 0x0046dbe0) */
+    void *raw04, *raw8db0, *rows8d8c, *raw8db4; /* plain allocations */
+    void *terrain_shapes[32]; /* terrain i's shape (+0x3214 - (31 - i) * 0x198) */
+    void *border_shapes[16];  /* border i's shape (+0x880c - (15 - i) * 0x5a0) */
+    void *masks;              /* +0x8dc8 (dtor 0x00517f30) */
+    void *v8dcc;              /* +0x8dcc (dtor 0x005168d0) */
+} AoeMapOwnedRor;
+
+enum {
+    AOE_MAP_OWNED_ZONES, AOE_MAP_OWNED_RANDOM_MAP, AOE_MAP_OWNED_SHAPE,
+    AOE_MAP_OWNED_MASKS, AOE_MAP_OWNED_8DCC
+};
+
+typedef struct {
+    void *context;
+    /* The member's destructor, then delete. */
+    void (*destroy)(void *context, int kind, void *object);
+    void (*free_raw)(void *context, void *p);
+} AoeMapOwnedOpsRor;
+
+/* 0x00444110 (base map destructor, deleting form 0x00443d60; the RoR map's 0x004ed840 resets its
+   vtable and calls it, 0x004ed7e0 also deletes): zones, random map
+   (both cleared), the four plain blocks (not cleared), the 32 terrain
+   shapes then the 16 border shapes, each from the last down (cleared),
+   then the masks and +0x8dcc (left set). */
+void aoe_map_release_owned_ror(AoeMapOwnedRor *m, const AoeMapOwnedOpsRor *ops);
+
+/* Template slot 0x00443140 (all template classes' vtables): keep a unit
+   footprint (half sizes template +0x30 / +0x34) centred on (*x, *y)
+   inside the map (world +0x28 width / height less 1e-5, 0x00544578): a
+   low edge below 0 or a high edge at or past the limit shifts the centre
+   (x first; the high-y test uses the low-y-shifted bottom edge only for
+   the shift amount). With `snap`, the footprint is then aligned to tile
+   edges using each edge's fractional part (|edge| less its int16
+   truncation; the high edges use 1 - fraction): x moves left by the high
+   fraction when the low fraction is smaller, else right by 1 - low
+   fraction, unless the two together are under one tile; y moves down by
+   1 - low fraction when that fraction is larger, else up by the high
+   fraction (ties go up for y, right for x). Returns 1. */
+int aoe_map_clamp_footprint_ror(float half_w, float half_h, int32_t map_w,
+                                int32_t map_h, float *x, float *y, int snap);
 
 #endif

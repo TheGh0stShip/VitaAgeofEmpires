@@ -69,7 +69,22 @@ static void gpf_destroy(void *c) { (void)c; ++gpf_destroys; }
 static int gpf_rect(void *c, int32_t r[4]) { (void)c; r[0] = r[1] = 0; r[2] = r[3] = 9; return 1; }
 static void gpf_show(void *c, const int32_t r[4]) { (void)c; assert(r[2] == 9); ++gpf_shows; }
 
+static const char *gfs_face = "Arial";
+static void gfs_load(void *c, int32_t id, char *buf, int32_t size) {
+    (void)c;
+    snprintf(buf, (size_t)size, "%s", id == 0x10 ? gfs_face : id == 0x11 ? "12" : "xb");
+}
+
+static void font_strings_tests(void) {
+    AoeLogFontRor f;
+    assert(aoe_game_font_from_strings_ror(NULL, gfs_load, 0x10, 1, "0", &f) == 1);
+    assert(f.height == -16 && f.weight == 700 && f.strikeout == 1 && strcmp(f.face, "Arial") == 0);
+    gfs_face = "";
+    assert(aoe_game_font_from_strings_ror(NULL, gfs_load, 0x10, 0, "0", &f) == 0);
+}
+
 static void paint_font_tests(void) {
+    font_strings_tests();
     AoeGamePaintFrameOpsRor o = {NULL, 1, 1, gpf_iconic, gpf_validate, gpf_clear, gpf_restore,
                                  gpf_redraw, gpf_redraw, gpf_destroy, gpf_rect, gpf_show};
     AoeLogFontRor f;

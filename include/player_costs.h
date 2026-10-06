@@ -63,4 +63,24 @@ int aoe_player_cost_queue_afford_ror(void *binding, int16_t unit_id,
 void aoe_player_cost_queue_pay_ror(void *binding, int16_t unit_id);
 void aoe_player_cost_queue_refund_ror(void *binding, int16_t unit_id);
 
+
+/* 0x004f0830: the costs to show for a template (the player's +0x24
+   entry): all three pairs start as (-1, 0); nothing more for no template
+   or a template type below 70. Each cost with the deduct byte and a
+   nonnegative type shows (int16)trunc(amount * mult); when the check
+   (0x004f15f0 with no failure pointer, multiplier 1 and pop flag 0)
+   passes and the value is below that amount, the amount shown becomes
+   the truncated value and the difference is summed. A positive sum is
+   added to the first pair that is gold (3) or unused (made gold), else
+   the second; else it replaces the third when that is gold or unused.
+   Pairs whose amount is below 1 get type -1. (The template's +0x08 that
+   the original can also return is not modelled.) Returns 0 only for the
+   host guards of the check. */
+int aoe_player_cost_shown_ror(const AoePlayerResources *resources,
+                              const DatUnit *unit_template, float mult,
+                              int16_t types[3], int16_t amounts[3]);
+/* 0x004f1ff0: the sum of the three shown amounts at multiplier 1. */
+int32_t aoe_player_cost_shown_total_ror(const AoePlayerResources *resources,
+                                        const DatUnit *unit_template);
+
 #endif

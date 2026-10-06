@@ -1,7 +1,23 @@
 #include "player_outcome_dispatch.h"
 
+#include <stdlib.h>
 #include <assert.h>
 #include <string.h>
+
+static int16_t tech_state(void *context, int16_t tech) {
+    return tech == 42 ? *(int16_t *)context : -1;
+}
+
+static void test_create_for_player(void) {
+    AoeOutcomePlayerRef player;
+    AoeOutcomeManager *m;
+    memset(&player, 0, sizeof player);
+    m = aoe_outcome_manager_create_for_player_ror(&player);
+    assert(m && player.outcome34 == m && m->owner == &player);
+    assert(!m->conditions && !m->events && m->outcome == 0 && m->score_sum_1c == 0);
+    assert(m->event_count == 0 && m->condition_count == 0);
+    free(m);
+}
 
 int main(void) {
     AoeOutcomeDispatcher dispatch = {0};
@@ -449,5 +465,23 @@ int main(void) {
     manager.conditions = &condition;
     assert(aoe_outcome_manager_update(&manager, &ops, &result));
     assert(result == 2 && condition.status == 2);
+    {
+        AoeOutcomeManager m = {0};
+        AoeOutcomeDispatcher d = {&m};
+        AoeOutcomeCondition c = {0};
+        int16_t state = 3;
+        c.kind = 100;
+        c.progress_target_20 = 42;
+        assert(aoe_outcome_dispatch_condition_tech_ror(&d, &c, tech_state, &state) && c.status == 0);
+        m.owner = (AoeOutcomePlayerRef *)&state; /* any non-null owner */
+        state = 2;
+        assert(aoe_outcome_dispatch_condition_tech_ror(&d, &c, tech_state, &state) && c.status == 0);
+        state = 3;
+        assert(aoe_outcome_dispatch_condition_tech_ror(&d, &c, tech_state, &state) && c.status == 2);
+        c.kind = 11;
+        c.status = 0;
+        assert(aoe_outcome_dispatch_condition_tech_ror(&d, &c, tech_state, &state) && c.status == 0);
+    }
+    test_create_for_player();
     return 0;
 }

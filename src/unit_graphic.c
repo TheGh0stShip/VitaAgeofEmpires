@@ -25,3 +25,17 @@ int aoe_unit_graphic_select(AoeUnitGraphicState *state,
     state->graphic_dirty = 0;
     return 1;
 }
+
+int aoe_unit_graphic_add_overlay(const AoeUnitGraphicOps *ops,
+                                 const void *graphic, unsigned priority) {
+    if (!ops || !ops->add) return 0;
+    ops->add(ops->context, graphic, priority, 0, 0);
+    return 1;
+}
+
+int aoe_unit_graphic_remove_overlay(const AoeUnitGraphicOps *ops,
+                                    const void *graphic) {
+    if (!ops || !ops->remove) return 0;
+    ops->remove(ops->context, graphic);
+    return 1;
+}

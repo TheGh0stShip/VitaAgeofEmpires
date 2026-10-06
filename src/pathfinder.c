@@ -181,3 +181,10 @@ void aoe_path_release_ror(AoePathfinderRor *path) {
     path->list_11dc64 = NULL;
     path->list_11dc64_count = path->list_11dc64_capacity = 0;
 }
+
+/* 0x004586d0 */
+AoePathfinderRor *aoe_path_delete_ror(AoePathfinderRor *path, uint8_t flags) {
+    aoe_path_release_ror(path);
+    if (flags & 1) free(path);
+    return path;
+}

@@ -102,5 +102,15 @@ int aoe_convert_action_retarget_ror(AoeConvertActionRor *action,
 int aoe_convert_action_update_ror(AoeConvertActionRor *action,
                                   const AoeConvertActionOps *ops,
                                   uint8_t *result);
+/* 0x004b2700 (called from 0x004ae970): an immediate conversion. Nothing
+   happens without a target or for a priest target (class 0x12). In state
+   7, or when the planar distance less 0.5 is within the range (+0x44),
+   the target converts: event 0x7b (unit owner, target owner, target x, y
+   truncated), the target's new owner (+0x44), resource 41 +1, faith 0
+   and state 3. Returns 0 only for missing dependencies or a failed host
+   call; *converted says whether it happened. */
+int aoe_convert_action_complete_ror(AoeConvertActionRor *action,
+                                    const AoeConvertActionOps *ops,
+                                    int *converted);
 
 #endif

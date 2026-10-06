@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include "aoe_stream.h"
 
 static AoeTribeCommandUnitRor u1 = {11, 2}, u2 = {12, 2}, bld = {30, 2};
 static int16_t last_min = -9, last_cls = -9, last_8f = -9, units_n = 2;
@@ -50,6 +51,164 @@ static void f_trib(void *c, int16_t p, int32_t a, int32_t r, float amt, int32_t 
     (void)c; (void)p; (void)a; (void)r; (void)amt; (void)b; ++f_tributes;
 }
 static void f_samp(void *c, int32_t skip, int32_t v) { (void)c; (void)skip; f_sample = v; }
+
+static int32_t relay_calls, relay_sum;
+static int32_t relay_msg(void *c, int32_t a, int32_t b, int32_t d, int32_t e, int32_t f) {
+    (void)c; ++relay_calls; return a + b + d + e + f;
+}
+static void relay_place(void *c, int32_t a, int32_t b, int32_t d, float x, float y, int32_t e,
+                        int32_t f) {
+    (void)c; ++relay_calls; relay_sum = a + b + d + (int32_t)x + (int32_t)y + e + f;
+}
+static void relay_named(void *c, int32_t a, int32_t b) { (void)c; ++relay_calls; relay_sum = a * b; }
+static void relay_done4(void *c, int32_t a, int32_t b, int32_t d, int32_t e) {
+    (void)c; ++relay_calls; relay_sum = a + b + d + e;
+}
+static void relay_three(void *c, int32_t a, int32_t b, int32_t d) {
+    (void)c; ++relay_calls; relay_sum = a - b - d;
+}
+
+
+static char tp_log[32];
+static int tp_n, tp_host = 1;
+static void tp_mark(char c) { tp_log[tp_n++] = c; tp_log[tp_n] = 0; }
+static void tp_base(void *c, AoeOutcomeStream *s) { (void)c; (void)s; tp_mark('B'); }
+static void tp_research(void *c, AoeOutcomeStream *s) { (void)c; aoe_stream_put_u8(s, 0xee); tp_mark('R'); }
+static void tp_history(void *c, AoeOutcomeStream *s) { (void)c; (void)s; tp_mark('H'); }
+static int32_t tp_is_host(void *c) { (void)c; return tp_host; }
+static void tp_ai(void *c, AoeOutcomeStream *s) { (void)c; (void)s; tp_mark('A'); }
+static void tp_free(void *c, void *o) { (void)c; tp_mark(*(char *)o); }
+static void tp_destroy(void *c) { (void)c; tp_mark('Z'); }
+
+static void test_tribe_player_save(void) {
+    AoeTribePlayerSaveOpsRor ops = {NULL, 1, tp_base, tp_research, tp_history, tp_is_host, tp_ai};
+    AoeTribePlayerSaveRor p = {9, 0x228, 0x22c, 0x230, 0x234, 0x238, 0x844, 0x848, 1, 1, 2, 3, 4};
+    uint8_t buf[128];
+    AoeOutcomeStream s = {0};
+    s.data = buf; s.size = sizeof buf;
+    aoe_tribe_player_save_ror(&p, &s, &ops);
+    assert(strcmp(tp_log, "BRHA") == 0 && s.pos == 1 + 16 + 1 + 4 + 8 + 4);
+    assert(buf[0] == 9 && buf[1] == 0x2c && buf[5] == 0x34 && buf[9] == 0x28 && buf[13] == 0x38);
+    assert(buf[17] == 0xee && buf[18] == 0x30 && buf[22] == 0x44 && buf[30] == 1);
+    tp_n = 0; tp_host = 0; s.pos = 0;
+    aoe_tribe_player_save_timed_ror(&p, &s, &ops);
+    assert(strcmp(tp_log, "BRH") == 0 && s.pos == 34 + 16);
+    assert(buf[30] == 0 && buf[34] == 1 && buf[38] == 2 && buf[42] == 4 && buf[46] == 3);
+    tp_n = 0; p.type = 2; s.pos = 0;
+    aoe_tribe_player_save_ror(&p, &s, &ops);
+    assert(s.pos == 30);
+    {
+        char r = 'r', a = 'a', h = 'h';
+        AoeTribePlayerMembersRor m = {NULL, &r, &a, &h, tp_free, tp_free, tp_free, tp_destroy};
+        tp_n = 0;
+        aoe_tribe_player_destroy_ror(&m);
+        assert(strcmp(tp_log, "rahZ") == 0 && !m.research && !m.ai && !m.history);
+        tp_n = 0; m.ai = &a;
+        aoe_tribe_player_destroy_ror(&m);
+        assert(strcmp(tp_log, "aZ") == 0);
+    }
+}
+
+
+static int ao_class = 3, ao_id = 5, ao_added, ao_event = -9;
+static uint8_t ao_state;
+static int32_t ao_base(void *c, void *u, int32_t a, int32_t b) { (void)c; (void)u; return a + b; }
+static int ao_info(void *c, void *u, int16_t *cl, int32_t *id) { (void)c; (void)u; *cl = (int16_t)ao_class; *id = ao_id; return 1; }
+static void ao_ai(void *c, void *u) { (void)c; (void)u; ++ao_added; }
+static void ao_build(void *c, void *u, int32_t arg) { (void)c; (void)u; ao_event = arg; }
+static uint8_t ao_game(void *c) { (void)c; return ao_state; }
+
+static void test_tribe_add_object(void) {
+    AoeTribeAddObjectOpsRor ops = {NULL, 1, ao_base, ao_info, ao_ai, ao_build, ao_game};
+    int unit = 0;
+    assert(aoe_tribe_add_object_ror(&ops, &unit, 2, 3) == 5 && ao_added == 1 && ao_event == 1);
+    ao_state = 3;
+    aoe_tribe_add_object_ror(&ops, &unit, 0, 0);
+    assert(ao_added == 2 && ao_event == 0);
+    ao_class = 11; ao_event = -9;
+    aoe_tribe_add_object_ror(&ops, &unit, 0, 0);
+    assert(ao_added == 2 && ao_event == -9);
+    ao_class = 3; ao_id = -1;
+    aoe_tribe_add_object_ror(&ops, &unit, 0, 0);
+    ao_id = 5; ops.has_ai = 0;
+    assert(aoe_tribe_add_object_ror(&ops, &unit, 1, 1) == 2 && ao_added == 2);
+}
+
+static int rp_allies = 3; /* bit 0: 2 -> other, bit 1: other -> 2 */
+static int rp_allied(void *c, int16_t from, int16_t to) {
+    (void)c; (void)to; return from == 2 ? (rp_allies & 1) : (rp_allies & 2) != 0;
+}
+static int rp_acks;
+static void rp_ack(void *c, const AoeTribeCommandUnitRor *u, const AoeTribeCommandUnitRor *t) {
+    (void)c; assert(u == &u1 && t->id == 99); ++rp_acks;
+}
+
+static void test_tribe_repair(void) {
+    AoeTribePlayerOpsRor ops = {0, 2, collect, template_state, ack_b, ack_u, selected, object_type, object_class, queue};
+    AoeTribeCommandUnitRor other = {99, 5}, mine = {99, 2};
+    AoeTribeRepairTargetRor t = {&mine, 'P', 3, 10.0f, 20, 2};
+    units_n = 2;
+    qsize = 0;
+    assert(aoe_tribe_player_repair_ror(&ops, &t, rp_allied, rp_ack) == 1);
+    assert(last_min == 4 && last_cls == 4 && last_8f == -1 && rp_acks == 1 && qsize > 0 && queued[0] == 0x6e);
+    t.hp = 20.0f;
+    assert(aoe_tribe_player_repair_ror(&ops, &t, rp_allied, rp_ack) == 0);
+    t.hp = 10.0f;
+    t.state = 3;
+    assert(aoe_tribe_player_repair_ror(&ops, &t, rp_allied, rp_ack) == 0);
+    t.state = 0;
+    t.unit = &other;
+    rp_allies = 1; /* one-way alliance: the building path still works */
+    assert(aoe_tribe_player_repair_ror(&ops, &t, rp_allied, rp_ack) == 1);
+    t.type = 'F';
+    t.cls = 20; /* a ship needs both ways */
+    assert(aoe_tribe_player_repair_ror(&ops, &t, rp_allied, rp_ack) == 0);
+    rp_allies = 3;
+    assert(aoe_tribe_player_repair_ror(&ops, &t, rp_allied, rp_ack) == 1);
+    t.cls = 6;
+    assert(aoe_tribe_player_repair_ror(&ops, &t, rp_allied, rp_ack) == 0);
+    t.cls = 2;
+    units_n = 0;
+    assert(aoe_tribe_player_repair_ror(&ops, &t, rp_allied, rp_ack) == 0);
+    units_n = 2;
+}
+
+static int tlo_hits[3];
+static void *tlo_combat(void *c, void *s, void *p) { (void)c; (void)p; ++tlo_hits[0]; return s; }
+static void *tlo_building(void *c, void *s, void *p) { (void)c; (void)s; ++tlo_hits[1]; return p; }
+static void *tlo_base(void *c, uint8_t k, void *s, void *p) { (void)c; (void)s; (void)p; ++tlo_hits[2]; return k == 10 ? c : NULL; }
+
+static void test_tribe_load_object(void) {
+    int ctx, stream, player;
+    AoeTribeLoadObjectOpsRor ops = {&ctx, tlo_combat, tlo_building, tlo_base};
+    assert(aoe_tribe_load_object_ror(&ops, 'F', &stream, &player) == &stream);
+    assert(aoe_tribe_load_object_ror(&ops, 'P', &stream, &player) == &player);
+    assert(aoe_tribe_load_object_ror(&ops, 10, &stream, &player) == &ctx);
+    assert(aoe_tribe_load_object_ror(&ops, 'Z', &stream, &player) == NULL);
+    assert(tlo_hits[0] == 1 && tlo_hits[1] == 1 && tlo_hits[2] == 2);
+}
+
+static int ttl_last;
+static void *ttl_f(void *c, void *s, int32_t a, int32_t b) { (void)c; (void)a; (void)b; ttl_last = 'F'; return s; }
+static void *ttl_p(void *c, void *s, int32_t a, int32_t b) { (void)c; (void)s; ttl_last = 'P'; return a == 7 && b == 8 ? c : NULL; }
+static void *ttl_z(void *c, void *s, int32_t a, int32_t b) { (void)c; (void)s; (void)a; (void)b; ttl_last = 'Z'; return NULL; }
+static void ttl_base(void *c, void *s, int16_t slot, uint8_t k, int32_t a, int32_t b) {
+    (void)c; (void)s; (void)a; (void)b; assert(slot == 3); ttl_last = k;
+}
+
+static void test_tribe_template_load(void) {
+    int ctx, stream;
+    void *slots[4] = {&ctx, &ctx, &ctx, &ctx};
+    AoeTribeTemplateLoadOpsRor ops = {&ctx, slots, ttl_f, ttl_p, ttl_z, ttl_base};
+    aoe_tribe_template_load_ror(&ops, &stream, 0, 'F', 7, 8);
+    assert(slots[0] == &stream && ttl_last == 'F');
+    aoe_tribe_template_load_ror(&ops, &stream, 1, 'P', 7, 8);
+    assert(slots[1] == &ctx && ttl_last == 'P');
+    aoe_tribe_template_load_ror(&ops, &stream, 2, 'Z', 7, 8);
+    assert(slots[2] == NULL && ttl_last == 'Z');
+    aoe_tribe_template_load_ror(&ops, &stream, 3, 10, 7, 8);
+    assert(slots[3] == &ctx && ttl_last == 10);
+}
 
 int main(void) {
     AoeTribePlayerOpsRor ops = {0, 2, collect, template_state, ack_b, ack_u, selected, object_type, object_class, queue};
@@ -155,5 +314,33 @@ int main(void) {
         assert(aoe_tribe_shared_vision_check_ror(1.0f, &flag, count_refresh, &refreshes));
         assert(flag == 1 && refreshes == 1);
     }
+    {
+        AoeTribeAiRelayOpsRor r = {NULL, 0, relay_msg, relay_place, relay_named, relay_done4,
+                                   relay_three, relay_three};
+        assert(aoe_tribe_ai_message_ror(&r, 1, 2, 3, 4, 5) == 0);
+        aoe_tribe_build_place_ror(&r, 1, 1, 1, 1.0f, 1.0f, 1, 1);
+        aoe_tribe_build_named_ror(&r, 2, 3);
+        aoe_tribe_build_done_4_ror(&r, 1, 2, 3, 4);
+        aoe_tribe_build_done_3_ror(&r, 1, 2, 3);
+        aoe_tribe_tactical_relay_ror(&r, 1, 2, 3);
+        assert(relay_calls == 0);
+        r.has_ai = 1;
+        assert(aoe_tribe_ai_message_ror(&r, 1, 2, 3, 4, 5) == 15);
+        aoe_tribe_build_place_ror(&r, 1, 2, 3, 4.5f, 5.0f, 6, 7);
+        assert(relay_sum == 28);
+        aoe_tribe_build_named_ror(&r, 2, 3);
+        assert(relay_sum == 6);
+        aoe_tribe_build_done_4_ror(&r, 1, 2, 3, 4);
+        assert(relay_sum == 10);
+        aoe_tribe_build_done_3_ror(&r, 9, 2, 3);
+        assert(relay_sum == 4);
+        aoe_tribe_tactical_relay_ror(&r, 10, 2, 3);
+        assert(relay_sum == 5 && relay_calls == 6);
+    }
+    test_tribe_player_save();
+    test_tribe_add_object();
+    test_tribe_load_object();
+    test_tribe_template_load();
+    test_tribe_repair();
     return 0;
 }

@@ -141,3 +141,7 @@ int aoe_live_unit_place_ror_with_vision(
         unit,placement,terrain_tiles,tile_lists,geometry,width,height,
         x,y,requested_z,vision,0);
 }
+
+int aoe_live_unit_vision_building_mode_ror(int completed, int alternate) {
+    return completed ? alternate : 1;
+}

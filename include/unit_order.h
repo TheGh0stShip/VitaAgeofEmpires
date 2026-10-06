@@ -118,4 +118,37 @@ int aoe_unit_order_ror(AoeLiveUnit *unit, AoeLiveUnit *target, float x,
                        float y, float z, const AoeUnitOrderOps *ops,
                        int16_t *code);
 
+/* The six tribe-unit "order by ID" slots (vtable 0x00547fa0 +0x164.. and
+   its twin at 0x0054820c): 0x004af200 (gather 0x6e, maker 0x004b32c0),
+   0x004af390 (convert 0x68, 0x004b1cb0), 0x004af520 (heal 0x69,
+   0x004b2c00), 0x004af6b0 (repair 0x6a, 0x004b55c0), 0x004af850 (build
+   0x65, 0x004b13c0) and 0x004af9e0 (trade 0x6f, 0x004b6520). The caller
+   resolves the ID (0x005206d0); a NULL target gives 0.
+   1. Without `force`, a non-empty list (0x00404520) whose head (0x004045b0)
+      is already of `action_type` and aimed at the target returns 1.
+   2. A head of `action_type` is retargeted (+0x34) to the target and its
+      position; 1 whatever the retarget answers.
+   3. Repair only: a non-NULL owner template 156 (owner +0x24 +0x270)
+      becomes the unit's template (+0x54).
+   4. The task comes from +0x214 = 0x00406670 (with its swap); none gives
+      0. The class's target maker (route of `action_type` through the tribe
+      factory, allocation 0x44) builds the action; failure gives 0.
+   5. The list is cleared (0x00403e50) and the unit adopts (+0x208); 1. */
+/* 0x004b0870 (tribe unit repair order on a target): nothing for NULL or
+   the unit itself. A unit whose template is not 156 takes owner template
+   156 (+0x54, unchecked like the original). The (new) template's first
+   repair task (action 0x6a) whose target class is the target's class, or
+   -1/0 for a type-80 target, is the task. A head action (0x004045c0)
+   built from that task and retargeted (0x00404580) gives its type;
+   otherwise the list factory builds the task's action, which the unit
+   adopts (+0x208), giving its type; else the result is 0. A unit with a
+   group object acknowledges 0x2ce/0x26a for result 0x6a (else -1/-1),
+   with the target's ID, class and position. Returns 0 for missing
+   dependencies; *code gets the result. */
+int aoe_unit_order_repair_ror(AoeLiveUnit *unit, AoeLiveUnit *target,
+                              const AoeUnitOrderOps *ops, int16_t *code);
+int aoe_unit_order_class_action_ror(AoeLiveUnit *unit, AoeLiveUnit *target,
+                                    int force, int16_t action_type,
+                                    const AoeUnitOrderOps *ops);
+
 #endif

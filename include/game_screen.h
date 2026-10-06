@@ -12,6 +12,18 @@
 
 enum { AOE_GAME_SCREEN_BUTTONS = 12, AOE_GAME_SCREEN_TIMERS = 10 };
 
+/* A map score line (0x00465ba0 style 5): text, RGB colour and shadow,
+   the font (8 or 0xb, 0x004199e0), and two icons (picture, frame). */
+typedef struct AoeGameScoreLineRor {
+    char text[0x200];
+    uint32_t colour, shadow;
+    int32_t font;
+    void *icon1;
+    int32_t frame1;
+    void *icon2;
+    int32_t frame2;
+} AoeGameScoreLineRor;
+
 /* What the screen reads of an object. */
 typedef struct {
     int32_t id;           /* +0x04 */
@@ -19,6 +31,7 @@ typedef struct {
     uint8_t type;         /* template +0x04 */
     float x, y;           /* +0x38, +0x3c */
     int32_t field_20;     /* +0x20 */
+    int16_t template_id;  /* template +0x10 */
 } AoeGameScreenObjectRor;
 
 /* A command button's setting (0x00483760). */
@@ -145,6 +158,104 @@ typedef struct {
     void (*toggle_pause)(void *context);
     void (*send_chat)(void *context, const char *text);
     uint32_t (*now)(void *context);
+    /* The command buttons rebuilt for the requested page (not yet
+       translated); the
+       game's +0x1b4 / +0x1b8 (edit mode 6 with sub mode 1 pages by 10). */
+    void (*refresh_buttons)(void *context);
+    int32_t (*edit_mode)(void *context, int32_t *sub_mode);
+    /* The current object is the viewed player's (template owner +0x4a
+       against the world's +0x7c); 0x0045dbb0 select an object; 0x0041c120
+       a sound. */
+    int (*owned_by_viewed)(void *context, int32_t id);
+    void (*select_object)(void *context, int32_t id);
+    void (*sound)(void *context, int32_t id);
+    /* Map orders on (0x0055873c) and the zoom step (in or out). */
+    int (*orders_enabled)(void *context);
+    void (*zoom)(void *context, int in);
+    /* Game speed (0x00484c60): the world's speed (+0x5b4 -> +0x18), the
+       game's fast-speed flag (0x0041b7f0, +0x989), the speed command
+       0x004e98f0 (opcode 0x67) and the stored speed 0x0041c180 (+0xa0c). */
+    float (*game_speed)(void *context);
+    int (*fast_speeds)(void *context);
+    void (*send_speed)(void *context, float speed);
+    void (*set_speed_setting)(void *context, float speed);
+    /* Escape (0x00484900): the screen's armed press (+0x45c) and its
+       disarm (0x00457d30); the view's +0xf4 and the outline reset
+       0x0050ffd0(-1, -1, -1, -1) (edit mode 0x15); the game's +0x10
+       mode change. Dialogs: the queued commands run (0x0042a140), the
+       comm pause 0x00419a60(1, 1), and a dialog made by name ("Diplomacy
+       Dialog", "Menu Dialog" 0x00433c30). */
+    int (*escape_armed)(void *context);
+    void (*escape_disarm)(void *context);
+    void (*view_cancel)(void *context, void *view);
+    void (*outline_reset)(void *context);
+    void (*set_mode)(void *context, int32_t mode, int32_t sub);
+    void (*run_commands)(void *context);
+    void (*comm_pause)(void *context, int32_t on, int32_t flag);
+    void (*open_dialog)(void *context, const char *name);
+    /* The viewed player's next object of a template after `after` (0:
+       from the start), 0x004f0ac0; 0 when none. */
+    int32_t (*next_of_type)(void *context, int32_t template_id, int32_t after);
+    /* The viewed player's current building (+0x134, a type 'P' object):
+       train there (0x004f1410 -> 0x004e9490) or research there
+       (0x004f1200 -> 0x004e9530); research affordable (0x004f1850, the
+       shortfall resource on failure). The instant flag (0x00558740) and
+       the world's +0x58 command 0x004e9c20(screen +0x5c8, id, arg). */
+    void (*train_at_current)(void *context, int16_t id);
+    void (*research_at_current)(void *context, int16_t id);
+    int (*can_research)(void *context, int16_t id, int16_t *failing);
+    int (*instant)(void *context);
+    void (*instant_train)(void *context, int16_t id, int32_t arg);
+    /* The screen's sound (+0x7b8) destroyed and freed (0x004a2c60), the
+       base children broadcast (0x00454390, +0xd4). */
+    void (*free_sound)(void *context, void *sound);
+    void (*base_broadcast)(void *context);
+    /* Hover help (0x00484620): the game window is the foreground window,
+       the view has the focus (0x00453f30), a capture/modal panel is set
+       (0x00451ad0 on the panel system), the game's mouse (0x00419b20),
+       the view's +0x33c (keeps the help line), the diamond map's tile
+       under a point (0x0042df00 on +0x4bc, nonzero over the map), a
+       button's hit test (vtable +0xe8) and its help text (+0x2d0). */
+    int (*foreground)(void *context);
+    int (*view_focus)(void *context);
+    int (*modal)(void *context);
+    void (*mouse)(void *context, int32_t *x, int32_t *y);
+    int (*view_keeps_help)(void *context);
+    int (*over_map)(void *context, int32_t x, int32_t y);
+    int (*button_hit)(void *context, void *button, int32_t x, int32_t y);
+    const char *(*button_help_text)(void *context, void *button);
+    /* Event cue (0x004844a0): sound on (the game's +0xc -> +0x8a8, its
+       +0x60 sound system, 0x007c052c clear); the world's cue table
+       (+0x28: count +0x8d90, 0x198-byte entries: active byte +0x8c,
+       priority byte +0xd1, effect +0xb0); the effect's file chosen
+       without playing (0x004a24a0); music stop (0x004a2910), play
+       (0x004a2870(name, 0, 0)) and the playing flag (0x007c0320). */
+    int (*sound_ready)(void *context);
+    int16_t (*cue_count)(void *context);
+    void (*cue)(void *context, int32_t i, uint8_t *active, uint8_t *priority, void **effect);
+    const char *(*cue_choose)(void *context, void *effect);
+    void (*music_stop)(void *context);
+    void (*music_play)(void *context, const char *name);
+    int (*music_playing)(void *context);
+    /* Map scores (0x00484f90 / 0x00483c40): the world's +0x11c flag, the
+       help panel's placement (vtable +0x18 (8, 4, 0, y, 4, 0, 0, 0x22,
+       0x22, 0, 0, 0, 0)), the game's player count (0x0041b9a0) and each
+       one's world slot (0x0041c080), a world player's score (+0x34's
+       0x00454170), colour (+0x10c -> +0x26) and lost state (+0x80 == 2);
+       the comm's player kind (0x00423d10), latency (+0x14d4 -> +0x1bc[p]),
+       ping (0x00428e60) and name (0x004241a0); 0x00465ba0 the line. */
+    void (*set_map_scores)(void *context, uint8_t on);
+    void (*help_place)(void *context, void *panel, int32_t y);
+    int32_t (*game_players)(void *context);
+    int32_t (*world_slot)(void *context, int32_t player);
+    int32_t (*score)(void *context, int32_t slot);
+    int16_t (*colour)(void *context, int32_t slot);
+    int (*lost)(void *context, int32_t slot);
+    int32_t (*player_kind)(void *context, int32_t player);
+    uint32_t (*latency)(void *context, int32_t player);
+    uint32_t (*ping)(void *context, int32_t player);
+    const char *(*player_name)(void *context, int32_t player);
+    void (*score_line)(void *context, void *panel, const struct AoeGameScoreLineRor *line);
 } AoeGameScreenOpsRor;
 
 typedef struct {
@@ -162,8 +273,23 @@ typedef struct {
     int32_t field_78;                            /* +0x78 */
     int32_t dialog;                              /* +0x7b4 */
     uint32_t pause_time;                         /* +0x7c0 */
+    uint32_t speed_time;                         /* +0x7bc */
+    void *sound;                                 /* +0x7b8 */
     int32_t idle_id;                             /* +0x7c4 */
+    int16_t button_pages;                        /* +0x5e0 */
+    int16_t button_page;                         /* +0x5e2 requested */
+    int16_t shown_page;                          /* +0x5e4 */
     int32_t alt_bar_held;                        /* 0x007c0648 */
+    void *more_buttons[5];                       /* +0x4f8.. (with buttons: 17) */
+    void *help_panel;                            /* +0x50c */
+    void *scores[8];                             /* +0x58c.. */
+    void *ping_picture;                          /* +0x448 */
+    int32_t width, height;                       /* +0x14, +0x18 */
+    int32_t mouse_x, mouse_y;                    /* +0x708, +0x70c */
+    uint32_t cue_interval;                       /* +0x678 */
+    uint32_t cue_time;                           /* +0x67c */
+    int32_t cue_playing;                         /* +0x684 */
+    uint32_t cue_start;                          /* +0x688 */
     const AoeGameScreenOpsRor *ops;
 } AoeGameScreenRor;
 
@@ -258,5 +384,89 @@ int32_t aoe_game_screen_next_idle_ror(AoeGameScreenRor *s, int32_t after);
 void aoe_game_screen_delete_ror(AoeGameScreenRor *s);
 void aoe_game_screen_command_6d_ror(AoeGameScreenRor *s, uint32_t value);
 void aoe_game_screen_pause_ror(AoeGameScreenRor *s);
+
+/* 0x00482290: back to the first button page and rebuild; 0x004847e0
+   the same after action (6, 1), nothing while the comm waits. */
+void aoe_game_screen_first_page_ror(AoeGameScreenRor *s);
+void aoe_game_screen_cancel_page_ror(AoeGameScreenRor *s);
+/* 0x00485140: the next button page (wrapping to 0); in edit mode 6 / 1
+   it flips between 0 and 10. Nothing while the comm waits. */
+void aoe_game_screen_next_page_ror(AoeGameScreenRor *s);
+/* 0x00485aa0: the go-to-idle key: the search starts after the current
+   unit when it is the viewed player's and of an idle category (4, 0x15,
+   0x13, 2), else after +0x7c4; the found unit is selected alone and
+   centred and the view redrawn, otherwise sound 3. */
+void aoe_game_screen_goto_idle_ror(AoeGameScreenRor *s);
+/* 0x00480f90 (the character handler in the table at 0x00546850): '+' or '=' zooms in, '-' out, when map
+   orders are on. Always 0. */
+int aoe_game_screen_zoom_key_ror(AoeGameScreenRor *s, int32_t key);
+/* 0x00484c60 (the step the '+'/'-' key's zoom op reaches): the game speed
+   one step faster (in != 0) or slower. Rate-limited to once a second
+   (unless 0x0041b750, the op 'paused'), nothing in game state 5. Slower:
+   16->8->4->2->1.5->1. Faster: 1->1.5->2, then only with 0x0041b750 and
+   the fast-speeds flag 2->4->8->16. Other speeds: nothing. A networked
+   game tells everyone (string 0xbf3); the speed command is sent and, when
+   0x0041b750, also stored. */
+void aoe_game_screen_speed_step_ror(AoeGameScreenRor *s, int in);
+/* 0x00484900: Escape. An armed press is disarmed; otherwise, unless the
+   comm waits, an edit mode is left (mode 0x15 first cancels the view's
+   placement and resets the outline; then mode (0, 0)), and without one
+   the selection is cleared (0x004856b0). */
+void aoe_game_screen_escape_ror(AoeGameScreenRor *s);
+/* 0x00484b60: unless the comm waits, the "Diplomacy Dialog" (a single
+   player game, 0x0041b750 == 1, pauses first: 0x00419a60(1, 1)). */
+void aoe_game_screen_diplomacy_ror(AoeGameScreenRor *s);
+/* 0x004850b0: the "Menu Dialog": in game state 6 the queued commands
+   run first; a single player game pauses as above. */
+void aoe_game_screen_menu_ror(AoeGameScreenRor *s);
+/* 0x00485390: the building keys 0..7 (templates 0x6d, 0x0c, 0x2d, 0x57,
+   0x31, 0x65, 0x68, 0): unless the comm waits, the next such object
+   after the current one (when it is of that template, else from the
+   start) becomes the only selection, the view centred on it and
+   redrawn. Other keys and no object: nothing. */
+void aoe_game_screen_building_key_ror(AoeGameScreenRor *s, int32_t key);
+/* 0x00485520: a train button: with the instant flag the world's command
+   (+0x5c8, id, arg); else affordable (0x004f15f0): the unit to place
+   (+0x3fc) and trained at the current building; else the shortfall (kind
+   0x67) on line 1 in colour 0x56. Nothing while the comm waits. */
+void aoe_game_screen_train_button_ror(AoeGameScreenRor *s, int16_t id, int32_t arg);
+/* 0x004852f0: a research button: researched at the current building
+   when affordable, else the shortfall as above. */
+void aoe_game_screen_research_button_ror(AoeGameScreenRor *s, int16_t id);
+/* 0x00484a70: the quick chat: in game state 5 with no dialog (+0x7b4)
+   string 0xbfe on line 1 (colour 0x32), else the "Send Quick Message
+   Dialog". 0x004849b0: the same in a single player game (0x0041b750),
+   otherwise the same check, then the "Send Message Dialog". */
+void aoe_game_screen_quick_chat_ror(AoeGameScreenRor *s);
+void aoe_game_screen_chat_ror(AoeGameScreenRor *s);
+/* 0x00485a50 (+0xd4): the screen's sound freed and cleared, then the
+   base broadcast. */
+void aoe_game_screen_broadcast_ror(AoeGameScreenRor *s);
+/* 0x004844a0: the event cue. With sound on: when idle, every
+   cue_interval ms the active cue (with an effect) of the highest priority
+   (above 0, first wins) has its file played as music (stopping any) and
+   the cue is playing; while playing, once a second: music stopped by
+   itself ends it, and after 6 s it is stopped. */
+void aoe_game_screen_cue_ror(AoeGameScreenRor *s);
+/* 0x00484620: hover help. With the game window in front, the view
+   focused and no modal panel, a moved mouse is kept; the help line is
+   hidden unless the view keeps it; inside the screen (x < width, y <=
+   height) and off the diamond map, the first of the 17 buttons that is
+   active, has a state and is hit shows its help (style 0, colour 0xff). */
+void aoe_game_screen_hover_ror(AoeGameScreenRor *s);
+/* 0x00484f90: the map scores on or off: the world's flag, the eight
+   score panels shown or hidden, refreshed when on (0x00483c40), the help
+   line placed at y 0xb8 (on) or 4, the view redrawn. */
+void aoe_game_screen_map_scores_ror(AoeGameScreenRor *s, int on);
+/* 0x00483c40: the score lines. Each game player with a world slot gets
+   a team (shared with mutually allied living players when alive) and
+   its team's average score; sorted (0x00483bc0); in a networked game the
+   human with the lowest rating (1000/latency, clamped 1..100, below 11:
+   the slowest link) is marked (icon 2 frame 0x11) and humans pinging 300+ get
+   icon 1 frame 0x13 (0x14 above 1000). Lines "%s: %d/%d" (name, score,
+   average) in the player's colour, font 8 for lost players and networked
+   non-humans (kinds other than 2 and 4), else 0xb; empty entries hide
+   their panel; stops at the first missing panel. */
+void aoe_game_screen_scores_ror(AoeGameScreenRor *s);
 
 #endif

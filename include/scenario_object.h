@@ -157,4 +157,57 @@ void aoe_scenario_index_close_ror(AoeScenarioIndexRor *x, const AoeScenarioIndex
 const char *aoe_scenario_index_name_ror(const AoeScenarioIndexRor *x, int32_t i);
 AoeScenarioRecordRor *aoe_scenario_index_record_ror(const AoeScenarioIndexRor *x, int32_t i);
 
+
+/* The scenario's +0x04 entry list (vtable 0x0054992c, one slot: the
+   deleting destructor 0x004ebda0), built by the scenario constructor
+   0x00474c90 with the world. Entries (0x30 bytes in the original) are a
+   singly linked list (next at +0x2c). Two entries refer to objects by id
+   (+0x20, +0x28) and keep the found object (+0x1c, +0x24). */
+typedef struct AoeScenarioEntryRor {
+    int32_t v0;                       /* +0x00 */
+    uint8_t v4;                       /* +0x04 */
+    int16_t v6;                       /* +0x06 */
+    uint8_t v8;                       /* +0x08 */
+    int32_t vc, v10, v14;             /* +0x0c, +0x10, +0x14 */
+    int16_t v18;                      /* +0x18 */
+    int16_t id1, id2;                 /* +0x20, +0x28 */
+    void *object1, *object2;          /* +0x1c, +0x24 */
+    struct AoeScenarioEntryRor *next; /* +0x2c */
+} AoeScenarioEntryRor;
+
+typedef struct {
+    void *world;                      /* +0x04 */
+    AoeScenarioEntryRor *head;        /* +0x08 */
+    int16_t count;                    /* +0x0c */
+    int16_t v0e;                      /* +0x0e */
+    float v10;                        /* +0x10 */
+} AoeScenarioEntriesRor;
+
+typedef struct {
+    void *context;
+    /* 0x00451340: the world's object with this id (or NULL). */
+    void *(*find)(void *context, void *world, int16_t id);
+    /* The 16-bit tag the save writes for a kept object (object +0x0c's
+       +0x4a). */
+    int16_t (*tag)(void *context, void *object);
+} AoeScenarioEntriesOpsRor;
+
+/* 0x004ebdc0: empty list for `world`; +0x10 is -1.0. */
+void aoe_scenario_entries_init_ror(AoeScenarioEntriesRor *e, void *world);
+/* 0x004ebdf0 (the deleting 0x004ebda0 also frees the object): frees every
+   entry and resets the list as 0x004ebdc0 does, without a world. */
+void aoe_scenario_entries_release_ror(AoeScenarioEntriesRor *e);
+/* 0x004ebbf0: count, +0x0e, +0x10, then per entry +0x00 (4), +0x04 (1),
+   +0x06 (2), +0x08 (1), +0x0c, +0x10, +0x14 (4 each), +0x18, +0x20 (2),
+   a 16-bit tag, +0x28 (2), a 16-bit tag. A negative tag, or no world,
+   leaves the object NULL; else the object is found by +0x20 / +0x28. */
+void aoe_scenario_entries_read_ror(AoeScenarioEntriesRor *e, AoeOutcomeStream *s, void *world,
+                                   const AoeScenarioEntriesOpsRor *ops);
+/* 0x004ebe40: the same layout; a tag is the object's tag or -1 without
+   one. The original strides through `count` 0x30-byte records from the
+   head, which only matches the list for contiguous entries; this walks
+   the list. */
+void aoe_scenario_entries_write_ror(const AoeScenarioEntriesRor *e, AoeOutcomeStream *s,
+                                    const AoeScenarioEntriesOpsRor *ops);
+
 #endif

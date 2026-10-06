@@ -49,6 +49,33 @@ int main(void) {
     d.table[2] = &d;
     aoe_draw_rows_reset_ror(&d);
     assert(!d.heads[3] && !d.table[2] && d.pool.available == d.pool.total && d.pool.resets == 1);
+    {
+        /* 0x00516510 / 0x00516660 */
+        const int16_t c[8] = {10, 20, 30, 40, 50, 60, 70, 80};
+        AoeDrawRowNodeRor *p, *q, *r;
+        d.table_base = 1; d.row_lo = 2; d.row_hi = 5;
+        assert(aoe_draw_rows_add_ror(&d, 3, 0, c, 1, 0, 9) == NULL);
+        assert(aoe_draw_rows_add_ror(&d, 3, 2, c, 3, 0, 9) == NULL);
+        assert(aoe_draw_rows_add_ror(&d, 3, -2, c, 3, 0, 9) == NULL);
+        p = aoe_draw_rows_add_ror(&d, 0, 0, c, 3, 44, 9);
+        q = aoe_draw_rows_add_ror(&d, 1, 0, c, 5, 0, 8);
+        r = aoe_draw_rows_add_ror(&d, 2, -1, c, 2, 0, 7);
+        assert(p && q && r && d.table[1] == q && q->free_link == p && !p->free_link && d.table[0] == r);
+        assert(p->id == 9 && p->key == 0 && aoe_draw_row_node_dword_ror(p, 0x10) == 3);
+        assert(aoe_draw_row_node_dword_ror(p, 0x1c) == 44 && aoe_draw_row_node_dword_ror(p, 0x14) == 0);
+        assert(aoe_draw_row_node_coord_ror(q, 7) == 80);
+        aoe_draw_rows_scroll_ror(&d, 2, 1);
+        assert(d.table[0] == q && !d.table[1] && !d.table[2]);
+        assert(aoe_draw_row_node_dword_ror(p, 0x14) == -2 && aoe_draw_row_node_dword_ror(p, 0x18) == -1);
+        assert(aoe_draw_row_node_coord_ror(q, 0) == 8 && aoe_draw_row_node_coord_ror(q, 1) == 19);
+        assert(aoe_draw_row_node_coord_ror(q, 4) == 48 && aoe_draw_row_node_coord_ror(q, 5) == 59);
+        assert(aoe_draw_row_node_coord_ror(q, 6) == 68 && aoe_draw_row_node_coord_ror(q, 7) == 79);
+        assert(aoe_draw_row_node_coord_ror(r, 0) == 10);
+        aoe_draw_rows_scroll_ror(&d, 0, -2);
+        assert(!d.table[0] && !d.table[1] && d.table[2] == q);
+        aoe_draw_rows_scroll_ror(&d, 0, 7);
+        assert(!d.table[0] && !d.table[1] && !d.table[2]);
+    }
     aoe_draw_rows_free_ror(&d);
     assert(!d.heads && !d.pool.blocks);
     {

@@ -250,3 +250,101 @@ int aoe_unit_start_task_ror(AoeLiveUnit *unit, int16_t id, const AoeUnitOrderOps
     ops->adopt(ops->context, unit, action);
     return 1;
 }
+
+int aoe_unit_order_class_action_ror(AoeLiveUnit *unit, AoeLiveUnit *target,
+                                    int force, int16_t action_type,
+                                    const AoeUnitOrderOps *ops) {
+    AoeActionList *list;
+    const DatUnitTask *task = NULL;
+    AoeActionRouteRor route;
+    void *head, *action;
+    float x, y, z;
+    if (!unit || !target || !ops || !ops->action_type || !ops->action_target ||
+        !ops->action_retarget || !ops->construct || !ops->adopt ||
+        !(list = unit->derived_action_list))
+        return 0;
+    x = target->core.position.x38;
+    y = target->core.position.y3c;
+    z = target->core.position.z40;
+    head = list->head ? list->head->action : NULL;
+    if (!force && head && ops->action_target(ops->context, head) == target &&
+        ops->action_type(ops->context, head) == action_type)
+        return 1;
+    if (head && ops->action_type(ops->context, head) == action_type) {
+        (void)ops->action_retarget(ops->context, head, target, x, y, z);
+        return 1;
+    }
+    if (action_type == 0x6a && ops->owner_template && ops->change_template &&
+        (!ops->owner_template_count ||
+         ops->owner_template_count(ops->context, unit) > 156)) {
+        const DatUnit *repairer = ops->owner_template(ops->context, unit, 156);
+        if (repairer) ops->change_template(ops->context, unit, repairer);
+    }
+    if (!aoe_unit_select_task_swap_ror(unit, target, x, y, z, ops, &task) ||
+        !task)
+        return 0;
+    aoe_action_route_ror(1, action_type, 1, &route);
+    if (route.shape == AOE_ACTION_SHAPE_NONE_ROR) return 0;
+    action = ops->construct(ops->context, unit, &route, task, target, x, y, z);
+    if (!action) return 0;
+    (void)aoe_action_list_clear(list);
+    ops->adopt(ops->context, unit, action);
+    return 1;
+}
+
+int aoe_unit_order_repair_ror(AoeLiveUnit *unit, AoeLiveUnit *target,
+                              const AoeUnitOrderOps *ops, int16_t *code) {
+    const DatUnit *t, *tt;
+    const DatUnitTask *task = NULL;
+    AoeActionList *list;
+    void *head, *action;
+    float x, y, z;
+    int16_t i;
+    if (!unit || !code || !ops || !ops->owner_template ||
+        !ops->change_template || !ops->action_task || !ops->action_retarget ||
+        !ops->action_type || !ops->construct || !ops->adopt ||
+        !ops->has_group_object || !ops->acknowledge ||
+        !(list = unit->derived_action_list) || !unit->core.unit_template)
+        return 0;
+    *code = 0;
+    if (!target || target == unit) return 1;
+    if (!(tt = target->core.unit_template)) return 0;
+    x = target->core.position.x38;
+    y = target->core.position.y3c;
+    z = target->core.position.z40;
+    if (unit->core.unit_template->id != 156)
+        ops->change_template(ops->context, unit,
+                             ops->owner_template(ops->context, unit, 156));
+    if (!(t = unit->core.unit_template)) return 0;
+    for (i = 0; t->tasks && i < t->task_count; ++i) {
+        const DatUnitTask *k = &t->tasks[i];
+        if (k->action_type == 0x6a &&
+            ((tt->type == 80 && (k->target_class == -1 || k->target_class == 0)) ||
+             k->target_class == tt->unit_class)) {
+            task = k;
+            break;
+        }
+    }
+    head = list->head ? list->head->action : NULL;
+    if (head && task && ops->action_task(ops->context, head) == task &&
+        ops->action_retarget(ops->context, head, target, x, y, z)) {
+        *code = ops->action_type(ops->context, head);
+    } else if (task) {
+        AoeActionRouteRor route;
+        aoe_action_route_ror(ops->tribe_template
+                                 ? ops->tribe_template(ops->context, t) : 1,
+                             task->action_type, 1, &route);
+        action = route.shape == AOE_ACTION_SHAPE_NONE_ROR ? NULL
+                 : ops->construct(ops->context, unit, &route, task, target,
+                                  x, y, z);
+        if (action) {
+            *code = ops->action_type(ops->context, action);
+            ops->adopt(ops->context, unit, action);
+        }
+    }
+    if (ops->has_group_object(ops->context, unit))
+        ops->acknowledge(ops->context, unit, *code == 0x6a ? 0x2ce : -1,
+                         *code == 0x6a ? 0x26a : -1, target->core.unit_id,
+                         tt->unit_class, x, y, z);
+    return 1;
+}

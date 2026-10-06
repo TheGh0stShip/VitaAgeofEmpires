@@ -81,4 +81,29 @@ int aoe_zone_manager_load_ror(AoeZoneManagerRor *manager, AoeOutcomeStream *s, i
                               int32_t height);
 void aoe_zone_manager_save_ror(const AoeZoneManagerRor *manager, AoeOutcomeStream *s);
 
+/* A unit's zone map: world +0x8dc4 manager, map size, terrain, and the
+   unit template's terrain restriction row (world +0x54[template +0x66],
+   world +0x52 entries). */
+typedef struct {
+    AoeZoneManagerRor *manager;
+    int32_t width, height;
+    const uint8_t *terrain;
+    const float *table;
+    int32_t table_count;
+} AoeUnitZoneWorldRor;
+
+/* The map a unit uses: its cached index (+0x7c) when set (0x00521c60),
+   else 0x00521b50 for its restriction row, caching the index. */
+AoeZoneMapRor *aoe_unit_zone_map_ror(const AoeUnitZoneWorldRor *world,
+                                     int32_t *cached_index);
+/* 0x004aba60: the zone of the unit's tile (ftol of +0x38 / +0x3c,
+   0x00521620); 0 without a map. */
+uint8_t aoe_unit_zone_ror(const AoeUnitZoneWorldRor *world,
+                          int32_t *cached_index, float x, float y);
+/* 0x004abae0: whether a tile of `zone` is within `distance` of tile
+   `at` (0x00521680) on the unit's map; 0 without a map. */
+int aoe_unit_zone_near_ror(const AoeUnitZoneWorldRor *world,
+                           int32_t *cached_index, uint8_t zone,
+                           const int32_t at[2], float distance);
+
 #endif

@@ -1,6 +1,7 @@
 #include "player_tile_map.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 #include "aoe_stream.h"
 
@@ -78,4 +79,37 @@ void aoe_visibility_masks_bind_rows_ror(const AoeVisibilityMaskMap *m, uint32_t 
     uint32_t y;
     for (y = 0; y < m->height && y < 256; ++y) rows[y] = m->masks + (size_t)y * m->width;
     for (; y < 256; ++y) rows[y] = NULL;
+}
+
+/* 0x00517490 */
+int32_t aoe_player_tile_map_load_ror(AoePlayerTileMapRor *m, int32_t world_field_28,
+                                     void *const *players, int32_t player_count,
+                                     float version, AoeOutcomeStream *s) {
+    int16_t id;
+    uint8_t lo;
+    const uint8_t *p;
+    int32_t y;
+    memset(m, 0, sizeof(*m));
+    m->field_c = world_field_28;
+    m->width = aoe_stream_i32(s);
+    m->height = aoe_stream_i32(s);
+    if (version >= 6.7f) m->explored = aoe_stream_i32(s);
+    lo = aoe_stream_u8(s);
+    id = (int16_t)(lo | (uint16_t)aoe_stream_u8(s) << 8);
+    if (s->failed) return -1;
+    m->total = m->width * m->height;
+    m->player = id >= 0 && id < player_count ? players[id] : NULL;
+    if (m->width > 0 && m->height > 0) {
+        p = aoe_stream_take(s, (size_t)m->total);
+        m->data = malloc((size_t)m->total);
+        m->rows = malloc((size_t)m->height * sizeof(*m->rows));
+        if (!p || !m->data || !m->rows) {
+            aoe_player_tile_map_free_ror(m);
+            return -1;
+        }
+        memcpy(m->data, p, (size_t)m->total);
+        for (y = 0; y < m->height; ++y) m->rows[y] = m->data + (size_t)y * (size_t)m->width;
+    }
+    m->mask = (uint32_t)(1u << (id & 0x1f)) << 16;
+    return id;
 }

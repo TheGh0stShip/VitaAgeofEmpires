@@ -137,3 +137,21 @@ int aoe_live_unit_place_ror(AoeLiveUnitCore *unit,
     }
     return 1;
 }
+
+int aoe_live_unit_relink_ror(AoeLiveUnitCore *unit,
+                             int32_t *saved_attached_id,
+                             const AoeLiveUnitRelinkOps *ops) {
+    int32_t id;
+    AoeLiveUnitCore *target;
+    if (!unit || !saved_attached_id || !ops || !ops->place || !ops->find ||
+        !ops->attach)
+        return 0;
+    ops->place(ops->context, unit, unit->position.x38, unit->position.y3c,
+               unit->position.z40);
+    if ((id = *saved_attached_id) != 0) {
+        *saved_attached_id = 0;
+        if ((target = ops->find(ops->context, unit, id)))
+            ops->attach(ops->context, unit, target);
+    }
+    return 1;
+}

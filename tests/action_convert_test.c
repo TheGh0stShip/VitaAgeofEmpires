@@ -220,5 +220,35 @@ int main(void) {
     assert(aoe_convert_action_set_state_ror(&a, 7, &o));
     a.timer = 0.0f;
     assert(aoe_convert_action_update_ror(&a, &o, &r) && changes == 2);
+    /* 0x004b2700: immediate conversion within range (dist - 0.5). */
+    {
+        int done = -1;
+        man.runtime_owner_index = 2;
+        a.base.target = &man;
+        a.base.state = 4;
+        a.range = 1.0f;
+        priest.core.position.x38 = 0; priest.core.position.y3c = 0;
+        man.core.position.x38 = 1.6f; man.core.position.y3c = 0;
+        assert(aoe_convert_action_complete_ror(&a, &o, &done) && done == 0 &&
+               man.runtime_owner_index == 2);
+        man.core.position.x38 = 1.5f;
+        event_count = 0;
+        res41 = 0;
+        assert(aoe_convert_action_complete_ror(&a, &o, &done) && done == 1 &&
+               man.runtime_owner_index == priest.runtime_owner_index &&
+               events[0] == 0x7b && res41 == 1.0f && a.base.state == 3 &&
+               priest.core.storage.carried_amount == 0.0f);
+        /* State 7 ignores distance; priests are never taken. */
+        man.runtime_owner_index = 2;
+        man.core.position.x38 = 50.0f;
+        a.base.state = 7;
+        m_t.unit_class = 0x12;
+        assert(aoe_convert_action_complete_ror(&a, &o, &done) && done == 0);
+        m_t.unit_class = 6;
+        a.base.state = 7;
+        assert(aoe_convert_action_complete_ror(&a, &o, &done) && done == 1);
+        a.base.target = NULL;
+        assert(aoe_convert_action_complete_ror(&a, &o, &done) && done == 0);
+    }
     return 0;
 }

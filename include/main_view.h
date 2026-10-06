@@ -1,0 +1,960 @@
+#ifndef VITA_AOE_MAIN_VIEW_H
+#define VITA_AOE_MAIN_VIEW_H
+
+#include <stddef.h>
+#include <stdint.h>
+
+/* Patched Rise of Rome 1.0a main map view panel and its game-view
+   subclass. Only the small state handlers are modelled here; the
+   terrain/object drawing lives in terrain_draw/sprite_draw. Semantic
+   fields replace the x86 object layout; the comments give the original
+   offsets. Calls the original makes through globals or vtables are
+   reached through the ops table. */
+
+/* -10000.0f, the "no hovered point" value written to +0x138/+0x13c. */
+#define AOE_MAIN_VIEW_NO_POINT_ROR (-10000.0f)
+
+typedef struct {
+    void *context;
+    /* Panel vtable +0x20: mark the panel for redraw (1 or 2). */
+    void (*redraw)(void *context, void *panel, int32_t level);
+    /* 0x0050fde0: recompute the visible tile counts and centre from the
+       panel size and the tile geometry. */
+    void (*recompute_layout)(void *context);
+    /* 0x00444a80 on the new map (called before its geometry is read). */
+    void (*map_attached)(void *context, void *map);
+    /* The map's world data (map +0x28) and its tile geometry
+       (+0x8d96, +0x8d98, +0x8d9c, +0x8d9a, +0x8d9e). */
+    void *(*map_world)(void *context, void *map);
+    void (*map_geometry)(void *context, void *world, int16_t geometry[5]);
+    /* Base panel handlers: mode change 0x00452bb0, 0x00453f00. */
+    void (*base_set_mode)(void *context, int32_t mode);
+    void (*base_handler)(void *context, int32_t value);
+    /* DAT_00582edc and 0x00449b00(panel +0x78). */
+    int (*global_flag)(void *context);
+    void (*notify_area)(void *context, void *area);
+    /* Owned "Terrain Buffer" surface at +0x324: destroyed and freed. */
+    void (*destroy_overlay)(void *context, void *overlay);
+    /* 0x0050ffd0: the tile highlight rectangle. */
+    void (*set_highlight)(void *context, int32_t x0, int32_t y0, int32_t x1,
+                          int32_t y1);
+    /* The game (DAT_00580e38) +0x1b0 state and +0x1b4 edit mode. */
+    int32_t (*game_state)(void *context);
+    int32_t (*game_edit_mode)(void *context);
+    /* The primary surface (panel +0x20, its +0x3c back buffer): busy
+       check (vtable +0x34 with 1, nonzero while a blit is pending) and the
+       fast blit (vtable +0x1c, flag 0x10 wait) of `src` (left, top,
+       right, bottom exclusive) to (x, y). */
+    int (*surface_busy)(void *context);
+    void (*surface_blit)(void *context, int32_t x, int32_t y,
+                         const int32_t src[4]);
+    /* The cursor (GetCursorPos), the windowed flag (+0x479 of the
+       primary's owner == 1) and ScreenToClient. */
+    void (*cursor_pos)(void *context, int32_t *x, int32_t *y);
+    int (*windowed)(void *context);
+    void (*screen_to_client)(void *context, int32_t *x, int32_t *y);
+    /* The draw surface lock / unlock named "view::draw_view"; the full
+       view draw (code 10 with the rectangle) and the generic view draw
+       (code, then zeros). */
+    int (*lock_surface)(void *context, void *surface, const char *name);
+    void (*unlock_surface)(void *context, void *surface, const char *name);
+    void (*draw_region)(void *context, int32_t left, int32_t top,
+                        int32_t right, int32_t bottom);
+    void (*draw_code)(void *context, uint8_t code);
+    /* The view's hit test (the generic view draw entry in pick mode) given two (x, y) points (both start as
+       the query point) and the in-out value; writes the two leading words
+       and the two 16-bit fields; returns the result character ('4'
+       object, '3' other hits). */
+    uint8_t (*pick)(void *context, uint8_t kind, int32_t arg,
+                    int32_t point_a[2], int32_t point_b[2], int32_t *value, int32_t *out0, int32_t *out1,
+                    int16_t *out2, int16_t *out3);
+    /* timeGetTime, the base panel draw 0x00453af0 and the timing
+       statistic 0x00417370(slot, ms). */
+    uint32_t (*time_ms)(void *context);
+    int32_t (*base_draw)(void *context, int32_t a, int32_t b, int32_t c,
+                         int32_t d, int32_t e);
+    void (*record_time)(void *context, int32_t slot, uint32_t ms);
+    /* 0x00419b20: the game's mouse position; the game's brush size
+       (DAT_00580e38 +0x402). */
+    void (*game_mouse)(void *context, int32_t *x, int32_t *y);
+    int16_t (*brush_size)(void *context);
+} AoeMainViewOpsRor;
+
+/* One entry of the queued blit list (+0x2dc, 32-byte records):
+   the source rectangle (inclusive right/bottom) and the destination. */
+typedef struct {
+    int32_t left, top, right, bottom;
+    int32_t dest_x, dest_y;
+} AoeMainViewBlitRor;
+
+/* 0x00511430 result (five dwords, the third holding two 16-bit fields). */
+typedef struct {
+    int32_t word0, word1;
+    int16_t half0, half1;
+    int32_t object_value; /* result '4' */
+    int32_t other_value;  /* result '3' */
+} AoeMainViewPickRor;
+
+typedef struct {
+    const AoeMainViewOpsRor *ops;
+    void *area;          /* +0x78 */
+    void *map;           /* +0xfc */
+    void *player;        /* +0x100 */
+    void *world;         /* +0x104 */
+    /* +0x108 tile width, +0x10a tile height, +0x10c half width,
+       +0x10e half height, +0x110 elevation step. */
+    int16_t geometry[5];
+    float point_x, point_y; /* +0x138, +0x13c */
+    uint8_t drag_flag;      /* +0x142 */
+    void *overlay;          /* +0x324 terrain buffer */
+    void *surface;          /* +0x20 primary surface */
+    void *draw_target;      /* +0xf4 */
+    int32_t left, top, right, bottom; /* +0x8c..+0x98 panel rectangle */
+    int16_t scroll_x, scroll_y;       /* +0x126, +0x128 */
+    int32_t origin_x, origin_y;       /* +0x130, +0x134 */
+    /* Queued blits: +0x2d8 active, +0x2dc list, +0x2e0 count, +0x2e8
+       current index, +0x2ec/+0x2f0 offset. */
+    int32_t blits_active;
+    const AoeMainViewBlitRor *blits;
+    int32_t blit_count, blit_index, blit_off_x, blit_off_y;
+    /* Row start table: +0x328 surface it was built for (never written by
+       0x00513980 itself), +0x32c table, +0x330 entry count. */
+    const void *rows_surface;
+    uint8_t **row_starts;
+    int32_t row_count;
+    void *aux_panel;        /* game view +0x360 (may be NULL) */
+} AoeMainViewRor;
+
+/* 0x0050fee0: attach `map` (NULL detaches): world and tile geometry copied
+   (zeroed without a map), then the layout recomputed. */
+void aoe_main_view_set_map_ror(AoeMainViewRor *v, void *map);
+/* 0x0050ffa0: the viewed player set, the hovered point reset to
+   AOE_MAIN_VIEW_NO_POINT_ROR, full redraw (2). */
+void aoe_main_view_set_player_ror(AoeMainViewRor *v, void *player);
+/* 0x0050fec0: the base mode change; mode 2 clears +0x142. */
+void aoe_main_view_set_mode_ror(AoeMainViewRor *v, int32_t mode);
+/* 0x0050f590: the base handler, then the area notified when the global
+   flag is set. */
+void aoe_main_view_handle_ror(AoeMainViewRor *v, int32_t value);
+/* 0x0050fba0: the +0x324 overlay destroyed and cleared. */
+void aoe_main_view_free_overlay_ror(AoeMainViewRor *v);
+/* 0x00518e50 (game view): 1 when the game state is 4..7, also redrawing
+   (1) in edit mode 1, 7 or 8; otherwise 0. */
+int aoe_game_view_check_redraw_ror(AoeMainViewRor *v);
+/* 0x0051a180 / 0x0051a1d0 (game view): after a successful base call
+   (the base view handlers, result `base_ok`) the +0x360 panel is
+   redrawn (1); returns 1 then, else 0. */
+int aoe_game_view_after_base_ror(AoeMainViewRor *v, int base_ok);
+/* 0x0051afb0 (game view): highlight cleared (-1 x4), redraw (1);
+   returns 0. */
+int aoe_game_view_clear_highlight_ror(AoeMainViewRor *v);
+/* 0x005104a0: the next queued blit (unless `force` is 0 and the
+   surface is still busy); the queue ends after its last entry, or at
+   once without a list or with an out-of-range index. */
+void aoe_main_view_step_blits_ror(AoeMainViewRor *v, int force);
+/* 0x00510ef0: draw into `target` (NULL: the primary surface). Into the
+   terrain buffer the panel rectangle and scroll are first shifted to the
+   buffer origin and restored afterwards. Code 10 draws the full region,
+   any other the generic draw. */
+void aoe_main_view_draw_ror(AoeMainViewRor *v, uint8_t code, void *target);
+/* 0x00511430: hit test; the value passed is `mask` unless `kind` is
+   0x28 (then 0); result '4' stores the value as object_value, '3' as
+   other_value. Returns the result character. */
+uint8_t aoe_main_view_pick_ror(AoeMainViewRor *v, uint8_t kind, int32_t arg,
+                               int32_t x, int32_t y, int32_t mask,
+                               AoeMainViewPickRor *out);
+/* 0x00514500: the cursor (client coordinates in windowed mode, 16-bit
+   wrapped) plus (dx, dy) in *x / *y; 1 when inside the panel rectangle
+   (inclusive). */
+int aoe_main_view_cursor_in_view_ror(AoeMainViewRor *v, int32_t dx,
+                                     int32_t dy, int32_t *x, int32_t *y);
+/* 0x00513980: per panel row (top..bottom) the surface row address plus
+   the panel left, rebuilt when the surface or the height differs (the
+   table reallocated when the height changed or none exists). `surface`
+   NULL or an empty height leaves it untouched. Returns 0 only when an
+   allocation fails. */
+int aoe_main_view_update_row_starts_ror(AoeMainViewRor *v,
+                                        const void *surface,
+                                        uint8_t *const *surface_rows);
+/* Releases the row table (not an original entry point). */
+void aoe_main_view_free_row_starts_ror(AoeMainViewRor *v);
+/* 0x00518e00 (game view): the base draw timed into statistic slot 13;
+   returns its result. */
+int32_t aoe_game_view_timed_draw_ror(AoeMainViewRor *v, int32_t a, int32_t b,
+                                     int32_t c, int32_t d, int32_t e);
+
+/* ---- Construction and destruction (vtable 0x0054a61c) ---- */
+
+/* Owned resources released by 0x0050f240, in its order. */
+typedef enum {
+    AOE_MAIN_VIEW_RES_SHAPE = 0,     /* +0x164 cursor shape (0x0049f840) */
+    AOE_MAIN_VIEW_RES_PEN,           /* +0x15c red pen (DeleteObject) */
+    AOE_MAIN_VIEW_RES_ROW_TABLE,     /* +0x32c row starts */
+    AOE_MAIN_VIEW_RES_REGION0,       /* +0x178 (0x004a37f0) */
+    AOE_MAIN_VIEW_RES_REGION1,       /* +0x17c */
+    AOE_MAIN_VIEW_RES_REGION2,       /* +0x180 */
+    AOE_MAIN_VIEW_RES_BUF0,          /* +0x184 */
+    AOE_MAIN_VIEW_RES_BUF1,          /* +0x188 */
+    AOE_MAIN_VIEW_RES_BUF2,          /* +0x2c8 */
+    AOE_MAIN_VIEW_RES_BLITS,         /* +0x2dc */
+    AOE_MAIN_VIEW_RES_DRAW_ROWS0,    /* +0x334 (0x005161c0) */
+    AOE_MAIN_VIEW_RES_DRAW_ROWS1,    /* +0x338 */
+    AOE_MAIN_VIEW_RES_LIST0,         /* +0x2fc..+0x30c, five lists */
+    AOE_MAIN_VIEW_RES_TIMERS = AOE_MAIN_VIEW_RES_LIST0 + 5, /* +0x354 */
+    AOE_MAIN_VIEW_RES_COUNT
+} AoeMainViewResourceRor;
+
+#define AOE_MAIN_VIEW_LISTS_ROR 5
+/* Each list: 0x40 entries of 0x14 bytes. */
+#define AOE_MAIN_VIEW_LIST_CAPACITY_ROR 0x40
+#define AOE_MAIN_VIEW_LIST_ENTRY_SIZE_ROR 0x14
+
+typedef struct {
+    void *context;
+    /* 0x00452750: the base panel constructor with the seven leading
+       arguments; 0x004526b0 the base destructor (run twice by the
+       original: once for the subobject, once for the base). */
+    void (*base_construct)(void *context, const int32_t args[7]);
+    void (*base_destruct)(void *context);
+    /* GetStockObject(6) white pen, CreatePen(PS_SOLID, 1, RGB(255,0,0)),
+       GetStockObject(5) null brush. */
+    void *(*stock_object)(void *context, int32_t which);
+    void *(*create_pen)(void *context, int32_t style, int32_t width,
+                        uint32_t colour);
+    /* operator new(0x20) + 0x0049f5f0(name, -1); NULL on failure. */
+    void *(*load_shape)(void *context, const char *name);
+    /* 0x50f5c0: the tile edge table set-up. */
+    void (*init_edges)(void *context);
+    void *(*alloc_zero)(void *context, uint32_t count, uint32_t size);
+    /* Release of one owned resource (non-NULL only). */
+    void (*release)(void *context, AoeMainViewResourceRor which, void *res);
+    /* 0x0050fba0 (the overlay free) and 0x00515fb0 (the marks free). */
+    void (*free_overlay)(void *context);
+    void (*free_marks)(void *context);
+    /* DAT_00582edc set: 0x0044bed0(0) then 0x00449b00(0). */
+    int (*global_flag)(void *context);
+    void (*clear_globals)(void *context);
+    /* 0x00525fc2 operator delete of the object (deleting destructor). */
+    void (*delete_self)(void *context, void *self);
+} AoeMainViewLifeOpsRor;
+
+typedef struct {
+    void *link;               /* +0xf4, 0 */
+    int32_t owner_arg;        /* +0xf8 */
+    int16_t scroll[4];        /* +0x126..+0x12c, 0 */
+    float point_x, point_y;   /* +0x138/+0x13c, -10000 */
+    uint8_t flag_140;         /* +0x140, 0 */
+    void *white_pen, *null_brush; /* +0x158, +0x160 (red pen: res) */
+    void *res[AOE_MAIN_VIEW_RES_COUNT];
+    int32_t list_count[AOE_MAIN_VIEW_LISTS_ROR]; /* +0x310.. */
+} AoeMainViewLifeRor;
+
+/* 0x0050f420: base constructor, the fields above, the cursor shape
+   loaded as "<name>.shp", the edge tables, five zeroed lists. Returns 1. */
+int aoe_main_view_construct_ror(AoeMainViewLifeRor *v,
+                                const AoeMainViewLifeOpsRor *ops,
+                                const int32_t base_args[7],
+                                int32_t owner_arg, const char *shape_name);
+/* 0x0050f240: releases everything in AoeMainViewResourceRor order
+   (shape first, then the overlay, the pen, ...), the global clear when
+   flagged, the timers, the marks, then the base destructor twice.
+   0x0050f220 is the deleting form (`flags` bit 0 frees `self`);
+   0x0047e9e0 is the same deleting form reached through a thunk of
+   0x0050f240 (vtable slots 0x00546688 and 0x0054a840). */
+void aoe_main_view_destruct_ror(AoeMainViewLifeRor *v,
+                                const AoeMainViewLifeOpsRor *ops);
+void *aoe_main_view_delete_ror(AoeMainViewLifeRor *v,
+                               const AoeMainViewLifeOpsRor *ops,
+                               uint8_t flags);
+
+/* ---- Tile bucket grid (DAT_007d2058 singleton) ---- */
+
+typedef struct {
+    void *items;        /* 0x20 entries of 8 bytes */
+    int16_t capacity;   /* 0x20 */
+    int16_t count;      /* 0 */
+} AoeViewGridCellRor;
+
+#define AOE_VIEW_GRID_BUFFERS_ROR 5
+#define AOE_VIEW_GRID_BUFFER_SIZE_ROR 0x800
+
+typedef struct {
+    AoeViewGridCellRor **rows;                       /* +0x00 */
+    uint8_t *buffers[AOE_VIEW_GRID_BUFFERS_ROR];     /* +0x04..+0x14 */
+    int32_t row_count;                               /* +0x18 */
+    int32_t col_count;                               /* +0x1c (arg + 1) */
+    int8_t *lookup;                                  /* +0x20 (0x516990) */
+} AoeViewGridRor;
+
+/* The globals the grid publishes: DAT_007d2038 buffer pointers,
+   DAT_007d2024 their fill counts, DAT_007d2058 the live grid. */
+typedef struct {
+    uint8_t *buffers[AOE_VIEW_GRID_BUFFERS_ROR];
+    int32_t used[AOE_VIEW_GRID_BUFFERS_ROR];
+    AoeViewGridRor *current;
+} AoeViewGridGlobalsRor;
+
+/* 0x00516800: rows x (cols + 1) cells, each with a 0x20-entry array;
+   five 0x800-byte buffers published to `g`; `build_lookup` is
+   0x516990 (may be NULL). Allocation failures are not checked by the
+   original; here a failed array leaves the cell with items NULL. */
+void aoe_view_grid_init_ror(AoeViewGridRor *grid, AoeViewGridGlobalsRor *g,
+                            int32_t rows, int32_t cols,
+                            void (*build_lookup)(AoeViewGridRor *grid));
+/* 0x005168d0: frees everything, clears the globals. */
+void aoe_view_grid_free_ror(AoeViewGridRor *grid, AoeViewGridGlobalsRor *g);
+
+/* ---- Small helpers ---- */
+
+/* 0x005160d0 (game view): the +0x334 draw rows searched for `id` in rows
+   6..0x28 with key 0 (`find` returns the node's +0x1c flags byte or
+   NULL). 1 when found and either `any` is set or flag bit 0 is clear. */
+int aoe_game_view_has_draw_node_ror(
+    const uint8_t *(*find)(void *ctx, int32_t id, int32_t y0, int32_t y1,
+                           int32_t key),
+    void *ctx, int32_t id, int any);
+
+/* 0x00517820: the radius footprint table index (clamped 0..16) and
+   which of the two table sets (0x0055f7b0 when `alt`, else 0x0055f76c). */
+int32_t aoe_view_footprint_index_ror(int32_t radius);
+const void *aoe_view_footprint_table_ror(const void *const normal[17],
+                                        const void *const alt_set[17],
+                                        int32_t radius, int alt);
+
+/* 0x00518700 (game view draw pass): 0x518720, 0x518a30, then the
+   base 0x00453360. */
+void aoe_game_view_draw_pass_ror(void *ctx, void (*first)(void *),
+                                 void (*second)(void *),
+                                 void (*base)(void *));
+
+/* 0x00517e90: a width x height int32 grid read from a stream (width,
+   height, then the cells). Reallocated only when the size changed; a
+   non-positive size zeroes all three fields (the old array is not
+   freed, as in the original). `read` returns nothing (0x0046b800). */
+typedef struct {
+    int32_t width, height; /* +0x00, +0x04 */
+    int32_t *cells;        /* +0x08 */
+} AoeIntGridRor;
+void aoe_int_grid_read_ror(AoeIntGridRor *g,
+                           void (*read)(void *ctx, void *buf, uint32_t n),
+                           void *ctx);
+
+/* 0x005116c0: the cursor action class for a hovered unit. `unit_kind`
+   is the unit template's +0x8d byte, `is_target` that the view's +0x33c
+   target mode is on and its +0x340 ID equals the unit's +4, `mode` the
+   pointer mode. Kind 2: 5 target, 3 for modes 1/2, 2 for mode 3, else 0.
+   Kind 3: 5 target, 3 for modes 1/2, else 0. Kind 4: 5 target, 4 for
+   modes 1/2, 3 for mode 3, else 2. Other kinds: 1. */
+uint8_t aoe_main_view_unit_cursor_ror(uint8_t unit_kind, int is_target,
+                                      int32_t mode);
+
+/* 0x005176b0: the whole visibility map filled with one value. */
+typedef struct {
+    int8_t **rows;              /* +0x00 per-player counts [y][x] */
+    int32_t width, height;      /* +0x14, +0x18 */
+    int32_t explored_count;     /* +0x1c */
+    int32_t cell_total;         /* +0x20 */
+    uint32_t visible_bits;      /* +0x24 */
+    uint32_t clear_mask;        /* +0x28 */
+    uint32_t explored_bits;     /* +0x2c */
+    uint32_t unexplore_mask;    /* +0x30 */
+    uint32_t **tile_masks;      /* global row table 0x007d205c */
+} AoeVisibilityFillRor;
+/* -1 (unexplored) and 0 (fogged) clear the visible bit in the shared
+   tile masks (-1 also the explored bit); any other value sets both
+   bits. The explored count becomes the cell total, or 0 for -1. */
+void aoe_visibility_fill_ror(AoeVisibilityFillRor *m, int8_t value);
+
+/* 0x0050cdf0: the leading player of a world with `count` players
+   (index 0, gaia, excluded). */
+typedef struct {
+    void *context;
+    int (*excluded)(void *context, int32_t player);  /* 0x00454150 != 0 */
+    int32_t (*score)(void *context, int32_t player, int32_t category);
+                                                     /* 0x0050ef70 */
+    uint8_t (*colour)(void *context, int32_t player); /* player +0x54 */
+    const char *(*name)(void *context, int32_t player); /* player +0x44 */
+    uint8_t (*stance)(void *context, int32_t from, int32_t to); /* 0x0045da60 */
+} AoeLeaderOpsRor;
+typedef struct {
+    int32_t score;   /* +0x00 */
+    uint8_t colour;  /* +0x04 */
+    char name[16];   /* +0x05 */
+    uint8_t allies;  /* +0x15 */
+} AoeLeaderRor;
+/* The first strictly highest positive score among the non-excluded
+   players wins (player 1 with score 0 otherwise); `allies` counts the
+   other players with a zero stance both ways. */
+void aoe_world_leader_ror(const AoeLeaderOpsRor *ops, int16_t count,
+                          int32_t category, AoeLeaderRor *out);
+
+/* 0x0051a210 (game view): one timed view render. */
+typedef struct {
+    void *context;
+    uint32_t (*time_ms)(void *context);
+    int32_t (*stat)(void *context, int32_t slot);   /* 0x00417430 */
+    void (*record)(void *context, int32_t slot, uint32_t ms); /* 0x00417370 */
+    void (*advance)(void *context);                 /* 0x004173c0 */
+    int (*has_map)(void *context);                  /* +0xfc and +0x100 */
+    /* Without a map: vtable +0x28(0), 0x00438b50(+0x24 area, +0xef
+       colour), vtable +0x2c. */
+    void (*begin_paint)(void *context, int32_t arg);
+    void (*clear_area)(void *context);
+    void (*end_paint)(void *context);
+    int (*debug_log)(void *context);                /* DAT_00580d84 */
+    void (*log)(void *context, const char *text);   /* 0x00416270 */
+    void (*render)(void *context);                  /* 0x510580 */
+} AoeGameViewRenderOpsRor;
+/* Statistic 6: wall time less the slot-11 delta; 12: the slot-11
+   delta. The debug log brackets the render with "<vs>" / "<vf>\n". */
+void aoe_game_view_render_ror(const AoeGameViewRenderOpsRor *ops);
+
+/* 0x00511790: the screen point of tile (x, y) of the world (width x
+   height, `tiles[y][x]`), relative to the view origin (+0x130/+0x134):
+   x = tile x - origin x; y = the slope's elevation offset (world +0x1c
+   + slope * 6) - origin y + tile y. With `centre`, sloped tiles add half
+   the elevation step (+0x110, truncated) and slopes 3, 5, 6 and 11
+   subtract a full step. 16-bit arithmetic. Off the map: 0 and (0, 0). */
+typedef struct {
+    int16_t x, y;   /* +0x00, +0x02 */
+    uint8_t slope;  /* +0x04 */
+} AoeMainViewTileRor;
+int aoe_main_view_tile_point_ror(const AoeMainViewRor *v,
+                                 const AoeMainViewTileRor *const *tiles,
+                                 int32_t width, int32_t height,
+                                 const int16_t *slope_offsets, int16_t x,
+                                 int16_t y, int16_t *out_x, int16_t *out_y,
+                                 int centre);
+
+/* 0x005150c0: four per-player edge queries (0x514fd0 with kinds 1, 4,
+   3, 2 for `flags` bits 0, 1, 2, 3) into out[0], out[3], out[2], out[1]
+   (all first -1). Returns 1 only when the player's world slot (world
+   +0x33ac + player * 0x5a0) is active and `flags` is nonzero. */
+int aoe_main_view_edge_query_ror(
+    int player_active, uint8_t flags,
+    int16_t (*query)(void *ctx, int32_t kind), void *ctx, int32_t out[4]);
+
+/* 0x00519360 (game view): mouse-up while the game state is 4..7. */
+typedef struct {
+    void *context;
+    int32_t (*game_state)(void *context);   /* DAT_00580e38 +0x1b0 */
+    int32_t (*edit_mode)(void *context);    /* +0x1b4 */
+    int (*comm_waiting)(void *context);     /* 0x004199c0 */
+    int (*dragging)(void *context);         /* view +0x168 byte */
+    void (*release_capture)(void *context); /* 0x00453db0 */
+    /* Vtable +0xf0 (finish drag), +0xec (drag box, kind 2), +0xf4
+       (cancel drag), +0x20 (redraw). */
+    void (*finish_drag)(void *context, int32_t a, int32_t b);
+    void (*drag_box)(void *context, int32_t kind, int32_t x0, int32_t y0,
+                     int32_t x1, int32_t y1);
+    void (*cancel_drag)(void *context);
+    void (*redraw)(void *context, int32_t level);
+    /* 0x00519d50 only: 0x00453d50 capture, the viewed player's +0x134
+       and its clear 0x0045dcb0, the game's vtable +0x10 mode change. */
+    void (*capture)(void *context);
+    int (*player_pending)(void *context);
+    void (*player_clear)(void *context);
+    void (*set_game_mode)(void *context, int32_t mode, int32_t arg);
+} AoeGameViewMouseOpsRor;
+/* Outside states 4..7: 0. While the comm waits: a drag is cancelled
+   (else the capture released); 0. Otherwise a drag is finished with
+   (a, b); edit mode 0 releases the capture, boxes kind 2 from the press
+   point (+0xc4, +0xc8) to (c, d) and finishes with (a, b); edit
+   modes 1, 7, 8 redraw (1); returns 1. */
+int aoe_game_view_mouse_up_ror(const AoeGameViewMouseOpsRor *ops,
+                               int32_t press_x, int32_t press_y, int32_t a,
+                               int32_t b, int32_t c, int32_t d);
+
+/* 0x00515d30: end of a mouse drag (+0x168 kind, press point +0xc4/+0xc8,
+   current point +0x16c/+0x170). */
+typedef struct {
+    void *context;
+    /* ClientToScreen + SetCursorPos. */
+    void (*warp_cursor)(void *context, int32_t x, int32_t y);
+    /* 0x005114d0(4, left, top, right, bottom): area selection. */
+    void (*select_area)(void *context, int32_t kind, int32_t l, int32_t t,
+                        int32_t r, int32_t b);
+    /* Vtable +0xf8 and +0x20. */
+    void (*point_action)(void *context, int32_t x0, int32_t y0, int32_t x1,
+                         int32_t y1, int32_t flag);
+    void (*redraw)(void *context, int32_t level);
+    void (*restore_mouse)(void *context);   /* 0x00419bb0 cursor show */
+    void (*release_capture)(void *context); /* 0x00453db0 */
+} AoeMainViewDragOpsRor;
+/* Kinds 1, 6, 7, 8 warp the cursor back to the press point; 2 selects
+   the normalised press..current rectangle and redraws (1); 9 runs the
+   point action at the press point and redraws (1). Kinds 1, 2, 6, 7, 8
+   then restore the mouse; the capture is always released and the kind
+   cleared. */
+void aoe_main_view_end_drag_ror(const AoeMainViewDragOpsRor *ops,
+                                uint8_t *kind, int32_t press_x,
+                                int32_t press_y, int32_t cur_x,
+                                int32_t cur_y);
+
+/* 0x0051afd0 (game view, panel vtable +0xd0): the help text under
+   (x, y). When the view pick (kind 0x29, 2) hits an object ('4'), its
+   help string (string table 0x004542a0 of the object's +0x98) is copied
+   into `text` and its help page (+0x9c) into *page; returns 1.
+   Otherwise the base panel query 0x004542e0 answers. */
+typedef struct {
+    void *context;
+    void *(*pick_object)(void *context, int32_t x, int32_t y); /* NULL: miss */
+    int32_t (*help_string_id)(void *context, void *object);   /* +0x98 */
+    int32_t (*help_page)(void *context, void *object);        /* +0x9c */
+    const char *(*string)(void *context, int32_t id);
+    int32_t (*base_help)(void *context, char *text, int32_t *page,
+                         int32_t x, int32_t y);
+} AoeGameViewHelpOpsRor;
+/* The original copies unbounded; `text_size` bounds it here. */
+int32_t aoe_game_view_help_ror(const AoeGameViewHelpOpsRor *ops, char *text,
+                               size_t text_size, int32_t *page, int32_t x,
+                               int32_t y);
+
+/* 0x00511310: the brush highlight under the mouse. Cleared (-1 x4)
+   first; when the mouse is inside the panel (inclusive) and the pick
+   (kind 0x28) hits the map ('3'), the picked map point (the pick's
+   first two words as floats) is truncated and the highlight set to the
+   brush size around it. In edit mode 0x13 the point snaps to the
+   centre of its 3x3 block and the size is 3. */
+void aoe_main_view_brush_highlight_ror(AoeMainViewRor *v);
+
+/* 0x00519d50 (game view): mouse press. 0 while the comm waits or
+   outside states 4..7. Edit mode 0x13: a pending player state is cleared
+   (and the view redrawn, 1), the game mode set to (0x13, 1) and drag
+   kind 9 started with (a, b, c, d); otherwise the mouse is captured.
+   Returns 1. */
+int aoe_game_view_mouse_down_ror(const AoeGameViewMouseOpsRor *ops,
+                                 int32_t a, int32_t b, int32_t c, int32_t d);
+
+/* 0x00519e00 (game view): mouse move while the game state is 4..7. While
+   the comm waits a drag is cancelled (else the capture released); 0. A
+   drag in progress is continued with (a, b); 1. Otherwise, unless the
+   viewed player's +0x1a0 word (`player_busy`) is set (0), the capture is
+   released, a kind-1 box drawn from the press point to (c, d) and the
+   drag continued with (a, b); 1. */
+int aoe_game_view_mouse_move_ror(const AoeGameViewMouseOpsRor *ops,
+                                 int player_busy, int32_t press_x,
+                                 int32_t press_y, int32_t a, int32_t b,
+                                 int32_t c, int32_t d);
+
+/* 0x0051ad40 (game view): a right-click map order. Only with map orders
+   on (0x0055873c) and a non-empty selection (0x0045e0c0, its list freed
+   at once). The pick 0x51a650(0x2a, 1, x, y, out, 0, 1) must not hit
+   the interface ('2'); the point is kept on the map (0x0051b070), the
+   viewed player's vtable +0xa0 ordered with (out[3], out[0], out[1]) and
+   the view redrawn (1). The game mode is then reset (vtable +0x10 with
+   0, 0). Returns the order's byte result (0 when nothing was ordered). */
+typedef struct {
+    void *context;
+    int (*orders_enabled)(void *context);
+    int (*has_selection)(void *context);
+    uint8_t (*pick)(void *context, int32_t x, int32_t y, int32_t out[5]);
+    void (*clamp_point)(void *context, int32_t out[5]);
+    uint8_t (*order)(void *context, int32_t a, int32_t x, int32_t y);
+    void (*redraw)(void *context, int32_t level);
+    void (*set_game_mode)(void *context, int32_t mode, int32_t arg);
+} AoeGameViewOrderOpsRor;
+uint8_t aoe_game_view_map_order_ror(const AoeGameViewOrderOpsRor *ops,
+                                    int32_t x, int32_t y);
+
+/* 0x00515e60: an editor brush stroke from the previous map point
+   (+0x2f4/+0x2f8, `*prev_x`/`*prev_y`) to the map point under (c, d).
+   The pick (kind 0x28) of (c, d) must hit the map ('3', else 0); its
+   float point is truncated; (a, b) is then picked as well (unused).
+   Edit mode 9 with `paint` and an elevation brush (game +0x3fe != -1):
+   map vtable +0x10(prev, point, size +0x402, +0x3fe); mode 10 likewise
+   +0x18 with the terrain brush +0x400; mode 0x13: +0x20(prev, point, 0,
+   game +0x1b8 == 1) and the view redrawn (2). The point becomes the
+   previous one; 1. */
+typedef struct {
+    void *context;
+    uint8_t (*pick)(void *context, int32_t x, int32_t y, float *fx,
+                    float *fy);
+    int32_t (*edit_mode)(void *context);   /* game +0x1b4 */
+    int16_t elevation, terrain, size;      /* game +0x3fe, +0x400, +0x402 */
+    int32_t cliff_mode;                    /* game +0x1b8 */
+    void (*stroke)(void *context, int32_t slot, int32_t x0, int32_t y0,
+                   int32_t x1, int32_t y1, int32_t a, int32_t b);
+    void (*redraw)(void *context, int32_t level);
+} AoeMainViewBrushOpsRor;
+int aoe_main_view_brush_stroke_ror(const AoeMainViewBrushOpsRor *ops,
+                                   int32_t *prev_x, int32_t *prev_y,
+                                   int32_t a, int32_t b, int32_t c,
+                                   int32_t d, int paint);
+
+
+/* ---- Mouse drag start (C3L) ---- */
+
+/* The drag state of the view: +0x168 kind, +0xc4/+0xc8 press point,
+   +0x16c/+0x170 current point, +0x2f4/+0x2f8 the kind-9 map anchor. */
+typedef struct {
+    uint8_t kind;
+    int32_t press_x, press_y;
+    int32_t cur_x, cur_y;
+    int32_t anchor_x, anchor_y;
+} AoeMainViewDragStateRor;
+
+typedef struct {
+    void *context;
+    /* 0x00453d50 mouse capture; 0x00419c20 (game) cursor hide. */
+    void (*capture)(void *context);
+    void (*hide_mouse)(void *context);
+    /* Vtable +0xf8 (the point action, as in 0x00515d30). */
+    int (*point_action)(void *context, int32_t x0, int32_t y0, int32_t x1,
+                        int32_t y1, int32_t flag);
+    /* The viewed player (+0x100): 0x0045dcb0 selection clear and
+       0x0045d330 the view centre set to a map point. */
+    void (*player_clear)(void *context);
+    void (*set_view_point)(void *context, float x, float y);
+} AoeMainViewDragStartOpsRor;
+
+/* 0x005154e0: start a drag of `kind` at (x, y). Kind 3 first needs a map
+   pick ('3', else 0 returned with nothing changed) and highlights that
+   single tile; kind 9 records the picked tile (truncated) as the anchor
+   and needs the point action (x, y, x, y, 1) to succeed (else 0), then
+   redraws (1). The kind, press and current points are stored and the
+   mouse captured; kinds 1, 2, 6, 7, 8 hide the cursor; kind 2 clears the
+   selection unless `keep_a` or `keep_b` and redraws (1); kinds 6 and 8
+   centre the view on the picked map point plus 0.5 and redraw (1),
+   returning 1 on a map hit. Everything else returns 0. */
+int aoe_main_view_begin_drag_ror(AoeMainViewRor *v,
+                                 AoeMainViewDragStateRor *drag,
+                                 const AoeMainViewDragStartOpsRor *ops,
+                                 uint8_t kind, int32_t x, int32_t y,
+                                 int32_t keep_a, int32_t keep_b);
+
+/* ---- Pixel picking in the draw rows (C3L) ---- */
+
+/* The shape frame header a draw node points at (+0x0c): the command
+   table and outline table offsets (from the shape data base, +0x20 of
+   the node), width (+0x10) and height (+0x14). */
+typedef struct {
+    uint32_t cmd_table_offset;   /* +0x00 */
+    uint32_t outline_offset;     /* +0x04 */
+    int32_t width, height;       /* +0x10, +0x14 */
+} AoeShapeHitFrameRor;
+
+/* 0x005149d0: what pixel (x, y) of the frame is. 0: outside the frame,
+   its row's outline (a negative left edge, or x left of the left edge
+   or right of width - right edge) or on an extended (0x?e) / end-of-row
+   (0x?f) command; 2: inside a colour run (low bits 0/1 of the command
+   byte = 0, 2-bit count; low nibble 2 the 12-bit count
+   (byte << 4 | next) with that many bytes), a player-colour run (6), a
+   fill (7), a player-colour fill (0xa) or a shadow run (0xb), the 4-bit
+   counts of 6/7/0xa/0xb meaning "next byte" when 0; 1 otherwise (a skip
+   run (1, low nibble 3 the 12-bit form), or the row end).
+   `size` bounds the reads here (out of bounds answers 0); the original
+   trusts the data. */
+int aoe_shape_hit_ror(const uint8_t *data, size_t size,
+                      const AoeShapeHitFrameRor *frame, int32_t x, int32_t y);
+
+/* One draw-row node (64 bytes, the rows' +0x5c heads) as the pick
+   routines read it. */
+typedef struct {
+    const void *next;            /* +0x04 */
+    int32_t object_id;           /* +0x08 */
+    const AoeShapeHitFrameRor *frame; /* +0x0c */
+    int16_t field_14, field_18;  /* +0x14, +0x18 (low words) */
+    uint32_t flags;              /* +0x1c (bit 1: mirrored) */
+    const uint8_t *shape;        /* +0x20 */
+    size_t shape_size;
+    int32_t key;                 /* +0x2c */
+    int16_t left, top, right, bottom; /* +0x30..+0x36 */
+} AoeViewDrawItemRor;
+
+typedef struct {
+    void *context;
+    const void *(*row_head)(void *context, int32_t row);
+    void (*item)(void *context, const void *node, AoeViewDrawItemRor *out);
+    /* 0x00514b60 only: the world object (map +0x88 table) of an ID: its
+       owner's +0x4a player number, its +0x48 state and its template's
+       +0x8d kind. 0 when there is none. */
+    int (*object)(void *context, int32_t id, int16_t *player,
+                  uint8_t *state, uint8_t *kind);
+} AoeViewDrawRowsOpsRor;
+
+#define AOE_VIEW_DRAW_ROWS_MAX_ROR 0x28
+
+/* 0x00514d70: the object drawn at (x, y). Nothing (0, *id 0) unless
+   (x, y) is inside the panel rectangle (inclusive) and the rows lo..hi
+   (clamped to 0..0x28) are not empty. Rows are scanned from hi down;
+   in each row every node with key 0 is hit-tested (mirrored nodes at
+   right - x, others at x - left; y - top) and the last opaque one ('2')
+   wins; the first row with a hit returns 1 with its object ID. */
+int aoe_main_view_pixel_object_ror(const AoeMainViewRor *v,
+                                   const AoeViewDrawRowsOpsRor *rows,
+                                   int32_t x, int32_t y, int32_t lo,
+                                   int32_t hi, int32_t *id);
+
+/* The 64-entry pick result table (0x007d1cf8, 12-byte records). */
+typedef struct {
+    int32_t id;
+    int16_t count, field_6;      /* both 1 */
+    int16_t field_14, field_18;  /* the node's */
+} AoeViewPickedRor;
+#define AOE_VIEW_PICKED_MAX_ROR 0x40
+
+/* 0x00514b60: the objects drawn in the panel-relative box (x0, y0) ..
+   (x1, y1) (screen coordinates, the panel origin subtracted) in rows
+   lo..hi (scanned from hi down; nothing unless the box meets the panel
+   and the rows are not empty). A node counts when its key is 0, its ID
+   non-negative, its box overlaps (inclusive), and its object is owned by
+   `player` (-1: anyone), in state 2 and of kind >= `min_kind`. Each ID
+   is listed once (a repeat clamps its count to 1); returns the count,
+   stopping at 0x40. */
+int32_t aoe_main_view_box_objects_ror(const AoeMainViewRor *v,
+                                      const AoeViewDrawRowsOpsRor *rows,
+                                      int32_t x0, int32_t y0, int32_t x1,
+                                      int32_t y1, int32_t lo, int32_t hi,
+                                      int32_t player, uint8_t min_kind,
+                                      AoeViewPickedRor out[AOE_VIEW_PICKED_MAX_ROR]);
+
+/* ---- Line/box draw nodes (C3L) ---- */
+
+/* A draw-row node of a non-sprite kind (+0x2c 1..4): +0x1c colour,
+   four 16-bit points at +0x30..+0x3e. */
+typedef struct {
+    int32_t kind;
+    uint8_t colour;
+    int16_t pt[8];   /* x0, y0, x1, y1, x2, y2, x3, y3 */
+} AoeViewLineNodeRor;
+
+typedef struct {
+    void *context;
+    /* Dirty region (span region) adds: 0x004a3950 columns x0..x1 of row
+       y, 0x004a3e00 a line. */
+    void (*add_span)(void *context, int32_t x0, int32_t x1, int32_t y);
+    void (*add_line)(void *context, int32_t x0, int32_t y0, int32_t x1,
+                     int32_t y1);
+    /* 0x00439960 on the target surface. */
+    void (*draw_line)(void *context, int32_t x0, int32_t y0, int32_t x1,
+                      int32_t y1, uint8_t colour);
+} AoeViewLineOpsRor;
+
+/* 0x00513a40: the node's dirty area. Kind 1: the closed quad
+   p0-p1-p2-p3 as lines. Kinds 2/3: rows y0..y1 (either order) of
+   columns x0 & ~3 .. x1 | 3. Kind 4: the outline of the box p0..p1
+   (either order), each edge widened to its group of four columns. */
+void aoe_view_line_node_dirty_ror(const AoeViewLineNodeRor *n,
+                                  const AoeViewLineOpsRor *ops);
+/* 0x00513bc0: the node drawn. Kind 1: the closed quad in the node
+   colour. Kind 2: for each row y0..y1, when y2 is nonzero the run
+   x0..x2 in 0x4a and when y3 is nonzero the run x3..x1 in 0x97.
+   Kind 4: the box p0..p1 in 0xff. Kind 3 draws nothing. */
+void aoe_view_line_node_draw_ror(const AoeViewLineNodeRor *n,
+                                 const AoeViewLineOpsRor *ops);
+
+/* ---- Wall dragging (tribe main view) ---- */
+typedef struct {
+    void *context;
+    int editing;           /* 0x0055873c */
+    int32_t game_mode;     /* game (0x00580e38) +0x1b0; 7 is the editor */
+    int has_template;      /* game +0x3fc names a template the player has */
+    /* Template +0x20(player, x, y, 0, 1, player +0x64, 0, 1, 1, 1):
+       nonzero when the tile is refused. */
+    int (*blocked)(void *context, float x, float y);
+    /* Player +0x94(template +0x10, x, y, 0, 1): place one. */
+    void (*place)(void *context, float x, float y);
+    /* 0x004f1170(template, x0, y0, x1, y1): the wall command. */
+    int (*command)(void *context, int32_t x0, int32_t y0, int32_t x1, int32_t y1);
+    void (*game_10)(void *context);      /* game vtable +0x10(0, 0) */
+    void (*clear_marks)(void *context);  /* 0x0050ffd0(-1, -1, -1, -1) */
+    void (*redraw)(void *context, int32_t level); /* vtable +0x20 */
+} AoeMainViewWallOpsRor;
+
+/* 0x00509050: one straight or diagonal run of tiles from (x0, y0) to
+   (x1, y1), both ends included, each step +-1 or 0 per axis; at every
+   tile centre (+0.5) not refused by the template a wall piece is
+   placed. */
+void aoe_main_view_wall_run_ror(const AoeMainViewWallOpsRor *ops, int32_t x0, int32_t y0,
+                                int32_t x1, int32_t y1);
+/* 0x00508e80(x0, y0, x1, y1, ack): 0 unless editing (0x0055873c). Out of
+   the editor the wall command (0x004f1170, with a template) gives the
+   result and `ack` calls game +0x10. In the editor with a template the
+   drag is split into runs: a diagonal one when |dx| == |dy|, else along
+   the longer axis first (to (x1, y0) or (x0, y1)) and then the rest from
+   the next tile (y0 + 1 or x0 + 1 on the increasing side, y0 - 1 or
+   x0 - 1 on the decreasing one); returns 1. Without a template 0. The
+   marks are cleared and the view redrawn (+0x20(1)) on every edited
+   path. */
+int aoe_main_view_wall_drag_ror(const AoeMainViewWallOpsRor *ops, int32_t x0, int32_t y0,
+                                int32_t x1, int32_t y1, int ack);
+
+/* 0x00509880 (game view, the 0x005116c0 override): as
+   aoe_main_view_unit_cursor_ror, but templates 0x45, 0x4f, 199 and
+   0x116 count as kind 3, the target is the view's +0x340 unit while
+   +0x33c is set, and a kind-3 unit in mode 3 answers 2 when its +0x48
+   byte is at most 1 (else 0). */
+uint8_t aoe_game_view_unit_cursor_ror(uint8_t unit_kind, int16_t template_id,
+                                      uint8_t unit_48, int is_target,
+                                      int32_t mode);
+
+/* 0x005099b0 (game view): double click. Outside game state 7, when the
+   pick (0x51a650 kind 0x29) hits an object ('4') of template kind 4
+   (+0x8d) owned by the viewed player: without either modifier the
+   selection is cleared (0x0045dcb0); the object is selected (0x0045dc10),
+   then every unit of the player's list with the same template ID (+0x10)
+   or, for class 3 (+0x8f), the same class, that is drawn on screen
+   (0x005160d0(ID, 0)), and the object once more; 1. Otherwise 0. */
+typedef struct {
+    int16_t template_id;   /* template +0x10 */
+    uint8_t kind;          /* template +0x8d */
+    uint8_t unit_class;    /* template +0x8f */
+    int32_t id;            /* +0x04 */
+    int owned;             /* +0x0c is the viewed player */
+} AoeGameViewUnitRor;
+typedef struct {
+    void *context;
+    int32_t (*game_state)(void *context);
+    /* NULL on a miss; `*info` filled on a hit. */
+    void *(*pick_object)(void *context, int32_t x, int32_t y,
+                         AoeGameViewUnitRor *info);
+    int32_t (*unit_count)(void *context);   /* viewed player's +0x28 list */
+    void *(*unit_at)(void *context, int32_t index, AoeGameViewUnitRor *info);
+    int (*on_screen)(void *context, int32_t id);
+    void (*clear_selection)(void *context);
+    void (*select)(void *context, void *unit);
+} AoeGameViewSelectOpsRor;
+int aoe_game_view_select_same_ror(const AoeGameViewSelectOpsRor *ops,
+                                  int32_t x, int32_t y, int shift,
+                                  int ctrl);
+
+/* 0x0051a4d0 (game view; 0x00509990 wraps it): a command at (x, y).
+   Only with map orders on and a selection (as 0x0051ad40). A target
+   under the point (0x51aa10 with `arg`) gets the viewed player's
+   vtable +0xa8 order with its +0x38/+0x3c; on success its ID (+0x04)
+   flashes (0x0050f970(ID, 1500, 2, 2)). The marks are then cleared
+   (0x00515fb0), the view redrawn (1) and the order's result returned.
+   With no target and `allow_move`, a map hit ('3', pick kind 0x28) is
+   kept on the map and ordered (vtable +0xa0(0, x, y)); on success the
+   kind-2 timers rewind (0x0051b0f0) and a mark (0x00516050: the
+   player's +0x08, 0, view origin +0x130/+0x134 plus the point, 0, 0xf,
+   0, 2, 0x5a) is added and the view redrawn (1); its result is
+   returned. Otherwise the marks are cleared, the view redrawn; 0. */
+typedef struct {
+    void *context;
+    int (*orders_enabled)(void *context);
+    int (*has_selection)(void *context);
+    void *(*find_target)(void *context, int32_t x, int32_t y, int32_t arg);
+    uint8_t (*order_target)(void *context, void *target); /* vtable +0xa8 */
+    void (*flash)(void *context, void *target);
+    void (*clear_marks)(void *context);
+    void (*redraw)(void *context, int32_t level);
+    uint8_t (*pick_map)(void *context, int32_t x, int32_t y, float point[2]);
+    void (*clamp_point)(void *context, float point[2]);
+    uint8_t (*order_move)(void *context, float x, float y); /* vtable +0xa0 */
+    void (*rewind_timers)(void *context, int32_t kind);
+    void (*add_mark)(void *context, int32_t x, int32_t y);
+    /* 0x0051ae10 only: the game's vtable +0x10. */
+    void (*set_game_mode)(void *context, int32_t mode, int32_t arg);
+} AoeGameViewCommandOpsRor;
+uint8_t aoe_game_view_command_ror(const AoeGameViewCommandOpsRor *ops,
+                                  int32_t origin_x, int32_t origin_y,
+                                  int32_t x, int32_t y, int allow_move,
+                                  int32_t arg);
+/* 0x0051ae10 (game view): the alternate command. As 0x0051a4d0 with
+   `arg` -1 and a move always allowed, but both orders go through the
+   viewed player's vtable +0xa4 (the caller's order_target/order_move),
+   a map hit redraws whether or not the order succeeded, and every path
+   past the selection check ends with the game mode reset (0, 0). */
+uint8_t aoe_game_view_alt_command_ror(const AoeGameViewCommandOpsRor *ops,
+                                      int32_t origin_x, int32_t origin_y,
+                                      int32_t x, int32_t y);
+
+/* ---- Tile object pick (C3L) ---- */
+
+typedef struct {
+    void *context;
+    /* Object +0x48 state, template +0x65 (selectable) and +0x8d kind,
+       +0x0c owner, +0x28/+0x2a screen offset. */
+    uint8_t (*state)(void *context, void *obj);
+    int (*selectable)(void *context, void *obj);
+    uint8_t (*kind)(void *context, void *obj);
+    void *(*owner)(void *context, void *obj);
+    void (*offset)(void *context, void *obj, int16_t *x, int16_t *y);
+    /* The live-unit box test (x, y, a.x, a.y, b.x, b.y) and 0x004aafe0 (x, y, b.x,
+       b.y, 5): the object's sprite hit tests (nonzero: hit). */
+    int (*hit_box)(void *context, void *obj, int32_t x, int32_t y,
+                   const int16_t a[3], const int16_t b[3]);
+    int (*hit)(void *context, void *obj, int32_t x, int32_t y,
+               const int16_t b[3], int32_t slack);
+    /* 0x0045dc10(obj, 0) on the viewed player: 0 when the selection is
+       full. 0x004aa8e0: the sprite offset (0: none). */
+    int (*select_add)(void *context, void *obj);
+    int (*sprite_offset)(void *context, void *obj, int32_t *dx,
+                         int32_t *dy);
+} AoeTilePickOpsRor;
+
+/* 0x005152f0: the object of a tile under (x, y). `objects` is the tile's
+   list in draw order (0x004512c0, built and freed here by the original;
+   `tile_present` 0 is the NULL tile). Objects in state >= 7, not
+   selectable while `selectable_only`, or of kind < `min_kind` (view
+   +0x141) are skipped. Pick modes '+' and ',' (view +0x140) take only
+   the viewed player's objects; ',' adds every box hit to the selection
+   (stopping when it is full) and returns the last added. Otherwise the
+   best hit (slack 5) wins: `preferred` returns at once when something
+   was already found, an object loses to an earlier pick of the viewed
+   player's when it is not the player's, and to a higher kind. The
+   winner's screen point (offset + sprite offset + (x, y)) goes to
+   *out_x / *out_y. */
+void *aoe_main_view_tile_object_ror(const AoeTilePickOpsRor *ops,
+                                    int tile_present, void *const *objects,
+                                    int32_t count, void *view_player,
+                                    uint8_t pick_mode, uint8_t min_kind,
+                                    int32_t x, int32_t y, const int16_t a[3],
+                                    const int16_t b[3], int16_t *out_x,
+                                    int16_t *out_y, void *preferred,
+                                    int selectable_only);
+
+/* 0x005151d0: does the terrain tile drawn at (left, top) cover `point`?
+   `tile` NULL counts as shape 0, terrain 0; else shape = byte +4,
+   terrain = byte +5 & 0x1f. Outside the shape's box (the terrain set
+   +0x104's +0x18 / +0x1a words per shape, stride 6): 0. Inside: 1 when
+   the terrain is out of range (+0x8d90 count), not loaded (+0x8c of its
+   0x198-byte record), has no art (+0xac) or no frame (0x00514ee0(terrain,
+   shape, tx, ty) gives -1); otherwise the art's pixel test 0x0049fb90 at
+   the point relative to (left, top). */
+typedef struct {
+    void *context;
+    int16_t (*shape_width)(void *context, int32_t shape);   /* +0x18 */
+    int16_t (*shape_height)(void *context, int32_t shape);  /* +0x1a */
+    int16_t terrain_count;                                   /* +0x8d90 */
+    int (*loaded)(void *context, int32_t terrain);
+    void *(*art)(void *context, int32_t terrain);
+    int16_t (*frame)(void *context, int32_t terrain, int32_t shape,
+                     int32_t tx, int32_t ty);
+    int (*pixel)(void *context, void *art, int32_t x, int32_t y,
+                 int32_t frame);
+} AoeMainViewTerrainHitOpsRor;
+int aoe_main_view_terrain_hit_ror(const AoeMainViewTerrainHitOpsRor *ops,
+                                  const uint8_t *tile, int16_t left,
+                                  int16_t top, int32_t tx, int32_t ty,
+                                  const int32_t point[2]);
+
+/* Vtable slot 0x00546788 0x00508d50(x, y, ack): a click placing a
+   building. 0 unless editing (0x0055873c); out of the editor (game +0x1b4
+   not 7) the base handler 0x0051a2e0(x, y, 1) answers. Otherwise the
+   picked point (0x51a650(0x28, 0, x, y, &point, 0, 1) must hit a tile,
+   code '3') is snapped (0x0051b070); with a template selected (game
+   +0x3fc) that the player (+0x100) has, the template adjusts the point
+   (+0x24, view +0xfc) and, unless it refuses it (+0x20), `ack` or
+   template 0x6d calls game +0x10(0, 0) and the build command 0x004f10e0
+   (id, x, y) gives the result. */
+typedef struct {
+    void *context;
+    int editing;           /* 0x0055873c */
+    int32_t mode_1b4;      /* game +0x1b4 */
+    int16_t template_id;   /* game +0x3fc, -1 none */
+    int has_template;      /* the player's +0x24[id] */
+    int (*base_click)(void *context, int32_t x, int32_t y, int32_t flag);
+    uint8_t (*pick)(void *context, int32_t x, int32_t y, float point[2]);
+    void (*snap)(void *context, float point[2]);
+    void (*adjust)(void *context, float point[2]);
+    int (*blocked)(void *context, float x, float y);
+    void (*game_10)(void *context);
+    int (*build)(void *context, int16_t id, float x, float y);
+} AoeMainViewPlaceOpsRor;
+int aoe_main_view_place_click_ror(const AoeMainViewPlaceOpsRor *ops, int32_t x, int32_t y,
+                                  int32_t ack);
+
+#endif

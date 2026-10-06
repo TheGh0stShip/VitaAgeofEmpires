@@ -36,6 +36,46 @@ static AoeOutcomeStream *idx_open_write(void *c, const char *p) {
 }
 static void idx_close(void *c, AoeOutcomeStream *s) { (void)c; if (s->size == sizeof idx_buf) idx_size = s->pos; }
 
+
+static int ent_obj_a, ent_obj_b, ent_finds;
+static void *ent_find(void *c, void *w, int16_t id) { (void)c; (void)w; ++ent_finds; return id == 5 ? (void *)&ent_obj_a : id == 6 ? (void *)&ent_obj_b : NULL; }
+static int16_t ent_tag(void *c, void *o) { (void)c; return o == &ent_obj_a ? 40 : 41; }
+
+static void test_scenario_entries(void) {
+    AoeScenarioEntriesOpsRor ops = {NULL, ent_find, ent_tag};
+    AoeScenarioEntriesRor e, r;
+    AoeScenarioEntryRor *a = calloc(1, sizeof *a), *b = calloc(1, sizeof *b);
+    uint8_t buf[256];
+    AoeOutcomeStream s = {0};
+    int world = 0;
+    aoe_scenario_entries_init_ror(&e, &world);
+    assert(e.world == &world && e.head == NULL && e.count == 0 && e.v10 == -1.0f);
+    a->v0 = 0x11223344; a->v4 = 7; a->v6 = -3; a->v8 = 9; a->vc = 1; a->v10 = 2; a->v14 = 3;
+    a->v18 = 4; a->id1 = 5; a->object1 = &ent_obj_a; a->id2 = 6; a->object2 = NULL;
+    b->id1 = 5; b->object1 = NULL; b->id2 = 6; b->object2 = &ent_obj_b;
+    a->next = b; e.head = a; e.count = 2; e.v0e = 12;
+    s.data = buf; s.size = sizeof buf;
+    aoe_scenario_entries_write_ror(&e, &s, &ops);
+    assert(!s.failed && s.pos == 8 + 2 * 30);
+    assert(buf[0] == 2 && buf[2] == 12 && buf[8] == 0x44 && buf[11] == 0x11);
+    assert(buf[8 + 24] == 40 && buf[8 + 28] == 0xff && buf[8 + 29] == 0xff && buf[38 + 28] == 41); /* tags */
+    s.size = s.pos; s.pos = 0;
+    ent_finds = 0;
+    aoe_scenario_entries_read_ror(&r, &s, &world, &ops);
+    assert(!s.failed && r.count == 2 && r.v0e == 12 && r.v10 == -1.0f && ent_finds == 2);
+    assert(r.head->v0 == 0x11223344 && r.head->v6 == -3 && r.head->v18 == 4);
+    assert(r.head->object1 == &ent_obj_a && r.head->object2 == NULL);
+    assert(r.head->next->object1 == NULL && r.head->next->object2 == &ent_obj_b);
+    assert(r.head->next->next == NULL);
+    s.pos = 0;
+    aoe_scenario_entries_read_ror(&e, &s, NULL, &ops); /* no world: no lookups */
+    assert(e.head->object1 == NULL && e.head->next->object2 == NULL && ent_finds == 2);
+    aoe_scenario_entries_release_ror(&r);
+    assert(r.head == NULL && r.count == 0 && r.world == NULL && r.v10 == -1.0f);
+    aoe_scenario_entries_release_ror(&e);
+    free(a); free(b);
+}
+
 int main(void) {
     static AoeScenarioObjectRor s;
     static char desc[64], ai[3][32], city[3][32], per[3][32];
@@ -151,5 +191,6 @@ int main(void) {
         aoe_scenario_index_close_ror(&y, &iops);
         assert(!aoe_scenario_index_load_ror(&y, "missing", &iops) && y.count == 0);
     }
+    test_scenario_entries();
     return 0;
 }

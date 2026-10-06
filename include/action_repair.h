@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "action_move.h"
+#include "pathfinder_search.h"
 
 /* Patched Rise of Rome 1.0a repair action (vtable 0x00548924, action type
    0x6a; routed from task action 0x6a to 0x004b55c0 (target) / 0x004b5650
@@ -86,6 +87,18 @@ int aoe_unit_line_terrain_point_ror(AoeLiveUnit *unit, const int32_t from[2],
                                     const int32_t to[2], int32_t out[2],
                                     int terrain_a, int terrain_b,
                                     int require_fit,
+                                    const AoeLineSearchOps *ops);
+
+/* Unit +0x1a8 for types 30+ (0x0044e470): along the alternate path
+   (+0xd8, at least two waypoints), each consecutive waypoint pair, as
+   truncated tiles, is line-searched (+0x1b4 above) for `terrain` (both
+   terrain arguments) with the fit required. The first hit writes
+   out x + 0.5 to BOTH *x and *y (the original stores the one value twice)
+   and returns 1, leaving the cursor on the pair's second waypoint. With
+   no hit both become -1.0; fewer than two waypoints return 0 untouched.
+   Returns 0 unless a point was found. */
+int aoe_unit_path_terrain_point_ror(AoeLiveUnit *unit, AoeUnitPathRor *path,
+                                    int terrain, float *x, float *y,
                                     const AoeLineSearchOps *ops);
 
 /* 0x004b55c0 (target: its position, then the boat meeting point) and

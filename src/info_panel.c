@@ -198,6 +198,21 @@ static const AoeUiPlatformRor *platform(const AoeInfoPanelRor *i) {
     return i->panel.system ? i->panel.system->platform : NULL;
 }
 
+/* The stat row text of both panels; 0 for an unknown kind (nothing
+   drawn). */
+static int item_text(int32_t kind, int32_t a, int32_t b, char *text, size_t n) {
+    switch (kind) {
+    case 0: snprintf(text, n, "%d", a); return 1;
+    case 1:
+        if (b <= a) snprintf(text, n, "%d", a);
+        else snprintf(text, n, "%d+%d", a, b - a);
+        return 1;
+    case 2: snprintf(text, n, "%d/%d", a, b); return 1;
+    case 3: snprintf(text, n, "%d%%", a); return 1;
+    default: return 0;
+    }
+}
+
 void aoe_info_panel_item_ror(AoeInfoPanelRor *i, int32_t row, int32_t icon,
                              int32_t kind, int32_t a, int32_t b) {
     AoeUiPanelRor *p = &i->panel;
@@ -205,16 +220,7 @@ void aoe_info_panel_item_ror(AoeInfoPanelRor *i, int32_t row, int32_t icon,
     char text[32];
     if (i->item_icons && icon != -1)
         shape(i, i->item_icons, icon, p->x + 0x36, p->y + 0x1e + row * 0x14, -1);
-    switch (kind) {
-    case 0: snprintf(text, sizeof text, "%d", a); break;
-    case 1:
-        if (b <= a) snprintf(text, sizeof text, "%d", a);
-        else snprintf(text, sizeof text, "%d+%d", a, b - a);
-        break;
-    case 2: snprintf(text, sizeof text, "%d/%d", a, b); break;
-    case 3: snprintf(text, sizeof text, "%d%%", a); break;
-    default: return;
-    }
+    if (!item_text(kind, a, b, text, sizeof text)) return;
     if (text[0] && pf && pf->text_begin &&
         pf->text_begin(pf->context, p->area, &p->clip, i->font)) {
         pf->text_out(pf->context, p->x + 0x58, p->y + 0x21 + row * 0x14, text,
@@ -581,6 +587,156 @@ redraw:
     aoe_info_panel_snapshot_ror(i);
     if (notify && p->parent) p->parent->vt->action(p->parent, p, 1, 0, 0);
     return 0;
+}
+
+void aoe_info_editor_item_ror(AoeInfoEditorPanelRor *e, int32_t row,
+                              int32_t icon, int32_t kind, int32_t a, int32_t b) {
+    AoeInfoPanelRor *i = &e->base;
+    AoeUiPanelRor *p = &i->panel;
+    const AoeUiPlatformRor *pf = platform(i);
+    char text[32];
+    if (i->item_icons && icon != -1)
+        shape(i, i->item_icons, icon, p->x + 0x3c, p->y + 0x1e + row * 0x12, -1);
+    if (!item_text(kind, a, b, text, sizeof text)) return;
+    if (text[0] && pf && pf->text_begin &&
+        pf->text_begin(pf->context, p->area, &p->clip, i->font)) {
+        pf->text_out(pf->context, p->x + 100, p->y + 0x20 + row * 0x12, text,
+                     (int32_t)strlen(text), 0xffffff);
+        pf->text_end(pf->context);
+    }
+}
+
+/* The template's icon (kind 2: the building set's, offset by the base)
+   in the player's colours, or without an icon its sprite placed by its
+   bounds. Returns 0 when the sprite was used (no hit points and no rows). */
+static int editor_picture(AoeInfoEditorPanelRor *e, const AoeInfoTemplateRor *t) {
+    AoeInfoPanelRor *i = &e->base;
+    AoeUiPanelRor *p = &i->panel;
+    const AoeInfoPanelOpsRor *ops = i->ops;
+    if (t->icon == -1) {
+        int32_t mx = 0, my = 0;
+        if (t->sprite && ops->sprite_bounds &&
+            ops->sprite_bounds(ops->context, t->sprite, &mx, &my) && ops->draw_sprite)
+            ops->draw_sprite(ops->context, p->area, t->sprite, p->x - mx + 10,
+                             p->y - my + 0x28, i->player);
+        return t->sprite == NULL;
+    }
+    {
+        int16_t icon = t->icon, colour = 0;
+        void *pic = i->unit_icons;
+        int32_t remap = -1;
+        if (t->panel_kind == 2) {
+            icon = (int16_t)(icon + t->building_icon_base);
+            pic = i->building_icons ? i->building_icons[e->icon_set] : NULL;
+        }
+        if (i->player && ops->player_colour &&
+            ops->player_colour(ops->context, i->player, &colour))
+            remap = (colour + 1) * 0x10;
+        shape(i, pic, icon, p->x + 2, p->y + 0x21, remap);
+    }
+    return 1;
+}
+
+/* The player's name ("Gaia" for "Unknown"), the template's name and,
+   with `hp_row`, its hit points as max/max. */
+static void editor_text(AoeInfoEditorPanelRor *e, const AoeInfoTemplateRor *t, int hp_row) {
+    AoeInfoPanelRor *i = &e->base;
+    AoeUiPanelRor *p = &i->panel;
+    const AoeUiPlatformRor *pf = platform(i);
+    const AoeInfoPanelOpsRor *ops = i->ops;
+    char a[100], b[100];
+    if (!pf || !pf->text_begin || !pf->text_begin(pf->context, p->area, &p->clip, i->font))
+        return;
+    if (i->player) {
+        int16_t n = ops->player_number ? ops->player_number(ops->context, i->player) : 0;
+        a[0] = '\0';
+        /* The game's name lookup (+0x28, 0x69) with the player number. */
+        if (ops->civ_name) ops->civ_name(ops->context, (uint8_t)n, a, 100);
+        if (strcmp(a, "Unknown") == 0) snprintf(a, sizeof a, "Gaia");
+        pf->text_out(pf->context, p->x + 2, p->y, a, (int32_t)strlen(a), 0xffffff);
+    }
+    b[0] = '\0';
+    if (t->name_id > 0 && ops->string) ops->string(ops->context, t->name_id, b, 100);
+    if (b[0] == '\0') snprintf(b, sizeof b, "%s", t->name ? t->name : "");
+    snprintf(a, sizeof a, "%s", b);
+    pf->text_out(pf->context, p->x + 2, p->y + 0xf, a, (int32_t)strlen(a), 0xffffff);
+    if (hp_row) {
+        snprintf(b, sizeof b, "%d/%d", t->max_hp, t->max_hp);
+        pf->text_out(pf->context, p->x + 5, p->y + 0x55, b, (int32_t)strlen(b), 0xffffff);
+    }
+    pf->text_end(pf->context);
+}
+
+/* The stat rows by panel kind. Kinds 4 and 6 show the +0x140 range
+   with the pierce armor as its second value (so "a+b-a" when the pierce
+   armor exceeds the range): the original pushes that register. */
+static void editor_rows(AoeInfoEditorPanelRor *e, const AoeInfoTemplateRor *t) {
+    uint8_t k = t->panel_kind;
+    int32_t row = 0, k_i;
+    if (k == 1) {
+        int16_t type = -1;
+        int32_t icon;
+        float amount = 0.0f;
+        for (k_i = 0; k_i < 3; ++k_i)
+            if (t->resource_amount[k_i] > 0.0f) {
+                type = t->resource_type[k_i];
+                amount = t->resource_amount[k_i];
+                break;
+            }
+        switch (type) {
+        case 0: case 0xf: case 0x10: case 0x11: icon = 2; break;
+        case 1: icon = 0; break;
+        case 2: icon = 1; break;
+        case 3: icon = 3; break;
+        default: return;
+        }
+        aoe_info_editor_item_ror(e, 0, icon, 0, ftol(amount), 0);
+        return;
+    }
+    if (k == 2) {
+        int32_t r = ftol(t->range_114);
+        aoe_info_editor_item_ror(e, 0, 7, 1, t->displayed_13e, t->displayed_13e);
+        aoe_info_editor_item_ror(e, 1, 8, 1, t->displayed_13c, t->displayed_13c);
+        aoe_info_editor_item_ror(e, 2, 6, 1, r, r);
+        return;
+    }
+    if (k < 3 || k > 9 || k == 8) return;
+    if (k == 3 || k == 4) {
+        aoe_info_editor_item_ror(e, 0, 7, 1, t->displayed_13e, t->displayed_13e);
+        row = 1;
+    }
+    if (k != 4 && k != 6) return;
+    aoe_info_editor_item_ror(e, row++, 8, 1, t->displayed_13c, t->displayed_13c);
+    aoe_info_editor_item_ror(e, row++, 10, 1, t->pierce, t->pierce);
+    aoe_info_editor_item_ror(e, row, 6, 1, (int16_t)ftol(t->range_140), t->pierce);
+}
+
+void aoe_info_editor_draw_ror(AoeInfoEditorPanelRor *e) {
+    AoeInfoPanelRor *i = &e->base;
+    AoeUiPanelRor *p = &i->panel;
+    AoeInfoTemplateRor t;
+    int hp_row;
+    if (!p->area || !p->visible || !p->active) {
+        p->redraw = 0;
+        return;
+    }
+    if (i->mode == 2) {
+        aoe_info_panel_draw_scores_ror(i);
+        return;
+    }
+    memset(&t, 0, sizeof t);
+    if (!e->tmpl || !i->ops || !i->ops->read_template ||
+        !i->ops->read_template(i->ops->context, e->tmpl, &t)) {
+        if (p->parent) p->parent->vt->draw_rect(p->parent, &p->clip);
+        p->redraw = 0;
+        return;
+    }
+    p->vt->begin_draw(p, 0);
+    fill_black(p);
+    hp_row = editor_picture(e, &t);
+    editor_text(e, &t, hp_row);
+    if (hp_row) editor_rows(e, &t);
+    p->vt->end_draw(p);
 }
 
 static AoeUiPanelVtblRor vtable;

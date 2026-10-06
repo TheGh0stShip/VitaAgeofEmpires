@@ -52,4 +52,15 @@ int aoe_player_object_memory_add(AoePlayerObjectMemory *memory,
 int aoe_player_object_memory_remove(AoePlayerObjectMemory *memory,
                                     int32_t unit_id, size_t category);
 
+/* 0x00516e50: the saved form. Before game version 7.11 (0x0054a720) the
+   category count is 5, else a dword; per category the capacity and
+   count dwords, then per category `count` 8-byte entries (little
+   endian: ID, two bytes, x, y). The owner (+0x0c) is the caller's. The
+   original trusts the stream; a negative size, count above capacity or
+   short read fails here (0, the memory left empty). */
+typedef int (*AoePlayerMemoryReadFn)(void *context, void *buffer, size_t size);
+int aoe_player_object_memory_load(AoePlayerObjectMemory *memory,
+                                  AoePlayerMemoryReadFn read, void *context,
+                                  float version);
+
 #endif

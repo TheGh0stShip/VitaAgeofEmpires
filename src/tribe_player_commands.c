@@ -237,3 +237,148 @@ int aoe_tribe_shared_vision_check_ror(float attribute_50, int32_t *flag_104,
     refresh(context);
     return 1;
 }
+
+int32_t aoe_tribe_ai_message_ror(const AoeTribeAiRelayOpsRor *ops, int32_t a, int32_t b,
+                                 int32_t c, int32_t d, int32_t e) {
+    return ops->has_ai ? ops->ai_message(ops->context, a, b, c, d, e) : 0;
+}
+
+void aoe_tribe_build_place_ror(const AoeTribeAiRelayOpsRor *ops, int32_t a, int32_t b,
+                               int32_t c, float x, float y, int32_t d, int32_t e) {
+    if (ops->has_ai) ops->build_place(ops->context, a, b, c, x, y, d, e);
+}
+
+void aoe_tribe_build_named_ror(const AoeTribeAiRelayOpsRor *ops, int32_t a, int32_t b) {
+    if (ops->has_ai) ops->build_named(ops->context, a, b);
+}
+
+void aoe_tribe_build_done_4_ror(const AoeTribeAiRelayOpsRor *ops, int32_t a, int32_t b,
+                                int32_t c, int32_t d) {
+    if (ops->has_ai) ops->build_done_4(ops->context, a, b, c, d);
+}
+
+void aoe_tribe_build_done_3_ror(const AoeTribeAiRelayOpsRor *ops, int32_t a, int32_t b,
+                                int32_t c) {
+    if (ops->has_ai) ops->build_done_3(ops->context, a, b, c);
+}
+
+void aoe_tribe_tactical_relay_ror(const AoeTribeAiRelayOpsRor *ops, int32_t a, int32_t b,
+                                  int32_t c) {
+    if (ops->has_ai) ops->tactical(ops->context, a, b, c);
+}
+
+/* 0x004eff20 */
+void aoe_tribe_player_save_ror(const AoeTribePlayerSaveRor *p, AoeOutcomeStream *s,
+                               const AoeTribePlayerSaveOpsRor *ops) {
+    ops->base_save(ops->context, s);
+    aoe_stream_put_u8(s, p->b48);
+    aoe_stream_put_i32(s, p->v22c);
+    aoe_stream_put_i32(s, p->v234);
+    aoe_stream_put_i32(s, p->v228);
+    aoe_stream_put_i32(s, p->v238);
+    ops->research_save(ops->context, s);
+    aoe_stream_put_i32(s, p->v230);
+    ops->history_save(ops->context, s);
+    aoe_stream_put_i32(s, p->v844);
+    aoe_stream_put_i32(s, p->v848);
+    if (p->type != 1) return;
+    if (ops->has_ai && ops->is_host(ops->context) == 1) {
+        aoe_stream_put_i32(s, 1);
+        ops->ai_save(ops->context, s);
+        return;
+    }
+    aoe_stream_put_i32(s, 0);
+}
+
+/* 0x004f7300 */
+void aoe_tribe_player_save_timed_ror(const AoeTribePlayerSaveRor *p, AoeOutcomeStream *s,
+                                     const AoeTribePlayerSaveOpsRor *ops) {
+    aoe_tribe_player_save_ror(p, s, ops);
+    aoe_stream_put_i32(s, p->v84c);
+    aoe_stream_put_i32(s, p->v850);
+    aoe_stream_put_i32(s, p->v858);
+    aoe_stream_put_i32(s, p->v854);
+}
+
+/* 0x004efdc0 */
+void aoe_tribe_player_destroy_ror(AoeTribePlayerMembersRor *m) {
+    if (m->research) {
+        m->research_free(m->context, m->research);
+        m->research = NULL;
+    }
+    if (m->ai) {
+        m->ai_delete(m->context, m->ai);
+        m->ai = NULL;
+    }
+    if (m->history) {
+        m->history_free(m->context, m->history);
+        m->history = NULL;
+    }
+    m->base_destroy(m->context);
+}
+
+/* 0x004f2aa0 */
+int32_t aoe_tribe_add_object_ror(const AoeTribeAddObjectOpsRor *ops, void *unit, int32_t a,
+                                 int32_t b) {
+    int32_t r = ops->base_add(ops->context, unit, a, b);
+    int16_t unit_class;
+    int32_t id;
+    uint8_t state;
+    if (!ops->unit_info(ops->context, unit, &unit_class, &id)) return r;
+    if (unit_class == 0xb || !ops->has_ai || id < 0) return r;
+    ops->ai_object_added(ops->context, unit);
+    state = ops->game_state(ops->context);
+    ops->build_event(ops->context, unit, (state == 2 || state == 3) ? 0 : 1);
+    return r;
+}
+
+void *aoe_tribe_load_object_ror(const AoeTribeLoadObjectOpsRor *ops, uint8_t kind, void *stream,
+                                void *player) {
+    if (kind == 'F') return ops->load_combat(ops->context, stream, player);
+    if (kind == 'P') return ops->load_building(ops->context, stream, player);
+    return ops->load_base(ops->context, kind, stream, player);
+}
+
+void aoe_tribe_template_load_ror(const AoeTribeTemplateLoadOpsRor *ops, void *stream,
+                                 int16_t slot, uint8_t kind, int32_t a, int32_t b) {
+    switch (kind) {
+    case 'F':
+        ops->templates[slot] = ops->load_f(ops->context, stream, a, b);
+        break;
+    case 'P':
+        ops->templates[slot] = ops->load_p(ops->context, stream, a, b);
+        break;
+    case 'Z':
+        ops->templates[slot] = ops->load_z(ops->context, stream, a, b);
+        break;
+    default:
+        ops->load_base(ops->context, stream, slot, kind, a, b);
+        break;
+    }
+}
+
+int aoe_tribe_player_repair_ror(const AoeTribePlayerOpsRor *ops,
+                                const AoeTribeRepairTargetRor *target,
+                                int (*allied)(void *context, int16_t from, int16_t to),
+                                void (*ack)(void *context, const AoeTribeCommandUnitRor *unit,
+                                            const AoeTribeCommandUnitRor *target)) {
+    const AoeTribeCommandUnitRor *units[MAX_UNITS];
+    uint8_t buf[0x200];
+    int16_t owner = target->unit->owner, n;
+    int ours = owner == ops->player;
+    int damaged = (float)target->max_hp > target->hp;
+    if (!((ours || allied(ops->context, ops->player, owner)) && target->type == 'P' &&
+          damaged && target->state <= 2)) {
+        if (!ours && (!allied(ops->context, ops->player, owner) ||
+                      !allied(ops->context, owner, ops->player)))
+            return 0;
+        if (target->cls != 2 && target->cls != 20 && target->cls != 21 && target->cls != 22)
+            return 0;
+        if (!damaged || target->state > 2) return 0;
+    }
+    n = ops->collect(ops->context, 4, 4, -1, -1, units);
+    if (n <= 0) return 0;
+    if (ack) ack(ops->context, units[0], target->unit);
+    send(ops, buf, aoe_tribe_build_repair_ror(buf, sizeof buf, units, n, target->unit));
+    return 1;
+}

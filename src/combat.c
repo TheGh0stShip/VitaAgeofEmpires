@@ -2,6 +2,7 @@
 
 #include <math.h>
 #include <stddef.h>
+#include <string.h>
 
 #include "aoe_ftol.h"
 
@@ -392,6 +393,79 @@ void aoe_combat_notice_ror(AoeLiveUnit *unit, int32_t a, int32_t b, int32_t code
     ops->owner_notice(ops->context, unit, a, b, code, c, d, e);
 }
 
+int aoe_combat_order_ror(AoeLiveUnit *unit, AoeCombatOrderKindRor kind, int32_t id, float x,
+                         float y, float scale, int force, const AoeCombatOrderOpsRor *ops) {
+    AoeLiveUnit *target = NULL;
+    const DatUnitTask *task = NULL;
+    const DatUnit *t;
+    void *head, *action;
+    float z;
+    int16_t graphic = -1;
+    if (!unit || !ops || !ops->head || !ops->action_type || !ops->build || !ops->adopt) return 0;
+    z = unit->core.position.z40;
+    if (kind != AOE_COMBAT_ORDER_EXPLORE_ROR) {
+        if (!ops->resolve || !(target = ops->resolve(ops->context, id))) return 0;
+        x = target->core.position.x38;
+        y = target->core.position.y3c;
+        z = target->core.position.z40;
+    }
+    head = ops->head(ops->context, unit);
+    if (kind == AOE_COMBAT_ORDER_ATTACK_ROR) {
+        int same = head && ops->action_target && ops->action_target(ops->context, head) == target;
+        int16_t ht = head ? ops->action_type(ops->context, head) : -1;
+        if (!force && same && (ht == 9 || ht == 7)) return 1;
+        if (same && ht == 9) {
+            if (ops->retarget) ops->retarget(ops->context, head, target, x, y, z);
+            return 1;
+        }
+        if ((t = unit->core.unit_template) != NULL && t->unit_class == 4 && ops->owner_template &&
+            ops->change_template) {
+            const DatUnit *base = ops->owner_template(ops->context, unit, 83);
+            if (base) ops->change_template(ops->context, unit, base);
+        }
+    }
+    if (!force && head && ops->action_type(ops->context, head) == (int16_t)kind &&
+        (kind == AOE_COMBAT_ORDER_EXPLORE_ROR ||
+         (ops->action_target && ops->action_target(ops->context, head) == target)))
+        return 1;
+    if ((kind == AOE_COMBAT_ORDER_GATHER_ROR || kind == AOE_COMBAT_ORDER_EXPLORE_ROR) && head &&
+        ops->action_type(ops->context, head) == (int16_t)kind) {
+        if (ops->retarget) ops->retarget(ops->context, head, target, x, y, z);
+        return 1;
+    }
+    if (kind == AOE_COMBAT_ORDER_GATHER_ROR || kind == AOE_COMBAT_ORDER_ENTER_ROR) {
+        if (!ops->task || !(task = ops->task(ops->context, unit, target, x, y))) return 0;
+    }
+    if (kind == AOE_COMBAT_ORDER_MOVE_ROR && (t = unit->core.unit_template) != NULL)
+        graphic = t->walking_graphic2 >= 0 ? t->walking_graphic2 : t->walking_graphic;
+    action = ops->build(ops->context, unit, kind, task, target, x, y, z, scale, graphic);
+    if (!action) return 0;
+    if (ops->clear_actions) ops->clear_actions(ops->context, unit);
+    ops->adopt(ops->context, unit, action);
+    return 1;
+}
+
+int aoe_combat_order_point_ror(AoeLiveUnit *unit, float x, float y, float z, int force,
+                               const AoeCombatOrderOpsRor *ops) {
+    void *head, *action;
+    if (!unit || !ops || !ops->head || !ops->action_type || !ops->build || !ops->adopt) return 0;
+    head = ops->head(ops->context, unit);
+    if (!force && head && ops->action_point) {
+        float hx, hy, hz;
+        ops->action_point(ops->context, head, &hx, &hy, &hz);
+        if (hx == x && hy == y && hz == z) {
+            int16_t ht = ops->action_type(ops->context, head);
+            if (ht == 9 || ht == 7) return 1;
+        }
+    }
+    action = ops->build(ops->context, unit, AOE_COMBAT_ORDER_ATTACK_POINT_ROR, NULL, NULL, x, y, z,
+                        0.0f, -1);
+    if (!action) return 0;
+    if (ops->clear_actions) ops->clear_actions(ops->context, unit);
+    ops->adopt(ops->context, unit, action);
+    return 1;
+}
+
 void aoe_combat_memory_moved_ror(uint8_t *entries[9], int32_t id, float old_x, float old_y,
                                  float new_x, float new_y) {
     int32_t ox = (int32_t)old_x, oy = (int32_t)old_y, nx, ny;
@@ -433,4 +507,63 @@ int32_t aoe_combat_template_damage_ror(const DatUnit *target, const DatUnit *att
     }
     if (sum < 1.0) sum = 1.0;
     return aoe_ftol32(sum);
+}
+
+uint8_t aoe_combat_type50_init_ror(AoeCombatType50Ror *unit,
+                                   const DatUnit *unit_template, int reinit) {
+    if (!unit) return 0;
+    memset(unit->memory, 0, sizeof(unit->memory));
+    unit->memory_count = 0;
+    unit->reload_timer = unit_template ? unit_template->reload_time : 0.0f;
+    if (reinit) return 0;
+    unit->field_1b8 = 0;
+    return 0x32;
+}
+
+void aoe_combat_type50_destroy_ror(const AoeCombatType50Ror *unit,
+                                   int32_t unit_id, int16_t owner, float x,
+                                   float y, int16_t template_word_14,
+                                   AoeCombatType50RecordFn record,
+                                   void *context) {
+    if (!unit || unit_id < 0 || !record) return;
+    record(context, unit_id, owner, (int32_t)x, (int32_t)y, template_word_14,
+           unit->memory_count, unit->memory);
+}
+
+int aoe_combat_high_ground_ror(float from_x, float from_y, float from_z,
+                               float to_x, float to_y, float to_z,
+                               AoeCombatHighGroundProbeFn probe,
+                               void *context) {
+    float dx, dy, step_x, step_y, x, y, best = -1.0f;
+    int32_t steps, ox = 0, oy = 0, prev_x = -999, prev_y = -999, count = 0;
+    if (!(from_z <= to_z)) return 1;
+    dx = to_x - from_x;
+    dy = to_y - from_y;
+    if (dx == 0.0f && dy == 0.0f) return 0;
+    steps = aoe_ftol32(fabsf(dx) < fabsf(dy) ? dy : dx);
+    steps = (int32_t)(2u * (uint32_t)(steps < 0 ? -(uint32_t)steps : (uint32_t)steps));
+    step_x = (float)((double)dx / (double)steps);
+    step_y = (float)((double)dy / (double)steps);
+    if (fabsf(step_x) <= fabsf(step_y)) ox = 1; else oy = 1;
+    if (!probe) return 0;
+    x = from_x;
+    y = from_y;
+    for (int32_t i = steps; i > 0; --i) {
+        int32_t tx, ty;
+        x += step_x;
+        y += step_y;
+        tx = aoe_ftol32(x);
+        ty = aoe_ftol32(y);
+        if (tx == prev_x && ty == prev_y) continue;
+        prev_x = tx;
+        prev_y = ty;
+        if (probe(context, tx, ty, from_x, from_y, to_x, to_y, &best, &count))
+            continue;
+        if (probe(context, tx - ox, ty - oy, from_x, from_y, to_x, to_y,
+                  &best, &count))
+            continue;
+        probe(context, tx + ox, ty + oy, from_x, from_y, to_x, to_y, &best,
+              &count);
+    }
+    return count > 0;
 }

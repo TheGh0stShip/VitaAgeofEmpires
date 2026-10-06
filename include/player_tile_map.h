@@ -31,6 +31,17 @@ void aoe_player_tile_map_free_ror(AoePlayerTileMapRor *m);
    positive). */
 int aoe_player_tile_map_save_ror(const AoePlayerTileMapRor *m, int16_t player_id, float version,
                                  AoeOutcomeStream *s);
+/* 0x00517490: the load counterpart (world +0x28 into +0x0c, the player
+   world +0x40[ID]; explored 0 before 6.7 (0x0054a738)); total = width x
+   height; the tiles stored row-major in one block with a row table when
+   both sizes are positive (else none). The player's bits: +0x24 1 << ID,
+   +0x2c that << 16 (`mask`), +0x28/+0x30 their complements (not kept
+   here). Returns the player ID, or -1 on a short read or allocation
+   failure (the map left empty); an ID outside `player_count` leaves the
+   player NULL (the original indexes without a bound). */
+int32_t aoe_player_tile_map_load_ror(AoePlayerTileMapRor *m, int32_t world_field_28,
+                                     void *const *players, int32_t player_count,
+                                     float version, AoeOutcomeStream *s);
 /* 0x00517810: explored / total. */
 float aoe_player_tile_map_explored_ror(const AoePlayerTileMapRor *m);
 /* 0x00517780: every unexplored tile becomes explored (0, counted), gets

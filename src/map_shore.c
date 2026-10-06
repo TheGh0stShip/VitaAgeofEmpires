@@ -591,3 +591,11 @@ int aoe_cliff_press_ror(AoeCliffTableRor *t, const AoeCliffOpsRor *ops,
     if (ops && ops->base_press) ops->base_press(ops->context, x, y, a, b, c, d);
     return 1;
 }
+
+/* 0x004ed860 */
+void aoe_map_extra_set_ror(AoeMapExtraRor *m, int32_t a, int32_t b, int32_t c, int32_t d) {
+    m->v8dd8 = b;
+    m->v8dd4 = a;
+    m->v8de0 = d;
+    (void)c; /* 0x004ed890 does nothing */
+}

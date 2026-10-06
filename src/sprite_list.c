@@ -191,3 +191,12 @@ AoeSpriteList *aoe_sprite_list_delete_ror(AoeSpriteList *list, uint8_t flags) {
     if (list && (flags & 1)) free(list);
     return list;
 }
+
+int aoe_live_unit_sprite_add_ror(AoeSpriteList *unit_sprites, const void *graphic,
+                                 uint8_t priority) {
+    return aoe_sprite_list_add(unit_sprites, graphic, priority, 0, 0);
+}
+
+int aoe_live_unit_sprite_remove_ror(AoeSpriteList *unit_sprites, const void *graphic) {
+    return aoe_sprite_list_remove(unit_sprites, graphic);
+}

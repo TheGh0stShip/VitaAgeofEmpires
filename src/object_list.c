@@ -201,3 +201,26 @@ void aoe_object_list_draw_ror(const AoeObjectListRor *l, const AoeObjectListDraw
         if (!skip) ops->draw(ops->context, o, a, b, c, colour);
     }
 }
+
+void *aoe_object_lists_find_any_ror(const AoeObjectListRor *const *lists,
+                                    int16_t player_count, int16_t owner_index,
+                                    const AoeObjectListOpsRor *ops,
+                                    int32_t id) {
+    void *found;
+    int k;
+    uint8_t p;
+    if (!lists || id < 0 || owner_index < 0 || owner_index >= player_count)
+        return NULL;
+    for (k = 0; k < 3; ++k)
+        if (lists[owner_index * 3 + k] &&
+            (found = aoe_object_list_find_ror(lists[owner_index * 3 + k], ops, id)))
+            return found;
+    for (p = 0; (int16_t)p < player_count; ++p) {
+        if ((int16_t)p == owner_index) continue;
+        for (k = 0; k < 3; ++k)
+            if (lists[p * 3 + k] &&
+                (found = aoe_object_list_find_ror(lists[p * 3 + k], ops, id)))
+                return found;
+    }
+    return NULL;
+}

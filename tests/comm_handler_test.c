@@ -37,6 +37,20 @@ static void block(void *c, uint8_t out[0x1d0]) { (void)c; memset(out, 7, 0x1d0);
 static uint8_t seq_fn(void *c, uint32_t t) { (void)c; (void)t; return 3; }
 static int to_slot(void *c, uint32_t s) { (void)c; return s == 2 || s == 4; }
 
+/* The receive poll's queue: data messages, then a system message. */
+static int rq_left, rq_sys, rq_runs;
+static int32_t rq_count(void *c, int32_t id, uint32_t *n) { (void)c; assert(id == 100); *n = 12; return 0; }
+static int32_t rq_recv(void *c, uint32_t flags, int32_t *from, int32_t *to, void *d, uint32_t *n) {
+    (void)c;
+    if (rq_left == 0) return (int32_t)0x887700beu;
+    *from = rq_left == 1 ? 0 : 7; *to = 100; *n = 3;
+    if (flags == 1) { memcpy(d, "abc", 3); rq_left--; }
+    return 0;
+}
+static void rq_system(void *c, uint32_t n, const uint8_t *d, int32_t to) { (void)c; assert(n == 3 && d[3] == 0 && to == 100); rq_sys++; }
+static void rq_run(void *c, int32_t n, const uint8_t *d, int32_t from, int32_t to, int f) {
+    (void)c; assert(n == 3 && !memcmp(d, "abc", 4) && from == 7 && to == 100 && f == 0); rq_runs++;
+}
 static int32_t dp_created, dp_closed, released, unlink_left = 3;
 static int32_t d_create(void *c, const uint32_t g[4]) { (void)c; (void)g; dp_created++; return 0; }
 static int32_t d_release(void *c) { (void)c; released++; dp = 0; return 0; }
@@ -166,6 +180,28 @@ int main(void) {
     assert(sent_to == 200 && sent_buf[0] == 0x31 && c.fast_time[2] == clock_ms);
     assert(aoe_comm_fast_send_ror(&c, self_id, &m, 1) == (int32_t)0x80004005);
 
+    /* Readiness: stored; sent only by a non-host. */
+    {
+        int32_t st[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+        int np = nposts;
+        sent_to = -5;
+        assert(aoe_comm_set_ready_ror(&c, st) == 1);
+        assert(c.stat[0][1] == 1 && c.stat[7][1] == 8 && sent_to == -5 && nposts == np + 1 &&
+               posts[np][0] == 0x17a6);
+        c.is_host = 0;
+        c.field_12a4 = 0x11;
+        c.gtd = 1;
+        assert(aoe_comm_set_ready_ror(&c, st) == 1);
+        assert(sent_to == 0 && sent_n == 0x28 && sent_buf[0] == 'R' && sent_buf[1] == 1 &&
+               sent_buf[4] == 2 && sent_buf[0x1c] == 8 && sent_buf[0x20] == 0x11 &&
+               sent_buf[0x24] == 1);
+        c.is_host = 1;
+        c.gtd = 0;
+        c.field_12a4 = 0;
+        memset(st, 0, sizeof st);
+        for (int i = 0; i < 8; ++i) c.stat[i][1] = 0;
+    }
+
     /* Sharing the player data. */
     c.data_time = clock_ms - 100;
     c.dirty = 1;
@@ -273,6 +309,38 @@ int main(void) {
         assert(!strcmp(last_log, "GTD: RX Ser#3 From P#2 T#12 ToExecT#14 Cmd=65 'A' Seq=5"));
         aoe_comm_post_ror(&ops, 77);
         assert(nposts == n + 1 && posts[n][0] == 77 && posts[n][1] == 0);
+    }
+    /* 0x0041f3e0: two data messages run, the system message ends it. */
+    {
+        AoeCommOpsRor rops = *c.ops;
+        rops.dp_message_count = rq_count; rops.dp_receive = rq_recv;
+        rops.system_message = rq_system; rops.run = rq_run;
+        c.ops = &rops;
+        dp = 1; rq_left = 3; self_id = 100;
+        aoe_comm_receive_ror(&c);
+        assert(rq_runs == 2 && rq_sys == 1 && c.rx_messages == 3 && c.rx_bytes == 9 &&
+               strcmp(last_log, "!!! DPMsgCount = 12") == 0);
+        aoe_comm_receive_ror(&c);
+        assert(rq_runs == 2 && c.rx_messages == 3);
+        c.ops = &ops;
+    }
+    /* 0x0041f330 / 0x0041f3d0: the pump polls only with messages waiting. */
+    {
+        AoeCommOpsRor rops = *c.ops;
+        int32_t mp = c.multiplayer;
+        uint8_t gtd = c.gtd;
+        rops.dp_message_count = rq_count; rops.dp_receive = rq_recv;
+        rops.system_message = rq_system; rops.run = rq_run;
+        rops.gtd_send_store = NULL;
+        c.ops = &rops;
+        c.multiplayer = 0; rq_left = 2; rq_runs = 0; rq_sys = 0;
+        aoe_comm_pump_ror(&c);
+        assert(rq_left == 2);
+        c.multiplayer = 1; c.gtd = 0; c.field_12a8 = 0;
+        aoe_comm_pump_flagged_ror(&c);
+        assert(c.field_12a8 == 1 && rq_left == 0 && rq_runs == 1 && rq_sys == 1);
+        c.multiplayer = mp; c.gtd = gtd;
+        c.ops = &ops;
     }
     puts("comm_handler_test: ok");
     return 0;

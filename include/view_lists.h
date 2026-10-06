@@ -50,6 +50,7 @@ typedef struct {
     void **table;                     /* +0x58 (+0x68 entries) */
     AoeDrawRowNodeRor **heads;        /* +0x5c (rows + 1) */
     AoeDrawRowNodeRor **tails;        /* +0x60 (rows + 1) */
+    int32_t table_base;               /* +0x64 (row bias of the table) */
     int32_t table_count;              /* +0x68 */
 } AoeDrawRowsRor;
 
@@ -67,6 +68,25 @@ AoeDrawRowNodeRor *aoe_draw_rows_find_ror(const AoeDrawRowsRor *d, int32_t id, i
 void aoe_draw_rows_reset_ror(AoeDrawRowsRor *d);
 AoeDrawRowNodeRor *aoe_draw_rows_take_ror(AoeDrawRowsRor *d);
 void aoe_draw_rows_free_ror(AoeDrawRowsRor *d);
+
+/* 0x00516510: a node pushed onto table list +0x64 + `row` (linked
+   through +0x00), only when `depth` is inside the row window (+0x50..
+   +0x54) and the index inside the table. Stored: +0x08 `id`, +0x10
+   `depth`, +0x1c `field_1c`, +0x2c `kind`, +0x30..+0x3e the eight
+   `coords`; +0x04, +0x0c, +0x14, +0x18, +0x20..+0x28 zeroed. The
+   original does not check the pool take; NULL is returned here. */
+AoeDrawRowNodeRor *aoe_draw_rows_add_ror(AoeDrawRowsRor *d, int32_t kind, int32_t row,
+                                         const int16_t coords[8], int32_t depth,
+                                         int32_t field_1c, int32_t id);
+/* 0x00516660: the view scrolled by (dx, dy): the table lists move by dy
+   entries (vacated ones emptied, dropped lists left in the pool), then
+   every listed node is shifted by kind: 0 the dwords +0x14/+0x18; 1 the
+   coords +0x3a/+0x3e by dy and then as 2; 2 +0x38/+0x3c by dx and then
+   as 3/4; 3, 4 the points +0x30/+0x32 and +0x34/+0x36. The original
+   indexes outside the table when |dy| exceeds its size; clamped here. */
+void aoe_draw_rows_scroll_ror(AoeDrawRowsRor *d, int32_t dx, int32_t dy);
+int16_t aoe_draw_row_node_coord_ror(const AoeDrawRowNodeRor *n, int32_t index);
+int32_t aoe_draw_row_node_dword_ror(const AoeDrawRowNodeRor *n, int32_t offset);
 
 /* 0x0051b070: a map point kept on the map (+0x104's +0x08 / +0x0c
    size): below 0 becomes 0, at or past the edge the size less 1.0. */

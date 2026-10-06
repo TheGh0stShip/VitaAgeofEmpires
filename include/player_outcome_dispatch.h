@@ -15,6 +15,15 @@ typedef struct {
    AoeOutcomeOps.user pointing to an AoeOutcomeDispatcher. */
 int aoe_outcome_dispatch_event(void *user, AoeOutcomeEvent *event);
 int aoe_outcome_dispatch_condition(void *user, AoeOutcomeCondition *condition);
+/* 0x00508510 (the derived manager, vtable 0x0054a3e4 +4): kind 100
+   goes to 0x00508530, every other kind to the base dispatcher above.
+   0x00508530: with an owner (+0xc), a still open (+0x2e status 0)
+   condition whose tech (+0x20, i16) has research state 3 (0x004ea9ac,
+   `research_state`) becomes status 2. */
+int aoe_outcome_dispatch_condition_tech_ror(void *user, AoeOutcomeCondition *condition,
+                                            int16_t (*research_state)(void *context,
+                                                                      int16_t tech),
+                                            void *context);
 
 /* Event kinds 0–4: RoR 0x005113b0/0x00511410/0x005114d0/
    0x005115c0/0x005116a0 (patched 1.0a 0x0050ec10/0x0050ec70/0x0050ed40/
@@ -69,5 +78,11 @@ int aoe_outcome_condition_kind12(AoeOutcomeManager *manager,
 int aoe_outcome_event_kind3_patched_ror(AoeOutcomeManager *manager, AoeOutcomeEvent *event);
 int aoe_outcome_condition_kind12_patched_ror(AoeOutcomeManager *manager,
                                              AoeOutcomeCondition *condition);
+
+/* 0x004f6bf0 (tribe player): the player's outcome manager (+0x34) made
+   from a zeroed 0x20-byte block by 0x005084f0 (the base constructor
+   0x0050d6d0 with the player as owner, then the derived vtable
+   0x0054a3e4); +0x34 is NULL when the allocation fails. Returns it. */
+AoeOutcomeManager *aoe_outcome_manager_create_for_player_ror(AoeOutcomePlayerRef *player);
 
 #endif

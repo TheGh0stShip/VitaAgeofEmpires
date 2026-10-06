@@ -141,4 +141,157 @@ void aoe_tribe_cycle_tick_ror(float *seconds, int32_t *counter, float tick);
 int aoe_tribe_shared_vision_check_ror(float attribute_50, int32_t *flag_104,
                                       void (*refresh)(void *context), void *context);
 
+/* Relays of the RoR tribe player (vtable 0x00549a44, also 0x00549b80)
+   that do nothing without a computer player (+0x23c); the targets are
+   the computer player's message handler, its build list (+0x104) and
+   its tactical module (+0x1146c). */
+typedef struct {
+    void *context;
+    int has_ai; /* +0x23c set */
+    int32_t (*ai_message)(void *context, int32_t a, int32_t b, int32_t c, int32_t d,
+                          int32_t e);                                      /* 0x004c86a0 */
+    void (*build_place)(void *context, int32_t a, int32_t b, int32_t c, float x, float y,
+                        int32_t d, int32_t e);                             /* 0x004b8ce0 */
+    void (*build_named)(void *context, int32_t a, int32_t b);              /* 0x004b8b40 */
+    void (*build_done_4)(void *context, int32_t a, int32_t b, int32_t c, int32_t d); /* 0x004b8f40 */
+    void (*build_done_3)(void *context, int32_t a, int32_t b, int32_t c);  /* 0x004b8fd0 */
+    void (*tactical)(void *context, int32_t a, int32_t b, int32_t c);      /* 0x004e1a80 */
+} AoeTribeAiRelayOpsRor;
+
+/* +0x54 0x004f2a70: the AI's message result, 0 without one. +0x100
+   0x004f2bb0, +0x104 0x004f2bf0, +0x110 0x004f2c50 and +0x11c 0x004f2ce0
+   pass their arguments to the build list; +0x5c 0x004f6b50 to the
+   tactical module. */
+int32_t aoe_tribe_ai_message_ror(const AoeTribeAiRelayOpsRor *ops, int32_t a, int32_t b,
+                                 int32_t c, int32_t d, int32_t e);
+void aoe_tribe_build_place_ror(const AoeTribeAiRelayOpsRor *ops, int32_t a, int32_t b,
+                               int32_t c, float x, float y, int32_t d, int32_t e);
+void aoe_tribe_build_named_ror(const AoeTribeAiRelayOpsRor *ops, int32_t a, int32_t b);
+void aoe_tribe_build_done_4_ror(const AoeTribeAiRelayOpsRor *ops, int32_t a, int32_t b,
+                                int32_t c, int32_t d);
+void aoe_tribe_build_done_3_ror(const AoeTribeAiRelayOpsRor *ops, int32_t a, int32_t b,
+                                int32_t c);
+void aoe_tribe_tactical_relay_ror(const AoeTribeAiRelayOpsRor *ops, int32_t a, int32_t b,
+                                  int32_t c);
+
+
+/* The RoR tribe player's own saved fields and members (0x00549a44 /
+   0x00549b80). */
+typedef struct {
+    uint8_t b48;                         /* +0x48 */
+    int32_t v228, v22c, v230, v234, v238; /* +0x228..+0x238 */
+    int32_t v844, v848;                  /* +0x844, +0x848 */
+    int32_t type;                        /* +0x04 (1: computer) */
+    /* 0x00549b80 only: +0x84c, +0x850, +0x854, +0x858. */
+    int32_t v84c, v850, v854, v858;
+} AoeTribePlayerSaveRor;
+
+typedef struct {
+    void *context;
+    int has_ai;                                                /* +0x23c set */
+    void (*base_save)(void *context, AoeOutcomeStream *s);     /* 0x0045d0d0 */
+    void (*research_save)(void *context, AoeOutcomeStream *s); /* 0x004eb59f (+0x224) */
+    void (*history_save)(void *context, AoeOutcomeStream *s);  /* 0x004b0a60 (+0x840) */
+    int32_t (*is_host)(void *context);                         /* 0x00423c20 */
+    void (*ai_save)(void *context, AoeOutcomeStream *s);       /* AI vtable +0x3c */
+} AoeTribePlayerSaveOpsRor;
+
+/* 0x004eff20 (vtable +0x84): the base player save, +0x48 (1 byte),
+   +0x22c, +0x234, +0x228, +0x238, the research states, +0x230, the score
+   history, +0x844, +0x848; for a computer player (type 1) a 4-byte 1 and
+   the AI when it has one and the comm handler is the host, else 0.
+   0x004f7300 (0x00549b80's +0x84): that, then +0x84c, +0x850, +0x858,
+   +0x854. */
+void aoe_tribe_player_save_ror(const AoeTribePlayerSaveRor *p, AoeOutcomeStream *s,
+                               const AoeTribePlayerSaveOpsRor *ops);
+void aoe_tribe_player_save_timed_ror(const AoeTribePlayerSaveRor *p, AoeOutcomeStream *s,
+                                     const AoeTribePlayerSaveOpsRor *ops);
+
+typedef struct {
+    void *context;
+    void *research;  /* +0x224 */
+    void *ai;        /* +0x23c */
+    void *history;   /* +0x840 */
+    void (*research_free)(void *context, void *research); /* 0x004ea982, delete */
+    void (*ai_delete)(void *context, void *ai);           /* vtable +0x00 (1) */
+    void (*history_free)(void *context, void *history);   /* 0x004b0a20, delete */
+    void (*base_destroy)(void *context);                  /* 0x0045ba50 */
+} AoeTribePlayerMembersRor;
+
+/* 0x004efdc0 (thunk 0x004f7280; deleting 0x004efae0 / 0x004f7260):
+   research states, the AI, the history (each cleared), then the base
+   player. */
+void aoe_tribe_player_destroy_ror(AoeTribePlayerMembersRor *m);
+
+
+typedef struct {
+    void *context;
+    int has_ai; /* +0x23c set */
+    int32_t (*base_add)(void *context, void *unit, int32_t a, int32_t b); /* 0x0045e880 */
+    int (*unit_info)(void *context, void *unit, int16_t *unit_class, int32_t *id); /* +0x08 +0x14, +0x04 */
+    void (*ai_object_added)(void *context, void *unit);     /* AI vtable +0x40 */
+    void (*build_event)(void *context, void *unit, int32_t arg); /* 0x004b8a70 */
+    uint8_t (*game_state)(void *context);                   /* player +0x3c's +0x1d */
+} AoeTribeAddObjectOpsRor;
+
+/* 0x004f2aa0 (vtable +0xdc): the base add (0x0045e880); then, for a unit
+   not of class 11 with an AI and a nonnegative ID, the AI hears of the
+   object and the build list gets its event with 1, or 0 while the game
+   state byte is 2 or 3. Returns the base add's result. */
+int32_t aoe_tribe_add_object_ror(const AoeTribeAddObjectOpsRor *ops, void *unit, int32_t a,
+                                 int32_t b);
+
+/* Vtable 0x00549a44 +0x12c 0x004ef7f0(kind, stream, player): a saved
+   object rebuilt by its type byte: 'F' (70, a 0x1c0-byte combat unit,
+   load constructor 0x004ae380) and 'P' (80, a 0x1fc-byte building,
+   0x004ac670) here, every other kind through the base player's loader
+   (0x004516e0). NULL when the allocation fails. */
+typedef struct {
+    void *context;
+    void *(*load_combat)(void *context, void *stream, void *player);   /* 0x004ae380 */
+    void *(*load_building)(void *context, void *stream, void *player); /* 0x004ac670 */
+    void *(*load_base)(void *context, uint8_t kind, void *stream, void *player); /* 0x004516e0 */
+} AoeTribeLoadObjectOpsRor;
+void *aoe_tribe_load_object_ror(const AoeTribeLoadObjectOpsRor *ops, uint8_t kind, void *stream,
+                                void *player);
+
+/* Tribe player template loader 0x004f06d0(stream, slot, kind, a, b):
+   'F' (0x164 bytes, 0x004eca90), 'P' (0x17c, 0x004ec180) and 'Z' (0xb8,
+   0x004ed2c0) are built here and stored in the template table (+0x24)
+   at `slot` (NULL when the allocation fails); every other kind goes to
+   the base loader 0x0045cb70, which stores its own. */
+typedef struct {
+    void *context;
+    void **templates;           /* +0x24 */
+    void *(*load_f)(void *context, void *stream, int32_t a, int32_t b); /* 0x004eca90 */
+    void *(*load_p)(void *context, void *stream, int32_t a, int32_t b); /* 0x004ec180 */
+    void *(*load_z)(void *context, void *stream, int32_t a, int32_t b); /* 0x004ed2c0 */
+    void (*load_base)(void *context, void *stream, int16_t slot, uint8_t kind, int32_t a,
+                      int32_t b);                                       /* 0x0045cb70 */
+} AoeTribeTemplateLoadOpsRor;
+void aoe_tribe_template_load_ror(const AoeTribeTemplateLoadOpsRor *ops, void *stream,
+                                 int16_t slot, uint8_t kind, int32_t a, int32_t b);
+
+/* 0x004f1450(target): repair. A building ('P') of ours or of a player we
+   are allied to (vtable +0x1c), below its maximum hit points (template
+   +0x26 vs unit +0x30) and in state (+0x48) 0..2 qualifies directly;
+   otherwise another player's object needs the alliance both ways and any
+   object must be of class 2, 20, 21 or 22, damaged and in state 0..2.
+   Then the selected villagers (min +0x8d 4, class 4): none gives 0; the
+   first one's task for the target (+0xbc(target, 0, 0, 0)) acknowledges
+   (+0x2c, `ack`) and opcode 0x6e (0x004e9b20) is queued. */
+typedef struct {
+    const AoeTribeCommandUnitRor *unit;
+    uint8_t type;      /* template +4 */
+    int16_t cls;       /* template +0x14 */
+    float hp;          /* +0x30 */
+    int16_t max_hp;    /* template +0x26 */
+    uint8_t state;     /* +0x48 */
+} AoeTribeRepairTargetRor;
+int aoe_tribe_player_repair_ror(const AoeTribePlayerOpsRor *ops,
+                                const AoeTribeRepairTargetRor *target,
+                                int (*allied)(void *context, int16_t from, int16_t to),
+                                void (*ack)(void *context, const AoeTribeCommandUnitRor *unit,
+                                            const AoeTribeCommandUnitRor *target));
+
 #endif

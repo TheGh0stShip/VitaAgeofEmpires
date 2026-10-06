@@ -1,5 +1,6 @@
 #include "train_action.h"
 #include <assert.h>
+#include <string.h>
 
 int main(void) {
     DatUnit unit = {0};
@@ -22,5 +23,16 @@ int main(void) {
     action.state = 6;
     assert(!aoe_train_action_progress_ror(&action, &id, &percent));
     assert(!aoe_train_action_progress_ror(NULL, &id, &percent));
+    {   /* 0x004b54c0: readout with the name cut to the buffer */
+        char name_text[] = "Legion";
+        char buf[4] = {'x', 'x', 'x', 'x'};
+        unit.name = name_text;
+        action.trained_template = &unit;
+        action.progress = 2.5f;
+        assert(aoe_train_action_readout_ror(&action, &id, &percent, buf, 4));
+        assert(id == 83 && percent == 25 && strcmp(buf, "Leg") == 0);
+        assert(aoe_train_action_readout_ror(&action, &id, &percent, NULL, 0));
+        assert(!aoe_train_action_readout_ror(&action, &id, &percent, buf, 0));
+    }
     return 0;
 }

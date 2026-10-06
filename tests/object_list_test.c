@@ -43,7 +43,31 @@ static void ddraw(void *c, void *o, int32_t a, int32_t b, int32_t cc, int32_t co
 }
 static void record(void *c, void *o) { Ctx *x = c; x->seen[x->seen_n++] = ((Obj *)o)->id; }
 
+static void test_find_any(void) {
+    /* 0x004a94d0: owner first, then other players in index order */
+    AoeObjectListOpsRor ops = {NULL, NULL, id, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, NULL};
+    AoeObjectListRor l[9];
+    const AoeObjectListRor *lists[9];
+    Obj a = {.id = 5}, b = {.id = 5}, c = {.id = 9}, d = {.id = 7};
+    int i;
+    for (i = 0; i < 9; ++i) { aoe_object_list_init_ror(&l[i]); lists[i] = &l[i]; }
+    assert(aoe_object_list_append_ror(&l[1], &a));  /* player 0 list 2 */
+    assert(aoe_object_list_append_ror(&l[8], &b));  /* player 2 list 3 */
+    assert(aoe_object_list_append_ror(&l[5], &c));  /* player 1 list 3 */
+    assert(aoe_object_list_append_ror(&l[6], &d));  /* player 2 list 1 */
+    assert(aoe_object_lists_find_any_ror(lists, 3, 2, &ops, 5) == &b);
+    assert(aoe_object_lists_find_any_ror(lists, 3, 1, &ops, 5) == &a);
+    assert(aoe_object_lists_find_any_ror(lists, 3, 0, &ops, 9) == &c);
+    assert(aoe_object_lists_find_any_ror(lists, 3, 0, &ops, 7) == &d);
+    assert(aoe_object_lists_find_any_ror(lists, 3, 0, &ops, 8) == NULL);
+    assert(aoe_object_lists_find_any_ror(lists, 3, 0, &ops, -1) == NULL);
+    for (i = 0; i < 9; ++i) {
+        while (l[i].head) aoe_object_list_remove_ror(&l[i], l[i].head->object, NULL);
+    }
+}
+
 int main(void) {
+    test_find_any();
     static Ctx ctx;
     AoeObjectListOpsRor ops = {&ctx, destroy, id, flag, key, order, needs, update, pump, 1, save, load};
     AoeObjectListRor l, back;

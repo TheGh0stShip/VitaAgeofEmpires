@@ -51,6 +51,129 @@ static void lv_unl(void *c, int32_t l) { (void)c; lv_unlink = l; }
 static void lv_set_state(void *c, int32_t s) { (void)c; lv_state = s; }
 static void lv_play(void *c, int32_t k, int w) { (void)c; (void)k; lv_video = w; }
 
+static int w_made, w_deleted, w_ok, w_cursor, w_status;
+static int w_obj;
+static void *w_create(void *c) { (void)c; return w_made++ < 99 ? &w_obj : NULL; }
+static int w_load(void *c, void *w) { (void)c; assert(w == &w_obj); return w_ok; }
+static void w_delete(void *c, void *w) { (void)c; assert(w == &w_obj); ++w_deleted; }
+static void w_cur(void *c, int wait) { (void)c; w_cursor = wait; }
+static void w_stat(void *c, int32_t id) { (void)c; w_status = id; }
+static void w_close(void *c) { (void)c; w_status = 0; }
+
+
+static char rl_mode[4], rl_path[32], rl_out[256];
+static int rl_fail, rl_closed;
+static void *rl_open(void *c, const char *p, const char *m) { (void)c; snprintf(rl_path, sizeof rl_path, "%s", p); snprintf(rl_mode, sizeof rl_mode, "%s", m); return rl_fail ? NULL : (void *)rl_out; }
+static void rl_write(void *c, void *f, const char *t) { (void)c; strcat((char *)f, t); }
+static void rl_close(void *c, void *f) { (void)c; (void)f; ++rl_closed; }
+static void rl_now(void *c, char *out, int32_t n) { (void)c; snprintf(out, (size_t)n, "Mon Oct  5 19:00:00 1998\n"); }
+
+static void test_run_log(void) {
+    AoeGameRorRunLogRor log = {NULL, 0, 0, rl_open, rl_write, rl_close, rl_now};
+    aoe_game_ror_run_log_ror(&log, "x", 0);
+    assert(rl_path[0] == 0 && !log.opened);
+    log.enabled = 1;
+    aoe_game_ror_run_log_ror(&log, "start", 1);
+    assert(strcmp(rl_path, "c:\\aoerun.txt") == 0 && strcmp(rl_mode, "w") == 0);
+    aoe_game_ror_run_log_ror(&log, "plain", 0);
+    assert(strcmp(rl_mode, "a") == 0 && rl_closed == 2);
+    assert(strcmp(rl_out, "Mon Oct  5 19:00:00 1998 - start\nplain\n") == 0);
+    rl_fail = 1;
+    aoe_game_ror_run_log_ror(&log, "lost", 0);
+    assert(rl_closed == 2);
+}
+
+static char gd_log[2048];
+static void gd_rm(void *c, const char *n) { (void)c; strcat(gd_log, n); strcat(gd_log, "|"); }
+static void gd_win(void *c, uint32_t w) { (void)c; assert(w == 77); strcat(gd_log, "W|"); }
+static void gd_free(void *c, uint32_t l) { (void)c; assert(l == 9); strcat(gd_log, "F|"); }
+static void gd_base(void *c) { (void)c; strcat(gd_log, "B|"); }
+static void gd_state(void *c, int32_t s) { (void)c; assert(s == 0); strcat(gd_log, "S|"); }
+static int gd_open_ok, gd_fb_ok, gd_menu_ok;
+static int gd_open(void *c, const char *n) { (void)c; assert(!strcmp(n, "scn")); strcat(gd_log, "O|"); return gd_open_ok; }
+static int gd_fb(void *c, const char *n, int32_t f) { (void)c; (void)n; assert(f == 0); strcat(gd_log, "FB|"); return gd_fb_ok; }
+static int gd_menu(void *c) { (void)c; strcat(gd_log, "M|"); return gd_menu_ok; }
+static void gd_give(void *c) { (void)c; strcat(gd_log, "G|"); }
+static void gd_step(void *c, int32_t id, int32_t a, int32_t b) {
+    char t[32];
+    (void)c;
+    snprintf(t, sizeof t, "%d:%d:%d|", (int)id, (int)a, (int)b);
+    strcat(gd_log, t);
+}
+
+static void test_destroy_editor_video(void) {
+    void *screen = (void *)1;
+    uint32_t lib = 9;
+    AoeGameRorDestroyOpsRor d = {NULL, 5, 4, 77, &screen, &lib, gd_win, gd_rm, gd_rm, gd_free, gd_base};
+    AoeGameRorEditorOpsRor e;
+    AoeGameRorVideoCloseOpsRor v = {NULL, 1, 1, 640, 480, NULL, NULL, gd_step};
+    int32_t flag = 0;
+    gd_log[0] = 0;
+    aoe_game_ror_destroy_ror(&d);
+    assert(d.field_1250 == 0 && d.mode == 0 && d.video_window == 0 && screen == NULL && lib == 0);
+    assert(!strncmp(gd_log, "W|Object List Dialog|", 21));
+    assert(strstr(gd_log, "Game Screen|Video Screen|Create Dialog|"));
+    assert(strstr(gd_log, "Logo2Screen|sounds.drs|graphics.drs|Terrain.drs|Border.drs|Interfac.drs|F|B|"));
+    memset(&e, 0, sizeof e);
+    e.remove_screen = gd_rm; e.set_state = gd_state; e.open_editor = gd_open;
+    e.fallback = gd_fb; e.main_menu = gd_menu; e.give_up = gd_give;
+    gd_log[0] = 0; gd_open_ok = 1;
+    assert(aoe_game_ror_open_editor_ror(&e, "scn") == 1 && !strcmp(e.scenario_name, "scn"));
+    assert(!strcmp(gd_log, "Scenario Editor Screen|S|O|"));
+    gd_log[0] = 0; gd_open_ok = 0; gd_fb_ok = 0; gd_menu_ok = 0;
+    assert(aoe_game_ror_open_editor_ror(&e, "scn") == 0 && !strcmp(gd_log, "Scenario Editor Screen|S|O|FB|M|G|"));
+    gd_log[0] = 0; gd_fb_ok = 1;
+    assert(aoe_game_ror_open_editor_ror(&e, "scn") == 0 && !strcmp(gd_log, "Scenario Editor Screen|S|O|FB|"));
+    gd_log[0] = 0;
+    v.redraw_flag = &flag;
+    aoe_game_ror_close_video_ror(&v);
+    assert(!strcmp(gd_log, "1:640:480|2:0:0|3:0:0|4:0:0|5:0:0|6:0:0|2:0:0|3:0:0|7:0:0|8:0:0|9:2:0|10:0:0|11:0:0|12:0:0|"));
+    assert(flag == 1 && v.video_up == 0 && v.mode_switched == 0);
+    gd_log[0] = 0;
+    aoe_game_ror_close_video_ror(&v);
+    assert(gd_log[0] == 0);
+    v.video_up = 1;
+    aoe_game_ror_close_video_ror(&v);
+    assert(!strncmp(gd_log, "2:0:0|3:0:0|7:0:0|", 18) && v.video_up == 0);
+}
+
+static char vo_log[512];
+static int vo_avail16 = 1, vo_set16 = 0, vo_avail8 = 1, vo_set8 = 1;
+static void vo_prep(void *c) { (void)c; strcat(vo_log, "prep|"); }
+static void vo_hide(void *c) { (void)c; strcat(vo_log, "hide|"); }
+static int vo_avail(void *c, int32_t w, int32_t h, int32_t b) { (void)c; assert(w == 640 && h == 480); return b == 16 ? vo_avail16 : vo_avail8; }
+static int vo_set(void *c, int32_t w, int32_t h, int32_t b) { (void)c; (void)w; (void)h; return b == 16 ? vo_set16 : vo_set8; }
+static void vo_logf(void *c, const char *t) { (void)c; strcat(vo_log, t); strcat(vo_log, "|"); }
+static void vo_state(void *c, int32_t s) { (void)c; assert(s == 1); strcat(vo_log, "st|"); }
+static void vo_after(void *c) { (void)c; strcat(vo_log, "ac|"); }
+
+static void test_open_video(void) {
+    AoeGameRorVideoOpenOpsRor o;
+    memset(&o, 0, sizeof o);
+    o.full_screen = 1; o.screen_width = 800; o.screen_height = 600;
+    o.prepare = vo_prep; o.hide_cursor = vo_hide; o.mode_available = vo_avail;
+    o.set_mode = vo_set; o.log = vo_logf; o.state = vo_state; o.after = vo_after;
+    vo_log[0] = 0;
+    assert(aoe_game_ror_open_video_ror(&o) == 1);
+    assert(!strcmp(vo_log, "prep|hide|640x480 16bit|640x480 8bit|640x480 8bit success|"
+                           "video_changed_res=1, double_size=1|st|ac|"));
+    assert(o.video_up == 1 && o.mode_16bit == 0 && o.old_width == 800 && o.old_height == 600);
+    vo_log[0] = 0;
+    assert(aoe_game_ror_open_video_ror(&o) == 1 && vo_log[0] == 0);
+    o.video_up = 0; vo_set16 = 1;
+    vo_log[0] = 0;
+    aoe_game_ror_open_video_ror(&o);
+    assert(o.mode_16bit == 1 && strstr(vo_log, "16bit success|video_changed_res=1"));
+    o.video_up = 0; o.eight_bit_switch = 1;
+    vo_log[0] = 0;
+    aoe_game_ror_open_video_ror(&o);
+    assert(!strcmp(vo_log, "prep|hide|video_changed_res=0, double_size=1|st|ac|") && o.mode_16bit == 0);
+    o.video_up = 0; o.full_screen = 0;
+    vo_log[0] = 0;
+    aoe_game_ror_open_video_ror(&o);
+    assert(!strcmp(vo_log, "prep|video_changed_res=0, double_size=1|st|ac|"));
+}
+
 int main(void) {
     char coded[64];
     AoeGameRorCommandOpsRor cops = {NULL, ns, sp, bc};
@@ -229,5 +352,23 @@ int main(void) {
         aoe_game_ror_end_session_ror(&e);
         assert(lv_state == 0 && lv_video == 1);
     }
+    {
+        AoeGameRorWorldOpsRor w = {NULL, NULL, w_create, w_load, w_load, w_delete, w_cur,
+                                   w_stat, w_close};
+        w_ok = 0;
+        assert(!aoe_game_ror_ensure_world_ror(&w) && w.world == NULL && w_deleted == 1);
+        w_ok = 1;
+        assert(aoe_game_ror_ensure_world_ror(&w) && w.world == &w_obj && w_made == 2);
+        assert(aoe_game_ror_ensure_world_ror(&w) && w_made == 2);
+        assert(aoe_game_ror_check_world_ror(&w) && w.world == NULL && w_deleted == 3);
+        assert(w_made == 3 && w_cursor == 0 && w_status == 0);
+        w_ok = 0;
+        assert(!aoe_game_ror_check_world_ror(&w) && w_deleted == 4);
+        w_made = 100;
+        assert(!aoe_game_ror_check_world_ror(&w) && w_deleted == 4);
+    }
+    test_run_log();
+    test_destroy_editor_video();
+    test_open_video();
     return 0;
 }

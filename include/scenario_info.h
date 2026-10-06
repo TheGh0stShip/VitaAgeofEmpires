@@ -301,4 +301,35 @@ int aoe_scenario_diplomacy_page_ror(const AoeScenarioInfoRor *info,
                                     int32_t slot, int32_t radio[8],
                                     int32_t allied_buttons[8]);
 
+/* 0x00507cd0: for each world player 1..player_count - 1 (slot = player
+   - 1): with option 0 (+0x50f4) set, the world's effects (+0x4c) apply
+   effect 100 to it (vtable +8); then its techs 0x58, 0x59, 0x5a, 0x5b,
+   0x5e, 0x5f, 0x61, 0x62, 0x5d, 0x60, 0x5c, 0x65, 0x66, 0x67, 0x73, 0x74
+   are enabled or disabled (0x004f1870) by the low byte of toggles 0..15.
+   Nothing without a world (+8). */
+typedef struct {
+    void *context;
+    int has_world;
+    void (*apply_effect)(void *context, int32_t player, int16_t effect);
+    void (*set_tech)(void *context, int32_t player, int16_t tech, uint8_t enabled);
+} AoeScenarioTechOpsRor;
+void aoe_scenario_apply_techs_ror(const AoeScenarioInfoRor *info,
+                                  const AoeScenarioTechOpsRor *ops);
+
+/* 0x00506c80(stream): 0x00507cd0 first, the base scenario save
+   (0x00476280), then (0x0046ba40, little-endian): the start resources
+   (16 x 4 int32), the marker -99, the six custom goals, +0x4be8,
+   victory type, score, time limit, the diplomacy (16 x 16), every
+   condition record (16 x 12 x 0x3c bytes), -99, the allied victory
+   (16), the tech toggles (16 x 20), the three options, the starting ages
+   (16) and -99. */
+typedef struct {
+    void *context;
+    void (*base_save)(void *context);                               /* 0x00476280 */
+    void (*write)(void *context, const uint8_t *data, int32_t n);   /* 0x0046ba40 */
+} AoeScenarioSaveOpsRor;
+void aoe_scenario_info_save_ror(const AoeScenarioInfoRor *info,
+                                const AoeScenarioTechOpsRor *techs,
+                                const AoeScenarioSaveOpsRor *ops);
+
 #endif

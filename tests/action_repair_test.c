@@ -176,6 +176,25 @@ static void line_search(const AoeRepairActionOps *ro) {
                                            o) == 0);
     assert(aoe_unit_line_terrain_point_ror(&repairer, from, from, out, 2, 2,
                                            1, o) == 0);
+    {
+        /* 0x0044e470: the second pair (2,2)->(10,6) hits (6,4); both
+           outputs get x + 0.5. */
+        AoePathWaypointRor pts[3] = {{2.7f, 9.1f, 0, 0}, {2.2f, 2.9f, 0, 0},
+                                     {10.5f, 6.5f, 0, 0}};
+        AoeUnitPathRor path = {pts, 3, 0, 3};
+        float px = 0, py = 0;
+        assert(aoe_unit_path_terrain_point_ror(&repairer, &path, 2, &px, &py,
+                                               o) == 1);
+        assert(px == 6.5f && py == 6.5f && path.cursor == 2);
+        terrain_map[4][6] = 0;
+        assert(aoe_unit_path_terrain_point_ror(&repairer, &path, 2, &px, &py,
+                                               o) == 0);
+        assert(px == -1.0f && py == -1.0f);
+        path.count = 1; px = 3;
+        assert(aoe_unit_path_terrain_point_ror(&repairer, &path, 2, &px, &py,
+                                               o) == 0 && px == 3);
+        terrain_map[4][6] = 2;
+    }
 }
 
 int main(void) {

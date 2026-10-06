@@ -112,4 +112,14 @@ typedef struct {
 void aoe_object_list_draw_ror(const AoeObjectListRor *l, const AoeObjectListDrawOpsRor *ops,
                               int32_t a, int32_t b, int32_t c, int fogged);
 
+/* 0x004a94d0 (a live unit's lookup of a unit by ID): a negative ID finds
+   nothing; otherwise the owner's three lists (player +0x28, +0x2c, +0x30)
+   are searched, then those of every other world player in index order
+   (world +0x40[0..+0x3c), skipping the owner's index +0x4a). `lists` holds
+   three lists per player, by player index. The first match wins. */
+void *aoe_object_lists_find_any_ror(const AoeObjectListRor *const *lists,
+                                    int16_t player_count, int16_t owner_index,
+                                    const AoeObjectListOpsRor *ops,
+                                    int32_t id);
+
 #endif

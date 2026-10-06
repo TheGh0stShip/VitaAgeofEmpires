@@ -80,6 +80,11 @@ typedef struct DatGraphic {
     float replay_delay;
     uint8_t sequence_type;
     uint8_t mirror_mode;
+    /* RoR runtime +0x14 (record byte 38): the SLP may be loaded on use. */
+    uint8_t slp_loadable;
+    /* RoR runtime +0x2c (record byte 43): selection test, 0 none, 1 SLP
+       pixels, 2 the frame box (0x004a6150). */
+    uint8_t selection_mode;
     uint16_t delta_count;
     DatGraphicDelta *deltas;
     size_t attack_sound_count; /* 3 pairs per angle when attack sounds are used. */

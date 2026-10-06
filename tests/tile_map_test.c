@@ -1,6 +1,7 @@
 #include "tile_map.h"
 
 #include <assert.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -55,8 +56,96 @@ static void gfin(void *c) { (void)c; ++g_fin; }
 static int32_t map_sound(void *c, int border, int i) { (void)c; return border ? -1 : 40 + i; }
 static void map_ctl(void *c, AoeOutcomeStream *s) { (void)c; aoe_stream_put_u8(s, 0xab); }
 
+static int32_t cl[5], cl_calls;
+static void t_cleanup(void *c, int32_t x0, int32_t y0, int32_t x1, int32_t y1, int32_t v) {
+    (void)c; cl[0] = x0; cl[1] = y0; cl[2] = x1; cl[3] = y1; cl[4] = v; ++cl_calls;
+}
+static void test_lines(const AoeTileMapOpsRor *ops) {
+    AoeTileMapRor m;
+    memset(&m, 0, sizeof(m));
+    assert(t_resize(NULL, &m, 8, 8));
+    /* Horizontal 0..3 width 1 (radius 0): start, 3 steps, end equal: 4 cells. */
+    painted = 0;
+    assert(aoe_tilemap_paint_line_ror(&m, 0, 2, 3, 2, 1, 5, ops) == 1);
+    assert(painted == 4);
+    /* (0,0)->(3,4): 5 steps, then (3,4) once more (5 * 0.6 rounds off). */
+    painted = 0;
+    assert(aoe_tilemap_paint_line_ror(&m, 0, 0, 3, 4, 0, 5, ops) == 1);
+    assert(painted == 6 || painted == 7);
+    /* Same point: one brush only; end clamped to the map. */
+    painted = 0;
+    assert(aoe_tilemap_paint_line_ror(&m, 7, 7, 20, 7, 1, 5, ops) == 1);
+    assert(painted == 1);
+    /* Width 3 (radius 1) elevation line from (5,1) to (2,1) with the
+       clean-up over the widened box. */
+    assert(aoe_tilemap_raise_line_ror(&m, 5, 1, 2, 1, 3, 2, t_cleanup, NULL) == 1);
+    assert(E(&m, 1, 0) == 2 && E(&m, 6, 2) == 2 && E(&m, 0, 1) == 0 && E(&m, 7, 1) == 0);
+    assert(E(&m, 3, 3) == 0);
+    assert(cl_calls == 1 && cl[0] == 1 && cl[1] == 0 && cl[2] == 6 && cl[3] == 2 && cl[4] == 2);
+    free(m.tiles);
+    painted = 0;
+}
+
+
+static int owned_log[64][2], owned_n;
+static void owned_destroy(void *c, int kind, void *o) { (void)c; owned_log[owned_n][0] = kind; owned_log[owned_n++][1] = (int)(intptr_t)o; }
+static void owned_free(void *c, void *p) { (void)c; owned_log[owned_n][0] = 100; owned_log[owned_n++][1] = (int)(intptr_t)p; }
+
+static void test_map_release_owned(void) {
+    AoeMapOwnedOpsRor ops = {NULL, owned_destroy, owned_free};
+    AoeMapOwnedRor m;
+    memset(&m, 0, sizeof m);
+    m.zones = (void *)1; m.random_map = (void *)2; m.raw04 = (void *)3; m.rows8d8c = (void *)4;
+    m.terrain_shapes[0] = (void *)10; m.terrain_shapes[31] = (void *)11;
+    m.border_shapes[2] = (void *)20; m.border_shapes[9] = (void *)21;
+    m.masks = (void *)30; m.v8dcc = (void *)31;
+    aoe_map_release_owned_ror(&m, &ops);
+    assert(owned_n == 10);
+    assert(owned_log[0][0] == AOE_MAP_OWNED_ZONES && owned_log[1][0] == AOE_MAP_OWNED_RANDOM_MAP);
+    assert(owned_log[2][0] == 100 && owned_log[2][1] == 3 && owned_log[3][1] == 4);
+    assert(owned_log[4][1] == 11 && owned_log[5][1] == 10 && owned_log[6][1] == 21 && owned_log[7][1] == 20);
+    assert(owned_log[8][0] == AOE_MAP_OWNED_MASKS && owned_log[9][0] == AOE_MAP_OWNED_8DCC);
+    assert(!m.zones && !m.random_map && !m.terrain_shapes[31] && !m.border_shapes[9]);
+    assert(m.raw04 && m.masks && m.v8dcc);
+}
+
+static void clamp_footprint(void) {
+    float x = 0.25f, y = 9.9f;
+    /* 0x00443140: pushed inside a 10x10 map, no snap */
+    assert(aoe_map_clamp_footprint_ror(0.5f, 0.5f, 10, 10, &x, &y, 0) == 1);
+    assert(x == 0.5f && fabsf(y - (9.5f - 1e-5f)) < 1e-4f);
+    /* snap: 2.25..3.75 spans whole tiles' fractions under one: kept;
+       2.75..3.25 (fractions .75 / 1 - .25, a tie) moves right by .25 */
+    x = 3.0f; y = 5.0f;
+    aoe_map_clamp_footprint_ror(0.75f, 0.5f, 10, 10, &x, &y, 1);
+    /* (y 4.5..5.5: fractions .5 / .5 sum to one, a tie: up by .5) */
+    assert(x == 3.0f && y == 4.5f);
+    y = 5.2f;
+    aoe_map_clamp_footprint_ror(0.25f, 0.1f, 10, 10, &x, &y, 1);
+    assert(fabsf(x - 3.25f) < 1e-6f && y == 5.2f);
+    /* y 4.6..5.2: low fraction .6 below 1 - .2, so up by .2 */
+    x = 5.5f; y = 4.9f;
+    aoe_map_clamp_footprint_ror(0.5f, 0.3f, 10, 10, &x, &y, 1);
+    assert(x == 5.5f && fabsf(y - 4.7f) < 1e-5f);
+}
+
 int main(void) {
+    clamp_footprint();
     AoeTileMapOpsRor ops = {NULL, t_resize, t_refresh, t_rect, t_cell, t_begin, t_end, t_border, t_used};
+    test_lines(&ops);
+    {
+        AoeTileMapRor fm;
+        int16_t o[8];
+        memset(&fm, 0, sizeof(fm));
+        fm.half_w = 32;
+        fm.half_h = 16;
+        /* (2.25, 3.5) with a 0.5 x 0.5 footprint: fx 0.75, fy 1.0. */
+        assert(aoe_tilemap_footprint_corners_ror(&fm, 0.5f, 0.5f, 2.25f, 3.5f, o) == 1);
+        assert(o[0] == 56 && o[1] == 20);   /* (1.75*32, 1.25*16) */
+        assert(o[2] == 24 && o[3] == 36);   /* fx -0.25 */
+        assert(o[4] == -8 && o[5] == 20);   /* fy 0.0 */
+        assert(o[6] == 24 && o[7] == 4);    /* fx 0.75 again */
+    }
     AoeTileMapRor m;
     uint8_t buf[64], cell;
     AoeOutcomeStream s = {buf, sizeof buf, 0, 0};
@@ -163,5 +252,6 @@ int main(void) {
         assert(out[0x8dcf] == 0x77 && image[0xb0] == 0);
     }
     free(m.tiles);
+    test_map_release_owned();
     return 0;
 }

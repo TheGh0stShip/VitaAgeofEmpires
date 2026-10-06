@@ -104,6 +104,27 @@ float aoe_combat_multiplier_tribe_ror(const AoeLiveUnit *attacker,
                                       const AoeLiveUnit *target,
                                       int ranged_bonus);
 
+/* Per-tile probe of the high-ground walk: vtable +0x24c(target, tile x,
+   tile y, from x, from y, to x, to y, map (owner +0x3c +0x28), 0, &best,
+   &count); non-zero ends that step's probes. `best` starts at -1.0 and
+   `count` at 0; both belong to the probe. */
+typedef int (*AoeCombatHighGroundProbeFn)(void *context, int32_t tile_x,
+                                          int32_t tile_y, float from_x,
+                                          float from_y, float to_x,
+                                          float to_y, float *best,
+                                          int32_t *count);
+/* 0x004b01c0 (vtables 0x00547fa0 / 0x0054820c +0x250, the `ranged_bonus`
+   above): 1 when the attacker's z (+0x40) is above the target's. Else 0
+   at the same (x, y); otherwise a walk of n = 2 * |ftol(larger-magnitude
+   delta)| float steps (delta / n, from the attacker's x/y) probes each
+   newly entered tile (ftol of both), then, while the probes return 0, its
+   neighbour at -1 and +1 across the walk (x for a mostly-y walk, which
+   includes |dx| == |dy|; else y). True when the count ends positive. */
+int aoe_combat_high_ground_ror(float from_x, float from_y, float from_z,
+                               float to_x, float to_y, float to_z,
+                               AoeCombatHighGroundProbeFn probe,
+                               void *context);
+
 /* Projectile launch point shared by 0x00426520 and 0x004266a0: the
    template offsets (+0x12c forward, +0x130 sideways) rotated by the
    facing, z offset +0x134; and the launch radius footprint + max range +
@@ -263,10 +284,108 @@ int aoe_combat_stand_ror(AoeLiveUnit *unit, int clear, const AoeCombatSlotOpsRor
 void aoe_combat_notice_ror(AoeLiveUnit *unit, int32_t a, int32_t b, int32_t code, int32_t c,
                            int32_t d, int32_t e, const AoeCombatSlotOpsRor *ops);
 
+/* The type-50 "order" slots that build one base action (vtable 0x0054324c,
+   kept by 0x005445e8, 0x00547fa0 and 0x0054820c):
+   +0x158 0x00427190 move to an object (type 1, 0x004052d0 with the scale
+   and the walking graphic +0xc0, else +0xbc; no task),
+   +0x168 0x00427420 gather an object (type 5, 0x00402ef0 with the task),
+   +0x17c 0x004275b0 explore a point (type 4, 0x00402b80 at (x, y, unit z);
+   no task),
+   +0x180 0x004276e0 enter an object (type 3, 0x00402440 with the task).
+   An object slot resolves the ID (0x005206d0; none gives 0). Without
+   `force`, a head action (0x00404520 / 0x004045b0) of the type already
+   aimed at the object (+0x4c; explore: any) gives 1. Gather and explore
+   then retarget (+0x34) a head of their type (object and position, or the
+   point and unit z) and give 1. Gather and enter need a task (+0x214 with
+   the object and its x, y; none gives 0). A built action replaces the list
+   (0x00403e50) and is adopted (+0x208): 1; a failed build gives 0.
+   The attacks (type 9; a head of type 9 or 7 counts as the same order):
+   +0x154 0x00426e20 attack an object: without `force` a head aimed at it
+   gives 1; a type-9 head aimed at it is retargeted (1); a class-4 unit
+   first takes its owner's template 83 (owner +0x24 +0x14c, when present,
+   through +0x54); then 0x00401150. +0x14c 0x00426ff0 attack a point
+   (x, y, z): without `force` a head at exactly that point (0x00407670)
+   gives 1; then 0x00401290. Both builds take the template's attack fields
+   (+0x114, +0x138, +0x124, +0x12a). */
+typedef enum {
+    AOE_COMBAT_ORDER_ATTACK_POINT_ROR = 2,
+    AOE_COMBAT_ORDER_MOVE_ROR = 1,
+    AOE_COMBAT_ORDER_ENTER_ROR = 3,
+    AOE_COMBAT_ORDER_EXPLORE_ROR = 4,
+    AOE_COMBAT_ORDER_GATHER_ROR = 5,
+    AOE_COMBAT_ORDER_ATTACK_ROR = 9
+} AoeCombatOrderKindRor;
+
+typedef struct {
+    void *context;
+    AoeLiveUnit *(*resolve)(void *context, int32_t id);
+    void *(*head)(void *context, AoeLiveUnit *unit); /* NULL: empty list */
+    int16_t (*action_type)(void *context, void *action);
+    AoeLiveUnit *(*action_target)(void *context, void *action);
+    void (*retarget)(void *context, void *action, AoeLiveUnit *target, float x, float y,
+                     float z);
+    const DatUnitTask *(*task)(void *context, AoeLiveUnit *unit, AoeLiveUnit *target, float x,
+                               float y);
+    void *(*build)(void *context, AoeLiveUnit *unit, AoeCombatOrderKindRor kind,
+                   const DatUnitTask *task, AoeLiveUnit *target, float x, float y, float z,
+                   float scale, int16_t graphic);
+    void (*clear_actions)(void *context, AoeLiveUnit *unit);
+    void (*adopt)(void *context, AoeLiveUnit *unit, void *action);
+    /* The head action's point (0x00407670), the owner's template `i` and
+       the unit's +0x54 (template change). */
+    void (*action_point)(void *context, void *action, float *x, float *y, float *z);
+    const DatUnit *(*owner_template)(void *context, AoeLiveUnit *unit, int16_t i);
+    void (*change_template)(void *context, AoeLiveUnit *unit, const DatUnit *t);
+} AoeCombatOrderOpsRor;
+
+/* `id` serves the object slots, x / y the explore point and `scale` the
+   move. ATTACK_POINT goes through aoe_combat_order_point_ror. */
+int aoe_combat_order_ror(AoeLiveUnit *unit, AoeCombatOrderKindRor kind, int32_t id, float x,
+                         float y, float scale, int force, const AoeCombatOrderOpsRor *ops);
+int aoe_combat_order_point_ror(AoeLiveUnit *unit, float x, float y, float z, int force,
+                               const AoeCombatOrderOpsRor *ops);
+
 /* +0x34 0x00427c60: after the move (0x0044bc40), a unit with an ID that
    changed tiles writes the new tile into the nine object memory entries
    it holds (+0x18c..+0x1ac; entry bytes +6 / +7). */
 void aoe_combat_memory_moved_ror(uint8_t *entries[9], int32_t id, float old_x, float old_y,
                                  float new_x, float new_y);
+
+/* Type-50 own fields (live +0x18c..+0x1b8). */
+typedef struct {
+    uint8_t *memory[9];   /* +0x18c..+0x1ac object memory entries */
+    int32_t memory_count; /* +0x1b0 */
+    float reload_timer;   /* +0x1b4 */
+    uint8_t field_1b8;    /* +0x1b8 (saved from 2.01) */
+} AoeCombatType50Ror;
+
+/* Init 0x00426140 (run by the constructor 0x00425f30 when its init flag
+   is set, after the type-40 constructor; the load constructor 0x00425fe0
+   runs the type-40 load constructor and, flagged, the record load
+   0x004261a0):
+   the memory and its count cleared, the reload timer at the template's
+   reload time (+0x120), +0x1b8 0; the type-40 init is the caller's. Returns the class byte, 0x32. The re-initialiser 0x004260f0
+   (`reinit`) clears the memory and reloads the timer but keeps +0x1b8 and
+   the class (it runs the type-40 re-initialiser instead). */
+uint8_t aoe_combat_type50_init_ror(AoeCombatType50Ror *unit,
+                                   const DatUnit *unit_template, int reinit);
+
+/* The release record at destruction: global 0x7d2058's
+   0x00516a50 (unit ID, owner +0x4a, truncated x and y, template +0x14,
+   memory count, 0, memory). */
+typedef void (*AoeCombatType50RecordFn)(void *context, int32_t unit_id,
+                                        int16_t owner, int32_t x, int32_t y,
+                                        int16_t template_word_14,
+                                        int32_t memory_count,
+                                        uint8_t *const memory[9]);
+
+/* Destructor 0x00426050 (deleting form 0x00425fc0): a unit with an ID
+   (>= 0) is recorded through `record` with its position truncated toward
+   zero; the type-40 destructor is the caller's. */
+void aoe_combat_type50_destroy_ror(const AoeCombatType50Ror *unit,
+                                   int32_t unit_id, int16_t owner, float x,
+                                   float y, int16_t template_word_14,
+                                   AoeCombatType50RecordFn record,
+                                   void *context);
 
 #endif

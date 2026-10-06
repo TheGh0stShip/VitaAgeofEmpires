@@ -342,3 +342,91 @@ const char *aoe_scenario_index_name_ror(const AoeScenarioIndexRor *x, int32_t i)
 AoeScenarioRecordRor *aoe_scenario_index_record_ror(const AoeScenarioIndexRor *x, int32_t i) {
     return (i < x->count && i >= 0) ? x->entries[i].record : NULL;
 }
+
+static void entries_put_i16(AoeOutcomeStream *s, int16_t v) {
+    uint8_t b[2];
+    b[0] = (uint8_t)((uint16_t)v & 0xff);
+    b[1] = (uint8_t)((uint16_t)v >> 8);
+    aoe_stream_put(s, b, 2);
+}
+
+static int16_t entries_i16(AoeOutcomeStream *s) {
+    const uint8_t *p = aoe_stream_take(s, 2);
+    return p ? (int16_t)(uint16_t)(p[0] | (p[1] << 8)) : 0;
+}
+
+/* 0x004ebdc0 */
+void aoe_scenario_entries_init_ror(AoeScenarioEntriesRor *e, void *world) {
+    e->world = world;
+    e->head = NULL;
+    e->count = 0;
+    e->v0e = 0;
+    e->v10 = -1.0f;
+}
+
+/* 0x004ebdf0 / deleting 0x004ebda0 */
+void aoe_scenario_entries_release_ror(AoeScenarioEntriesRor *e) {
+    while (e->head) {
+        AoeScenarioEntryRor *next = e->head->next;
+        free(e->head);
+        e->head = next;
+    }
+    aoe_scenario_entries_init_ror(e, NULL);
+}
+
+/* 0x004ebbf0 */
+void aoe_scenario_entries_read_ror(AoeScenarioEntriesRor *e, AoeOutcomeStream *s, void *world,
+                                   const AoeScenarioEntriesOpsRor *ops) {
+    AoeScenarioEntryRor **link = &e->head;
+    int32_t i;
+    e->count = entries_i16(s);
+    e->v0e = entries_i16(s);
+    e->v10 = aoe_stream_f32(s);
+    e->world = world;
+    e->head = NULL;
+    for (i = 0; i < e->count; ++i) {
+        AoeScenarioEntryRor *n = calloc(1, sizeof *n);
+        int16_t tag1, tag2;
+        if (!n) return;
+        n->v0 = aoe_stream_i32(s);
+        n->v4 = aoe_stream_u8(s);
+        n->v6 = entries_i16(s);
+        n->v8 = aoe_stream_u8(s);
+        n->vc = aoe_stream_i32(s);
+        n->v10 = aoe_stream_i32(s);
+        n->v14 = aoe_stream_i32(s);
+        n->v18 = entries_i16(s);
+        n->id1 = entries_i16(s);
+        tag1 = entries_i16(s);
+        n->id2 = entries_i16(s);
+        tag2 = entries_i16(s);
+        n->object1 = (tag1 < 0 || !world) ? NULL : ops->find(ops->context, world, n->id1);
+        n->object2 = (tag2 < 0 || !world) ? NULL : ops->find(ops->context, world, n->id2);
+        *link = n;
+        link = &n->next;
+    }
+}
+
+/* 0x004ebe40 */
+void aoe_scenario_entries_write_ror(const AoeScenarioEntriesRor *e, AoeOutcomeStream *s,
+                                    const AoeScenarioEntriesOpsRor *ops) {
+    const AoeScenarioEntryRor *n = e->head;
+    int32_t i;
+    entries_put_i16(s, e->count);
+    entries_put_i16(s, e->v0e);
+    aoe_stream_put_f32(s, e->v10);
+    for (i = 0; i < e->count && n; ++i, n = n->next) {
+        aoe_stream_put_i32(s, n->v0);
+        aoe_stream_put_u8(s, n->v4);
+        entries_put_i16(s, n->v6);
+        aoe_stream_put_u8(s, n->v8);
+        aoe_stream_put_i32(s, n->vc);
+        aoe_stream_put_i32(s, n->v10);
+        aoe_stream_put_i32(s, n->v14);
+        entries_put_i16(s, n->v18);
+        entries_put_i16(s, n->id1);
+        entries_put_i16(s, n->object1 ? ops->tag(ops->context, n->object1) : (int16_t)-1);
+        entries_put_i16(s, n->id2);
+        entries_put_i16(s, n->object2 ? ops->tag(ops->context, n->object2) : (int16_t)-1);
+    }
+}

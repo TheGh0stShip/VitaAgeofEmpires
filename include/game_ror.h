@@ -191,6 +191,28 @@ int32_t aoe_game_ror_palette_ror(AoeGameRorInputOpsRor *ops);
 int32_t aoe_game_ror_activate_ror(AoeGameRorInputOpsRor *ops, int32_t active);
 int32_t aoe_game_ror_key_ror(AoeGameRorInputOpsRor *ops, int32_t key);
 
+/* The tribe game's world (+0x3f4), made by its vtable +0xbc. */
+typedef struct {
+    void *context;
+    void *world;                                          /* +0x3f4 */
+    void *(*create_world)(void *context);                 /* game +0xbc */
+    /* World +0xb0 (game info +0x1f8, game +0x60, +0x18c) / +0xac (game
+       info +0x1f8, +0xf3): nonzero on success. */
+    int (*load)(void *context, void *world);
+    int (*check)(void *context, void *world);
+    void (*delete_world)(void *context, void *world);     /* world +0xa0(1) */
+    void (*cursor)(void *context, int wait);              /* 0x0041bd60 / 0x0041bdc0 */
+    void (*status)(void *context, int32_t text_id);       /* 0x00500390(id, 0, -1) */
+    void (*status_close)(void *context);                  /* 0x005003e0 */
+} AoeGameRorWorldOpsRor;
+
+/* 0x005011e0: without a world one is made and loaded; a failed load
+   deletes it again. 1 when a world is there. 0x00501140: under the wait
+   cursor and status 0x44d, any world is deleted, a new one made, asked
+   its +0xac check and deleted; returns the check (0 when none made). */
+int aoe_game_ror_ensure_world_ror(AoeGameRorWorldOpsRor *ops);
+int aoe_game_ror_check_world_ror(AoeGameRorWorldOpsRor *ops);
+
 /* 0x004fe490: the game's dialogs and screens deleted
    (`remove(name)`, 0x00451df0), the game screen too when `all`. */
 void aoe_game_ror_delete_screens_ror(void (*remove)(void *context, const char *name),
@@ -264,5 +286,125 @@ typedef struct {
 } AoeGameRorEndOpsRor;
 int aoe_game_ror_quit_session_ror(const AoeGameRorEndOpsRor *ops);
 void aoe_game_ror_end_session_ror(const AoeGameRorEndOpsRor *ops);
+
+
+/* The debug run log (c:\aoerun.txt). */
+typedef struct {
+    void *context;
+    int enabled;  /* 0x00580db0 */
+    int opened;   /* 0x007c0650: the first line truncates the file */
+    void *(*open)(void *context, const char *path, const char *mode); /* 0x005263f1 */
+    void (*write)(void *context, void *file, const char *text);        /* 0x00526875 */
+    void (*close)(void *context, void *file);                          /* 0x005262f0 */
+    /* time() then ctime() (0x0052668c, 0x00528deb). */
+    void (*now_text)(void *context, char *out, int32_t size);
+} AoeGameRorRunLogRor;
+
+/* 0x004fdea0(text, stamped): when enabled, opens the log ("w" the first
+   time, "a" after; nothing when that fails) and writes "<time> - text\n"
+   (the time text cut to 24 characters) when `stamped`, else "text\n". */
+void aoe_game_ror_run_log_ror(AoeGameRorRunLogRor *log, const char *text, int32_t stamped);
+
+/* +0x64 0x005065e0: returns 1, the same code as the base default
+   0x004172b0 (aoe_game_default_true_ror in game_base.h). */
+
+/* Destructor 0x004fe220 (the scalar deleting form 0x004fe200 frees the
+   object afterwards): +0x1250 and +0x1b0 cleared, the video window
+   (+0x1dc) destroyed, 0x004fe490 with `all`, then the 28 named screens
+   below closed (0x00451df0), the five archives released (0x0046b1d0:
+   sounds, graphics, Terrain, Border, Interfac .drs), the language
+   library (0x007c0634) freed and the base destructor 0x00416e40 run. */
+typedef struct {
+    void *context;
+    int32_t field_1250;         /* +0x1250 */
+    int32_t mode;               /* +0x1b0 */
+    uint32_t video_window;      /* +0x1dc */
+    void **game_screen;         /* 0x004fe490's game screen slot */
+    uint32_t *language_library; /* global 0x007c0634 */
+    void (*destroy_window)(void *context, uint32_t window);
+    void (*remove_screen)(void *context, const char *name);  /* 0x00451df0 */
+    void (*close_archive)(void *context, const char *name);  /* 0x0046b1d0 */
+    void (*free_library)(void *context, uint32_t library);
+    void (*base_destroy)(void *context);                     /* 0x00416e40 */
+} AoeGameRorDestroyOpsRor;
+void aoe_game_ror_destroy_ror(AoeGameRorDestroyOpsRor *ops);
+
+/* 0x00502a40(name): the name is copied to +0xae8, "Scenario Editor
+   Screen" closed, vtable +0xc(0); 1 when 0x00502ad0 (the editor screen)
+   opens it; otherwise 0x00504e50(name, 0), and when that fails the main
+   menu (0x00500c60), and when that fails too 0x00419930. Returns 0. */
+typedef struct {
+    void *context;
+    char scenario_name[0x104];  /* +0xae8 */
+    void (*remove_screen)(void *context, const char *name);  /* 0x00451df0 */
+    void (*set_state)(void *context, int32_t state);         /* vtable +0xc */
+    int (*open_editor)(void *context, const char *name);     /* 0x00502ad0 */
+    int (*fallback)(void *context, const char *name, int32_t flag); /* 0x00504e50 */
+    int (*main_menu)(void *context);                         /* 0x00500c60 */
+    void (*give_up)(void *context);                          /* 0x00419930 */
+} AoeGameRorEditorOpsRor;
+int aoe_game_ror_open_editor_ror(AoeGameRorEditorOpsRor *ops, const char *name);
+
+/* 0x00506300 (from 0x00500740): with a video window up (+0xc00): when the
+   display mode was switched (+0xc08), the mode is restored
+   (0x00437370(+0xc10, +0xc14, 8)), the primary blanked (0x00437490), the
+   palette (+0xc18) set (0x00438170), +0xc08 cleared, the lost-surface
+   check and restore flags (0x004374d0, 0x00437610), 0x004197b0 and the
+   global 0x00580e20 set to 1. Then always: blank, palette, 0x0041c290,
+   the main window (+0x10) invalidated, vtable +0xc(2), vtable +0xb0, the
+   arrow cursor set (0x00419d40) and shown (0x00419bb0); +0xc00 cleared. */
+typedef struct {
+    void *context;
+    int32_t video_up;           /* +0xc00 */
+    int32_t mode_switched;      /* +0xc08 */
+    int32_t width, height;      /* +0xc10, +0xc14 */
+    void *palette;              /* +0xc18 */
+    int32_t *redraw_flag;       /* global 0x00580e20 */
+    /* step ids: see AOE_GAME_ROR_VSTEP_* */
+    void (*step)(void *context, int32_t id, int32_t a, int32_t b);
+} AoeGameRorVideoCloseOpsRor;
+enum {
+    AOE_GAME_ROR_VSTEP_SET_MODE = 1,  /* 0x00437370(a, b, 8) */
+    AOE_GAME_ROR_VSTEP_BLANK,         /* 0x00437490 */
+    AOE_GAME_ROR_VSTEP_PALETTE,       /* 0x00438170(palette) */
+    AOE_GAME_ROR_VSTEP_CHECK_LOST,    /* 0x004374d0 */
+    AOE_GAME_ROR_VSTEP_CLEAR_RESTORED,/* 0x00437610 */
+    AOE_GAME_ROR_VSTEP_4197B0,        /* 0x004197b0 */
+    AOE_GAME_ROR_VSTEP_41C290,        /* 0x0041c290 */
+    AOE_GAME_ROR_VSTEP_INVALIDATE,    /* InvalidateRect(+0x10, NULL, 1) */
+    AOE_GAME_ROR_VSTEP_STATE,         /* vtable +0xc(a) */
+    AOE_GAME_ROR_VSTEP_B0,            /* vtable +0xb0 */
+    AOE_GAME_ROR_VSTEP_ARROW_CURSOR,  /* LoadCursorA(IDC_ARROW), 0x00419d40 */
+    AOE_GAME_ROR_VSTEP_SHOW_CURSOR    /* 0x00419bb0 */
+};
+void aoe_game_ror_close_video_ror(AoeGameRorVideoCloseOpsRor *ops);
+
+/* 0x00506130: the video window's set-up (1 at once when +0xc00 is set):
+   "Blank Screen" shown (0x00451be0(name, 0)), 0x00419c20, double size
+   (+0xc04) 1, changed (+0xc08) and 16-bit (+0xc0c) 0, the palette
+   (+0xc18) taken from the draw system (+0x48 +8). In full screen (draw
+   system +0x479 == 2): the cursor hidden (SetCursor(NULL), class cursor
+   0), 0x004498c0, the old size (+0x2c, +0x30) kept in +0xc10/+0xc14, and
+   unless the "8BITVIDEO" switch is given: 640x480x16 when available
+   (0x00436f70) is set (0x00437370; success also sets 16-bit), else (and
+   when the screen is not 640 wide) 640x480x8 likewise, each logged
+   (0x0042c330). Then the result logged, vtable +0xc(1), +0xac, +0xc00 1.
+   Returns 1. */
+typedef struct {
+    void *context;
+    int32_t video_up, double_size, mode_switched, mode_16bit; /* +0xc00..+0xc0c */
+    int32_t old_width, old_height;                            /* +0xc10, +0xc14 */
+    int full_screen;          /* draw system +0x479 == 2 */
+    int32_t screen_width, screen_height; /* draw system +0x2c, +0x30 */
+    int eight_bit_switch;     /* 0x0041bfe0("8BITVIDEO") */
+    void (*prepare)(void *context);      /* "Blank Screen", 0x00419c20, palette */
+    void (*hide_cursor)(void *context);  /* SetCursor, SetClassLongA, 0x004498c0 */
+    int (*mode_available)(void *context, int32_t w, int32_t h, int32_t bits); /* 0x00436f70 */
+    int (*set_mode)(void *context, int32_t w, int32_t h, int32_t bits);       /* 0x00437370 */
+    void (*log)(void *context, const char *text);                            /* 0x0042c330 */
+    void (*state)(void *context, int32_t state);                             /* vtable +0xc */
+    void (*after)(void *context);                                            /* vtable +0xac */
+} AoeGameRorVideoOpenOpsRor;
+int aoe_game_ror_open_video_ror(AoeGameRorVideoOpenOpsRor *ops);
 
 #endif

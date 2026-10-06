@@ -50,7 +50,8 @@ typedef struct {
 } AoeSpriteDrawQueueEntry;
 
 /* The view's sprite list (RoR 1.0a disc, view +0x338; constructor
-   0x00518a80, reset 0x0051917e, add 0x00518d90). Sprite parts drawn during
+   0x00518a80 = patched 0x00516110, reset 0x0051917e, add 0x00518d90 =
+   patched 0x00516390). Sprite parts drawn during
    the terrain tile walk are queued and drawn after all terrain (view loop
    0x00515844 / 0x0051606f):
    - row key: the global the live draw 0x004a8a60 sets before its
@@ -95,7 +96,7 @@ const uint8_t *aoe_sprite_draw_transform_table_ror(
     const DatGraphic *graphic, const uint8_t *selected_table,
     AoeSpriteFixedColorTableRor fixed_table, void *fixed_context);
 
-/* RoR 0x00415dc0 -> disc 0x00416190 (patched 0x00415b30)/disc 0x004166e0 (patched 0x00416050) -> 0x004a7110 draw plan.
+/* RoR 0x00415dc0 -> disc 0x00416190 (patched 0x00415b30)/disc 0x004166e0 (patched 0x00416050) -> disc 0x004a7110 (patched 0x004a5920) draw plan.
    It applies static-instance offsets to both coordinate pairs, selects the
    secondary pair for graphic layer < 11 and primary otherwise, and expands
    direct delta graphics with their angle filter and offsets. If parts is

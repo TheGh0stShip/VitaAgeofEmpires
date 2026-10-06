@@ -136,3 +136,74 @@ AoeSpriteInstance *aoe_sprite_instance_delete_ror(AoeSpriteInstance *instance, u
     if (instance && (flags & 1)) free(instance);
     return instance;
 }
+
+typedef struct {
+    AoeSpritePartDrawFn draw;
+    void *context;
+    int32_t frame;
+} SpritePartAdapter;
+
+static void sprite_part_adapter(void *context, const DatGraphic *graphic,
+                                int32_t angle, int32_t x, int32_t y) {
+    SpritePartAdapter *a = (SpritePartAdapter *)context;
+    a->draw(a->context, graphic, angle, a->frame, x, y);
+}
+
+static int32_t sprite_draw_frame(const AoeSpriteInstance *instance) {
+    return instance->kind == 2 ? instance->animation.frame : 0;
+}
+
+int aoe_sprite_instance_draw_top_ror(AoeSpriteInstance *instance,
+                                     int16_t angle, int32_t x, int32_t y,
+                                     AoeSpritePartDrawFn draw,
+                                     void (*play)(void *context,
+                                                  int16_t sound_id),
+                                     void *context) {
+    SpritePartAdapter a;
+    int drawn;
+    if (!instance || !instance->graphic || !draw) return 0;
+    a.draw = draw; a.context = context; a.frame = sprite_draw_frame(instance);
+    if (instance->kind != 2) {
+        x += instance->offset_x;
+        y += instance->offset_y;
+    }
+    drawn = aoe_graphic_draw_layer20_ror(instance->graphic, angle, x, y,
+                                         sprite_part_adapter, &a);
+    if (instance->kind == 2 && instance->animation.frame_changed) {
+        if (play)
+            aoe_graphic_frame_sounds(instance->graphic,
+                                     instance->animation.previous_frame,
+                                     instance->animation.frame, angle, play,
+                                     context);
+        instance->animation.frame_changed = 0;
+    }
+    return drawn;
+}
+
+int aoe_sprite_instance_draw_lower_ror(const AoeSpriteInstance *instance,
+                                       int16_t angle, int32_t x, int32_t y,
+                                       uint8_t skip_layer,
+                                       AoeSpritePartDrawFn draw,
+                                       void *context) {
+    SpritePartAdapter a;
+    if (!instance || !instance->graphic || !draw) return 0;
+    a.draw = draw; a.context = context; a.frame = sprite_draw_frame(instance);
+    if (instance->kind != 2) {
+        x += instance->offset_x;
+        y += instance->offset_y;
+    }
+    return aoe_graphic_draw_lower_layers_ror(instance->graphic, angle, x, y,
+                                             skip_layer, sprite_part_adapter,
+                                             &a);
+}
+
+int aoe_sprite_instance_bounds_ror(const AoeSpriteInstance *instance,
+                                   int16_t angle,
+                                   AoeGraphicFrameBoundsFn bounds,
+                                   void *context, int16_t *x0, int16_t *y0,
+                                   int16_t *x1, int16_t *y1) {
+    if (!instance) return 0;
+    return aoe_graphic_bounds_ror(instance->graphic, angle,
+                                  sprite_draw_frame(instance), bounds, context,
+                                  x0, y0, x1, y1);
+}

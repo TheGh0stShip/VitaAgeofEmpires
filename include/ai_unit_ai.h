@@ -213,6 +213,19 @@ typedef struct {
 void aoe_ai_unit_ai_init_ror(AoeAiUnitAiRor *ai, int kind,
                              const AoeAiUnitAiOpsRor *ops);
 
+/* 0x004afbe0 (vtables 0x00547fa0 / 0x0054820c +0x254, the unit's AI
+   factory into +0x74): which unit AI (a 0x134-byte object; its second
+   constructor argument goes to `arg`) a unit of template class / id
+   gets. Class 1: none for ids 99 and 10, else KIND_5644 with 5. Class 2
+   CLASS_2; 3 and 0x1b KIND_5724 for ids 0x4f, 199, 0x45, 0x116, 0x17f,
+   0x17c, else KIND_5804; 4 CLASS_4; 9 CLASS_9; 10 by id: 0x9d CLASS_9,
+   0x30 TYPE_30, 0x7e TYPE_7E, else CLASS_10; 0x12 PRIEST; 0x14 CLASS_14;
+   0x15 CLASS_15. Classes 5, 7, 8, 0xb, 0xe..0x10 and 0x1d..0x21 get none;
+   every other class KIND_5564. All but class 1 pass 10. Returns 0 for
+   none (+0x74 left untouched; only a failed allocation stores NULL). */
+int aoe_ai_unit_ai_kind_for_unit_ror(int16_t class_code, int16_t id,
+                                     int *kind, int32_t *arg);
+
 /* Base unit AI methods (vtable 0x00542d10).
    - +0x34 = 0x004114b0: after refreshing the nearby lists, the band-3
      object (0x00414f40) our unit damages most, the first kept on ties;
@@ -227,7 +240,42 @@ void aoe_ai_unit_ai_init_ror(AoeAiUnitAiRor *ai, int kind,
 int32_t aoe_ai_unit_ai_most_damaged_ror(const AoeAiUnitAiOpsRor *ops, float *out);
 int32_t aoe_ai_unit_ai_weakest_ror(const AoeAiUnitAiOpsRor *ops, float *out);
 int32_t aoe_ai_unit_ai_report_nearby_ror(AoeAiUnitAiOrderRor *ai, const AoeAiUnitAiOpsRor *ops);
+/* 0x004115f0: the nearest object of the +0x60 list (group_count entries,
+   each read through group_at, which grows the list to hold it): a world
+   object (world_type) at the smallest distance_to, the first kept on
+   ties; -1 for none, `out` getting that distance (0.0 without one). */
+int32_t aoe_ai_unit_ai_nearest_listed_ror(const AoeAiUnitAiOpsRor *ops, float *out);
+/* 0x00411740(type_class, mode, state, type_id, out): after refreshing the
+   nearby lists (vtable +0x20), the nearest (distance byte) object of the
+   nearby bands other than our unit, below state 7 and matching each filter
+   that is not -1 (class, type, state). Mode 0 looks in bands 1 and 2,
+   1 in band 3, 2 in band 4, 3 in band 1, anything else in all five. The
+   global 0x00561464 gets the number of players 1..8 seen in any entry of
+   the five bands (`players`, when given); `out` gets the distance (-1
+   without a hit). */
+int32_t aoe_ai_unit_ai_nearest_nearby_ror(const AoeAiUnitAiOpsRor *ops, int32_t type_class,
+                                          int32_t mode, int32_t state, int32_t type_id,
+                                          int32_t *out, int32_t *players);
 int32_t aoe_ai_unit_ai_base_d4_ror(const AoeAiUnitAiOpsRor *ops, int32_t first);
+
+/* Base vtable +0xd0 = 0x004144c0 (a message of three dwords: value, ID,
+   type): only with a play (+0x12c) whose play entry (+0x190, 0x0040e950)
+   and rule (+0x1b8, 0x0040cca0) exist and a type-500 message. The play's
+   +0x1bc takes the value; then each of the rule's three triggers
+   (0x0040c940) of kind 5, or of kind 4 whose value (+4) is the category
+   of the message's ID (0x0040d440), runs the play's trigger
+   handler (not translated yet; `run`) with (trigger +0xd, 0). */
+typedef struct {
+    void *context;
+    int (*play_ready)(void *context);
+    void (*set_play_value)(void *context, int32_t value);
+    /* Trigger i (0..2): its kind byte, value (+4) and index byte (+0xd);
+       0 when absent. */
+    int (*trigger)(void *context, int i, uint8_t *kind, uint32_t *value, uint8_t *index);
+    uint8_t (*category)(void *context, int32_t id);
+    void (*run)(void *context, uint8_t index, int32_t arg); /* the trigger handler */
+} AoeAiUnitAiPlayOpsRor;
+void aoe_ai_unit_ai_play_message_ror(const int32_t msg[3], const AoeAiUnitAiPlayOpsRor *ops);
 
 /* Fixed overrides: 0x004e3fa0 (vtable +0x54) 1, 0x004e4160 (+0xd4) 5,
    0x004e4df0 (+0xd8) 9. */

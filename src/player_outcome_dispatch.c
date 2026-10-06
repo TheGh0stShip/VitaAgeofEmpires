@@ -1,5 +1,6 @@
 #include "player_outcome_dispatch.h"
 
+#include <stdlib.h>
 #include <limits.h>
 
 static int64_t signed_32(uint32_t value) {
@@ -617,4 +618,24 @@ int aoe_outcome_condition_kind12_patched_ror(AoeOutcomeManager *manager,
     r = aoe_outcome_condition_kind12(manager, condition);
     if (!r) condition->status = before;
     return r;
+}
+
+int aoe_outcome_dispatch_condition_tech_ror(void *user, AoeOutcomeCondition *condition,
+                                            int16_t (*research_state)(void *context,
+                                                                      int16_t tech),
+                                            void *context) {
+    AoeOutcomeDispatcher *dispatch = user;
+    if (!condition || condition->kind != 100)
+        return aoe_outcome_dispatch_condition(user, condition);
+    if (dispatch && dispatch->manager && dispatch->manager->owner && condition->status == 0 &&
+        research_state(context, (int16_t)condition->progress_target_20) == 3)
+        condition->status = 2;
+    return 1;
+}
+
+AoeOutcomeManager *aoe_outcome_manager_create_for_player_ror(AoeOutcomePlayerRef *player) {
+    AoeOutcomeManager *manager = (AoeOutcomeManager *)calloc(1, sizeof *manager);
+    if (manager) manager->owner = player;
+    player->outcome34 = manager;
+    return manager;
 }

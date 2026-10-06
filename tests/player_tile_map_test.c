@@ -56,5 +56,27 @@ int main(void) {
     m.player = &m;
     aoe_player_tile_map_free_ror(&m);
     assert(!m.data && !m.rows && !m.player);
+    {
+        /* 0x00517490 */
+        uint8_t in[] = {3, 0, 0, 0, 2, 0, 0, 0, 4, 0, 0, 0, 2, 0, 1, 2, 3, 4, 5, 6};
+        AoeOutcomeStream r = {in, sizeof in, 0, 0};
+        AoePlayerTileMapRor l;
+        int pa, pb, pc;
+        void *players[3] = {&pa, &pb, &pc};
+        assert(aoe_player_tile_map_load_ror(&l, 77, players, 3, 7.0f, &r) == 2);
+        assert(r.pos == sizeof in && l.width == 3 && l.height == 2 && l.explored == 4 && l.total == 6);
+        assert(l.player == &pc && l.field_c == 77 && l.rows[1][2] == 6 && l.rows[0][0] == 1);
+        assert(l.mask == 0x40000u);
+        aoe_player_tile_map_free_ror(&l);
+        /* Before 6.7 no explored count. */
+        {
+            uint8_t old[] = {0, 0, 0, 0, 5, 0, 0, 0, 1, 0};
+            AoeOutcomeStream o = {old, sizeof old, 0, 0};
+            assert(aoe_player_tile_map_load_ror(&l, 0, players, 3, 6.5f, &o) == 1);
+            assert(o.pos == sizeof old && !l.data && !l.rows && l.explored == 0 && l.player == &pb && l.total == 0);
+        }
+        r.pos = 0; r.size = 18;
+        assert(aoe_player_tile_map_load_ror(&l, 0, players, 3, 7.0f, &r) == -1 && !l.data);
+    }
     return 0;
 }

@@ -59,6 +59,12 @@ typedef struct {
    +0x11dc64 list freed and emptied. The two global instances register it
    with atexit (0x00458500 for 0x006a1cc0, 0x00458550 for 0x00583bc8). */
 void aoe_path_release_ror(AoePathfinderRor *path);
+/* 0x004586d0, the deleting destructor: the destructor above and, with bit
+   0 of `flags`, the allocator's free of the object. Returns the object
+   (freed or not, as the original does). The static initialisers
+   0x004584d0 / 0x00458520 only run the global constructors (0x004584e0 /
+   0x00458530) and register the destructor above with atexit. */
+AoePathfinderRor *aoe_path_delete_ror(AoePathfinderRor *path, uint8_t flags);
 
 /* 0x004587e0: the penalty byte of cell [first * 255 + second] (0 without
    storage or outside the grid; the original reads unchecked). */

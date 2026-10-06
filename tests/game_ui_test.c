@@ -35,6 +35,57 @@ static int chat_cmd(void *c, int16_t pl, const char *t) { (void)c; (void)pl; ++c
 static void play(void *c, int32_t i) { (void)c; if (i == 2) ++sounds; }
 static void show_chat(void *c, const char *t) { (void)c; snprintf(shown, sizeof(shown), "%s", t); }
 static void send_chat(void *c, const char *t) { (void)c; snprintf(sent, sizeof(sent), "%s", t); }
+/* The send message dialog's comm: slot 1 is ours (player 1), slot 2 a
+   connected human (player 2), slot 3 a computer (player 3), slot 4 unused. */
+static int sm_recip[10], sm_flags;
+static int32_t sm_slot_player(void *c, int32_t s) { (void)c; return s >= 1 && s <= 3 ? s : 0; }
+static int32_t sm_slots(void *c) { (void)c; return 4; }
+static int32_t sm_status(void *c, int32_t s) { (void)c; return s <= 2 ? 2 : 0; }
+static int32_t sm_own(void *c) { (void)c; return 1; }
+static const char *sm_name(void *c, int32_t s) { (void)c; return s == 2 ? "Bob" : "P"; }
+static int sm_computer(void *c, int32_t p) { (void)c; return p == 3; }
+static void sm_civ(void *c, int32_t p, char *o, uint32_t n) { (void)c; snprintf(o, n, "civ%d", (int)p); }
+static int sm_rel_a(void *c, int32_t me, int32_t p) { (void)c; (void)me; (void)p; return 1; }
+static int sm_rel_b(void *c, int32_t me, int32_t p) { (void)c; (void)me; (void)p; return 0; }
+static int sm_get(void *c, int32_t s) { (void)c; return sm_recip[s]; }
+static void sm_set(void *c, int32_t s, int on) { (void)c; sm_recip[s] = on; }
+static int sm_net(void *c) { (void)c; return 1; }
+static int32_t dp_count(void *c) { (void)c; return 4; }
+static int32_t dp_type(void *c, int32_t p) { (void)c; return p == 3 ? 2 : 0; }
+static const char *dp_name(void *c, int32_t p) { (void)c; return p == 2 ? "Ann" : "X"; }
+static int32_t dp_stance(void *c, int32_t me, int32_t p) { (void)c; assert(me == 1); return p == 2 ? 0 : 3; }
+static int dp_allied(void *c, int32_t p) { (void)c; return p == 1; }
+static float dp_attr(void *c, int32_t p, int32_t i) { (void)c; (void)p; return i == 1 ? 200.0f : i == 46 ? 0.25f : 0.0f; }
+static int dp_market(void *c, int32_t p, int32_t t) { (void)c; (void)p; return t == 0x54; }
+/* The diplomacy dialog's OK commands and draw (0x004323b0 / 0x00433230). */
+static int dg_stances, dg_gifts, dg_icons, dg_fill;
+static void dg_set_stance(void *c, int32_t me, int32_t p, uint8_t st) {
+    (void)c; assert(me == 1 && p == 3 && st == 0); ++dg_stances;
+}
+static void dg_allied(void *c, int32_t me, int on) { (void)c; (void)me; (void)on; assert(0); }
+static void dg_give(void *c, int32_t me, int32_t p, int r, float a, float fee) {
+    (void)c; assert(me == 1 && p == 2 && r == 1 && a == 100.0f && fee == 0.25f); ++dg_gifts;
+}
+static const uint8_t dg_tab[4];
+static char dg_shapes[2];
+static int dg_fail, dg_freed;
+static void *dg_load(void *c, const char *f, int32_t id) {
+    (void)c;
+    if (strcmp(f, "tradicon.shp") == 0 && id == 50732) return &dg_shapes[0];
+    if (strcmp(f, "dlg_plbn.shp") == 0 && id == 50746 && !dg_fail) return &dg_shapes[1];
+    return NULL;
+}
+static void dg_free(void *c, void *s) { (void)c; assert(s); ++dg_freed; }
+static const uint8_t *dg_table(void *c, int32_t p, int16_t *colour) {
+    (void)c; if (p != 2) return NULL; *colour = 2; return dg_tab;
+}
+static void dg_set_fill(void *c, uint8_t colour) { (void)c; dg_fill = colour; }
+static void dg_icon(void *c, AoeUiPanelRor *p, void *pic, int32_t x, int32_t y, const uint8_t *t) {
+    (void)c; assert(pic && t == dg_tab && x == p->x + 10 && y == p->y + 0x50 + 30); ++dg_icons;
+}
+static void sm_flag(void *c, AoeUiPanelRor *p, int32_t pl, int32_t x, int32_t y) {
+    (void)c; (void)pl; assert(x == p->x + 50 && y == p->y + 40 + 30 * sm_flags); ++sm_flags;
+}
 
 /* A fake native edit window for the chat line. */
 static char edit_text[128];
@@ -260,6 +311,35 @@ static void delete_file(void *c, const char *path) { (void)c; ++deletes; snprint
 static const char *scen_dir(void *c) { (void)c; return "scen/"; }
 static void editor_load(void *c, const char *f, int32_t flag) { (void)c; (void)flag; snprintf(loaded, sizeof loaded, "%s", f ? f : ""); }
 
+static int cd_creates, cd_setups, cd_ok;
+static char cd_saved[64];
+static const char *cd_name(void *c) { (void)c; return "Saved Game"; }
+static void cd_set_name(void *c, const char *n) { (void)c; snprintf(cd_saved, sizeof(cd_saved), "%s", n); }
+static int cd_create(void *c, const char *n) { (void)c; (void)n; ++cd_creates; return cd_ok; }
+static void cd_open_setup(void *c) { (void)c; ++cd_setups; }
+static int32_t js_slots[10] = {9, 9, 9, 9, 9, 9, 9, 9, 9, 9};
+static int32_t js_again = -1, js_line = -1, js_dropped, js_released, js_join_ok;
+static uint32_t js_ms;
+static void js_slot(void *c, int32_t i, int32_t v) { (void)c; js_slots[i] = v; }
+static int32_t js_enum(void *c, int32_t again) { (void)c; js_again = again; return 2; }
+static void js_info(void *c, int32_t i, const char **n, int32_t *a, int32_t *b) {
+    (void)c; *n = i ? "Bob" : "Ann"; *a = i + 1; *b = 8;
+}
+static int js_join(void *c, int32_t line) { (void)c; js_line = line; return js_join_ok; }
+static void js_drop(void *c, int32_t r) { (void)c; js_dropped = r; }
+static void js_release(void *c) { (void)c; ++js_released; }
+static uint32_t js_now(void *c) { (void)c; return js_ms; }
+static int ms_started, ms_started_service = -9, ms_zone_runs;
+static char ms_saved[64], ms_saved_service[64];
+static const char *ms_name(void *c) { (void)c; return "Ann"; }
+static void ms_set_name(void *c, const char *n) { (void)c; snprintf(ms_saved, sizeof(ms_saved), "%s", n); }
+static const char *ms_service_name(void *c) { (void)c; return "TCP"; }
+static void ms_set_service(void *c, const char *n) { (void)c; snprintf(ms_saved_service, sizeof(ms_saved_service), "%s", n); }
+static int32_t ms_services(void *c) { (void)c; return 3; }
+static const char *ms_service(void *c, int32_t i) { (void)c; return i == 0 ? "Modem" : i == 1 ? NULL : "TCP"; }
+static void ms_start(void *c, const char *n, int32_t i) { (void)c; (void)n; ++ms_started; ms_started_service = i; }
+static int ms_zone(void *c, char *o, uint32_t n) { (void)c; snprintf(o, n, "browser zone"); return 1; }
+static void ms_run_zone(void *c, const char *cmd) { (void)c; (void)cmd; ++ms_zone_runs; }
 int main(void) {
     AoeUiPlatformRor pf = {0};
     static AoeUiSystemRor sys;
@@ -450,6 +530,186 @@ int main(void) {
         qp = &q->dialog.ez.panel;
         qp->vt->mouse_down(qp, 1, 0, 0, 0, 0);
         assert(!aoe_ui_system_find_ror(&sys, "Send Quick Message Dialog"));
+    }
+    /* The send message dialog (0x00434fe0): a row per used slot, a box
+       only for the other connected human; the radios and boxes drive the
+       recipient flags (0x00435bc0); Enter sends and clears, Send closes. */
+    {
+        AoeSendMessageDialogRor *d = calloc(1, sizeof(*d));
+        AoeUiPanelRor *dp;
+        int (*was_net)(void *) = ops.networked;
+        ops.slot_player = sm_slot_player; ops.comm_slots = sm_slots;
+        ops.comm_slot_status = sm_status; ops.comm_own_slot = sm_own;
+        ops.comm_slot_name = sm_name; ops.player_is_computer = sm_computer;
+        ops.player_civ_name = sm_civ; ops.player_relation_a = sm_rel_a;
+        ops.player_relation_b = sm_rel_b; ops.recipient = sm_get;
+        ops.set_recipient = sm_set; ops.draw_player_flag = sm_flag;
+        ops.networked = sm_net;
+        game.mode = 0; game.view_player = 1; settings.flag_97e = 1;
+        sm_recip[2] = 1;
+        assert(aoe_send_message_dialog_init_ror(d, &ui, &screen->panel));
+        dp = &d->dialog.ez.panel;
+        assert(dp->width == 520 && dp->height == 465);
+        assert(d->slots[0] == 1 && d->slots[1] == 2 && d->slots[2] == 3 && d->slots[3] == 0);
+        assert(!d->checks[0] && d->checks[1] && !d->checks[2]);
+        assert(strcmp(d->names[1]->lines->text, "Bob") == 0 &&
+               strcmp(d->civs[2]->lines->text, "civ3") == 0);
+        assert(aoe_ui_button_state_ror(d->checks[1]) == 1 &&
+               aoe_ui_button_state_ror(d->radios[3]) == 1 &&
+               d->edit->max == 0x42 && d->send->hotkey == 0x1b &&
+               dp->current == &d->edit->panel);
+        dp->vt->action(dp, &d->radios[1]->panel, 1, 0, 0);
+        assert(aoe_ui_button_state_ror(d->checks[1]) == 0 && sm_recip[2] == 0);
+        dp->vt->action(dp, &d->radios[0]->panel, 1, 0, 0);
+        assert(sm_recip[2] == 1);
+        aoe_ui_button_set_state_ror(d->radios[0], 1);
+        aoe_ui_button_set_state_ror(d->radios[3], 0);
+        dp->vt->action(dp, &d->checks[1]->panel, 1, 0, 0);
+        assert(aoe_ui_button_state_ror(d->radios[3]) == 1 &&
+               aoe_ui_button_state_ror(d->radios[0]) == 0);
+        dp->vt->draw(dp);
+        assert(sm_flags == 3);
+        sent[0] = 0;
+        snprintf(edit_text, sizeof(edit_text), "hi");
+        dp->vt->action(dp, &d->edit->panel, 0, 0, 0);
+        assert(strcmp(sent, "hi") == 0 && edit_text[0] == 0 &&
+               aoe_ui_system_find_ror(&sys, "Send Message Dialog"));
+        snprintf(edit_text, sizeof(edit_text), "bye");
+        dp->vt->action(dp, &d->send->panel, 1, 0, 0);
+        assert(strcmp(sent, "bye") == 0 &&
+               !aoe_ui_system_find_ror(&sys, "Send Message Dialog"));
+
+        ops.networked = was_net;
+    }
+    /* The diplomacy dialog (0x00431470): stances, tribute buttons only
+       for a living other player, the stock left per column, exhausted
+       columns disabled. */
+    {
+        AoeDiplomacyDialogRor *d = calloc(1, sizeof(*d));
+        AoeUiPanelRor *dp;
+        int (*was_net)(void *) = ops.networked;
+        ops.networked = NULL;
+        ops.player_count = dp_count; ops.player_type = dp_type;
+        ops.player_name = dp_name; ops.player_stance = dp_stance;
+        ops.allied_victory = dp_allied; ops.player_attribute = dp_attr;
+        ops.has_building = dp_market;
+        game.mode = 0; game.view_player = 1;
+        assert(aoe_diplomacy_dialog_init_ror(d, &ui, &screen->panel));
+        dp = &d->dialog.ez.panel;
+        assert(dp->width == 625 && dp->height == 405 && d->own_row == 0);
+        assert(strcmp(d->names[1]->lines->text, "Ann") == 0 && !d->names[3]);
+        assert(!d->stances[0] && d->stances[3] && d->stances[6]);
+        assert(aoe_ui_button_state_ror(d->stances[3]) == 1 &&
+               aoe_ui_button_state_ror(d->stances[8]) == 1);
+        assert(d->gifts[0][1] && !d->gifts[0][0] && !d->gifts[0][2]);
+        assert(!d->gifts[0][1]->disabled && d->gifts[1][1]->disabled);
+        assert(strcmp(d->stocks[0]->lines->text, "200") == 0 &&
+               strcmp(d->stocks[1]->lines->text, "0") == 0);
+        assert(aoe_ui_button_state_ror(d->allied_victory) == 1 && d->ok && d->clear &&
+               d->cancel->hotkey == 0x1b && dp->current == &d->ok->panel);
+        assert(d->has_market && d->fee->panel.active && !d->notice->panel.active);
+        /* 0x004323b0: wood for Ann at 125 each (fee 25%), the rest partial;
+           Clear restores; OK sends the changed stance and the tribute.
+           0x00433230: the colour icon of each player with a table. */
+        {
+            const char *l1, *l2;
+            static int pic;
+            ops.set_stance = dg_set_stance; ops.set_allied_victory = dg_allied;
+            ops.give_tribute = dg_give; ops.player_colour_table = dg_table;
+            ops.set_fill_colour = dg_set_fill; ops.draw_colour_icon = dg_icon;
+            assert(dp->vt->action(dp, &d->gifts[0][1]->panel, 1, 0, 0) == 1);
+            assert(strcmp(d->stocks[0]->lines->text, "75") == 0);
+            aoe_ui_button_texts_ror(d->gifts[0][1], 0, &l1, &l2);
+            assert(l1 && strcmp(l1, "100") == 0 && !d->gifts[0][1]->disabled);
+            dp->vt->action(dp, &d->gifts[0][1]->panel, 1, 0, 0);
+            assert(strcmp(d->stocks[0]->lines->text, "0") == 0 && d->gifts[0][1]->disabled);
+            dp->vt->action(dp, &d->clear->panel, 1, 0, 0);
+            assert(strcmp(d->stocks[0]->lines->text, "200") == 0 && !d->gifts[0][1]->disabled &&
+                   d->tribute.given[1][2] == 0.0f);
+            dp->vt->action(dp, &d->gifts[0][1]->panel, 1, 0, 0);
+            d->colours = &pic;
+            dp->vt->draw(dp);
+            assert(dg_icons == 1 && dg_fill == 0x30);
+            aoe_ui_button_set_state_ror(d->stances[6], 1);
+            dp->vt->action(dp, &d->ok->panel, 1, 0, 0);
+            assert(dg_stances == 1 && dg_gifts == 1 &&
+                   !aoe_ui_system_find_ror(&sys, "Diplomacy Dialog"));
+            ops.set_allied_victory = NULL;
+        }
+        /* 0x00431470: tradicon.shp (50732) and dlg_plbn.shp (50746) loaded,
+           a failed load fails the dialog. */
+        ez_ops.load_shape = dg_load; ez_ops.free_shape = dg_free;
+        d = calloc(1, sizeof(*d));
+        assert(aoe_diplomacy_dialog_init_ror(d, &ui, &screen->panel));
+        assert(d->icons == &dg_shapes[0] && d->colours == &dg_shapes[1]);
+        aoe_ui_system_close_ror(&sys, "Diplomacy Dialog");
+        assert(dg_freed == 2);
+        dg_fail = 1;
+        d = calloc(1, sizeof(*d));
+        assert(!aoe_diplomacy_dialog_init_ror(d, &ui, &screen->panel));
+        d->dialog.ez.panel.vt->destroy(&d->dialog.ez.panel);
+        free(d);
+        assert(dg_freed == 3);
+        ez_ops.load_shape = NULL; ez_ops.free_shape = NULL;
+        d = calloc(1, sizeof(*d));
+        assert(aoe_diplomacy_dialog_init_ror(d, &ui, &screen->panel));
+        aoe_ui_system_close_ror(&sys, "Diplomacy Dialog");
+        /* Mode 5: no OK, Clear or tribute; the stances disabled. */
+        d = calloc(1, sizeof(*d));
+        game.mode = 5;
+        assert(aoe_diplomacy_dialog_init_ror(d, &ui, &screen->panel));
+        assert(!d->ok && !d->clear && !d->gifts[0][1] && d->stances[3]->disabled);
+        aoe_ui_system_close_ror(&sys, "Diplomacy Dialog");
+        game.mode = 0;
+        ops.networked = was_net;
+    }
+    /* The create dialog: the remembered name; a blank name keeps it
+       open; a failed create returns to the join screen; success opens
+       the MP setup screen and closes the join screen. */
+    {
+        AoeCreateDialogRor *c;
+        AoeUiPanelRor *cp;
+        AoeUiEzRor *join = calloc(1, sizeof(*join));
+        aoe_ui_ez_init_named_ror(join, &sys, &ez_ops, "Join Screen");
+        assert(aoe_ui_ez_setup_ror(join, &area, NULL, NULL, -1, 1, 0, 0, 0, 0, 0));
+        aoe_ui_system_show_ror(&sys, &join->panel, 0);
+        ops.mp_game_name = cd_name;
+        ops.set_mp_game_name = cd_set_name;
+        ops.create_mp_game = cd_create;
+        ops.open_mp_setup = cd_open_setup;
+        c = calloc(1, sizeof(*c));
+        assert(aoe_create_dialog_init_ror(c, &ui, &join->panel));
+        cp = &c->dialog.ez.panel;
+        assert(cp->width == 500 && cp->height == 0xe6 && c->edit->max == 0x29 &&
+               strcmp(edit_text, "Saved Game") == 0 && c->cancel->hotkey == 0x1b &&
+               cp->current == &c->edit->panel &&
+               strcmp(c->title->lines->text, "S9638") == 0);
+        snprintf(edit_text, sizeof(edit_text), "   ");
+        cp->vt->action(cp, &c->ok->panel, 1, 0, 0);
+        assert(cd_creates == 0 && aoe_ui_system_find_ror(&sys, "Create Dialog"));
+        snprintf(edit_text, sizeof(edit_text), "Room");
+        cd_ok = 0;
+        cp->vt->action(cp, &c->edit->panel, 0, 0, 0);
+        assert(cd_creates == 1 && strcmp(cd_saved, "Room") == 0 && cd_setups == 0 &&
+               !aoe_ui_system_find_ror(&sys, "Create Dialog") &&
+               aoe_ui_system_find_ror(&sys, "OKDialog"));
+        aoe_ui_system_close_ror(&sys, "OKDialog");
+        c = calloc(1, sizeof(*c));
+        assert(aoe_create_dialog_init_ror(c, &ui, &join->panel));
+        cp = &c->dialog.ez.panel;
+        cp->vt->action(cp, &c->cancel->panel, 1, 0, 0);
+        assert(cd_creates == 1 && !aoe_ui_system_find_ror(&sys, "Create Dialog") &&
+               sys.screen == &join->panel);
+        c = calloc(1, sizeof(*c));
+        assert(aoe_create_dialog_init_ror(c, &ui, &join->panel));
+        cp = &c->dialog.ez.panel;
+        snprintf(edit_text, sizeof(edit_text), "Room2");
+        cd_ok = 1;
+        cp->vt->action(cp, &c->ok->panel, 1, 0, 0);
+        assert(cd_creates == 2 && cd_setups == 1 &&
+               !aoe_ui_system_find_ror(&sys, "Create Dialog") &&
+               !aoe_ui_system_find_ror(&sys, "Join Screen"));
+        aoe_ui_system_show_ror(&sys, &screen->panel, 0);
     }
     /* About: the version line gets "a"; one copyright line when 9252 has
        text; the default product ID; Close goes back to the game. */
@@ -848,6 +1108,93 @@ int main(void) {
         assert(!strcmp(pif_added, "Dee") && camp_opens == 1);
         assert(!aoe_ui_system_find_ror(&sys, "New Name Dialog"));
         assert(!aoe_ui_system_find_ror(&sys, "Name Selection Screen"));
+    }
+    /* The join screen: comm slots set; sessions listed; a failed join
+       says so; a join waits, times out after 10 s, or opens the setup
+       screen when the host answers. */
+    {
+        AoeJoinScreenRor *j = calloc(1, sizeof *j);
+        AoeUiPanelRor *jp = &j->ez.panel;
+        ops.set_slot_state = js_slot;
+        ops.mp_enum_sessions = js_enum;
+        ops.mp_session_info = js_info;
+        ops.mp_join_session = js_join;
+        ops.mp_drop = js_drop;
+        ops.mp_release_sessions = js_release;
+        ops.now_ms = js_now;
+        ops.open_mp_setup = cd_open_setup;
+        assert(aoe_join_screen_init_ror(j, &ui, &area));
+        assert(js_slots[1] == 2 && js_slots[2] == 0 && js_slots[9] == 0 &&
+               jp->current == &j->refresh->panel && j->cancel->hotkey == 0x1b &&
+               strcmp(j->list->text.lines->text, "S9643") == 0);
+        jp->vt->action(jp, &j->refresh->panel, 1, 0, 0);
+        assert(j->sessions_made && j->count == 2 && js_again == 0 &&
+               aoe_ui_text_count_ror(&j->list->text) == 2 &&
+               strcmp(aoe_ui_text_line_ror(&j->list->text, 1), "Bob ( 2 / 8 )") == 0);
+        aoe_ui_text_select_ror(&j->list->text, 1);
+        js_join_ok = 0;
+        jp->vt->action(jp, &j->join->panel, 1, 0, 0);
+        assert(js_line == 1 && !j->joining && aoe_ui_system_find_ror(&sys, "OKDialog"));
+        aoe_ui_system_close_ror(&sys, "OKDialog");
+        js_join_ok = 1;
+        js_ms = 100;
+        jp->vt->action(jp, &j->list->text.panel, 3, 0, 0);
+        assert(j->joining && j->join_ms == 100);
+        js_ms = 10100;
+        jp->vt->handle_idle(jp);
+        assert(j->joining && js_dropped == 0);
+        js_ms = 10101;
+        jp->vt->handle_idle(jp);
+        assert(!j->joining && js_dropped == 5 && aoe_ui_system_find_ror(&sys, "OKDialog"));
+        aoe_ui_system_close_ror(&sys, "OKDialog");
+        assert(jp->vt->user(jp, 0x17b8, 0) == 0);
+        jp->vt->action(jp, &j->join->panel, 1, 0, 0);
+        assert(jp->vt->user(jp, 0x17b8, 0) == 1);
+        assert(cd_setups == 3 && js_released == 1 &&
+               !aoe_ui_system_find_ror(&sys, "Join Screen"));
+    }
+    /* The MP startup screen: the remembered name and service; the
+       Zone entry; errors; the Zone question; OK opens the join screen. */
+    {
+        AoeMpStartupScreenRor *ms = calloc(1, sizeof *ms);
+        AoeUiPanelRor *mp = &ms->ez.panel;
+        AoeUiTextRor *t;
+        ops.mp_player_name = ms_name;
+        ops.set_mp_player_name = ms_set_name;
+        ops.mp_service_name = ms_service_name;
+        ops.set_mp_service_name = ms_set_service;
+        ops.mp_services = ms_services;
+        ops.mp_service = ms_service;
+        ops.mp_start = ms_start;
+        ops.zone_command = ms_zone;
+        ops.run_zone = ms_run_zone;
+        ops.quit_program = quit_program;
+        settings.flag_97e = 1;
+        assert(aoe_mp_startup_screen_init_ror(ms, &ui, &area));
+        t = &ms->list->text;
+        assert(!aoe_settings_flag_97e_ror(&settings) && strcmp(edit_text, "Ann") == 0 &&
+               mp->current == &ms->name->panel && aoe_ui_text_count_ror(t) == 3 &&
+               aoe_ui_text_selected_id_ror(t) == 2 &&
+               strcmp(aoe_ui_text_line_ror(t, 2), "S9614") == 0);
+        snprintf(edit_text, sizeof(edit_text), "%s", "");
+        mp->vt->action(mp, &ms->ok->panel, 1, 0, 0);
+        assert(aoe_settings_flag_97e_ror(&settings) &&
+               aoe_ui_system_find_ror(&sys, "Name Error") && !ms_started);
+        mp->vt->action(mp, aoe_ui_system_find_ror(&sys, "Name Error"), 0, 0, 0);
+        assert(!aoe_ui_system_find_ror(&sys, "Name Error"));
+        snprintf(edit_text, sizeof(edit_text), "Cy");
+        aoe_ui_text_select_ror(t, 2);
+        mp->vt->action(mp, &ms->ok->panel, 1, 0, 0);
+        assert(aoe_ui_system_find_ror(&sys, "Start Zone") && !ms_started);
+        mp->vt->action(mp, aoe_ui_system_find_ror(&sys, "Start Zone"), 1, 0, 0);
+        assert(!aoe_ui_system_find_ror(&sys, "Start Zone") && !ms_zone_runs);
+        aoe_ui_text_select_ror(t, 0);
+        mp->vt->action(mp, &t->panel, 3, 0, 0);
+        assert(ms_started == 1 && ms_started_service == 0 && strcmp(ms_saved, "Cy") == 0 &&
+               strcmp(ms_saved_service, "Modem") == 0 &&
+               aoe_ui_system_find_ror(&sys, "Join Screen") &&
+               !aoe_ui_system_find_ror(&sys, "MP Startup Screen"));
+        aoe_ui_system_close_ror(&sys, "Join Screen");
     }
     /* The config dialog over the editor screen. */
     {

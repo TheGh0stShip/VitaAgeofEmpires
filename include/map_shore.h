@@ -171,4 +171,15 @@ int aoe_cliff_press_ror(AoeCliffTableRor *table, const AoeCliffOpsRor *ops,
                         int32_t x, int32_t y, int32_t a, int32_t b,
                         int32_t c, int32_t d);
 
+
+/* RoR map fields past the base record (map +0x8dd4, +0x8dd8, +0x8de0). */
+typedef struct {
+    int32_t v8dd4, v8dd8, v8de0;
+} AoeMapExtraRor;
+
+/* 0x004ed860 (map vtable +0x24, the base's empty 0x00446540): stores
+   `a` at +0x8dd4, `b` at +0x8dd8 and `d` at +0x8de0; `c` goes to the
+   empty 0x004ed890 and is dropped. */
+void aoe_map_extra_set_ror(AoeMapExtraRor *m, int32_t a, int32_t b, int32_t c, int32_t d);
+
 #endif

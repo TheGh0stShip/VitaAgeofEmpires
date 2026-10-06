@@ -61,6 +61,12 @@ static void type_name_tests(void) {
     assert(!strcmp(aoe_action_type_name_ror(0, 9, out), "None") && !strcmp(out, "None"));
     assert(!strcmp(aoe_action_type_name_ror(1, 9, out), "Attack"));
     assert(!strcmp(aoe_action_type_name_ror(1, 0x15, out), "Make"));
+    /* 0x004b4c80: the tribe list names its own types, defers the rest. */
+    assert(!strcmp(aoe_tribe_action_type_name_ror(1, 0x6e, out), "Hunt") && !strcmp(out, "Hunt"));
+    assert(!strcmp(aoe_tribe_action_type_name_ror(1, 0x0c, out), "Transport"));
+    assert(!strcmp(aoe_tribe_action_type_name_ror(1, 0x6d, out), "Unknown"));
+    assert(!strcmp(aoe_tribe_action_type_name_ror(1, 9, out), "Attack"));
+    assert(!strcmp(aoe_tribe_action_type_name_ror(0, 0x65, out), "None"));
     assert(!strcmp(aoe_action_type_name_ror(1, 2, out), "Unknown"));
 }
 

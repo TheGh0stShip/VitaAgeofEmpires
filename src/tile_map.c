@@ -1,9 +1,11 @@
 #include "tile_map.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 
+#include "aoe_ftol.h"
 #include "aoe_stream.h"
 
 void aoe_tilemap_set_shape_ror(AoeTileMapRor *m, uint8_t i, int16_t w, int16_t h, int16_t offset) {
@@ -192,6 +194,90 @@ int aoe_tilemap_raise_square_ror(AoeTileMapRor *m, int32_t x, int32_t y, int32_t
     return 1;
 }
 
+typedef void (*AoeLineBrushRor)(AoeTileMapRor *m, int32_t x, int32_t y, int32_t r, int32_t value,
+                                const AoeTileMapOpsRor *ops);
+
+static void line_paint(AoeTileMapRor *m, int32_t x, int32_t y, int32_t r, int32_t value,
+                       const AoeTileMapOpsRor *ops) {
+    (void)aoe_tilemap_paint_square_ror(m, x, y, r, value, ops);
+}
+static void line_raise(AoeTileMapRor *m, int32_t x, int32_t y, int32_t r, int32_t value,
+                       const AoeTileMapOpsRor *ops) {
+    (void)ops;
+    (void)aoe_tilemap_raise_square_ror(m, x, y, r, (uint8_t)value);
+}
+
+/* Shared body of 0x00446050 / 0x00446250 (clamped ends written back). */
+static void brush_line(AoeTileMapRor *m, int32_t *x0, int32_t *y0, int32_t *x1, int32_t *y1,
+                       int32_t r, int32_t value, AoeLineBrushRor brush,
+                       const AoeTileMapOpsRor *ops) {
+    double dx, dy, sx, sy, cx, cy;
+    int32_t steps;
+    if (*x0 < 0) *x0 = 0;
+    if (*x1 >= m->width) *x1 = m->width - 1;
+    if (*y0 < 0) *y0 = 0;
+    if (*y1 >= m->height) *y1 = m->height - 1;
+    dx = (double)(*x1 - *x0);
+    dy = (double)(*y1 - *y0);
+    steps = aoe_ftol32(sqrt(dx * dx + dy * dy));
+    /* With no steps the original's 0/0 increments are never used. */
+    sx = steps ? dx / (double)steps : 0.0;
+    sy = steps ? dy / (double)steps : 0.0;
+    cx = (double)*x0;
+    cy = (double)*y0;
+    brush(m, *x0, *y0, r, value, ops);
+    for (int32_t i = steps; i > 0; --i) {
+        cx += sx;
+        cy += sy;
+        brush(m, aoe_ftol32(cx), aoe_ftol32(cy), r, value, ops);
+    }
+    if ((double)*x1 != cx || (double)*y1 != cy) brush(m, *x1, *y1, r, value, ops);
+}
+
+/* 0x00446050 */
+int aoe_tilemap_paint_line_ror(AoeTileMapRor *m, int32_t x0, int32_t y0, int32_t x1, int32_t y1,
+                               int32_t width, int32_t terrain, const AoeTileMapOpsRor *ops) {
+    brush_line(m, &x0, &y0, &x1, &y1, width >> 1, terrain, line_paint, ops);
+    return 1;
+}
+
+/* 0x00446250 */
+int aoe_tilemap_raise_line_ror(AoeTileMapRor *m, int32_t x0, int32_t y0, int32_t x1, int32_t y1,
+                               int32_t width, int32_t elevation,
+                               void (*cleanup)(void *context, int32_t x0, int32_t y0,
+                                               int32_t x1, int32_t y1, int32_t value),
+                               void *context) {
+    int32_t r = width >> 1, lx, hx, ly, hy;
+    brush_line(m, &x0, &y0, &x1, &y1, r, elevation, line_raise, NULL);
+    if (x0 < x1) { lx = x0 - r; hx = x1 + r; } else { lx = x1 - r; hx = x0 + r; }
+    if (y0 < y1) { ly = y0 - r; hy = y1 + r; } else { ly = y1 - r; hy = y0 + r; }
+    if (cleanup) cleanup(context, lx, ly, hx, hy, elevation);
+    return 1;
+}
+
+/* 0x004433c0 */
+int aoe_tilemap_footprint_corners_ror(const AoeTileMapRor *m, float size_x, float size_y,
+                                      float x, float y, int16_t out[8]) {
+    double hw = (double)m->half_w, hh = (double)m->half_h, t;
+    float fx = (float)((double)x - (double)(int16_t)aoe_ftol32(x) + (double)size_x);
+    float fy = (float)((double)y - (double)(int16_t)aoe_ftol32(y) + (double)size_y);
+    double x2, fy2;
+    out[0] = (int16_t)aoe_ftol32(((double)fy + (double)fx) * hw);
+    t = (double)fy + 1.0;
+    out[1] = (int16_t)aoe_ftol32((t - (double)fx) * hh);
+    fx = (float)((double)fx - ((double)size_x + (double)size_x));
+    out[2] = (int16_t)aoe_ftol32(((double)fy + (double)fx) * hw);
+    out[3] = (int16_t)aoe_ftol32((t - (double)fx) * hh);
+    fy2 = (double)fy - ((double)size_y + (double)size_y); /* kept unrounded */
+    out[4] = (int16_t)aoe_ftol32((fy2 + (double)fx) * hw);
+    t = fy2 + 1.0;
+    out[5] = (int16_t)aoe_ftol32((t - (double)fx) * hh);
+    x2 = (double)size_x + (double)size_x + (double)fx;
+    out[6] = (int16_t)aoe_ftol32((fy2 + x2) * hw);
+    out[7] = (int16_t)aoe_ftol32((t - x2) * hh);
+    return 1;
+}
+
 int aoe_tilemap_load_old_ror(AoeTileMapRor *m, AoeOutcomeStream *s, const AoeTileMapOpsRor *ops) {
     int32_t w = aoe_stream_i32(s), h = aoe_stream_i32(s), x, y;
     if (s->failed || !ops->resize(ops->context, m, w, h)) return 0;
@@ -290,4 +376,72 @@ int aoe_tilemap_save_data_ror(const uint8_t image[AOE_MAP_RECORD_SIZE],
     controller_save(context, s);
     free(copy);
     return !s->failed;
+}
+
+/* 0x00444110 (0x004ed840 / deleting 0x004ed7e0) */
+void aoe_map_release_owned_ror(AoeMapOwnedRor *m, const AoeMapOwnedOpsRor *ops) {
+    int32_t i;
+    if (m->zones) {
+        ops->destroy(ops->context, AOE_MAP_OWNED_ZONES, m->zones);
+        m->zones = NULL;
+    }
+    if (m->random_map) {
+        ops->destroy(ops->context, AOE_MAP_OWNED_RANDOM_MAP, m->random_map);
+        m->random_map = NULL;
+    }
+    if (m->raw04) ops->free_raw(ops->context, m->raw04);
+    if (m->raw8db0) ops->free_raw(ops->context, m->raw8db0);
+    if (m->rows8d8c) ops->free_raw(ops->context, m->rows8d8c);
+    if (m->raw8db4) ops->free_raw(ops->context, m->raw8db4);
+    for (i = 31; i >= 0; --i)
+        if (m->terrain_shapes[i]) {
+            ops->destroy(ops->context, AOE_MAP_OWNED_SHAPE, m->terrain_shapes[i]);
+            m->terrain_shapes[i] = NULL;
+        }
+    for (i = 15; i >= 0; --i)
+        if (m->border_shapes[i]) {
+            ops->destroy(ops->context, AOE_MAP_OWNED_SHAPE, m->border_shapes[i]);
+            m->border_shapes[i] = NULL;
+        }
+    if (m->masks) ops->destroy(ops->context, AOE_MAP_OWNED_MASKS, m->masks);
+    if (m->v8dcc) ops->destroy(ops->context, AOE_MAP_OWNED_8DCC, m->v8dcc);
+}
+
+static float frac_i16(float v) {
+    return v - (float)(int16_t)aoe_ftol32(v);
+}
+
+int aoe_map_clamp_footprint_ror(float half_w, float half_h, int32_t map_w,
+                                int32_t map_h, float *x, float *y, int snap) {
+    const float eps = 9.999999747378752e-06f; /* 0x00544578 */
+    float x0, y0, x1, y1, max_x, max_y;
+    if (!x || !y) return 0;
+    x0 = *x - half_w; y0 = *y - half_h;
+    x1 = *x + half_w; y1 = *y + half_h;
+    max_x = (float)map_w - eps;
+    max_y = (float)map_h - eps;
+    if (x0 < 0.0f) { x1 += -x0; *x += -x0; x0 = 0.0f; }
+    if (y0 < 0.0f) { y1 += -y0; *y += -y0; y0 = 0.0f; }
+    if (max_x <= x1) { x0 += max_x - x1; *x += max_x - x1; x1 = max_x; }
+    if (!(y1 < max_y)) { y0 += max_y - y1; *y += max_y - y1; }
+    if (snap) {
+        float a, b, c, d;
+        if (x0 < 0.0f) x0 = -x0;
+        if (y0 < 0.0f) y0 = -y0;
+        if (x1 < 0.0f) x1 = -x1;
+        if (y1 < 0.0f) y1 = -y1;
+        a = frac_i16(x0);
+        c = frac_i16(y0);
+        b = 1.0f - frac_i16(x1);
+        d = 1.0f - frac_i16(y1);
+        if (!(b + a < 1.0f)) {
+            if (a < b) *x -= 1.0f - b;
+            else *x += 1.0f - a;
+        }
+        if (!(d + c < 1.0f)) {
+            if (c > d) *y += 1.0f - c;
+            else *y -= 1.0f - d;
+        }
+    }
+    return 1;
 }

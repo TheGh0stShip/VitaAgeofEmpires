@@ -72,6 +72,17 @@ typedef struct {
     int32_t (*rand)(void *context);
     /* The player data block (+0x1550, 0x1d0 bytes) the host shares. */
     void (*state_block)(void *context, uint8_t out[0x1d0]);
+    /* The receive poll: DirectPlay's message count for our ID (+0x44)
+       and a receive (+0x64; flags 1 receive, 8 peek; the sender, the
+       receiver, the buffer and its size in/out), each returning an
+       HRESULT; a system message (from DPID 0) handed on (the system message handler). */
+    int32_t (*dp_message_count)(void *context, int32_t dpid, uint32_t *count);
+    int32_t (*dp_receive)(void *context, uint32_t flags, int32_t *from, int32_t *to, void *data,
+                          uint32_t *size);
+    void (*system_message)(void *context, uint32_t size, const uint8_t *data, int32_t to);
+    /* The guaranteed-delivery send store pass (sub_421fb0, resends;
+       not translated yet). */
+    void (*gtd_send_store)(void *context);
 } AoeCommOpsRor;
 
 typedef struct {
@@ -84,6 +95,7 @@ typedef struct {
     char info[0x81];                  /* +0x1179 */
     char label[0x100];                /* +0x11fa: "name [info]" */
     char text[0x100];                 /* +0xfc5: report text */
+    int32_t field_12a4;               /* +0x12a4: sent in the readiness message */
     int32_t field_12a8;               /* +0x12a8 */
     uint32_t bytes_sent;              /* +0x12c0 */
     char (*names)[0x80];              /* +0x12c8: per slot */
@@ -123,6 +135,9 @@ typedef struct {
     /* 0x005817d8 / 0x005817dc: the command sequence of the turn. */
     uint8_t cmd_seq;
     int32_t cmd_turn;
+    uint8_t rx_buf[4001];             /* +0x24: the receive buffer */
+    uint32_t rx_bytes;                /* +0x12b8 */
+    uint32_t rx_messages;             /* +0x1334 */
     const AoeCommOpsRor *ops;
 } AoeCommRor;
 
@@ -328,6 +343,15 @@ void aoe_comm_gtd_rx_log_ror(const AoeCommRor *c, const AoeCommOpsRor *ops, int3
                              int32_t from, int32_t exec_turn, uint8_t command, uint8_t sequence);
 void aoe_comm_post_ror(const AoeCommOpsRor *ops, uint32_t w);
 
+/* 0x004251c0: our readiness. The old eight stats of our slot are logged
+   ("SET-MY-READINESS: P#%d RDY=%d O1=%d ... O7=%d "), the new ones stored
+   and, unless we host, sent unguaranteed to all (0x0041f6e0 to DPID 0) as
+   a 0x28-byte 'R' message: byte 1 the first stat, dwords +4..+0x1c the
+   other seven, +0x20 the +0x12a4 field and byte +0x24 the guaranteed
+   delivery flag (the original leaves bytes 2..3 and 0x25..0x27 as stack
+   garbage; zero here). 0x17a6 is posted; 1. */
+int aoe_comm_set_ready_ror(AoeCommRor *c, const int32_t stats[8]);
+
 /* The lobby (0x00425a10..0x00425e30). */
 typedef struct {
     uint32_t window;      /* +0x00 */
@@ -382,5 +406,25 @@ int32_t aoe_comm_enable_new_players_ror(void *iface, int32_t enable,
 int aoe_lobby_send_options_ror(AoeLobbyRor *l, const AoeLobbyOpsRor *ops, const uint32_t guid[4],
                                const void *data, uint32_t size, const int32_t values[4],
                                const AoeCommOpsRor *comm);
+
+/* 0x0041f3e0: with DirectPlay present, logs a backlog above 10 messages;
+   then per message: a peek for the size (a slow peek or receive above
+   50 ms, and a loop over 500 ms, are logged); a size of 4000 or more is
+   logged as an overflow and ends the poll; the message is received into
+   the buffer (zero-terminated, counted in rx_bytes / rx_messages). No
+   message (DPERR_NOMESSAGES 0x887700be) or none read ends the poll; a
+   failure is reported ("Rcv MSG"); a system message (sender 0) is handed
+   on and ends the poll; any other is run (ops->run) and the loop goes on. */
+void aoe_comm_receive_ror(AoeCommRor *c);
+/* 0x0041f330: the receive pump (multiplayer only): with guaranteed
+   delivery the ordered received messages run first; with no DirectPlay
+   ID the poll runs at once, else only when the message count (+0x44) is
+   nonzero (a failure reported as "MsgWait"); after a poll the ordered
+   messages run again; with guaranteed delivery the send store pass
+   (sub_421fb0) follows unless a poll ran without it; finally the quiet
+   slots are pinged (0x0041f5e0, not forced). 0x0041f3d0 sets +0x12a8
+   (field_12a8 = 1) then pumps. */
+void aoe_comm_pump_ror(AoeCommRor *c);
+void aoe_comm_pump_flagged_ror(AoeCommRor *c);
 
 #endif

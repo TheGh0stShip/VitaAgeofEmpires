@@ -26,6 +26,23 @@ static void enter_tile(void *context, AoeLiveUnitCore *unit) {
     trace->events[trace->count++] = 'E';
 }
 
+static int relink_places, relink_attaches;
+static AoeLiveUnitCore relink_other;
+static void relink_place(void *c, AoeLiveUnitCore *u, float x, float y, float z) {
+    (void)c; (void)u;
+    assert(x == 3.5f && y == 4.0f && z == 1.0f);
+    ++relink_places;
+}
+static AoeLiveUnitCore *relink_find(void *c, AoeLiveUnitCore *u, int32_t id) {
+    (void)c; (void)u;
+    return id == 77 ? &relink_other : NULL;
+}
+static void relink_attach(void *c, AoeLiveUnitCore *u, AoeLiveUnitCore *t) {
+    (void)c; (void)u;
+    assert(t == &relink_other);
+    ++relink_attaches;
+}
+
 int main(void) {
     ScnTile tiles[4] = {0};
     AoeObjectUpdateList lists[4] = {0};
@@ -102,5 +119,20 @@ int main(void) {
                                     NAN, 0.0f, 0.0f, 0));
     assert(placement.tile == &lists[1] && lists[1].count == 1);
     for (unsigned i = 0; i < 4; ++i) aoe_object_update_list_clear(&lists[i]);
+    {
+        /* 0x004a9490: re-place, then attach a saved unit ID once. */
+        AoeLiveUnitRelinkOps ro = {NULL, relink_place, relink_find, relink_attach};
+        AoeLiveUnitCore u;
+        int32_t saved = 77;
+        memset(&u, 0, sizeof(u));
+        u.position.x38 = 3.5f; u.position.y3c = 4.0f; u.position.z40 = 1.0f;
+        assert(aoe_live_unit_relink_ror(&u, &saved, &ro) && saved == 0 &&
+               relink_places == 1 && relink_attaches == 1);
+        assert(aoe_live_unit_relink_ror(&u, &saved, &ro) &&
+               relink_places == 2 && relink_attaches == 1);
+        saved = 5; /* gone: cleared, nothing attached */
+        assert(aoe_live_unit_relink_ror(&u, &saved, &ro) && saved == 0 &&
+               relink_attaches == 1);
+    }
     return 0;
 }

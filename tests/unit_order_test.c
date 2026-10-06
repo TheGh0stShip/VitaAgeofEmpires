@@ -218,5 +218,80 @@ int main(void) {
            aoe_unit_start_task_ror(&unit, -1, &ops) == 0);
     expect("");
     aoe_action_list_clear(&list);
+
+    /* 0x004af850-style class orders: routes of the six makers. */
+    {
+        static const struct { int16_t type; uint32_t ctor; } makers[] = {
+            {0x6e, 0x004b32c0}, {0x68, 0x004b1cb0}, {0x69, 0x004b2c00},
+            {0x6a, 0x004b55c0}, {0x65, 0x004b13c0}, {0x6f, 0x004b6520}};
+        size_t i;
+        for (i = 0; i < sizeof(makers) / sizeof(makers[0]); i++) {
+            aoe_action_route_ror(1, makers[i].type, 1, &r);
+            assert(r.constructor == makers[i].ctor &&
+                   r.shape == AOE_ACTION_SHAPE_TARGET_ROR);
+        }
+    }
+    unit.core.unit_template = &builder;
+    site.core.position.x38 = 7; site.core.position.y3c = 8;
+    trace[0] = 0;
+    /* Empty list: task, maker, clear, adopt. */
+    assert(aoe_unit_order_class_action_ror(&unit, &site, 0, 0x65, &ops) == 1);
+    expect("ctor4b13c0/40/1 adopt ");
+    /* Head already building the site: nothing unless forced. */
+    head_action = (FakeAction){&builder_tasks[0], &site, 0x65, 0};
+    assert(aoe_action_list_push(&list, &head_action));
+    assert(aoe_unit_order_class_action_ror(&unit, &site, 0, 0x65, &ops) == 1);
+    expect("");
+    /* Forced (or another target): a same-type head is retargeted, 1 even
+       when the retarget fails. */
+    assert(aoe_unit_order_class_action_ror(&unit, &site, 1, 0x65, &ops) == 1);
+    expect("retarget ");
+    /* The task comes from 0x00406670 (swapping back to the villager); the
+       maker is the slot's own class whatever the task's type. */
+    assert(aoe_unit_order_class_action_ror(&unit, &tree_unit, 0, 0x6e, &ops) == 1);
+    assert(strstr(trace, "swap ctor4b32c0/") && strstr(trace, "adopt "));
+    trace[0] = 0;
+    assert(!list.head && unit.core.unit_template == &villager);
+    assert(aoe_unit_order_class_action_ror(&unit, NULL, 0, 0x65, &ops) == 0);
+    /* No task for the target: 0. */
+    assert(aoe_unit_order_class_action_ror(&unit, &unit, 0, 0x6f, &ops) == 0);
+    expect("");
+    /* Maker failure: 0 and the list is kept. */
+    unit.core.unit_template = &builder;
+    head_action.type = 2;
+    assert(aoe_action_list_push(&list, &head_action));
+    construct_ok = 0;
+    assert(aoe_unit_order_class_action_ror(&unit, &site, 0, 0x65, &ops) == 0);
+    expect("ctor4b13c0/40/1 ");
+    assert(list.head && list.head->action == &head_action);
+    construct_ok = 1;
+    aoe_action_list_clear(&list);
+    /* 0x004b0870: repair. Owner template 156 here is the builder (index
+       >= 2), given a repair task for type-80 targets. */
+    {
+        static DatUnitTask repair_tasks[2];
+        repair_tasks[0] = (DatUnitTask){.action_type = 0x6a, .target_class = 15};
+        repair_tasks[1] = (DatUnitTask){.action_type = 0x6a, .target_class = -1};
+        builder.tasks = repair_tasks; builder.task_count = 2; builder.id = 156;
+        unit.core.unit_template = &villager;
+        site.core.position.z40 = 0;
+        trace[0] = 0;
+        assert(aoe_unit_order_repair_ror(&unit, &site, &ops, &code) && code == 0x6a);
+        assert(strstr(trace, "swap->builder ctor4b55c0/") && strstr(trace, "adopt ack2ce/26a/3/3"));
+        assert(built.task == &repair_tasks[1]);
+        trace[0] = 0;
+        /* Same task at the head, retargeted: no swap (already 156). */
+        head_action = (FakeAction){&repair_tasks[1], &site, 0x6a, 1};
+        assert(aoe_action_list_push(&list, &head_action));
+        assert(aoe_unit_order_repair_ror(&unit, &site, &ops, &code) && code == 0x6a);
+        expect("retarget ack2ce/26a/3/3");
+        /* No matching task (a class-6 target): result 0, -1/-1. */
+        foundation_t.type = 70; foundation_t.unit_class = 6;
+        assert(aoe_unit_order_repair_ror(&unit, &site, &ops, &code) && code == 0);
+        expect("ackffffffff/ffffffff/3/6");
+        assert(aoe_unit_order_repair_ror(&unit, &unit, &ops, &code) && code == 0);
+        expect("");
+        aoe_action_list_clear(&list);
+    }
     return 0;
 }

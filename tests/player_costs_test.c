@@ -47,6 +47,31 @@ static void binding_tests(void) {
            failing == -1);
 }
 
+
+static void shown_tests(void) {
+    int16_t ty[3], am[3];
+    DatUnit u;
+    memset(values, 0, sizeof(values));
+    values[29] = 1.0f; /* gold may cover shortfalls */
+    values[0] = 30.5f; values[1] = 500.0f; values[3] = 100.0f;
+    u = unit(0, 50, 1, 20, -1, 0);
+    assert(aoe_player_cost_shown_ror(&r, &u, 2.0f, ty, am));
+    /* 100 food shown as 30, 70 short moves to gold in the unused third. */
+    assert(ty[0] == 0 && am[0] == 30 && ty[1] == 1 && am[1] == 40);
+    assert(ty[2] == 3 && am[2] == 70);
+    assert(aoe_player_cost_shown_total_ror(&r, &u) == 30 + 20 + 20);
+    u = unit(3, 10, 0, 50, 2, 5);
+    assert(aoe_player_cost_shown_ror(&r, &u, 1.0f, ty, am));
+    assert(ty[0] == 3 && am[0] == 35 && am[1] == 30 && ty[2] == -1 && am[2] == 0);
+    values[29] = 0.0f; /* no gold cover: unaffordable, shown in full */
+    assert(aoe_player_cost_shown_ror(&r, &u, 1.0f, ty, am));
+    assert(am[0] == 10 && am[1] == 50 && ty[1] == 0);
+    u.costs[1].paid = 0;
+    assert(aoe_player_cost_shown_ror(&r, &u, 1.0f, ty, am) && ty[1] == -1 && am[1] == 0);
+    u.type = 60;
+    assert(aoe_player_cost_shown_ror(&r, &u, 1.0f, ty, am) && ty[0] == -1 && am[0] == 0);
+}
+
 int main(void) {
     binding_tests();
     /* Villager-like: food 50, population 1. */
@@ -148,5 +173,6 @@ int main(void) {
     villager.costs[0].resource_type = 40;
     assert(!aoe_player_cost_check_ror(&r, &villager, 1.0f, 0, &failing, &ok));
     assert(!aoe_player_cost_refund_ror(&r, &villager));
+    shown_tests();
     return 0;
 }

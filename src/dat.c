@@ -235,6 +235,8 @@ int dat_parse_graphics(const DatBlob *blob, const DatSounds *sounds,
         graphic->slp_id = (int32_t)le32(item + 34);
         graphic->layer = item[40];
         graphic->player_color = (int16_t)le16(item + 41);
+        graphic->slp_loadable = item[38];
+        graphic->selection_mode = item[43];
         for (unsigned j = 0; j < 4; ++j)
             graphic->coordinates[j] = (int16_t)le16(item + 44 + j * 2);
         graphic->delta_count = le16(item + 52);

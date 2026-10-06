@@ -1,4 +1,5 @@
 #include "visibility_footprint.h"
+#include "aoe_ftol.h"
 
 #include <limits.h>
 #include <stddef.h>
@@ -35,6 +36,20 @@ int aoe_visibility_footprint_half_width(int radius, int row, int *half_width) {
     if (row < -radius || row > radius) return 0;
     *half_width = half_widths[offsets[radius] + (row < 0 ? -row : row)];
     return 1;
+}
+
+const uint8_t *aoe_visibility_footprint_rows(int radius, int *clamped) {
+    if (radius > 16) radius = 16;
+    if (radius < 0) radius = 0;
+    if (clamped) *clamped = radius;
+    return &half_widths[offsets[radius]];
+}
+
+const uint8_t *aoe_unit_sight_footprint_rows_ror(int has_owner,
+                                                 float line_of_sight,
+                                                 int *clamped) {
+    if (!has_owner) return NULL;
+    return aoe_visibility_footprint_rows(aoe_ftol32(line_of_sight), clamped);
 }
 
 static int valid_grid(const AoeVisibilityFootprintGrid *grid) {

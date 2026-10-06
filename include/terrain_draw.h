@@ -57,8 +57,13 @@ int terrain_build_sprite_pass_plan(uint8_t tile_flags, int first_active,
                                     int second_active,
                                     TerrainSpritePassPlan *plan);
 
-/* Original tile-draw ordering from Empiresx.exe 0x00516710 and
+/* Original tile-draw ordering from Empiresx.exe disc 0x00516710 and
    Empires.exe 0x004ba930, after their callers' one-step terrain replacement.
+   Not cited at the patched 1.0a counterpart (0x513ea0): that build adds,
+   before its tile blit, a test of the visibility word from row table
+   0x007d205c against the view player +0x100's +0xd8/+0xd4 masks that bumps
+   the globals 0x007d201c/0x007d2020 (summed into the comm_speed.h sync
+   value); the disc build has no such block and it is not modelled here.
    Inputs are the raw tile terrain ID, shape byte, border byte, and tile X/Y.
    An empty plan is valid when the original direct art is unavailable.
    Fog, palette effects, loose/SHP resources, object layers, and pixel

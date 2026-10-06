@@ -259,3 +259,29 @@ void aoe_zone_manager_save_ror(const AoeZoneManagerRor *z, AoeOutcomeStream *s) 
     aoe_stream_put_i32(s, z->count);
     for (int32_t i = 0; i < z->count; ++i) aoe_zone_map_save_ror(z->maps[i], s);
 }
+
+AoeZoneMapRor *aoe_unit_zone_map_ror(const AoeUnitZoneWorldRor *w,
+                                     int32_t *cached) {
+    if (!w || !w->manager || !cached) return NULL;
+    if (*cached == -1) {
+        if (!w->terrain || !w->table) return NULL;
+        *cached = aoe_zone_manager_index_ror(w->manager, w->width, w->height,
+                                             w->terrain, w->table,
+                                             w->table_count);
+        if (*cached == -1) return NULL;
+    }
+    return aoe_zone_manager_map_ror(w->manager, *cached);
+}
+
+uint8_t aoe_unit_zone_ror(const AoeUnitZoneWorldRor *w, int32_t *cached,
+                          float x, float y) {
+    AoeZoneMapRor *m = aoe_unit_zone_map_ror(w, cached);
+    return m ? aoe_zone_at_ror(m, aoe_ftol32(x), aoe_ftol32(y)) : 0;
+}
+
+int aoe_unit_zone_near_ror(const AoeUnitZoneWorldRor *w, int32_t *cached,
+                           uint8_t zone, const int32_t at[2],
+                           float distance) {
+    AoeZoneMapRor *m = aoe_unit_zone_map_ror(w, cached);
+    return m && at ? aoe_zone_near_ror(m, zone, at[0], at[1], distance) : 0;
+}

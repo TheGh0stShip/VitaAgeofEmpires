@@ -539,3 +539,80 @@ int aoe_scenario_diplomacy_page_ror(const AoeScenarioInfoRor *info,
         allied_buttons[slot] = aoe_scenario_allied_victory_ror(info, slot);
     return 1;
 }
+
+void aoe_scenario_apply_techs_ror(const AoeScenarioInfoRor *info,
+                                  const AoeScenarioTechOpsRor *ops) {
+    static const int16_t techs[16] = {0x58, 0x59, 0x5a, 0x5b, 0x5e, 0x5f, 0x61, 0x62,
+                                      0x5d, 0x60, 0x5c, 0x65, 0x66, 0x67, 0x73, 0x74};
+    int32_t p;
+    int k;
+    if (!ops->has_world) return;
+    for (p = 1; p < info->player_count && p <= AOE_SCENARIO_PLAYERS; ++p) {
+        if (info->options[0]) ops->apply_effect(ops->context, p, 100);
+        for (k = 0; k < 16; ++k)
+            ops->set_tech(ops->context, p, techs[k], (uint8_t)info->tech_toggles[p - 1][k]);
+    }
+}
+
+static void save_i32(const AoeScenarioSaveOpsRor *ops, int32_t v) {
+    uint8_t b[4];
+    uint32_t u = (uint32_t)v;
+    b[0] = (uint8_t)u;
+    b[1] = (uint8_t)(u >> 8);
+    b[2] = (uint8_t)(u >> 16);
+    b[3] = (uint8_t)(u >> 24);
+    ops->write(ops->context, b, 4);
+}
+
+static void save_f32(const AoeScenarioSaveOpsRor *ops, float f) {
+    uint32_t u;
+    memcpy(&u, &f, 4);
+    save_i32(ops, (int32_t)u);
+}
+
+static void save_i32s(const AoeScenarioSaveOpsRor *ops, const int32_t *v, int n) {
+    int i;
+    for (i = 0; i < n; ++i) save_i32(ops, v[i]);
+}
+
+void aoe_scenario_info_save_ror(const AoeScenarioInfoRor *info,
+                                const AoeScenarioTechOpsRor *techs,
+                                const AoeScenarioSaveOpsRor *ops) {
+    int p, c, i;
+    if (techs) aoe_scenario_apply_techs_ror(info, techs);
+    if (ops->base_save) ops->base_save(ops->context);
+    save_i32s(ops, &info->start_resources[0][0], AOE_SCENARIO_PLAYERS * 4);
+    save_i32(ops, -99);
+    save_i32(ops, info->custom_conquest);
+    save_i32(ops, info->ruins);
+    save_i32(ops, info->artifacts);
+    save_i32(ops, info->discoveries);
+    save_i32(ops, info->explore);
+    save_i32(ops, info->gold);
+    save_i32(ops, info->all_custom_required);
+    save_i32(ops, info->victory_type);
+    save_i32(ops, info->score);
+    save_i32(ops, info->time_limit);
+    save_i32s(ops, &info->diplomacy[0][0], AOE_SCENARIO_PLAYERS * AOE_SCENARIO_PLAYERS);
+    for (p = 0; p < AOE_SCENARIO_PLAYERS; ++p)
+        for (c = 0; c < AOE_SCENARIO_CONDITIONS; ++c) {
+            const AoeScenarioConditionRor *r = &info->conditions[p][c];
+            save_i32(ops, r->object_class);
+            save_i32(ops, r->all_flag);
+            save_i32(ops, r->player);
+            save_i32(ops, r->field_0c);
+            for (i = 0; i < 4; ++i) save_f32(ops, r->area[i]);
+            save_i32(ops, r->type);
+            save_i32(ops, r->amount);
+            save_i32(ops, r->subtype);
+            save_i32(ops, r->unit_ref);
+            save_i32(ops, r->target_ref);
+            save_i32s(ops, r->field_34, 2);
+        }
+    save_i32(ops, -99);
+    save_i32s(ops, info->allied_victory, AOE_SCENARIO_PLAYERS);
+    save_i32s(ops, &info->tech_toggles[0][0], AOE_SCENARIO_PLAYERS * 20);
+    save_i32s(ops, info->options, 3);
+    save_i32s(ops, info->starting_age, AOE_SCENARIO_PLAYERS);
+    save_i32(ops, -99);
+}

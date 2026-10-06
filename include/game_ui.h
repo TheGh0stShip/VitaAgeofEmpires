@@ -10,6 +10,7 @@
 #include "ui_ez.h"
 #include "ui_picture.h"
 #include "palette_fade.h"
+#include "tribute.h"
 
 /* The game-side context shared by the Patched Rise of Rome 1.0a screens
    and in-game dialogs: the panel system (0x005830e8), the game object
@@ -224,6 +225,94 @@ typedef struct {
     int32_t (*game_flag_a08)(void *context);
     void (*set_game_flag_a08)(void *context, int32_t value);
     void (*set_path_budget)(void *context, int32_t budget);
+    /* The create dialog: the registry's "Default Age Of Empires MP
+       Gamename" (user key, 0x0046aee0; NULL when unset) and its write
+       (0x0046ae80); the game created under a name (0x00424410 then the
+       status screen, closedpw and the comm's create call), nonzero on success. */
+    const char *(*mp_game_name)(void *context);
+    void (*set_mp_game_name)(void *context, const char *name);
+    int (*create_mp_game)(void *context, const char *name);
+    /* The join screen's sessions: enumerated (the first time the
+       enumerator 0x004285c0 is made, -1 when it cannot be; again
+       0x00428890), the count (0x00451ac0); entry i's name and the two
+       player counts (0x00428670, 0x004286c0, 0x00428690); joining the
+       session on a list line (0x004286f0 then the comm's join; nonzero on
+       success); the comm dropped with a reason (0x004237c0); the
+       enumerator released (0x0042c330 and delete). */
+    int32_t (*mp_enum_sessions)(void *context, int32_t again);
+    void (*mp_session_info)(void *context, int32_t i, const char **name, int32_t *a,
+                            int32_t *b);
+    int (*mp_join_session)(void *context, int32_t line);
+    void (*mp_drop)(void *context, int32_t reason);
+    void (*mp_release_sessions)(void *context);
+    /* The MP startup screen: the registry's "Default Age Of Empires
+       Player Name" and "... Multiplayer Service" (user key; NULL when
+       unset) and their writes; the services refreshed and counted
+       (0x00428380, 0x00428400) and service i's name when it is usable
+       (0x004284e0, 0x00428420; NULL otherwise); the comm started as a
+       player name on service i (0x00424440, 0x00428380, 0x00428480,
+       0x00424eb0, 0x00424a60). The Zone: the browser command (HKCR
+       http\shell\open\command's program, which must exist, followed by
+       the machine key's "Zone" address) into out, nonzero when there is
+       one; the command run (WinExec). */
+    const char *(*mp_player_name)(void *context);
+    void (*set_mp_player_name)(void *context, const char *name);
+    const char *(*mp_service_name)(void *context);
+    void (*set_mp_service_name)(void *context, const char *name);
+    int32_t (*mp_services)(void *context);
+    const char *(*mp_service)(void *context, int32_t i);
+    void (*mp_start)(void *context, const char *name, int32_t service);
+    int (*zone_command)(void *context, char *out, uint32_t size);
+    void (*run_zone)(void *context, const char *command);
+    /* The send message dialog: the game player of comm slot i (0x0041c080;
+       0 when unused), the comm slot count (0x0041b9a0), a slot's status
+       (0x00423d10; 2 and 4 are connected humans), our slot (0x00423c10),
+       a slot's name (0x004241a0); a player is a computer (type +0x80 ==
+       2); its civilization's name (game string 105 for +0x109); the
+       viewed player's two relation tests (player vtable +0x1c and
+       +0x18); recipient flag i read (0x0041ca70) and set (0x0041ca50);
+       the flag of a player drawn in its colour ("dlg_plbn.shp" 50746,
+       frame 0, 0x0049fe00). */
+    int32_t (*slot_player)(void *context, int32_t slot);
+    int32_t (*comm_slots)(void *context);
+    int32_t (*comm_slot_status)(void *context, int32_t slot);
+    int32_t (*comm_own_slot)(void *context);
+    const char *(*comm_slot_name)(void *context, int32_t slot);
+    int (*player_is_computer)(void *context, int32_t player);
+    void (*player_civ_name)(void *context, int32_t player, char *out, uint32_t size);
+    int (*player_relation_a)(void *context, int32_t me, int32_t player);
+    int (*player_relation_b)(void *context, int32_t me, int32_t player);
+    int (*recipient)(void *context, int32_t slot);
+    void (*set_recipient)(void *context, int32_t slot, int on);
+    void (*draw_player_flag)(void *context, AoeUiPanelRor *panel, int32_t player,
+                             int32_t x, int32_t y);
+    /* The diplomacy dialog: the world's player count (+0x3c), player
+       p's type (+0x80; 2 a computer, nonzero no tribute), name (+0x44),
+       the viewed player's stance toward p (0x0045da60; 0 ally, 1
+       neutral, 3 enemy) and allied victory flag (0x0045da50); attribute
+       i of a player (+0x50); whether a player has a finished building
+       of a type (0x00451370(type, -1, -1, 1, 2, 0)). */
+    int32_t (*player_count)(void *context);
+    int32_t (*player_type)(void *context, int32_t player);
+    const char *(*player_name)(void *context, int32_t player);
+    int32_t (*player_stance)(void *context, int32_t me, int32_t player);
+    int (*allied_victory)(void *context, int32_t player);
+    float (*player_attribute)(void *context, int32_t player, int32_t i);
+    int (*has_building)(void *context, int32_t player, int32_t type);
+    /* The diplomacy dialog's OK: a stance command (0x004e9890), an
+       allied victory command (0x004e9840), a tribute through the giver's
+       +0xf8(player, resource, amount, fee). Its draw: player p's colour
+       table (+0x10c; its +0x26 colour; NULL without one), the fill colour
+       (0x00540760) and a colour-icon frame 0 drawn through a table
+       (0x0049fe00, mode 1). */
+    void (*set_stance)(void *context, int32_t me, int32_t player, uint8_t stance);
+    void (*set_allied_victory)(void *context, int32_t me, int on);
+    void (*give_tribute)(void *context, int32_t me, int32_t player, int resource, float amount,
+                         float fee);
+    const uint8_t *(*player_colour_table)(void *context, int32_t player, int16_t *colour);
+    void (*set_fill_colour)(void *context, uint8_t colour);
+    void (*draw_colour_icon)(void *context, AoeUiPanelRor *panel, void *picture, int32_t x,
+                             int32_t y, const uint8_t *table);
 } AoeGameUiOpsRor;
 
 typedef struct {
@@ -317,6 +406,167 @@ extern const AoeUiEzVtblRor aoe_quick_chat_dialog_vtable_ror;
 int aoe_quick_chat_dialog_init_ror(AoeQuickChatDialogRor *d,
                                    AoeGameUiRor *ui, AoeUiPanelRor *parent,
                                    int32_t comment);
+
+/* The in-game "Send Message Dialog" (vtable 0x00543f54,
+   0x00434fe0..0x00435c10): a row per used comm slot (name, civilization,
+   a recipient box for another connected human), four recipient radios,
+   a 65-character line and Send. */
+typedef struct {
+    AoeUiDialogRor dialog;
+    AoeUiTextRor *title;                     /* +0x490 */
+    AoeUiTextRor *names[8];                  /* +0x494 */
+    AoeUiTextRor *civs[8];                   /* +0x4b4 */
+    AoeUiButtonRor *checks[8];               /* +0x4d4 */
+    AoeUiTextRor *radio_labels[4];           /* +0x4f4 */
+    AoeUiButtonRor *radios[4];               /* +0x504 */
+    AoeUiEditRor *edit;                      /* +0x518 */
+    AoeUiTextRor *edit_label;                /* +0x51c */
+    AoeUiButtonRor *send;                    /* +0x520 */
+    int32_t slots[8];                        /* +0x52c */
+    int32_t has_flags;                       /* +0x528 picture */
+    AoeGameUiRor *ui;
+} AoeSendMessageDialogRor;
+
+extern const AoeUiEzVtblRor aoe_send_message_dialog_vtable_ror;
+
+/* 0x00434fe0 constructor (with its setup); 0x00435650 destructor
+   (deleting 0x00435630); +0xb8 0x00435750; +0x30 0x00435c10. */
+int aoe_send_message_dialog_init_ror(AoeSendMessageDialogRor *d, AoeGameUiRor *ui,
+                                     AoeUiPanelRor *parent);
+/* 0x00435bc0 */
+void aoe_send_message_dialog_apply_ror(AoeSendMessageDialogRor *d);
+
+/* The in-game "Diplomacy Dialog" (vtable 0x00543814): stances, tribute
+   and allied victory (tribute.h holds its logic and draw). */
+typedef struct {
+    AoeUiDialogRor dialog;
+    AoeUiTextRor *title;                     /* +0x490 */
+    AoeUiTextRor *headers[6];                /* +0x494.. */
+    AoeUiTextRor *notice;                    /* +0x510 */
+    AoeUiTextRor *fee;                       /* +0x4a8 */
+    AoeUiTextRor *ally_label;                /* +0x4ac */
+    AoeUiTextRor *names[8], *civs[8];
+    AoeUiButtonRor *gifts[4][8];             /* wood, food, gold, stone */
+    AoeUiButtonRor *stances[24];             /* +0x594: 3 per player */
+    AoeUiButtonRor *allied_victory;          /* +0x5f4 */
+    AoeUiButtonRor *ok, *clear, *cancel, *help; /* +0x5f8..+0x604 */
+    AoeUiTextRor *stocks[4];                 /* wood, food, gold, stone */
+    void *icons;                             /* +0x608 tradicon.shp 50732 */
+    AoeTributeRor tribute;                   /* +0x610.. */
+    int32_t own_row;                         /* +0x6b0 */
+    int32_t has_market;                      /* +0x6b4 */
+    AoeGameUiRor *ui;
+    void *colours;                           /* +0x60c dlg_plbn.shp 50746 */
+} AoeDiplomacyDialogRor;
+
+extern const AoeUiEzVtblRor aoe_diplomacy_dialog_vtable_ror;
+
+/* 0x00431470 constructor (with its setup); 0x004321f0 destructor
+   (deleting 0x004321d0); +0xb8 0x004323b0 the action slot and +0x30
+   0x00433230 the draw slot (tribute.h). */
+int aoe_diplomacy_dialog_init_ror(AoeDiplomacyDialogRor *d, AoeGameUiRor *ui,
+                                  AoeUiPanelRor *parent);
+
+/* The "MP Startup Screen" (vtable 0x00546c50, 0x00487250..0x00487f40;
+   640 x 480 on "scr3" 50053): a title (9611), "name" (9612), the
+   remembered player name (15 characters), "connection" (9613), the
+   service list (font 11) with its bar, OK, Cancel (Escape), help (?)
+   and the close button; tab order name, OK, list, Cancel, help, the
+   name focused. Building it clears the multiplayer flag. 0x00487770
+   destructor (deleting 0x00487750) also closes "Create Dialog",
+   "OKDialog" and "YesNoDialog". 0x00487d70 fills the list: each usable
+   service (ID = its index), the Internet Gaming Zone (9614, ID -1)
+   when a Zone command exists, the remembered service selected. +0xb8
+   0x00487880: OK sets the multiplayer flag and needs a name ("Name
+   Error" 9615) and a service ("List Error" 9618); the Zone asks first
+   ("Start Zone" 9619: yes runs the browser and quits); otherwise the
+   name and service are remembered, the comm started and the join screen
+   opened. Cancel (or Escape in the name) drops the comm (2) and opens
+   the main menu; a list double click is OK; help arms help mode; close
+   quits. */
+typedef struct {
+    AoeUiEzRor ez;
+    AoeUiTextRor *title, *name_label;        /* +0x478, +0x47c */
+    AoeUiEditRor *name;                      /* +0x480 */
+    AoeUiTextRor *list_label;                /* +0x484 */
+    AoeUiButtonRor *ok, *cancel, *help;      /* +0x488..+0x490 */
+    AoeUiButtonRor *close;                   /* +0x494 */
+    AoeUiListRor *list;                      /* +0x498 */
+    AoeUiScrollbarRor *list_bar;             /* +0x49c */
+    char zone[0x200];                        /* +0x4a0 (program at +0x59f) */
+    AoeGameUiRor *ui;
+} AoeMpStartupScreenRor;
+
+extern const AoeUiEzVtblRor aoe_mp_startup_screen_vtable_ror;
+
+/* 0x00487250 */
+int aoe_mp_startup_screen_init_ror(AoeMpStartupScreenRor *m, AoeGameUiRor *ui,
+                                   AoeUiAreaRor *area);
+/* 0x00487d70 */
+void aoe_mp_startup_screen_fill_ror(AoeMpStartupScreenRor *m);
+
+/* The "Join Screen" (vtable 0x00546208, 0x0047b440..0x0047beb0;
+   640 x 480 on "scr3" 50053): a title (9631), a label (9640), the
+   session list (font 11, "none" 9643 at first) with its bar, Refresh
+   (9633), Join (9632), Create (9634), Cancel (Escape) and the close
+   button; tab order list, Refresh, Join, Create, Cancel, Refresh
+   focused. Building it sets comm slot 1 to 2 and slots 2..9 to 0.
+   0x0047b780 destructor (deleting 0x0047b760) releases the session
+   enumerator. 0x0047ba60 refresh: "searching" (9641), the sessions
+   enumerated and listed as "name ( a / b )", or 9643 when none. +0x4c
+   0x0047b870 idle: while joining, more than 10 s without an answer
+   drops the comm (5) with message 9635. +0x64 0x0047b900 user
+   messages: 0x17a8..0x17aa and 0x17b2 while joining drop the comm the
+   same way; 0x17b8 while joining opens the MP setup screen. +0xb8
+   0x0047bc20: a list double click joins; Join with sessions joins the
+   selection (a failed join shows 9635 with the line, none shows
+   9636); Cancel drops the comm (2) and opens the MP startup screen;
+   Create opens the create dialog; Refresh refreshes; close quits. */
+typedef struct {
+    AoeUiEzRor ez;
+    int32_t sessions_made;                   /* +0x478 */
+    int32_t listed;                          /* +0x47c */
+    AoeUiTextRor *title, *label;             /* +0x480, +0x484 */
+    AoeUiListRor *list;                      /* +0x488 */
+    AoeUiScrollbarRor *list_bar;             /* +0x48c */
+    AoeUiButtonRor *join, *create, *cancel;  /* +0x490..+0x498 */
+    AoeUiButtonRor *refresh, *close;         /* +0x49c, +0x4a0 */
+    int32_t count;                           /* +0x4a4 */
+    int32_t joining;                         /* +0x4a8 */
+    uint32_t join_ms;                        /* +0x4ac */
+    AoeGameUiRor *ui;
+} AoeJoinScreenRor;
+
+extern const AoeUiEzVtblRor aoe_join_screen_vtable_ror;
+
+/* 0x0047b440 */
+int aoe_join_screen_init_ror(AoeJoinScreenRor *j, AoeGameUiRor *ui, AoeUiAreaRor *area);
+/* 0x0047ba60 */
+void aoe_join_screen_refresh_ror(AoeJoinScreenRor *j);
+
+/* The "Create Dialog" over the join screen (vtable 0x00546334,
+   0x0047beb0..0x0047c510): 500 x 230, a title (9638), a label (9642),
+   a 40-character edit box holding the remembered MP game name and OK /
+   Cancel (Escape) buttons; tab order edit, OK, Cancel. */
+typedef struct {
+    AoeUiDialogRor dialog;
+    AoeUiTextRor *title, *label;     /* +0x490, +0x494 */
+    AoeUiEditRor *edit;              /* +0x498 */
+    AoeUiButtonRor *ok, *cancel;     /* +0x49c, +0x4a0 */
+    AoeGameUiRor *ui;
+} AoeCreateDialogRor;
+
+extern const AoeUiEzVtblRor aoe_create_dialog_vtable_ror;
+
+/* 0x0047beb0 constructor; 0x0047c120 destructor (deleting 0x0047c100);
+   +0xb8 0x0047c1b0: OK or Enter with a blank name refocuses the edit;
+   otherwise the name is remembered and the game created: on success the
+   MP setup screen is made and shown and the status, create and join
+   screens close; on failure the join screen comes back with an OK
+   message (9645, 450 x 100). Cancel or Escape goes back to the join
+   screen. */
+int aoe_create_dialog_init_ror(AoeCreateDialogRor *d, AoeGameUiRor *ui,
+                               AoeUiPanelRor *parent);
 
 /* "About Dialog" (vtable 0x005435ac, 0x0042f7f0..0x0042ff80): 520 x 472
    inside a bevelled frame: the title lines (strings 9241, 9255), the

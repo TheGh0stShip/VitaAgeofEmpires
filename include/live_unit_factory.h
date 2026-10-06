@@ -368,7 +368,10 @@ typedef struct {
    (0x004155e0 -> 0x00415620), its facet (+0x35), class 0x19 (+0x4e) and
    the tile-mask pointer (+0x9c). A source already in state 7+ is not
    kept. The +0xa8/+0xa9 display bytes (source template +0x8e / +0x90) are
-   not parsed yet. */
+   not parsed yet. The re-initialiser 0x00436330 (vtable slot at 0x005443a8)
+   runs the type-20 re-init 0x00415130 and this same source tail, then the
+   unit's +0x1f0; without a source it clears the links and calls +0x68
+   instead of the constructor's 0x004aa2e0 (both are the caller's here). */
 int aoe_live_unit_doppelganger_init_ror(AoeLiveUnit *unit,
                                         AoeLiveUnit *source,
                                         const uint32_t *tile_mask);

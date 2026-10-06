@@ -69,6 +69,26 @@ typedef struct {
     float owner_attribute_9;    /* owner +0x50[9] (a dock's stock) */
 } AoeInfoObjectRor;
 
+/* What the editor panel reads from a unit template, by original offset. */
+typedef struct AoeInfoTemplateRor {
+    int16_t icon;               /* +0x4c, -1 none */
+    uint8_t panel_kind;         /* +0x8f */
+    int16_t building_icon_base; /* +0x16e (kind 2) */
+    void *sprite;               /* +0x18, drawn when there is no icon */
+    int16_t name_id;            /* +0x0c */
+    const char *name;           /* +0x08 */
+    int16_t max_hp;             /* +0x26 */
+    int16_t displayed_13c;      /* +0x13c: item icon 8 */
+    int16_t displayed_13e;      /* +0x13e: item icon 7 */
+    float range_114;            /* +0x114 (kind 2) */
+    float range_140;            /* +0x140 (kinds 4 and 6) */
+    int16_t resource_type[3];   /* +0x6a */
+    float resource_amount[3];   /* +0x70 */
+    /* 0x004a4b90 (aoe_combat_panel_pierce_armor_ror): a type 70
+       template's last class 3 armor, else 0. */
+    int16_t pierce;
+} AoeInfoTemplateRor;
+
 typedef struct {
     void *context;
     /* The player's selected object (+0x134), NULL for none or no player. */
@@ -105,6 +125,18 @@ typedef struct {
     int32_t (*shape_frames)(void *context, void *shape);
     void *(*load_shape)(void *context, const char *file, int32_t id);
     void (*free_shape)(void *context, void *shape);
+    /* The scenario editor's template panel: read a template, a player's
+       number (+0x4a) and colour record (+0x10c, its +0x26 index), and a
+       template sprite's (+0x18) bounds (patched 0x4a5c60, untranslated) and draw (0x004a55e0,
+       in the player's colours). */
+    int (*read_template)(void *context, const void *tmpl,
+                         struct AoeInfoTemplateRor *out);
+    int16_t (*player_number)(void *context, const void *player);
+    int (*player_colour)(void *context, const void *player, int16_t *index);
+    int (*sprite_bounds)(void *context, void *sprite, int32_t *min_x,
+                         int32_t *min_y);
+    void (*draw_sprite)(void *context, AoeUiAreaRor *area, void *sprite,
+                        int32_t x, int32_t y, const void *player);
 } AoeInfoPanelOpsRor;
 
 typedef struct {
@@ -174,5 +206,21 @@ void aoe_info_panel_draw_scores_ror(AoeInfoPanelRor *i);
 /* +0x30 0x004f8740 draw; +0x4c 0x004f9970 idle. */
 void aoe_info_panel_draw_ror(AoeUiPanelRor *p);
 int32_t aoe_info_panel_idle_ror(AoeUiPanelRor *p);
+
+/* The scenario editor's template panel (vtable 0x00547cc0): the object
+   panel showing a unit template for a player (+0x110). */
+typedef struct {
+    AoeInfoPanelRor base;
+    const void *tmpl;          /* +0x214 */
+    uint8_t icon_set;          /* +0x218 */
+} AoeInfoEditorPanelRor;
+
+/* +0xe4 0x004a49a0: the editor's stat row: the item icon (unless -1) at
+   (x + 0x3c, y + 0x1e + row * 18), the text at (x + 100, y + 0x20 +
+   row * 18); kinds as aoe_info_panel_item_ror. */
+void aoe_info_editor_item_ror(AoeInfoEditorPanelRor *e, int32_t row,
+                              int32_t icon, int32_t kind, int32_t a, int32_t b);
+/* +0x30 0x004a4350: the editor's draw. */
+void aoe_info_editor_draw_ror(AoeInfoEditorPanelRor *e);
 
 #endif

@@ -83,6 +83,33 @@ static void *load_shape(void *c, const char *f, int32_t id) {
 }
 static void free_shape(void *c, void *s) { (void)c; (void)s; ++freed; }
 
+static AoeInfoTemplateRor tmpl;
+static char tmpl_token, sprite_token;
+static int sprite_x, sprite_y, sprite_draws;
+static int read_tmpl(void *c, const void *t, AoeInfoTemplateRor *out) {
+    (void)c;
+    assert(t == &tmpl_token);
+    *out = tmpl;
+    return 1;
+}
+static int16_t pnum(void *c, const void *pl) { (void)c; (void)pl; return 3; }
+static int pcolour(void *c, const void *pl, int16_t *ix) { (void)c; (void)pl; *ix = 2; return 1; }
+static int sbounds(void *c, void *s, int32_t *mx, int32_t *my) {
+    (void)c;
+    assert(s == &sprite_token);
+    *mx = -20, *my = -40;
+    return 1;
+}
+static void dsprite(void *c, AoeUiAreaRor *a, void *s, int32_t x, int32_t y, const void *pl) {
+    (void)c; (void)a; (void)s; (void)pl;
+    sprite_x = x, sprite_y = y;
+    ++sprite_draws;
+}
+static void unknown_name(void *c, uint8_t civ_id, char *out, int n) {
+    (void)c;
+    snprintf(out, (size_t)n, civ_id == 3 ? "Unknown" : "P%d", civ_id);
+}
+
 static int actions;
 static int32_t parent_action(AoeUiPanelRor *p, AoeUiPanelRor *from, int32_t code, int32_t a, int32_t b) {
     (void)p; (void)from; (void)a; (void)b;
@@ -304,6 +331,77 @@ int main(void) {
     ip.mode = 1;
     aoe_info_panel_set_player_ror(&ip, NULL);
     assert(ip.object == NULL);
+
+    /* The scenario editor's template panel (0x004a4350 / 0x004a49a0). */
+    {
+        static AoeInfoEditorPanelRor ed;
+        ops.read_template = read_tmpl;
+        ops.player_number = pnum;
+        ops.player_colour = pcolour;
+        ops.sprite_bounds = sbounds;
+        ops.draw_sprite = dsprite;
+        ops.civ_name = unknown_name;
+        ed.base = ip;
+        ed.base.mode = 1;
+        ed.base.player = &player_token;
+        ed.base.panel.visible = ed.base.panel.active = 1;
+        ed.tmpl = &tmpl_token;
+        ed.icon_set = 1;
+
+        /* Rows sit 18 pixels apart with the editor's offsets. */
+        ndraws = nouts = 0;
+        aoe_info_editor_item_ror(&ed, 2, 5, 1, 4, 6);
+        assert(draws[0].shape == &items && draws[0].frame == 5 && draws[0].x == 100 + 0x3c &&
+               draws[0].y == 200 + 0x1e + 36);
+        assert((o = find("4+2")) && o->x == 200 && o->y == 200 + 0x20 + 36);
+
+        /* Kind 2: building icon in the player's colours, "Unknown" shown
+           as Gaia, hit points max/max, then three rows. */
+        memset(&tmpl, 0, sizeof tmpl);
+        tmpl.icon = 4;
+        tmpl.panel_kind = 2;
+        tmpl.building_icon_base = 10;
+        tmpl.name = "Wall";
+        tmpl.max_hp = 300;
+        tmpl.displayed_13e = 7;
+        tmpl.displayed_13c = 2;
+        tmpl.range_114 = 5.9f;
+        ndraws = nouts = 0;
+        aoe_info_editor_draw_ror(&ed);
+        assert(draws[0].shape == &bld1 && draws[0].frame == 14 && draws[0].x == 102 &&
+               draws[0].y == 200 + 0x21 && draws[0].remap == 0x30);
+        assert((o = find("Gaia")) && o->x == 102 && o->y == 200);
+        assert((o = find("Wall")) && o->y == 200 + 0xf);
+        assert((o = find("300/300")) && o->x == 105 && o->y == 200 + 0x55);
+        assert(find("7") && find("2") && find("5") && ndraws == 4);
+        assert(draws[3].frame == 6 && draws[3].y == 200 + 0x1e + 36);
+
+        /* Kind 4: the range row carries the pierce armor as its maximum. */
+        tmpl.panel_kind = 4;
+        tmpl.pierce = 9;
+        tmpl.range_140 = 7.0f;
+        ndraws = nouts = 0;
+        aoe_info_editor_draw_ror(&ed);
+        assert(ndraws == 5 && draws[1].frame == 7 && draws[2].frame == 8 &&
+               draws[3].frame == 10 && draws[4].frame == 6);
+        assert(find("7+2") && find("9"));
+
+        /* Kind 1: the first resource with a positive amount. */
+        tmpl.panel_kind = 1;
+        tmpl.resource_type[0] = 1, tmpl.resource_amount[0] = 0.0f;
+        tmpl.resource_type[1] = 0x10, tmpl.resource_amount[1] = 150.7f;
+        ndraws = nouts = 0;
+        aoe_info_editor_draw_ror(&ed);
+        assert(ndraws == 2 && draws[1].frame == 2 && find("150"));
+
+        /* No icon: the sprite placed by its bounds, no hit points or rows. */
+        tmpl.icon = -1;
+        tmpl.sprite = &sprite_token;
+        ndraws = nouts = 0;
+        aoe_info_editor_draw_ror(&ed);
+        assert(sprite_draws == 1 && sprite_x == 100 + 20 + 10 && sprite_y == 200 + 40 + 0x28);
+        assert(ndraws == 0 && !find("300/300") && find("Wall"));
+    }
 
     p->vt->destroy(p);
     assert(freed == 2);

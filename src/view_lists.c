@@ -181,3 +181,89 @@ void aoe_view_geometry_ror(AoeViewGeometryRor *g) {
     g->field_122 = g->field_124 = 0;
     g->field_11e = g->field_120 = 0;
 }
+
+/* Node dwords at +0x0c..+0x28 live in `body`, coords +0x30.. in `tail`. */
+static void node_put32(AoeDrawRowNodeRor *n, int32_t offset, int32_t v) {
+    memcpy(n->body + (offset - 0x0c), &v, sizeof(v));
+}
+
+int32_t aoe_draw_row_node_dword_ror(const AoeDrawRowNodeRor *n, int32_t offset) {
+    int32_t v;
+    memcpy(&v, n->body + (offset - 0x0c), sizeof(v));
+    return v;
+}
+
+int16_t aoe_draw_row_node_coord_ror(const AoeDrawRowNodeRor *n, int32_t index) {
+    int16_t v;
+    memcpy(&v, n->tail + index * 2, sizeof(v));
+    return v;
+}
+
+static void node_sub16(AoeDrawRowNodeRor *n, int32_t index, int32_t by) {
+    int16_t v = (int16_t)(aoe_draw_row_node_coord_ror(n, index) - (int16_t)by);
+    memcpy(n->tail + index * 2, &v, sizeof(v));
+}
+
+/* 0x00516510 */
+AoeDrawRowNodeRor *aoe_draw_rows_add_ror(AoeDrawRowsRor *d, int32_t kind, int32_t row,
+                                         const int16_t coords[8], int32_t depth,
+                                         int32_t field_1c, int32_t id) {
+    int32_t index = d->table_base + row;
+    AoeDrawRowNodeRor *n;
+    if (depth > d->row_hi || depth < d->row_lo || index < 0 || index >= d->table_count)
+        return NULL;
+    n = aoe_draw_rows_take_ror(d);
+    if (!n) return NULL;
+    n->free_link = d->table[index];
+    d->table[index] = n;
+    n->next = NULL;
+    n->id = id;
+    memset(n->body, 0, sizeof(n->body));
+    node_put32(n, 0x10, depth);
+    node_put32(n, 0x1c, field_1c);
+    n->key = kind;
+    memcpy(n->tail, coords, 8 * sizeof(int16_t));
+    return n;
+}
+
+/* 0x00516660 */
+void aoe_draw_rows_scroll_ror(AoeDrawRowsRor *d, int32_t dx, int32_t dy) {
+    int32_t count = d->table_count, i;
+    if (dy > 0) {
+        int32_t n = dy < count ? dy : count;
+        for (i = 0; i < count - n; ++i) d->table[i] = d->table[i + n];
+        for (i = count - n; i < count; ++i) d->table[i] = NULL;
+    } else if (dy < 0) {
+        int32_t n = -dy < count ? -dy : count;
+        for (i = count - 1; i >= n; --i) d->table[i] = d->table[i - n];
+        for (i = 0; i < n; ++i) d->table[i] = NULL;
+    }
+    for (i = 0; i < count; ++i) {
+        AoeDrawRowNodeRor *n;
+        for (n = d->table[i]; n; n = n->free_link) {
+            switch (n->key) {
+            case 0:
+                node_put32(n, 0x14, aoe_draw_row_node_dword_ror(n, 0x14) - dx);
+                node_put32(n, 0x18, aoe_draw_row_node_dword_ror(n, 0x18) - dy);
+                break;
+            case 1:
+                node_sub16(n, 5, dy);
+                node_sub16(n, 7, dy);
+                /* fall through */
+            case 2:
+                node_sub16(n, 4, dx);
+                node_sub16(n, 6, dx);
+                /* fall through */
+            case 3:
+            case 4:
+                node_sub16(n, 0, dx);
+                node_sub16(n, 1, dy);
+                node_sub16(n, 2, dx);
+                node_sub16(n, 3, dy);
+                break;
+            default:
+                break;
+            }
+        }
+    }
+}

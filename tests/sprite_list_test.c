@@ -140,5 +140,16 @@ int main(void) {
         h->head = NULL;
         assert(aoe_sprite_list_delete_ror(h, 1) == h);
     }
+    {
+        Trace tr = {0};
+        int g = 1;
+        AoeSpriteList unit = {.ops = {&tr, create_sprite, graphic_of, is_animated,
+                                      destroy_sprite, invalidate}};
+        tr.arg1 = tr.arg2 = 99;
+        assert(aoe_live_unit_sprite_add_ror(&unit, &g, 5));
+        assert(tr.arg1 == 0 && tr.arg2 == 0 && aoe_sprite_list_priority_at(&unit, 0) == 5);
+        assert(aoe_live_unit_sprite_remove_ror(&unit, &g));
+        assert(aoe_sprite_list_count(&unit) == 0 && tr.destroyed == 1);
+    }
     return 0;
 }

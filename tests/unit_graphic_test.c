@@ -82,7 +82,26 @@ static void test_null_walking_graphic(void) {
     assert(trace.remove_count == 1 && trace.add_count == 1);
 }
 
+static const void *ov_last;
+static unsigned ov_prio, ov_adds, ov_removes;
+static void ov_add(void *c, const void *g, unsigned p, unsigned a1, unsigned a2) {
+    (void)c; assert(a1 == 0 && a2 == 0); ov_last = g; ov_prio = p; ++ov_adds;
+}
+static void ov_remove(void *c, const void *g) { (void)c; ov_last = g; ++ov_removes; }
+
+static void test_overlay(void) {
+    static int g;
+    AoeUnitGraphicOps ops = {NULL, ov_remove, ov_add};
+    assert(aoe_unit_graphic_add_overlay(&ops, &g, 7));
+    assert(ov_last == &g && ov_prio == 7 && ov_adds == 1 && ov_removes == 0);
+    ov_last = NULL;
+    assert(aoe_unit_graphic_remove_overlay(&ops, &g));
+    assert(ov_last == &g && ov_removes == 1 && ov_adds == 1);
+    assert(!aoe_unit_graphic_add_overlay(NULL, &g, 1));
+}
+
 int main(void) {
+    test_overlay();
     test_edition(AOE_PLAYER_BASE);
     test_edition(AOE_PLAYER_RISE_OF_ROME);
     test_null_walking_graphic();

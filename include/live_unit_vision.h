@@ -53,11 +53,18 @@ int aoe_live_unit_vision_change_ror(AoeLiveUnitCore *unit,
                                      int entering, int alternate);
 
 /* The same hooks with the radius argument of +0xd8/+0xdc(owner, mode,
-   radius): a negative radius means the template's line of sight (effects
+   radius) (patched RoR 1.0a 0x004aaa10 enter via 0x00517860/0x00517b50 and
+   0x004aab20 leave via 0x00517a40/0x00517d10; the "double explore" flag
+   is owner +0x4a == world +0x7c there): a negative radius means the template's line of sight (effects
    pass an explicit radius when it changes). */
 int aoe_live_unit_vision_radius_ror(AoeLiveUnitCore *unit,
                                     AoeLiveUnitVisionBinding *vision,
                                     int entering, int alternate,
                                     int32_t radius_override);
+
+/* 0x004ad070 (type-80 +0xd8 override): an unfinished building (+0x1dd
+   zero) always enters with the rectangle; a finished one keeps the
+   caller's mode. Returns the mode passed on to 0x004aaa10. */
+int aoe_live_unit_vision_building_mode_ror(int completed, int alternate);
 
 #endif

@@ -2,6 +2,7 @@
 
 #include <ctype.h>
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -508,4 +509,168 @@ void aoe_game_ror_end_session_ror(const AoeGameRorEndOpsRor *o) {
     if (!o->has_world) return;
     if (o->world_ended) o->world_ended(o->leave.context);
     if (o->play_video) o->play_video(o->leave.context, 4, o->won);
+}
+
+int aoe_game_ror_ensure_world_ror(AoeGameRorWorldOpsRor *ops) {
+    if (ops->world) return 1;
+    ops->world = ops->create_world(ops->context);
+    if (!ops->world) return 0;
+    if (!ops->load(ops->context, ops->world)) {
+        ops->delete_world(ops->context, ops->world);
+        ops->world = NULL;
+        return 0;
+    }
+    return 1;
+}
+
+int aoe_game_ror_check_world_ror(AoeGameRorWorldOpsRor *ops) {
+    int ok = 0;
+    ops->cursor(ops->context, 1);
+    ops->status(ops->context, 0x44d);
+    if (ops->world) {
+        ops->delete_world(ops->context, ops->world);
+        ops->world = NULL;
+    }
+    ops->world = ops->create_world(ops->context);
+    if (ops->world) {
+        ok = ops->check(ops->context, ops->world) != 0;
+        ops->delete_world(ops->context, ops->world);
+        ops->world = NULL;
+    }
+    ops->status_close(ops->context);
+    ops->cursor(ops->context, 0);
+    return ok;
+}
+
+/* 0x004fdea0 */
+void aoe_game_ror_run_log_ror(AoeGameRorRunLogRor *log, const char *text, int32_t stamped) {
+    void *f;
+    char line[1100];
+    if (!log->enabled) return;
+    f = log->open(log->context, "c:\\aoerun.txt", log->opened ? "a" : "w");
+    log->opened = 1;
+    if (!f) return;
+    if (stamped) {
+        char when[64], cut[25];
+        when[0] = 0;
+        log->now_text(log->context, when, (int32_t)sizeof when);
+        /* The original copies the first 24 characters of the time text
+           (the ctime() line without its newline). */
+        memcpy(cut, when, 24);
+        cut[24] = 0;
+        snprintf(line, sizeof line, "%s - %.1024s\n", cut, text);
+    } else {
+        snprintf(line, sizeof line, "%.1024s\n", text);
+    }
+    log->write(log->context, f, line);
+    log->close(log->context, f);
+}
+
+/* ---- destructor, editor open, video close ---- */
+
+void aoe_game_ror_destroy_ror(AoeGameRorDestroyOpsRor *ops) {
+    static const char *const screens[] = {
+        "Video Screen", "Create Dialog", "Campaign Editor Screen", "Game Setup Screen",
+        "Game Settings Screen", "Select Scenario Screen", "Campaign Selection Screen",
+        "Load Saved Game Screen", "MP Startup Screen", "MP Setup Screen",
+        "Connecting Screen", "Join Screen", "Main Menu", "Save Game Screen", "End Screen",
+        "Scenario Editor Menu", "Scenario Editor Open", "Scenario Editor Screen",
+        "Single Player Menu", "New Name Dialog", "Name Selection Screen", "Status Screen",
+        "Temp Screen", "ScenarioEditorInfo", "FeaturesInfo", "QuotesInfo", "Logo1Screen",
+        "Logo2Screen"};
+    static const char *const archives[] = {"sounds.drs", "graphics.drs", "Terrain.drs",
+                                           "Border.drs", "Interfac.drs"};
+    size_t i;
+    void *unused_screen = NULL;
+    ops->field_1250 = 0;
+    ops->mode = 0;
+    if (ops->video_window) {
+        ops->destroy_window(ops->context, ops->video_window);
+        ops->video_window = 0;
+    }
+    aoe_game_ror_delete_screens_ror(ops->remove_screen, ops->context, 1,
+                                    ops->game_screen ? ops->game_screen : &unused_screen);
+    for (i = 0; i < sizeof screens / sizeof screens[0]; ++i)
+        ops->remove_screen(ops->context, screens[i]);
+    for (i = 0; i < sizeof archives / sizeof archives[0]; ++i)
+        ops->close_archive(ops->context, archives[i]);
+    if (ops->language_library && *ops->language_library) {
+        ops->free_library(ops->context, *ops->language_library);
+        *ops->language_library = 0;
+    }
+    if (ops->base_destroy) ops->base_destroy(ops->context);
+}
+
+int aoe_game_ror_open_editor_ror(AoeGameRorEditorOpsRor *ops, const char *name) {
+    snprintf(ops->scenario_name, sizeof ops->scenario_name, "%s", name);
+    ops->remove_screen(ops->context, "Scenario Editor Screen");
+    ops->set_state(ops->context, 0);
+    if (ops->open_editor(ops->context, ops->scenario_name)) return 1;
+    if (!ops->fallback(ops->context, ops->scenario_name, 0) && !ops->main_menu(ops->context))
+        ops->give_up(ops->context);
+    return 0;
+}
+
+void aoe_game_ror_close_video_ror(AoeGameRorVideoCloseOpsRor *ops) {
+    if (!ops->video_up) return;
+    if (ops->mode_switched) {
+        ops->step(ops->context, AOE_GAME_ROR_VSTEP_SET_MODE, ops->width, ops->height);
+        ops->step(ops->context, AOE_GAME_ROR_VSTEP_BLANK, 0, 0);
+        ops->step(ops->context, AOE_GAME_ROR_VSTEP_PALETTE, 0, 0);
+        ops->mode_switched = 0;
+        ops->step(ops->context, AOE_GAME_ROR_VSTEP_CHECK_LOST, 0, 0);
+        ops->step(ops->context, AOE_GAME_ROR_VSTEP_CLEAR_RESTORED, 0, 0);
+        ops->step(ops->context, AOE_GAME_ROR_VSTEP_4197B0, 0, 0);
+        if (ops->redraw_flag) *ops->redraw_flag = 1;
+    }
+    ops->step(ops->context, AOE_GAME_ROR_VSTEP_BLANK, 0, 0);
+    ops->step(ops->context, AOE_GAME_ROR_VSTEP_PALETTE, 0, 0);
+    ops->step(ops->context, AOE_GAME_ROR_VSTEP_41C290, 0, 0);
+    ops->step(ops->context, AOE_GAME_ROR_VSTEP_INVALIDATE, 0, 0);
+    ops->step(ops->context, AOE_GAME_ROR_VSTEP_STATE, 2, 0);
+    ops->step(ops->context, AOE_GAME_ROR_VSTEP_B0, 0, 0);
+    ops->step(ops->context, AOE_GAME_ROR_VSTEP_ARROW_CURSOR, 0, 0);
+    ops->step(ops->context, AOE_GAME_ROR_VSTEP_SHOW_CURSOR, 0, 0);
+    ops->video_up = 0;
+}
+
+int aoe_game_ror_open_video_ror(AoeGameRorVideoOpenOpsRor *ops) {
+    char line[64];
+    if (ops->video_up) return 1;
+    ops->prepare(ops->context);
+    ops->double_size = 1;
+    ops->mode_switched = 0;
+    ops->mode_16bit = 0;
+    if (ops->full_screen) {
+        ops->hide_cursor(ops->context);
+        ops->old_width = ops->screen_width;
+        ops->old_height = ops->screen_height;
+        if (!ops->eight_bit_switch) {
+            if (ops->mode_available(ops->context, 640, 480, 16)) {
+                ops->log(ops->context, "640x480 16bit");
+                ops->mode_switched = ops->set_mode(ops->context, 640, 480, 16);
+                if (ops->mode_switched) {
+                    ops->double_size = 1;
+                    ops->mode_16bit = 1;
+                    ops->log(ops->context, "640x480 16bit success");
+                }
+            }
+            if (!ops->mode_switched && ops->screen_width != 640 &&
+                ops->mode_available(ops->context, 640, 480, 8)) {
+                ops->log(ops->context, "640x480 8bit");
+                ops->mode_switched = ops->set_mode(ops->context, 640, 480, 8);
+                if (ops->mode_switched) {
+                    ops->double_size = 1;
+                    ops->log(ops->context, "640x480 8bit success");
+                }
+            }
+        }
+    }
+    snprintf(line, sizeof line, "video_changed_res=%d, double_size=%d", (int)ops->mode_switched,
+             (int)ops->double_size);
+    ops->log(ops->context, line);
+    ops->state(ops->context, 1);
+    ops->after(ops->context);
+    ops->video_up = 1;
+    return 1;
 }

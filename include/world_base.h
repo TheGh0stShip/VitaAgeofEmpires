@@ -52,8 +52,9 @@ typedef struct {
     void (*sound_free)(void *context, void *sound);
     /* Sprites (0x78 bytes): 0x004a4ea0 from text (the sounds), 0x004a4bd0
        an empty one, 0x004a4c40 binary (sounds, colours), 0x004a51c0 link
-       to the table, 0x004a5220 save, 0x004a6430 idle-unload, 0x004a5160
-       free. */
+       to the table (ending in 0x004a5420: the loaded shape +0x1c dropped
+       and the load-on-demand flag +0x14 set, its argument unused), 0x004a5220 save, 0x004a6430
+       idle-unload, 0x004a5160 free. */
     void *(*sprite_text)(void *context, FILE *f, int16_t id, void **sounds);
     void *(*sprite_empty)(void *context, int16_t id);
     void *(*sprite_read)(void *context, AoeOutcomeStream *s, void **sounds, void **colors);

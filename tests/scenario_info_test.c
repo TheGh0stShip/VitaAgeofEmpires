@@ -44,6 +44,55 @@ static int count_kind(const AoeOutcomeManager *m, int kind, int group) {
     return n;
 }
 
+static int st_effects, st_techs, st_disabled, st_base;
+static void st_effect(void *c, int32_t p, int16_t e) { (void)c; assert(e == 100 && p >= 1); ++st_effects; }
+static void st_tech(void *c, int32_t p, int16_t t, uint8_t en) {
+    (void)c; (void)p; ++st_techs;
+    if (!en) { assert(p == 2 && t == 0x5e); ++st_disabled; }
+}
+static uint8_t st_buf[0x4000];
+static int32_t st_len;
+static void st_write(void *c, const uint8_t *d, int32_t n) { (void)c; memcpy(st_buf + st_len, d, (size_t)n); st_len += n; }
+static void st_base_save(void *c) { (void)c; assert(st_len == 0); ++st_base; }
+static int32_t st_i32(int32_t off) {
+    return (int32_t)((uint32_t)st_buf[off] | (uint32_t)st_buf[off + 1] << 8 |
+                     (uint32_t)st_buf[off + 2] << 16 | (uint32_t)st_buf[off + 3] << 24);
+}
+
+static void test_techs_and_save(void) {
+    static AoeScenarioInfoRor info;
+    AoeScenarioTechOpsRor t = {NULL, 1, st_effect, st_tech};
+    AoeScenarioSaveOpsRor s = {NULL, st_base_save, st_write};
+    memset(&info, 0, sizeof info);
+    aoe_scenario_enable_all_techs_ror(&info);
+    info.player_count = 4;
+    info.tech_toggles[1][4] = 0x100; /* low byte 0: disabled */
+    aoe_scenario_apply_techs_ror(&info, &t);
+    assert(st_effects == 0 && st_techs == 48 && st_disabled == 1);
+    info.options[0] = 1;
+    t.has_world = 0;
+    aoe_scenario_apply_techs_ror(&info, &t);
+    assert(st_techs == 48);
+    t.has_world = 1;
+    info.start_resources[0][0] = 200;
+    info.gold = 5;
+    info.time_limit = 77;
+    info.diplomacy[15][15] = 3;
+    info.conditions[0][0].type = 6;
+    info.conditions[15][11].field_34[1] = 9;
+    info.allied_victory[0] = 1;
+    info.starting_age[15] = 4;
+    aoe_scenario_info_save_ror(&info, &t, &s);
+    assert(st_effects == 3 && st_base == 1);
+    assert(st_len == 0x100 + 4 + 0x18 + 16 + 0x400 + 16 * 0x2d0 + 4 + 0x40 + 0x500 + 0xc + 0x40 + 4);
+    assert(st_i32(0) == 200 && st_i32(0x100) == -99 && st_i32(0x104 + 20) == 5);
+    assert(st_i32(0x11c + 12) == 77 && st_i32(0x12c + 0x3fc) == 3);
+    assert(st_i32(0x52c + 0x20) == 6 && st_i32(0x52c + 16 * 0x2d0 - 4) == 9);
+    assert(st_i32(0x322c) == -99 && st_i32(0x3230) == 1);
+    assert(st_i32(0x3270) == 1 && st_i32(0x3270 + 0x500) == 1);
+    assert(st_i32(st_len - 8) == 4 && st_i32(st_len - 4) == -99);
+}
+
 int main(void) {
     static AoeScenarioInfoRor info;
     static World w;
@@ -348,5 +397,6 @@ int main(void) {
         aoe_scenario_record_free_ror(&a.base);
         aoe_scenario_record_free_ror(&b.base);
     }
+    test_techs_and_save();
     return 0;
 }

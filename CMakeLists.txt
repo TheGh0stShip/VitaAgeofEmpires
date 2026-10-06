@@ -904,6 +904,19 @@ else()
       ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_test"
       PASS_REGULAR_EXPRESSION
       "c:190,455 -> Mission Dialog\nc:560,460 -> Game Screen\ni:5 -> Game Screen\nd:39 -> Game Screen\ni:5 -> Game Screen\nu:39 -> Game Screen\nc:520,380 -> Game Screen(.|\n)*r:420,250 -> Game Screen\ni:20 -> Game Screen(.|\n)*c:162,388 -> Game Screen")
+    # Building placement from the screen: a villager selected, its build
+    # menu (command 3), the house (slot 0), the pointer over a free tile
+    # (the footprint preview in mode 7) and a left click placing it
+    # (0x00508d50 -> the 0x66 command); the screen stays the Game Screen.
+    add_test(NAME ror_building_placement_real COMMAND ui_host_tool
+      "${CMAKE_SOURCE_DIR}/build/demo_root" "${CMAKE_BINARY_DIR}"
+      c:320,198 c:320,188 t:Tester k:13 c:100,240 c:190,455 c:560,460 i:5
+      c:215,85 i:2 c:163,389 i:2 c:163,389 i:2 m:300,250 i:2 c:300,250 i:20 r:420,250 i:2)
+    set_tests_properties(ror_building_placement_real PROPERTIES
+      FIXTURES_REQUIRED ror_user
+      ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_test"
+      PASS_REGULAR_EXPRESSION
+      "c:215,85 -> Game Screen\ni:2 -> Game Screen\nc:163,389 -> Game Screen\ni:2 -> Game Screen\nc:163,389 -> Game Screen\ni:2 -> Game Screen\nm:300,250 -> Game Screen\ni:2 -> Game Screen\nc:300,250 -> Game Screen\ni:20 -> Game Screen\nr:420,250 -> Game Screen")
     # In the game: Escape clears the selection, F10 opens the Menu Dialog,
     # Quit Game asks, and Yes leaves for the Main Menu.
     add_test(NAME ror_campaign_quit_real COMMAND ui_host_tool

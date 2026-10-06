@@ -1,7 +1,7 @@
 /* Runs the translated screens on user-supplied data through the UI host,
    starting at the Main Menu, with scripted input:
      ui_host_tool ROOT OUTDIR STEP...
-   Steps: c:X,Y click; r:X,Y right click; k:VK key press (decimal or 0x);
+   Steps: c:X,Y click; r:X,Y right click; m:X,Y move the pointer; k:VK key press (decimal or 0x);
    d:VK / u:VK key down / up (to hold Ctrl 0x11 or Shift 0x10);
    t:TEXT typed characters; i:N idle N times; p:NAME paint and write
    OUTDIR/NAME.ppm. After each step the current screen's name is printed.
@@ -72,7 +72,9 @@ int main(int argc, char **argv) {
     for (i = 3; i < argc && !dir.quit; ++i) {
         const char *a = argv[i];
         int x = 0, y = 0;
-        if (a[0] == 'c' && sscanf(a, "c:%d,%d", &x, &y) == 2) {
+        if (a[0] == 'm' && sscanf(a, "m:%d,%d", &x, &y) == 2) {
+            aoe_ui_host_mouse_move_ror(&host, x, y);
+        } else if (a[0] == 'c' && sscanf(a, "c:%d,%d", &x, &y) == 2) {
             aoe_ui_host_click_ror(&host, x, y);
         } else if (a[0] == 'r' && sscanf(a, "r:%d,%d", &x, &y) == 2) {
             aoe_ui_host_mouse_move_ror(&host, x, y);

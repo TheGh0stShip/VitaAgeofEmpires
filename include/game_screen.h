@@ -432,10 +432,12 @@ void aoe_game_screen_delete_ror(AoeGameScreenRor *s);
 void aoe_game_screen_command_6d_ror(AoeGameScreenRor *s, uint32_t value);
 void aoe_game_screen_pause_ror(AoeGameScreenRor *s);
 
-/* 0x00482290: back to the first button page and rebuild; 0x004847e0
-   the same after action (6, 1), nothing while the comm waits. */
+/* 0x00482290: back to the first button page and rebuild; 0x004847e0 the
+   build menu (the villager page's command 3): the same after the game's
+   action (6, 1), the edit mode the rebuild lists the buildings in;
+   nothing while the comm waits. */
 void aoe_game_screen_first_page_ror(AoeGameScreenRor *s);
-void aoe_game_screen_cancel_page_ror(AoeGameScreenRor *s);
+void aoe_game_screen_build_menu_ror(AoeGameScreenRor *s);
 /* 0x00485140: the next button page (wrapping to 0); in edit mode 6 / 1
    it flips between 0 and 10. Nothing while the comm waits. */
 void aoe_game_screen_next_page_ror(AoeGameScreenRor *s);

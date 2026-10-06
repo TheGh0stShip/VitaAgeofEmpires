@@ -50,7 +50,6 @@ typedef struct {
     void *tech_icons;                 /* AOE_GSC_SHAPE 1: "btntech.shp" (+0x490) */
     AoeCommandButtonRor *buttons[17]; /* +0x4c8.. */
     AoeCommandButtonOpsRor button_ops;
-    int16_t button_count, button_page, button_shown; /* +0x5e0, +0x5e2, +0x5e4 */
     int16_t frame_4b0, frame_4b2, frame_4b4;
     void *train_list;                 /* +0x5d4 (AoeTribeTrainEntryRor) */
     int16_t train_count;
@@ -71,7 +70,7 @@ typedef struct {
     uint32_t last_ms;
     int32_t mouse_x, mouse_y;     /* screen coordinates, -1 before any move */
     int16_t place_unit;           /* game +0x3fc: the unit to place, -1 none */
-    int32_t edit_mode, edit_sub;  /* game +0x1b4 / +0x1b8: 0x15 places a building */
+    int32_t edit_mode, edit_sub;  /* game +0x1b4 / +0x1b8: 7 places a building */
 } AoeGameScreenHostRor;
 
 /* The view rectangle for a screen size (0x0047f000 without the

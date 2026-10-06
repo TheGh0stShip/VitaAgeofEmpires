@@ -378,7 +378,7 @@ void aoe_game_screen_first_page_ror(AoeGameScreenRor *s) {
     OPS->refresh_buttons(CTX);
 }
 
-void aoe_game_screen_cancel_page_ror(AoeGameScreenRor *s) {
+void aoe_game_screen_build_menu_ror(AoeGameScreenRor *s) {
     if (OPS->comm_waiting(CTX)) return;
     OPS->action(CTX, 6, 1);
     aoe_game_screen_first_page_ror(s);

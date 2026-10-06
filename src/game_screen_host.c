@@ -461,7 +461,7 @@ static int make_minimap(AoeGameScreenHostRor *s) {
    orders the selection there. The original's view panel does this
    through its mouse handlers (0x0050f420's game view; not assembled). */
 static void selection_changed(AoeGameScreenHostRor *s);
-/* ---- building placement, edit mode 0x15 ---- */
+/* ---- building placement, edit mode 7 (0x15 places adjacent buildings, not yet) ---- */
 static void so_set_mode(void *c, int32_t mode, int32_t sub);
 
 typedef struct {
@@ -532,7 +532,7 @@ static void draw_place_preview(AoeGameScreenHostRor *s) {
                                      pv_has_graphic, pv_facing,    pv_shape,  pv_relocating,
                                      pv_draw};
     int32_t code = 0, py = 0, left = s->ez.panel.x + s->view_x, top = s->ez.panel.y + s->view_y;
-    if (s->edit_mode != 0x15 || !p.t || s->mouse_x < 0) return;
+    if (s->edit_mode != 7 || !p.t || s->mouse_x < 0) return;
     aoe_main_view_editor_preview(&o, left, top, left + s->view_w - 1, top + s->view_h - 1, &code,
                                  &py);
 }
@@ -562,7 +562,12 @@ static int pc_blocked(void *c, float x, float y) {
     PlaceCtx *p = c;
     return !aoe_demo_can_place(p->s->world, 1, p->s->place_unit, x, y);
 }
-static void pc_game_10(void *c) { so_set_mode(((PlaceCtx *)c)->s, 0, 0); }
+/* The game's +0x10(0, 0); the buttons back to the first page as a new
+   selection would (0x00482290). */
+static void pc_game_10(void *c) {
+    so_set_mode(((PlaceCtx *)c)->s, 0, 0);
+    selection_changed(((PlaceCtx *)c)->s);
+}
 /* 0x004f10e0: the selected villagers (class 4) build `id` there: opcode
    0x66 for player 1, run by the world. */
 static int pc_build(void *c, int16_t id, float x, float y) {
@@ -596,11 +601,15 @@ static int32_t gs_mouse_down(AoeUiPanelRor *p, uint8_t button, int32_t x, int32_
     if (!s->world || vx < 0 || vy < 0 || vx >= s->view_w || vy >= s->view_h ||
         (button != 1 && button != 2) || aoe_ui_ez_help_press_ror(&s->ez, button, x, y))
         return aoe_ui_ez_mouse_down_slot_ror(p, button, x, y, c, sh);
-    if (s->edit_mode == 0x15 && s->place_unit >= 0) {
-        /* 0x00508d50 places on a left click; a right click leaves the mode
-           (0x00519ed0: sub-mode 0x15 clears the box and redraws). */
-        if (button == 1) place_click(s, vx, vy);
-        else so_set_mode(s, 0, 0);
+    if (s->edit_mode == 7 && s->place_unit >= 0) {
+        /* 0x00508d50 places on a left click; a right click resets the mode
+           (0x00519ed0: any sub-mode but 0 and 0x14 resets it). */
+        if (button == 1) {
+            place_click(s, vx, vy);
+        } else {
+            so_set_mode(s, 0, 0);
+            selection_changed(s);
+        }
         render_view(s);
         p->vt->set_redraw(p, 1);
         return 1;
@@ -636,6 +645,8 @@ static void so_clear_selection(void *c) {
     aoe_demo_select(SO(c)->world, NULL);
     selection_changed(SO(c));
 }
+static void rebuild_buttons(AoeGameScreenHostRor *s);
+static void so_refresh_buttons(void *c) { rebuild_buttons(SO(c)); }
 static void so_redraw(void *c, void *panel, int all) {
     (void)panel;
     (void)all;
@@ -846,13 +857,14 @@ static int so_can_afford(void *c, int16_t id, int16_t *failing) {
     return ok;
 }
 static void so_place_unit(void *c, int16_t id) { SO(c)->place_unit = id; } /* game +0x3fc */
-/* The game's +0x10 as the screen's "action" (0x00484820 asks 0x15 for a
-   building, 7 otherwise); a template's +0x04 flag is being a building. */
+/* The game's +0x10 (0x004ff420: the state and substate, 0x00419970) as
+   the screen's "action": 0x00484820 asks 7 to place a building, or 0x15
+   when the template's +0x16c byte (adjacent mode, walls) is set. */
 static void so_action(void *c, int32_t action, int32_t arg) { so_set_mode(c, action, arg); }
 static int so_template_flag(void *c, int16_t id) {
     const AoePlayerTemplates *ts = aoe_demo_player_templates(SO(c)->world, 1);
     const DatUnit *t = ts && id >= 0 ? aoe_player_templates_get(ts, (uint16_t)id) : NULL;
-    return t && t->type == 80;
+    return t && t->building_adjacent_mode != 0;
 }
 static void production(AoeGameScreenHostRor *s, uint8_t opcode, int16_t item) {
     uint8_t cmd[AOE_COMMAND_PRODUCTION_SIZE_ROR];
@@ -1179,9 +1191,11 @@ static void rebuild_buttons(AoeGameScreenHostRor *s) {
     o.has_current_unit = n > 0;
     o.game_state = s->game_state;
     o.civ = style < 6 ? style : 0;
-    o.count = &s->button_count;
-    o.shown = &s->button_shown;
-    o.page = s->button_page;
+    o.count = &s->screen.button_pages;
+    o.shown = &s->screen.shown_page;
+    o.page = s->screen.button_page;
+    o.edit_mode = s->edit_mode;
+    o.field_1b8 = s->edit_sub;
     o.frame_4b0 = s->frame_4b0;
     o.frame_4b2 = s->frame_4b2;
     o.frame_4b4 = s->frame_4b4;
@@ -1209,22 +1223,21 @@ static void rebuild_buttons(AoeGameScreenHostRor *s) {
 /* A new current object: the first button page rebuilt (0x00482290, as
    the player change 0x00481f70 ends). */
 static void selection_changed(AoeGameScreenHostRor *s) {
-    s->button_page = 0;
+    s->screen.button_page = 0;
     rebuild_buttons(s);
 }
 
-/* 0x00481410's handlers that are integrated: train (0x485520), research
-   (0x4852f0), the next page (0x485140) and the menu (0x4850b0). */
+/* 0x00481410's handlers that are integrated: train (0x485520), a building
+   to place (0x484820), research (0x4852f0), the build menu (0x4847e0), the
+   next page (0x485140), the menu (0x4850b0) and Escape (0x484900). */
 static void command_run(void *c, uint32_t handler, int32_t arg, int32_t arg2) {
     AoeGameScreenHostRor *s = c;
     switch (handler) {
     case 0x485520u: aoe_game_screen_train_button_ror(&s->screen, (int16_t)arg, arg2); break;
     case 0x484820u: aoe_game_screen_train_ror(&s->screen, (int16_t)arg); break; /* a building to place */
     case 0x4852f0u: aoe_game_screen_research_button_ror(&s->screen, (int16_t)arg); break;
-    case 0x485140u:
-        s->button_page = (int16_t)(s->button_page + 1 >= 2 ? 0 : s->button_page + 1);
-        rebuild_buttons(s);
-        break;
+    case 0x4847e0u: aoe_game_screen_build_menu_ror(&s->screen); break;
+    case 0x485140u: aoe_game_screen_next_page_ror(&s->screen); break;
     case 0x4850b0u: aoe_game_screen_menu_ror(&s->screen); break;
     case 0x484900u: aoe_game_screen_escape_ror(&s->screen); break;
     default: break;
@@ -1245,6 +1258,7 @@ static void screen_ops(AoeGameScreenHostRor *s) {
     o->clear_selection = so_clear_selection;
     o->clear_block = so_none;
     o->redraw = so_redraw;
+    o->refresh_buttons = so_refresh_buttons; /* the page requested by first/next page */
     o->game_state = so_state;
     o->run_commands = so_none;
     o->paused = so_none_int;
@@ -1297,7 +1311,7 @@ static void act_step(void *c, int32_t id, int32_t a, int32_t b, int32_t arg) {
         aoe_game_screen_command_ror(1, a, b, arg, 0, command_run, s);
         break;
     case AOE_GS_ACT_PLAYER_CHANGED:   /* 0x00481f70 -> the first page, rebuilt */
-        s->button_page = 0;
+        s->screen.button_page = 0;
         rebuild_buttons(s);
         break;
     default:   /* restart, resign, load, resume, commands: not integrated */

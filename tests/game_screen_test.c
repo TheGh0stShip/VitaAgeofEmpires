@@ -897,10 +897,10 @@ int main(void) {
     assert(s.button_page == 0 && refreshes == 4);
     s.button_page = 5;
     f.comm = 1;
-    aoe_game_screen_cancel_page_ror(&s);
+    aoe_game_screen_build_menu_ror(&s);
     assert(s.button_page == 5 && refreshes == 4);
     f.comm = 0;
-    aoe_game_screen_cancel_page_ror(&s);
+    aoe_game_screen_build_menu_ror(&s);
     assert(s.button_page == 0 && refreshes == 5 && f.last_action == 6 && f.last_arg == 1);
     s.button_page = 4;
     aoe_game_screen_first_page_ror(&s);

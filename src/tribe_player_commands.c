@@ -882,3 +882,179 @@ void aoe_tribe_player_load_ai_ror(const AoeTribeAiLoadOpsRor *o, const char *bui
     if (o->scenario_learn_name && o->scenario_learn_name[0]) o->load_learn(o->context, o->scenario_learn_name);
     o->srand_(o->context, saved);
 }
+
+/* ---- 0x004f36e0 ---- */
+#define SN(i, v) o->set_sn(o->context, (i), (int32_t)(v))
+#define RND() o->rand_(o->context)
+static void tp_div3(int32_t *w, const uint8_t *idx, int n) {
+    int i;
+    for (i = 0; i < n; ++i)
+        if (w[idx[i]] > 0) w[idx[i]] /= 3;
+}
+static int tp_in(int32_t v, const uint8_t *set, int n) {
+    int i;
+    for (i = 0; i < n; ++i) if (set[i] == v) return 1;
+    return 0;
+}
+void aoe_tribe_player_personality_ror(const AoeTribePersonalityOpsRor *o, char *build_list,
+                                      char *rule_set, int32_t map_type, int32_t victory,
+                                      int32_t size) {
+    static const uint8_t g0[] = {19, 20, 21, 128, 129, 130};
+    static const uint8_t g1[] = {6, 7, 8, 59, 58, 54, 55, 104, 47, 127};
+    static const uint8_t g2[] = {16, 49, 108};
+    static const uint8_t g3[] = {46, 53, 17, 18, 99, 102, 109, 18, 125, 126};
+    static const uint8_t g4[] = {3, 4, 5, 9, 10, 11, 12, 42, 44, 45, 48, 56, 74, 98, 103, 112, 113};
+    static const uint8_t g5[] = {41, 0, 1, 2, 41, 50, 51, 72, 73, 50, 51, 80, 81, 82, 107};
+    static const uint8_t g6[] = {40, 57, 114, 84};
+    static const uint8_t pick5[] = {0, 1, 2, 0x29, 0x32, 0x33, 0x50, 0x51, 0x52, 0x6b};
+    static const uint8_t pick1[] = {6, 7, 8, 0x2b, 0x36, 0x37, 0x3a, 0x3b, 0x68};
+    static const uint8_t pick7[] = {0xd, 0xe, 0xf};
+    static const uint8_t pick12[] = {0x3c, 0x3d, 0x3e, 0x3f, 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46,
+                                     0x47, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f, 0x53, 0x55, 0x56, 0x57, 0x58,
+                                     0x59, 0x5a, 0x5b, 0x5c, 0x5d, 0x5e, 0x5f, 0x60, 0x61, 100, 0x65,
+                                     0x69, 0x6a, 0x6e, 0x6f, 0x73, 0x74, 0x79, 0x7a, 0x7b, 0x7c};
+    static const uint8_t pick2[] = {0x10, 0x31, 0x6c};
+    static const uint8_t pick3[] = {0x11, 0x12, 0x2e, 0x34, 0x35, 99, 0x66, 0x6d};
+    static const uint8_t pick0[] = {0x13, 0x14, 0x15};
+    static const uint8_t pick_none[] = {0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+                                        0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x75, 0x76,
+                                        0x77, 0x78};
+    static const uint8_t pick6[] = {0x28, 0x39, 0x54, 0x72};
+    static const uint8_t time9[] = {0, 3, 0xb, 0xc, 0xd, 0x13, 0x2f, 0x30, 0x33, 0x37, 0x39, 0x48,
+                                    0x4a, 0x4b, 0x4e, 0x51, 0x55, 0x58, 0x5a, 0x5e, 0x60, 100, 0x69,
+                                    0x6e, 0x73};
+    static const uint8_t time8a[] = {9, 0x38};
+    static const uint8_t time8b[] = {10, 0x29, 0x2b, 0x2c, 0x2d, 0x32, 0x3a, 0x71};
+    int32_t w[AOE_TRIBE_WEIGHTS], *c = o->counters, kind = o->difficulty, total = 0, pick = 0, i, t, v, adj;
+    char civ_name[0x100], text[0x200];
+    if (!o->has_module) return;
+    memset(w, 0, sizeof w);
+    o->weights(o->context, o->civ, w, map_type, victory, size);
+    if (!o->death_match && (o->civ == 4 || o->civ == 1 || o->civ == 2 || o->civ == 5 || o->civ == 9 ||
+                            o->civ == 7 || o->civ == 8 || o->civ == 11)) {
+        int32_t add = -1;
+        if (map_type == 0) add = c[11] < 1 ? 0 : c[12] == 0 ? 300 : 100;
+        else if (map_type == 1) add = c[11] < 1 ? 0 : c[12] == 0 ? 250 : 75;
+        else if (map_type == 2 || map_type == 6 || map_type == 8) add = c[11] < 1 ? 0 : c[12] == 0 ? 200 : 50;
+        if (add == 0) w[13] = w[14] = 0;
+        else if (add > 0) { w[13] += add; w[14] += add; }
+    }
+    SN(0xc9, 1);
+    if (!o->death_match) {
+        switch (o->top_bucket(o->context)) {
+        case 0: case 6: case 1: w[6] *= 2; w[7] *= 2; break;
+        case 2: w[18] *= 2; w[17] *= 2; w[3] *= 2; w[4] *= 2; break;
+        case 3:
+            w[0] *= 2; w[1] *= 2; w[19] *= 2; w[20] *= 2;
+            if (w[17] > 0) w[17] /= 4;
+            if (w[18] > 0) w[18] /= 4;
+            break;
+        case 4: w[6] *= 2; w[7] *= 2; w[19] *= 2; w[20] *= 2; break;
+        case 5: w[6] *= 2; w[7] *= 2; w[0] *= 2; w[1] *= 2; break;
+        case 7: case 10:
+            if (w[19] > 0) w[19] /= 4;
+            if (w[20] > 0) w[20] /= 4;
+            break;
+        case 8:
+            w[19] *= 2; w[20] *= 2;
+            if (c[11] > 0) { w[13] *= 3; w[14] *= 3; }
+            break;
+        case 9: w[19] *= 3; w[20] *= 3; break;
+        default: break;
+        }
+    }
+    tp_div3(w, g0, sizeof g0); tp_div3(w, g1, sizeof g1); tp_div3(w, g2, sizeof g2);
+    tp_div3(w, g3, sizeof g3); tp_div3(w, g4, sizeof g4); tp_div3(w, g5, sizeof g5);
+    tp_div3(w, g6, sizeof g6);
+    for (i = 0; i < AOE_TRIBE_WEIGHTS; ++i) if (w[i] < 0) w[i] = 0;
+    for (i = 0; i < AOE_TRIBE_WEIGHTS; ++i) total += w[i];
+    if (total > 0) {
+        int32_t r = RND() % total, cum = 0;
+        for (i = 0; i < AOE_TRIBE_WEIGHTS; ++i) {
+            cum += w[i];
+            if (r < cum) { pick = i; break; }
+        }
+        if (i == AOE_TRIBE_WEIGHTS) pick = 0;
+    } else {
+        pick = 0; /* the original divides by the zero total */
+    }
+    o->string(o->context, 0x26930 + pick, build_list, 0x100);
+    if (tp_in(pick, pick5, sizeof pick5)) { ++c[5]; ++c[11]; }
+    else if (tp_in(pick, pick1, sizeof pick1)) { ++c[1]; ++c[11]; }
+    else if (tp_in(pick, pick7, sizeof pick7)) { SN(0x3b, 4); SN(0x3c, 10); ++c[7]; ++c[12]; }
+    else if (tp_in(pick, pick12, sizeof pick12)) { ++c[12]; }
+    else if (tp_in(pick, pick2, sizeof pick2)) { ++c[2]; ++c[11]; }
+    else if (tp_in(pick, pick3, sizeof pick3) || pick == 0x7d || pick == 0x7e) { ++c[3]; ++c[11]; }
+    else if (tp_in(pick, pick0, sizeof pick0) || pick == 0x80 || pick == 0x81 || pick == 0x82) { ++c[0]; ++c[11]; }
+    else if (tp_in(pick, pick_none, sizeof pick_none)) { ++c[11]; }
+    else if (tp_in(pick, pick6, sizeof pick6)) { ++c[6]; ++c[11]; }
+    else if (pick == 0x48 || pick == 0x49) { ++c[11]; ++c[5]; }
+    else if (pick == 0x4a) { ++c[11]; ++c[4]; }
+    else if (pick == 0x7f) { ++c[11]; ++c[1]; }
+    else { ++c[4]; ++c[11]; }
+    civ_name[0] = '\0';
+    o->string(o->context, 0x27f6 + o->civ, civ_name, 0x100);
+    snprintf(text, sizeof text, "I am the %.200s civ (culture #%d):", civ_name, (int)o->civ - 1);
+    o->log(o->context, text);
+    snprintf(text, sizeof text, "Selected a best build list of '%.200s'.", build_list);
+    o->log(o->context, text);
+    strcpy(rule_set, "RandomGameSpecialized");
+    o->log(o->context, "Setting AI Personality:");
+    switch (victory) {
+    case 0: case 1: SN(0x36, 5); SN(0x37, 5); break;
+    case 2: case 3: case 4: case 5:
+        if (o->get_sn(o->context, 1) < 1) { SN(0, 0x32); SN(2, 0x32); }
+        else { SN(0, 0x32); SN(1, 0x19); SN(2, 0x19); }
+        if (map_type > 1) SN(3, 5);
+        SN(0x2a, 2);
+        SN(0x3d, 2);
+        if (victory != 2) {
+            SN(0x26, size + 1);
+            SN(0x24, 1);
+            if (victory == 3) { SN(0x36, 1); SN(0x37, 5); }
+            else if (victory == 4) { SN(0x36, 5); SN(0x37, 1); }
+            else { SN(0x36, 5); SN(0x37, 5); }
+        }
+        break;
+    default: break;
+    }
+    if (o->death_match == 1) SN(4, 10);
+    t = (RND() % 12 + 28) * 60;
+    if (tp_in(pick, time9, sizeof time9)) { ++c[9]; t = (RND() % 6 + 20) * 60; }
+    else if (tp_in(pick, time8a, sizeof time8a)) { t = (RND() % 2 + 5) * 60; ++c[8]; }
+    else if (tp_in(pick, time8b, sizeof time8b)) { ++c[8]; t = (RND() % 4 + 11) * 60; }
+    else ++c[10];
+    if (kind == 0 && RND() % 3 == 0) t -= 300;
+    SN(0x68, t); SN(0x10, 2); SN(0x1a, 10); SN(0x5d, 1); SN(99, 4);
+    SN(0xbc, RND() % 3 != 0);
+    SN(0xc3, RND() % 40 + 10);
+    SN(0xbd, RND() % 70 + 30);
+    SN(0xc6, (RND() % 5 + 5) * kind);
+    SN(199, (RND() % 10 + 10) * kind);
+    SN(0xa1, 4);
+    adj = size;
+    if (map_type == 0) adj -= 2; else if (map_type == 1) adj -= 1;
+    switch (adj) {
+    case 0: SN(0x49, RND() % 2 + 15); v = o->get_sn(o->context, 0x49) + 1 + RND() % 4; break;
+    case 1: SN(0x49, RND() % 3 + 16); v = o->get_sn(o->context, 0x49) + 1 + RND() % 5; break;
+    case 2: SN(0x49, RND() % 2 + 17); v = o->get_sn(o->context, 0x49) + 1 + RND() % 6; break;
+    case 3: SN(0x49, RND() % 2 + 18); v = o->get_sn(o->context, 0x49) + 1 + RND() % 7; break;
+    case 4: SN(0x49, RND() % 4 + 18); v = o->get_sn(o->context, 0x49) + 1 + RND() % 8; break;
+    case -2: case -1: SN(0x49, RND() % 2 + 14); v = o->get_sn(o->context, 0x49) + 1 + RND() % 4; break;
+    default: SN(0x49, RND() % 2 + 18); v = o->get_sn(o->context, 0x49) + 1 + RND() % 9; break;
+    }
+    SN(0x4a, v); SN(0xd0, 1); SN(0xd1, 1); SN(0xd2, 1); SN(0xdf, 1);
+    if (map_type == 0) { SN(0xd4, 3); SN(0xd5, 6); SN(0xd6, 2); SN(0xe0, 6); }
+    else if (map_type == 1) { SN(0xd4, 2); SN(0xd5, 5); SN(0xd6, 2); SN(0xe0, 4); }
+    else if (map_type == 2 || map_type == 6 || map_type == 5 || map_type == 8) { SN(0xd4, 1); SN(0xd5, 4); SN(0xd6, 1); SN(0xe0, 3); }
+    else if (map_type == 3 || map_type == 4 || map_type == 7) { SN(0xd4, 0); SN(0xd5, 0); SN(0xd6, 0); SN(0xe0, 0); }
+    if (o->flag_554734) {
+        v = kind == 0 ? 2000 : 0;
+        SN(0x8a, v); SN(0x8b, v); SN(0x8c, v); SN(0x8d, v);
+    }
+    SN(0xa8, 0); SN(0xa2, 0);
+    if (kind < 3) { SN(0xc2, 1); SN(0x2f, 2); } else { SN(0xc2, 0); SN(0x2f, 1); }
+    if (kind >= 0 && kind <= 3) { SN(0xba, 0xb4); SN(0xba, kind == 0 ? 200 : kind == 1 ? 150 : kind == 2 ? 100 : 50); }
+    SN(0xb5, RND() % 6 < 5);
+    SN(0xb6, RND() % 3 < 1);
+}

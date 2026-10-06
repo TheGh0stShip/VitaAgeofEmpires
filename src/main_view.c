@@ -1944,3 +1944,29 @@ int32_t aoe_main_view_point_objects_ror(const AoeMainViewRor *v, const AoeViewDr
     }
     return n;
 }
+
+/* ---- 0x00516990 ---- */
+void aoe_view_grid_build_lookup_ror(AoeViewGridRor *grid, const int32_t *const tables[17])
+{
+    int t, i;
+
+    free(grid->lookup);
+    grid->lookup = malloc(256);
+    if (!grid->lookup)
+        return;
+    for (i = 0; i < 256; i++)
+        grid->lookup[i] = -1;
+    for (t = 0; t < 17; t++) {
+        const int32_t *p = tables[t];
+        for (; p[0] != 999; p += 3) {
+            int32_t row = p[0], c0 = p[1], c1 = p[2], c;
+            if (row < 0 || row >= 16)
+                continue;
+            if (c0 < 0) c0 = 0;
+            if (c1 > 15) c1 = 15;
+            for (c = c0; c <= c1; c++)
+                if (grid->lookup[row * 16 + c] == -1)
+                    grid->lookup[row * 16 + c] = (int8_t)t;
+        }
+    }
+}

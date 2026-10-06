@@ -1290,6 +1290,16 @@ static void point_objects_tests(void) {
     n = (int)aoe_main_view_point_objects_ror(&v, &rows, &lists, 110, 60, 0, 7, 0, 4, 0, out);
     assert(n == 2 && out[0].id == 2 && out[0].field_6 == 8 && lists.counts[1] == 1); /* the freed slot is reused */
 }
+
+static void grid_lookup_tests(void) {
+    static const int32_t t0[] = {0, 0, 0, 999}, t1[] = {0, -3, 2, 1, 1, 1, 999}, t2[] = {1, 0, 40, 17, 0, 0, 999}, tn[] = {999};
+    const int32_t *tables[17] = {t0, t1, t2, tn, tn, tn, tn, tn, tn, tn, tn, tn, tn, tn, tn, tn, tn};
+    AoeViewGridRor g; memset(&g, 0, sizeof g);
+    aoe_view_grid_build_lookup_ror(&g, tables);
+    assert(g.lookup && g.lookup[0] == 0 && g.lookup[1] == 1 && g.lookup[2] == 1 && g.lookup[3] == -1);
+    assert(g.lookup[16] == 2 && g.lookup[17] == 1 && g.lookup[18] == 2 && g.lookup[31] == 2 && g.lookup[32] == -1);
+    free(g.lookup);
+}
 int main(void)
 {
     AoeMainViewRor v;
@@ -1481,5 +1491,6 @@ int main(void)
     edit_click_tests();
     mouse_move_tests();
     point_objects_tests();
+    grid_lookup_tests();
     return 0;
 }

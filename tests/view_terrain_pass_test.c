@@ -123,6 +123,20 @@ static void walk_tests(void) {
     assert(aoe_main_view_walk_ror(&v, &wops, 14, 0, pt, NULL, &res, &ox, &oy, &osx, &osy) == '2' && strcmp(lg, "w0(0,0,0,0,0) ") == 0);
 }
 
+
+static void border_frame_tests(void) {
+    static int16_t table[(16 * 12) * 3];
+    AoeViewBorderRor b = {1, 0, table};
+    table[(2 * 12 + 0xb) * 3 + 0] = 3; table[(2 * 12 + 0xb) * 3 + 1] = 10; table[(2 * 12 + 0xb) * 3 + 2] = 100;
+    table[(2 * 12 + 9) * 3 + 0] = 2; table[(2 * 12 + 9) * 3 + 1] = 1; table[(2 * 12 + 9) * 3 + 2] = 7;
+    table[(0 * 12 + 1) * 3 + 0] = 1; table[(0 * 12 + 1) * 3 + 2] = 5;
+    assert(aoe_main_view_border_frame_ror(&b, 2, 0xb, 4, 7) == 110 && aoe_main_view_border_frame_ror(&b, 2, 9, 4, 7) == 7 && aoe_main_view_border_frame_ror(&b, 2, 9, 5, 7) == 8);
+    assert(aoe_main_view_border_frame_ror(&b, 0, 1, 9, 9) == 5 && aoe_main_view_border_frame_ror(&b, 0, 2, 9, 9) == -1);
+    b.per_edge = 1;
+    assert(aoe_main_view_border_frame_ror(&b, 2, 0xb, 4, 7) == 100 && aoe_main_view_border_frame_ror(&b, 2, 9, 5, 7) == 7);
+    b.has_shape = 0;
+    assert(aoe_main_view_border_frame_ror(&b, 2, 0xb, 4, 7) == -1);
+}
 int main(void) {
     AoeViewTerrainPassRor v;
     AoeViewMarkRor m1, m2;
@@ -169,5 +183,6 @@ int main(void) {
     lg[0] = '\0'; t.border = 0; t.flags = 0x40;
     assert(aoe_game_view_draw_tile_ror(&tops, &t, 1, 100, 50, 2, 2, 0, 1, 1) == 1 && strcmp(lg, "tf1 blit(100,50,T,4,0,40,1,1) dirty(1,2) ") == 0);
     walk_tests();
+    border_frame_tests();
     return 0;
 }

@@ -1795,3 +1795,30 @@ int32_t aoe_ai_unit_ai_choose_target_ror(const AoeAiTargetOpsRor *o, int allow_1
     }
     return best;
 }
+
+/* ---- 0x004ac0a0 ---- */
+int32_t aoe_unit_group_leave_ror(AoeUnitGroupRor *g, int32_t id, const AoeUnitGroupOpsRor *o) {
+    int32_t i;
+    if (id == g->id && g->id == g->leader) return o->became_leader(o->context);
+    for (i = 0; i < g->count; ++i) {
+        AoeUnitGroupRor *u;
+        if (g->capacity - 1 < i) {
+            int32_t *grown = o->regrow(o->context, g->members, g->capacity, i + 1);
+            if (grown) {
+                g->members = grown;
+                g->capacity = i + 1;
+            }
+        }
+        u = o->unit(o->context, g->members[i]);
+        if (u && u->id != g->id) {
+            int32_t k, n = u->count;
+            for (k = 0; k < n; ++k) if (u->members[k] == id) break;
+            if (k < n) {
+                for (; k < n - 1; ++k) u->members[k] = u->members[k + 1];
+                if (--u->count < 0) u->count = 0;
+            }
+        }
+    }
+    o->left(o->context, id);
+    return 1;
+}

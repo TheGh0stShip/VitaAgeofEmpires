@@ -913,4 +913,30 @@ typedef struct {
    beats a class-3 best outright. Returns the best ID, -1 when none. */
 int32_t aoe_ai_unit_ai_choose_target_ror(const AoeAiTargetOpsRor *o, int allow_1b, int32_t mode);
 
+
+/* ---- 0x004ac0a0: a unit leaving its group ---- */
+/* A unit's group fields: +0x04 its ID, +0x64 the member IDs, +0x68 their
+   count, +0x70 the array's capacity, +0x78 the leader's ID. */
+typedef struct {
+    int32_t id;
+    int32_t *members;
+    int32_t count, capacity;
+    int32_t leader;
+} AoeUnitGroupRor;
+typedef struct {
+    void *context;
+    AoeUnitGroupRor *(*unit)(void *context, int32_t id);   /* 0x005206d0 (NULL none) */
+    int32_t (*became_leader)(void *context);               /* 0x4ac1d0 */
+    void (*left)(void *context, int32_t id);               /* 0x4ac030(id) */
+    /* The member array regrown to `n` entries (the old one freed). */
+    int32_t *(*regrow)(void *context, int32_t *old, int32_t old_count, int32_t n);
+} AoeUnitGroupOpsRor;
+/* 0x004ac0a0(id): when `id` is this unit and it is its own leader,
+   0x4ac1d0 answers. Otherwise every member (growing the array to i + 1
+   entries whenever the index reaches its capacity, as the original
+   does) that resolves to another unit has `id` removed from its own
+   member list (the tail shifted down, its count lowered, never below
+   0); then 0x4ac030(id); 1. */
+int32_t aoe_unit_group_leave_ror(AoeUnitGroupRor *g, int32_t id, const AoeUnitGroupOpsRor *o);
+
 #endif

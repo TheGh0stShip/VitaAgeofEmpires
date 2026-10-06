@@ -480,3 +480,25 @@ uint8_t aoe_main_view_walk_ror(AoeViewTerrainPassRor *v, const AoeViewWalkOpsRor
     if ((mode == ')' || mode == '*' || mode == '+') && res == '4') *result = best;
     return res;
 }
+
+/* ---- 0x00514fd0 ---- */
+int16_t aoe_main_view_border_frame_ror(const AoeViewBorderRor *b, uint8_t shape, uint8_t bshape,
+                                       int16_t x, int16_t y) {
+    const int16_t *e;
+    int32_t count, idx = 0;
+    if (!b->has_shape) return -1;
+    e = b->table + ((int32_t)shape * 12 + bshape) * 3;
+    count = e[0];
+    if (count == 0) return -1;
+    if (count >= 2) {
+        if (b->per_edge == 0) {
+            if (bshape == 0xb || bshape == 0xc) idx = y % count;
+            else if (bshape == 9 || bshape == 10) idx = x % count;
+        } else if (b->per_edge == 1) {
+            if (bshape == 3 || bshape == 2) idx = y % count;
+            else if (bshape == 1 || bshape == 4) idx = x % count;
+        }
+    }
+    if (count - 1 < (int16_t)idx) idx = 0;
+    return (int16_t)(e[1] * idx + e[2]);
+}

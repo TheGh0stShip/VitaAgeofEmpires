@@ -660,4 +660,57 @@ typedef struct {
 void aoe_tribe_player_load_ai_ror(const AoeTribeAiLoadOpsRor *o, const char *build_list,
                                   const char *city_plan, const char *rule_set, int32_t personality);
 
+
+/* ---- 0x004f36e0: the computer player's random personality ---- */
+#define AOE_TRIBE_WEIGHTS 131
+typedef struct {
+    void *context;
+    int has_module;             /* +0x23c */
+    uint8_t civ;                /* +0x109 */
+    int32_t difficulty;         /* the settings' byte +0x993 (0x0041b990) */
+    uint8_t death_match;        /* 0x005054e0 */
+    int32_t flag_554734;        /* the data flag 0x00554734 (1 in the patched build) */
+    int32_t *counters;          /* 0x007d2464[13] (world_game.h path_flags) */
+    /* The civilisation's weights (0x004f5430..0x004f6640 for civs 1..16, see tribe_civ_setup.h). */
+    void (*weights)(void *context, uint8_t civ, int32_t w[AOE_TRIBE_WEIGHTS], int32_t map_type,
+                    int32_t victory, int32_t size);
+    /* 0x004c6670 then 0x004c6710: the largest statistics bucket (-1 none). */
+    int32_t (*top_bucket)(void *context);
+    int32_t (*rand_)(void *context);                                /* rand() */
+    void (*set_sn)(void *context, int32_t index, int32_t value);    /* 0x004cc030 */
+    int32_t (*get_sn)(void *context, int32_t index);                /* 0x004cc060 */
+    void (*string)(void *context, int32_t id, char *out, int size); /* game vtable +0x20 */
+    void (*log)(void *context, const char *text);                   /* 0x0040c240 */
+} AoeTribePersonalityOpsRor;
+/* 0x004f36e0(build_list, rule_set, map_type, victory, size): nothing
+   without the computer-player object. The civilisation's 131 weights;
+   outside a death match civs 1, 2, 4, 5, 7, 8, 9 and 11 adjust weights
+   13 / 14 by the map type (0: +300 / +100, 1: +250 / +75, 2 / 6 / 8:
+   +200 / +50 when counter 12 is 0 / not; cleared while counter 11 is
+   below 1). SN 0xc9 = 1. Outside a death match the top learn bucket
+   doubles, quarters or triples groups of weights (0x004c6710); seven
+   groups are then divided by 3 (positive entries only), negatives
+   cleared, and a weighted draw (rand() % total) picks the build list:
+   its name is string 0x26930 + pick (into `build_list`), and the pick's
+   group bumps the 0x007d2464 counters (groups of three set SN 0x3b = 4
+   and 0x3c = 10). Logs "I am the %s civ (culture #%d):", "Selected a
+   best build list of '%s'." and "Setting AI Personality:"; `rule_set`
+   becomes "RandomGameSpecialized". Then the strategic numbers: by the
+   victory (0 / 1: 0x36 = 0x37 = 5; 2..5: 0 = 50, 1 = 2 = 25 unless SN 1
+   is below 1 (then 2 = 50), 3 = 5 for map types above 1, 0x2a = 0x3d =
+   2, and for 3..5 0x26 = size + 1, 0x24 = 1, 0x36 / 0x37 = 1 / 5, 5 / 1,
+   5 / 5), 4 = 10 in a death match, 0x68 by the pick's group ((rand % 12
+   + 28), (% 6 + 20), (% 2 + 5) or (% 4 + 11) minutes, less 300 with
+   probability 1/3 at difficulty 0), 0x10 = 2, 0x1a = 10, 0x5d = 1, 99 = 4,
+   0xbc, 0xc3, 0xbd random, 0xc6 / 199 random times the difficulty, 0xa1 = 4,
+   0x49 / 0x4a by the size less 2 / 1 for map types 0 / 1, 0xd0 / 0xd1 /
+   0xd2 / 0xdf = 1, 0xd4 / 0xd5 / 0xd6 / 0xe0 by the map type, 0x8a..0x8d
+   = 2000 at difficulty 0 (else 0), 0xa8 = 0xa2 = 0, 0xc2 / 0x2f by
+   difficulty < 3, 0xba = 180 then 200 / 150 / 100 / 50 by difficulty
+   0..3, 0xb5 and 0xb6
+   random. */
+void aoe_tribe_player_personality_ror(const AoeTribePersonalityOpsRor *o, char *build_list,
+                                      char *rule_set, int32_t map_type, int32_t victory,
+                                      int32_t size);
+
 #endif

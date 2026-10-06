@@ -249,4 +249,21 @@ uint8_t aoe_main_view_walk_ror(AoeViewTerrainPassRor *v, const AoeViewWalkOpsRor
                                uint8_t min_kind, const int16_t *point, void *arg, void **result,
                                float *out_x, float *out_y, int16_t *out_sx, int16_t *out_sy);
 
+
+/* ---- 0x00514fd0: a border's frame ---- */
+/* A map border record (map +0x338c + type * 0x5a0): its shape (+0x20),
+   the per-edge flag (+0x59e) and the frame table at +0x3c: entry
+   shape * 12 + border shape, three int16 (count, step, base). */
+typedef struct {
+    int has_shape;
+    int16_t per_edge;
+    const int16_t *table;
+} AoeViewBorderRor;
+/* -1 without a shape or an empty entry. With two or more frames the
+   index is y % count for border shapes 11 / 12 (per-edge 0) or 3 / 2
+   (per-edge 1), x % count for 9 / 10 (per-edge 0) or 1 / 4 (per-edge 1),
+   else 0 (also when it exceeds count - 1). Returns base + step * index. */
+int16_t aoe_main_view_border_frame_ror(const AoeViewBorderRor *b, uint8_t shape, uint8_t bshape,
+                                       int16_t x, int16_t y);
+
 #endif

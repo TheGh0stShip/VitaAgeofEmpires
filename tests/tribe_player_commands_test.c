@@ -492,6 +492,45 @@ static void load_ai_tests(void) {
     assert(strstr(al_log, "<bl:bl972>[Loading no city plan") && strstr(al_log, "[Rule set has been initialized with code-controlled options.][Setting difficulty") && !strstr(al_log, "<rules:"));
     al_n = 0; o.has_ai = 0; aoe_tribe_player_load_ai_ror(&o, NULL, NULL, NULL, 0); assert(al_n == 0 && al_seeded == 777);
 }
+
+static char pp_log[4096]; static int32_t pp_counters[13], pp_rand_seq[64], pp_rand_i, pp_bucket = -1, pp_sn[256];
+static void pp_add(const char *fmt, ...) { va_list ap; size_t n = strlen(pp_log); va_start(ap, fmt); vsnprintf(pp_log + n, sizeof pp_log - n, fmt, ap); va_end(ap); }
+static void pp_weights(void *c, uint8_t civ, int32_t w[AOE_TRIBE_WEIGHTS], int32_t mt, int32_t vic, int32_t sz) { (void)c; pp_add("w(%d,%d,%d,%d) ", civ, (int)mt, (int)vic, (int)sz); w[13] = 30; w[19] = 90; w[0x4a] = 9; w[40] = -5; }
+static int32_t pp_top(void *c) { (void)c; return pp_bucket; }
+static int32_t pp_rand(void *c) { (void)c; return pp_rand_seq[pp_rand_i++ % 64]; }
+static void pp_set_sn(void *c, int32_t i, int32_t v) { (void)c; pp_sn[i & 0xff] = v; pp_add("sn%d=%d ", (int)i, (int)v); }
+static int32_t pp_get_sn(void *c, int32_t i) { (void)c; return pp_sn[i & 0xff]; }
+static void pp_string(void *c, int32_t id, char *out, int size) { (void)c; snprintf(out, (size_t)size, "S%x", (unsigned)id); }
+static void pp_logf(void *c, const char *t) { (void)c; pp_add("[%s] ", t); }
+static void personality_tests(void) {
+    AoeTribePersonalityOpsRor o = {NULL, 1, 4, 1, 0, 1, pp_counters, pp_weights, pp_top, pp_rand, pp_set_sn, pp_get_sn, pp_string, pp_logf};
+    char bl[0x100], rs[0x100];
+    int i;
+    for (i = 0; i < 64; ++i) pp_rand_seq[i] = i * 7;
+    /* Egyptians on map type 0 with counter 11 at 2 and counter 12 clear: weight 13 gains 300 -> 330, 19 / 3 = 30,
+       0x4a = 9: total 369 + 30 (w14 = 300 / 3? no: 14 is not divided) ... the draw at rand 0 picks index 13. */
+    pp_counters[11] = 2; pp_log[0] = '\0'; pp_rand_i = 0;
+    aoe_tribe_player_personality_ror(&o, bl, rs, 0, 3, 2);
+    assert(strcmp(bl, "S2693d") == 0 && strcmp(rs, "RandomGameSpecialized") == 0);
+    assert(strncmp(pp_log, "w(4,0,3,2) sn201=1 sn59=4 sn60=10 [I am the S27fa civ (culture #3):] [Selected a best build list of 'S2693d'.] [Setting AI Personality:] sn0=50 sn2=50 sn42=2 sn61=2 sn38=3 sn36=1 sn54=1 sn55=5 sn104=1320 ", 180) == 0);
+    /* Pick 13 (0xd) sets SN 0x3b / 0x3c and bumps counters 7 and 12; victory 3 and map type 0 give the fixed numbers. */
+    assert(pp_counters[7] == 1 && pp_counters[12] == 1 && pp_counters[11] == 2 && pp_sn[0x3b] == 4 && pp_sn[0x3c] == 10);
+    assert(pp_sn[0] == 0x32 && pp_sn[2] == 0x32 && pp_sn[0x2a] == 2 && pp_sn[0x26] == 3 && pp_sn[0x24] == 1 && pp_sn[0x36] == 1 && pp_sn[0x37] == 5);
+    assert(pp_sn[0xd4] == 3 && pp_sn[0xd5] == 6 && pp_sn[0xd6] == 2 && pp_sn[0xe0] == 6 && pp_sn[0x8a] == 0 && pp_sn[0xc2] == 1 && pp_sn[0x2f] == 2 && pp_sn[0xba] == 150);
+    /* Pick 13 is in the (rand % 6 + 20)-minute group: the second rand value 14 -> 14 % 6 = 2 -> 22 * 60; difficulty 1 is not 0 so no -300. */
+    assert(pp_sn[0x68] == 22 * 60 && pp_counters[9] == 1 && pp_sn[0xd0] == 1 && pp_sn[0xa1] == 4);
+    /* Size 2 on map type 0 -> adjusted 0: SN 0x49 = rand % 2 + 15, 0x4a = 0x49 + 1 + rand % 4. */
+    assert(pp_sn[0x49] >= 15 && pp_sn[0x49] <= 16 && pp_sn[0x4a] >= pp_sn[0x49] + 1 && pp_sn[0x4a] <= pp_sn[0x49] + 4);
+    /* A death match skips the map adjustment and the bucket scaling and sets SN 4 = 10; difficulty 0 gives the 2000s. */
+    o.death_match = 1; o.difficulty = 0; pp_log[0] = '\0'; pp_rand_i = 0; pp_bucket = 3; memset(pp_counters, 0, sizeof pp_counters);
+    aoe_tribe_player_personality_ror(&o, bl, rs, 5, 0, 4);
+    assert(pp_sn[4] == 10 && pp_sn[0x8a] == 2000 && pp_sn[0x36] == 5 && pp_sn[0x37] == 5 && pp_sn[0xba] == 200 && pp_sn[0xd4] == 1 && pp_sn[0xe0] == 3);
+    /* The draw: weights 13 = 30, 19 = 30 (90 / 3), 0x4a = 9: total 69; rand 0 -> pick 13 again. */
+    assert(strcmp(bl, "S2693d") == 0 && pp_counters[7] == 1);
+    o.has_module = 0; pp_log[0] = '\0';
+    aoe_tribe_player_personality_ror(&o, bl, rs, 5, 0, 4);
+    assert(pp_log[0] == '\0');
+}
 int main(void) {
     AoeTribePlayerOpsRor ops = {0, 2, collect, template_state, ack_b, ack_u, selected, object_type, object_class, queue};
     /* Build: villagers (min 4, class 4), template 118 acknowledges, 0x66. */
@@ -632,5 +671,6 @@ int main(void) {
     place_start_tests();
     status_line_tests();
     load_ai_tests();
+    personality_tests();
     return 0;
 }

@@ -3,6 +3,7 @@
 
 #include <assert.h>
 #include <stdarg.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -968,6 +969,28 @@ static void choose_target_tests(void) {
     o.setting_41b750 = 0; ct_in_range_id = 10; /* no special settings: radius 8 again */
     assert(aoe_ai_unit_ai_choose_target_ror(&o, 0, 1) == 10);
 }
+
+/* 0x004ac0a0: unit 1 leads 1, 2, 3; unit 2 lists 1 and 3; unit 3 lists 1, 2 and 5. */
+static int32_t ug_m1[3] = {1, 2, 3}, ug_m2[4] = {1, 3, 0, 0}, ug_m3[3] = {1, 2, 5};
+static AoeUnitGroupRor ug[4] = {{0, NULL, 0, 0, 0}, {1, ug_m1, 3, 3, 1}, {2, ug_m2, 2, 4, 1}, {3, ug_m3, 3, 3, 1}};
+static char ug_log[128];
+static AoeUnitGroupRor *ug_unit(void *c, int32_t id) { (void)c; return id >= 1 && id <= 3 ? &ug[id] : NULL; }
+static int32_t ug_leader(void *c) { (void)c; strcat(ug_log, "leader "); return 7; }
+static void ug_left(void *c, int32_t id) { (void)c; size_t n = strlen(ug_log); snprintf(ug_log + n, sizeof ug_log - n, "left(%d) ", (int)id); }
+static int32_t *ug_regrow(void *c, int32_t *old, int32_t old_count, int32_t n) { int32_t *p = calloc((size_t)n, sizeof *p); (void)c; memcpy(p, old, (size_t)(old_count < n ? old_count : n) * sizeof *p); size_t l = strlen(ug_log); snprintf(ug_log + l, sizeof ug_log - l, "grow(%d) ", (int)n); return p; }
+static void group_leave_tests(void) {
+    AoeUnitGroupOpsRor o = {NULL, ug_unit, ug_leader, ug_left, ug_regrow};
+    ug_log[0] = '\0';
+    assert(aoe_unit_group_leave_ror(&ug[1], 1, &o) == 7 && strcmp(ug_log, "leader ") == 0);
+    /* Unit 1 leaves member 2: units 2 and 3 drop ID 2 from their lists (1 keeps its own). */
+    ug_log[0] = '\0';
+    assert(aoe_unit_group_leave_ror(&ug[1], 2, &o) == 1 && strcmp(ug_log, "left(2) ") == 0);
+    assert(ug[2].count == 2 && ug[3].count == 2 && ug[3].members[0] == 1 && ug[3].members[1] == 5 && ug[1].count == 3);
+    /* A count above the capacity regrows the array on the way. */
+    ug[2].count = 5; ug[2].capacity = 4; ug_log[0] = '\0';
+    assert(aoe_unit_group_leave_ror(&ug[2], 9, &o) == 1 && strcmp(ug_log, "grow(5) left(9) ") == 0 && ug[2].capacity == 5);
+    free(ug[2].members);
+}
 int main(void) {
     free_tile_tests();
     ai_kind_for_unit_tests();
@@ -1132,5 +1155,6 @@ int main(void) {
     play_tests();
     message_tests();
     choose_target_tests();
+    group_leave_tests();
     return 0;
 }

@@ -1330,4 +1330,12 @@ int32_t aoe_main_view_point_objects_ror(const AoeMainViewRor *v, const AoeViewDr
                                         int positive_only,
                                         AoeViewPickedRor out[AOE_VIEW_PICKED_MAX_ROR]);
 
+
+/* 0x00516990: the grid's 16 x 16 lookup (+0x20, 256 bytes, -1 empty):
+   for footprint tables 0..16 (0x0055f76c..; triples row, first column,
+   last column ended by a row of 999), rows 0..15 with the columns
+   clamped to 0..15 take the first table that covers them. The old
+   lookup is freed. */
+void aoe_view_grid_build_lookup_ror(AoeViewGridRor *grid, const int32_t *const tables[17]);
+
 #endif

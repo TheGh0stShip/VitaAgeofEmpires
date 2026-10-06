@@ -458,6 +458,40 @@ static void status_line_tests(void) {
     o.current_player = -1;
     assert(strcmp(aoe_tribe_player_status_line_ror(&o, 1, out), "Invalid currentUpdateComputerPlayer...") == 0);
 }
+
+static char al_log[2048]; static int al_n, al_load_fail = 1, al_rgs; static int32_t al_seeded;
+static void al_add(const char *fmt, ...) { va_list ap; va_start(ap, fmt); al_n += vsnprintf(al_log + al_n, sizeof al_log - (size_t)al_n, fmt, ap); va_end(ap); }
+static int32_t al_rand(void *c) { (void)c; return 777; }
+static void al_srand(void *c, int32_t s) { (void)c; al_seeded = s; }
+static void al_logf(void *c, const char *t) { (void)c; al_add("[%s]", t); }
+static void al_string(void *c, int32_t id, char *o, int n) { (void)c; snprintf(o, (size_t)n, id == 0x277b ? "Random" : "Default"); }
+static void al_choose(void *c, char *bl, char *rs, int32_t t, int32_t v, int32_t s) { (void)c; snprintf(bl, 64, "bl%d%d%d", (int)t, (int)v, (int)s); snprintf(rs, 64, al_rgs ? "RandomGameSpecialized" : "rules.per"); }
+static int al_loadbl(void *c, const char *n) { (void)c; al_add("<bl:%s>", n); return al_load_fail-- <= 0; }
+static void al_city(void *c, const char *n, int32_t w, int32_t h) { (void)c; al_add("<city:%s,%d,%d>", n, (int)w, (int)h); }
+static void al_rules(void *c, const char *n) { (void)c; al_add("<rules:%s>", n); }
+static void al_diff(void *c, int32_t l) { (void)c; al_add("<diff%d>", (int)l); }
+static void al_init(void *c) { (void)c; al_add("<init>"); }
+static int al_allied(void *c, int32_t p) { (void)c; return p == 2; }
+static int al_neutral(void *c, int32_t p) { (void)c; return p == 3; }
+static void al_dset(void *c, int32_t p, int32_t k, int32_t v) { (void)c; al_add("<d%d:%d=%d>", (int)p, (int)k, (int)v); }
+static void al_dflag(void *c, int32_t p, int32_t v) { (void)c; al_add("<f%d=%d>", (int)p, (int)v); }
+static void al_pers(void *c, int32_t v) { (void)c; al_add("<pers%d>", (int)v); }
+static void al_learn(void *c, const char *n) { (void)c; al_add("<learn:%s>", n); }
+static void load_ai_tests(void) {
+    AoeTribeAiLoadOpsRor o = {NULL, 1, 3, 2, 7, 120, 96, 2, 5, 1, "", al_rand, al_srand, al_logf, al_string, al_choose, al_loadbl, al_city, al_rules, al_diff, al_init, al_allied, al_neutral, al_dset, al_dflag, al_pers, al_learn};
+    aoe_tribe_player_load_ai_ror(&o, NULL, NULL, NULL, 4);
+    assert(strstr(al_log, "[We have a mostly land map.][Loading default build list=bl372.]<bl:bl372>[Loading default build list=bl372.]<bl:bl372>[Loading no city plan (influence placement will be used).]<city:NONE,120,96>[Loading random game selected rule set=rules.per.]<rules:rules.per>[Setting difficulty level to 2.]<diff2><init><d1:0=0><d1:2=100><d2:0=74><d2:2=24><d3:0=24><d3:2=74><f1=1><f2=0><f3=0><f4=1><pers4>") == al_log && al_seeded == 777);
+    al_n = 0; al_load_fail = 1; o.map_type = 9; o.scenario_learn_name = "myai";
+    aoe_tribe_player_load_ai_ror(&o, "Random", "plan.cty", "Random", 1);
+    assert(strstr(al_log, "[We don't have a specific map type (i.e. this is a scenario).][Loading random game selected build list=bl972.]<bl:bl972>[Loading random game selected build list=bl972.]<bl:bl972>[Loading city plan=plan.cty.]<city:plan.cty,120,96>[Loading random game selected rule set=rules.per.]") == al_log && strstr(al_log, "<pers1><learn:myai>"));
+    al_n = 0; al_load_fail = 1;
+    aoe_tribe_player_load_ai_ror(&o, "mine.ai", "Random", "rules2.per", 0);
+    assert(strstr(al_log, "[Loading build list=mine.ai.]<bl:mine.ai>[Loading no city plan") && strstr(al_log, "[Loading rule set=rules2.per.]<rules:rules2.per>"));
+    al_n = 0; al_load_fail = 0; al_rgs = 1;  /* the chooser names RandomGameSpecialized -> code-controlled rules */
+    aoe_tribe_player_load_ai_ror(&o, NULL, NULL, NULL, 0);
+    assert(strstr(al_log, "<bl:bl972>[Loading no city plan") && strstr(al_log, "[Rule set has been initialized with code-controlled options.][Setting difficulty") && !strstr(al_log, "<rules:"));
+    al_n = 0; o.has_ai = 0; aoe_tribe_player_load_ai_ror(&o, NULL, NULL, NULL, 0); assert(al_n == 0 && al_seeded == 777);
+}
 int main(void) {
     AoeTribePlayerOpsRor ops = {0, 2, collect, template_state, ack_b, ack_u, selected, object_type, object_class, queue};
     /* Build: villagers (min 4, class 4), template 118 acknowledges, 0x66. */
@@ -597,5 +631,6 @@ int main(void) {
     cursor_command_tests();
     place_start_tests();
     status_line_tests();
+    load_ai_tests();
     return 0;
 }

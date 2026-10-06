@@ -818,3 +818,67 @@ const char *aoe_tribe_player_status_line_ror(const AoeTribeStatusOpsRor *o, int3
         return "Invalid status line number.";
     }
 }
+
+/* 0x004f2d80 */
+void aoe_tribe_player_load_ai_ror(const AoeTribeAiLoadOpsRor *o, const char *build_list,
+                                  const char *city_plan, const char *rule_set, int32_t personality) {
+    static const char *const map_text[5] = {
+        "We have an all water map.", "We have a mostly water map.", "We have a land and water map.",
+        "We have a mostly land map.", "We have an all land map."};
+    char text[0x400], random_label[0x100], label[0x100], chosen[0x100], rules[0x100];
+    int32_t saved = o->rand_(o->context), p;
+    if (!o->has_ai) { o->srand_(o->context, saved); return; }
+    o->log(o->context, o->map_type >= 0 && o->map_type <= 4 ? map_text[o->map_type]
+                       : "We don't have a specific map type (i.e. this is a scenario).");
+    label[0] = '\0'; random_label[0] = '\0';
+    o->string(o->context, 0x2775, label, sizeof label);
+    o->string(o->context, 0x277b, random_label, sizeof random_label);
+    chosen[0] = '\0'; rules[0] = '\0';
+    if (!build_list || strcmp(build_list, random_label) == 0) {
+        const char *fmt = build_list ? "Loading random game selected build list=%s." : "Loading default build list=%s.";
+        do {
+            o->choose(o->context, chosen, rules, o->map_type, o->victory, o->map_size);
+            snprintf(text, sizeof text, fmt, chosen);
+            o->log(o->context, text);
+        } while (!o->load_build_list(o->context, chosen));
+    } else {
+        snprintf(text, sizeof text, "Loading build list=%s.", build_list);
+        o->log(o->context, text);
+        o->load_build_list(o->context, build_list);
+    }
+    if (!city_plan || strcmp(city_plan, random_label) == 0) {
+        o->log(o->context, "Loading no city plan (influence placement will be used).");
+        city_plan = "NONE";
+    } else {
+        snprintf(text, sizeof text, "Loading city plan=%s.", city_plan);
+        o->log(o->context, text);
+    }
+    o->load_city_plan(o->context, city_plan, o->map_w, o->map_h);
+    if (!rule_set || strcmp(rule_set, random_label) == 0) {
+        if (strcmp(rules, "RandomGameSpecialized") != 0) {
+            snprintf(text, sizeof text, "Loading random game selected rule set=%s.", rules);
+            o->log(o->context, text);
+            o->load_rules(o->context, rules);
+        } else {
+            o->log(o->context, "Rule set has been initialized with code-controlled options.");
+        }
+    } else {
+        snprintf(text, sizeof text, "Loading rule set=%s.", rule_set);
+        o->log(o->context, text);
+        o->load_rules(o->context, rule_set);
+    }
+    snprintf(text, sizeof text, "Setting difficulty level to %d.", (int)o->difficulty);
+    o->log(o->context, text);
+    o->set_difficulty(o->context, o->difficulty);
+    o->init_objects(o->context);
+    for (p = 1; p < o->player_count; ++p) {
+        if (p == o->own_id) { o->diplomacy_set(o->context, p, 0, 0); o->diplomacy_set(o->context, p, 2, 100); }
+        else if (o->allied(o->context, p)) { o->diplomacy_set(o->context, p, 0, 0x4a); o->diplomacy_set(o->context, p, 2, 0x18); }
+        else if (o->neutral(o->context, p)) { o->diplomacy_set(o->context, p, 0, 0x18); o->diplomacy_set(o->context, p, 2, 0x4a); }
+    }
+    for (p = 1; p < o->player_count; ++p)
+        o->diplomacy_flag(o->context, p, !o->allied(o->context, p) && !o->neutral(o->context, p));
+    o->personality(o->context, personality);
+    if (o->scenario_learn_name && o->scenario_learn_name[0]) o->load_learn(o->context, o->scenario_learn_name);
+    o->srand_(o->context, saved);
+}

@@ -1156,3 +1156,226 @@ void aoe_game_ror_notify_ror(const AoeGameNotifyOpsRor *o, int32_t kind, int32_t
 #undef GN_SOUND
 #undef GN_NAMED
 }
+
+/* 0x004fe600 */
+int aoe_game_ror_init_resources_ror(const AoeGameRorInitOpsRor *o) {
+    static const uint8_t cycle[21] = {0x17, 0x27, 0x7c, 0x27, 0x3f, 0x90, 0x3f, 0x5f, 0x9f, 0x57, 0x7b,
+                                      0xb4, 0x3f, 0x5f, 0xa0, 0x27, 0x3f, 0x91, 0x17, 0x27, 0x7b};
+    char upper[0x100], dll[0x40], text[0x300], name[0x104];
+    const char *p;
+    int32_t join, bytes, month, year, hour, minute, second;
+    int i;
+    if (*o->error) return 0;
+    snprintf(upper, sizeof upper, "%.255s", o->options);
+    for (i = 0; upper[i]; ++i) upper[i] = (char)toupper((unsigned char)upper[i]);
+    snprintf(dll, sizeof dll, "languagex.dll");
+    p = strstr(upper, "STRING=");
+    if (p) {
+        int n = 0;
+        while (*p != '=') ++p;
+        ++p;
+        while (*p && !isspace((unsigned char)*p) && n < (int)sizeof dll - 1) dll[n++] = *p++;
+        dll[n] = '\0';
+    }
+    if (!o->load_library(o->context, dll)) { *o->error = 1; return 0; }
+    if (!o->file_exists(o->context, "empires.exe")) { *o->error = 0x17; return 0; }
+    o->register_drs(o->context, "sounds.drs", "tribe", o->data_dir, 1);
+    o->register_drs(o->context, "graphics.drs", "tribe", o->data_dir, 0);
+    o->register_drs(o->context, "Interfac.drs", "tribe", o->data_dir, 0);
+    o->register_drs(o->context, "sounds.drs", "tribe", "data\\", 1);
+    o->register_drs(o->context, "graphics.drs", "tribe", "data\\", 0);
+    o->register_drs(o->context, "Terrain.drs", "tribe", "data\\", 0);
+    o->register_drs(o->context, "Border.drs", "tribe", "data\\", 0);
+    o->register_drs(o->context, "Interfac.drs", "tribe", "data\\", 0);
+    if (!o->step_4166b0(o->context)) return 0;
+    o->palette_entries(o->context, 0xf8, 7, cycle);
+    o->input_window(o->context);
+    o->codec_check(o->context);
+    if (!o->lobby_switch) {
+        join = o->lobby_join(o->context);
+        if (join != 1) {
+            int ok;
+            if (o->editor_name[0]) ok = o->open_editor(o->context, o->editor_name);
+            else if (o->saved_name[0]) ok = o->start_file(o->context, o->saved_name);
+            else if (!o->settings_890) { o->play_video(o->context, "logo1"); ok = 1; }
+            else return o->main_menu(o->context) ? (o->after(o->context), 1) : 0;
+            if (!ok) {
+                if (!o->main_menu(o->context)) return 0;
+                if (o->screen_exists(o->context, "Main Menu")) o->ok_dialog(o->context, 0x961);
+            }
+        } else {
+            o->set_flag_97e(o->context);
+            o->new_mp_setup(o->context);
+            o->show(o->context, "MP Setup Screen");
+            o->remove(o->context, "Status Screen");
+        }
+    } else {
+        o->new_status(o->context);
+        o->show(o->context, "Status Screen");
+        join = o->lobby_join(o->context);
+        if (join == 1) {
+            o->set_flag_97e(o->context);
+            if (!o->new_mp_setup(o->context)) return 0;
+            o->show(o->context, "MP Setup Screen");
+        } else if (join != -1) {
+            o->close_window(o->context);
+            return 1;
+        } else {
+            if (!o->new_error_screen(o->context, 0x96a)) return 0;
+            o->show(o->context, "Main Error Screen");
+        }
+        o->remove(o->context, "Status Screen");
+    }
+    o->after(o->context);
+    o->log(o->context, "------------------------------", 0);
+    o->log(o->context, "", 1);
+    if (o->file_info(o->context, 0, name, sizeof name, &bytes, &month, &year, &hour, &minute, &second)) {
+        snprintf(text, sizeof text, "program=%s, size=%d, date=%d/%d/%d, time=%d:%d:%d", name, (int)bytes,
+                 (int)month, (int)month, (int)year, (int)hour, (int)minute, (int)second);
+        o->log(o->context, text, 0);
+    }
+    if (o->file_info(o->context, 1, name, sizeof name, &bytes, &month, &year, &hour, &minute, &second)) {
+        snprintf(text, sizeof text, "data=%s, size=%d, date=%d/%d/%d, time=%d:%d:%d", name, (int)bytes,
+                 (int)month, (int)month, (int)year, (int)hour, (int)minute, (int)second);
+        o->log(o->context, text, 0);
+    }
+    snprintf(text, sizeof text, "options=%.255s", o->options);
+    o->log(o->context, text, 0);
+    return 1;
+}
+
+/* 0x00503100 */
+int aoe_game_ror_setup_random_game_ror(const AoeGameRorRandomOpsRor *o) {
+    AoeGameSettingsRor *g = o->settings;
+    AoeRandomPlayerRor players[8];
+    AoeRandomStartRor start;
+    int32_t order[9], i, s, count, next = 0, n = 0, ok, seed;
+    int networked = aoe_settings_flag_97e_ror(g) != 0, scenario = 0;
+    int campaign = aoe_settings_int_9a0_ror(g) != 0, scenario_mode = aoe_settings_flag_8fc_ror(g) != 0;
+    *o->busy = 0;
+    o->reset_fields(o->context);
+    memset(&start, 0, sizeof start);
+    memset(players, 0, sizeof players);
+    if (aoe_settings_byte_1190_ror(g)) {
+        int32_t type;
+        if (o->global_7c0640 == 1) { aoe_settings_set_map_size_ror(g, 2); type = 4; }
+        else {
+            aoe_settings_set_map_size_ror(g, 3);
+            type = o->rand_(o->context) % 10;
+            if (type < 2) type = 4; else if (type == 2) type = 3; else if (type == 3) type = 2;
+            else if (type == 4) type = 1; else if (type != 5 && type != 6 && type != 7) type = type == 8 ? 8 : 0;
+        }
+        aoe_settings_set_int_a80_ror(g, type);
+        o->clear_names(o->context);
+        count = aoe_settings_byte_988_ror(g);
+        for (i = 0; i < count; ++i) {
+            int32_t civ = (o->rand_(o->context) & 0xf) + 1;
+            aoe_settings_set_byte_a94_ror(g, i, (uint8_t)civ);
+            aoe_settings_set_byte_acd_ror(g, i, (uint8_t)o->pick_name(o->context, civ));
+        }
+    }
+    if (!campaign) {
+        if (!scenario_mode) {
+            start.kind = 0;
+            start.map_type = aoe_settings_int_a80_ror(g);
+            start.map_w = aoe_settings_map_width_ror(g);
+            start.map_h = aoe_settings_map_height_ror(g);
+        } else {
+            const char *nm = aoe_settings_scenario_name_ror(g);
+            start.kind = 1;
+            snprintf(start.path, sizeof start.path, "%s%s.scn", o->scenario_dir, nm);
+            if (!o->file_exists(o->context, start.path)) snprintf(start.path, sizeof start.path, "%s.scx", nm);
+            else snprintf(start.path, sizeof start.path, "%s.scn", nm);
+        }
+    } else {
+        start.kind = 2;
+    }
+    if (!networked) { seed = o->own_seed; if (seed == -1) seed = o->rand_(o->context); }
+    else seed = o->comm_seed;
+    o->srand_(o->context, seed);
+    for (i = 0; i < 9; ++i) {
+        int32_t civ = aoe_settings_byte_a94_ror(g, i);
+        if (civ > 16 || civ < 0) aoe_settings_set_byte_a94_ror(g, i, (uint8_t)(o->rand_(o->context) * 16 / 0x7fff + 1));
+    }
+    o->clear_names(o->context);
+    count = aoe_settings_byte_988_ror(g);
+    for (i = 0; i < count; ++i)
+        if (o->slot_type(o->context, i + 1) == 4)
+            aoe_settings_set_byte_acd_ror(g, i, (uint8_t)o->pick_name(o->context, aoe_settings_byte_a94_ror(g, i)));
+    if (campaign || scenario_mode) {
+        scenario = o->scenario_load(o->context, campaign ? NULL : start.path, campaign);
+        if (!scenario) return 0;
+    }
+    for (i = 0; i < 9; ++i) { order[i] = -1; o->set_slot_player(o->context, i, 0); }
+    for (s = 1; s <= count; ++s) {
+        int32_t type = o->slot_type(o->context, s);
+        if (type == 2) {
+            int32_t c = aoe_settings_byte_ac4_ror(g, s - 1) - 1;
+            if (c < 0 || c > 7) continue;
+            if (order[c] == -1) order[c] = next++;
+            o->set_slot_player(o->context, s, order[c] + 1);
+        } else if (type == 4) {
+            int32_t c;
+            for (c = 0; c < 8; ++c) {
+                int32_t h, taken = 0;
+                if (order[c] != -1) continue;
+                for (h = 1; h <= 8; ++h)
+                    if (o->slot_type(o->context, h) == 2 && aoe_settings_byte_ac4_ror(g, h - 1) - 1 == c) { taken = 1; break; }
+                if (taken) continue;
+                aoe_settings_set_byte_ac4_ror(g, s - 1, (uint8_t)(c + 1));
+                order[c] = next++;
+                o->set_slot_player(o->context, s, order[c] + 1);
+                break;
+            }
+        }
+    }
+    o->clear_names(o->context);
+    for (i = 0; i < 8; ++i) {
+        int32_t slot = 0, type, color;
+        AoeRandomPlayerRor *p = &players[n];
+        for (s = 1; s <= 8; ++s) if (o->slot_player(o->context, s) == i + 1) { slot = s; break; }
+        if (!slot) break;
+        type = o->slot_type(o->context, slot);
+        color = aoe_settings_byte_ac4_ror(g, slot - 1);
+        p->kind = (type == 4 || o->global_580de0 == 1 || (o->global_580de0 == 2 && i > 0)) ? 4 : 0;
+        p->civ = (uint8_t)(campaign ? o->scenario_civ(o->context, color - 1) : aoe_settings_byte_a94_ror(g, slot - 1));
+        p->name[0] = '\0';
+        if (networked && type == 2) {
+            snprintf(p->name, sizeof p->name, "%.64s", o->comm_name(o->context, slot));
+        } else {
+            if (!campaign && aoe_settings_flag_8fc_clear_ror(g) && p->kind == 0)
+                o->string(o->context, 0x286d, p->name, sizeof p->name);
+            else if (campaign || scenario_mode)
+                snprintf(p->name, sizeof p->name, "%.64s", o->scenario_name(o->context, color - 1));
+            else if (p->kind == 0)
+                snprintf(p->name, sizeof p->name, "%.64s", o->settings_name(o->context));
+            if (!p->name[0]) {
+                if (p->kind == 0) o->string(o->context, 0x286d, p->name, sizeof p->name);
+                else if (!campaign && aoe_settings_byte_acd_ror(g, slot - 1))
+                    o->string(o->context, 0x1130 + aoe_settings_byte_acd_ror(g, slot - 1), p->name, sizeof p->name);
+                else o->string(o->context, 0x1130 + o->pick_name(o->context, p->civ), p->name, sizeof p->name);
+            }
+            o->set_comm_name(o->context, slot, p->name);
+        }
+        p->color = color;
+        p->position = (int16_t)(color - 1);
+        ++n;
+    }
+    if (scenario) o->scenario_delete(o->context);
+    if (n == 0) return 0;
+    if (o->has_sound) o->sound_hold(o->context, 1);
+    ok = o->world_start(o->context, players, n, &start, o->slot_player(o->context, networked ? o->our_slot : 1));
+    if (ok && o->world_player_count(o->context) < 2) { ok = 0; o->world_stop(o->context); }
+    if (o->has_sound) o->sound_hold(o->context, 0);
+    for (i = 0; i < o->world_player_count(o->context); ++i) o->clear_wonder(o->context, i);
+    o->refresh_world(o->context);
+    if (aoe_settings_byte_985_ror(g))
+        for (i = 1; i < o->world_player_count(o->context); ++i)
+            if (o->owner_kind(o->context, i) == 0) o->explore_all(o->context, i);
+    {
+        uint8_t pf = networked ? aoe_settings_byte_983_ror(g) : aoe_settings_byte_a14_ror(g);
+        *o->global_554738 = pf == 1 ? 5000 : pf == 2 ? 7500 : 2500;
+    }
+    for (s = 1; s < 9; ++s) o->slot_types[s - 1] = o->slot_type(o->context, s);
+    return ok;
+}

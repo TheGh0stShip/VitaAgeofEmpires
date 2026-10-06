@@ -609,4 +609,55 @@ typedef struct {
 } AoeTribeStatusOpsRor;
 const char *aoe_tribe_player_status_line_ror(const AoeTribeStatusOpsRor *o, int32_t line, char out[256]);
 
+
+/* 0x004f2d80 (build_list, city_plan, rule_set, personality): the
+   computer player's AI files. The random seed is saved (rand) and
+   restored (srand) around the call; nothing else without an AI (+0x23c).
+   The map type (0x00505310) is logged ("We have an all water map.",
+   "... a mostly water map.", "... a land and water map.", "... a mostly
+   land map.", "... an all land map.", else "We don't have a specific
+   map type (i.e. this is a scenario)."). Strings 0x2775 and 0x277b (the
+   random label) are read. A missing build list, or one equal to the
+   random label, is chosen by 0x4f36e0 (map type, victory +0xa8c, map
+   size; it also names a rule set) and loaded through the Build AI's
+   +0x44 until one loads ("Loading default build list=%s." / "Loading
+   random game selected build list=%s."); else "Loading build list=%s.".
+   A missing or random city plan logs "Loading no city plan (influence
+   placement will be used)." and uses "NONE", else "Loading city
+   plan=%s."; the city plan object (AI +0x6c4) gets +0x40(name, map
+   width, map height, 0, 0, 0). A missing or random rule set loads the
+   chosen one (0x004cbff0) unless it is "RandomGameSpecialized" ("Rule
+   set has been initialized with code-controlled options."); a given one
+   "Loading rule set=%s.". "Setting difficulty level to %d." then
+   0x004cc080 and 0x004c8210. Diplomacy (0x0040ab40): ourselves (0, 0)
+   and (2, 100); an ally (+0x18) (0, 0x4a) and (2, 0x18); a neutral
+   (+0x1c) (0, 0x18) and (2, 0x4a); then 0x0040ac80(p, neither); the
+   personality preset (0x0040b2d0); a non-empty scenario +0x1010 name
+   loads the learn file (0x004c3820). */
+typedef struct {
+    void *context;
+    int has_ai;
+    int32_t map_type, map_size, victory, map_w, map_h, difficulty;
+    int16_t player_count, own_id;
+    const char *scenario_learn_name;   /* world +0x5c -> +0x1010 */
+    int32_t (*rand_)(void *context);
+    void (*srand_)(void *context, int32_t seed);
+    void (*log)(void *context, const char *text);                      /* 0x0040c240 */
+    void (*string)(void *context, int32_t id, char *out, int size);
+    void (*choose)(void *context, char *build_list, char *rule_set, int32_t type, int32_t victory, int32_t size); /* 0x4f36e0 */
+    int (*load_build_list)(void *context, const char *name);          /* Build AI +0x44 */
+    void (*load_city_plan)(void *context, const char *name, int32_t w, int32_t h); /* +0x6c4's +0x40 */
+    void (*load_rules)(void *context, const char *name);              /* 0x004cbff0 */
+    void (*set_difficulty)(void *context, int32_t level);             /* 0x004cc080 */
+    void (*init_objects)(void *context);                              /* 0x004c8210 */
+    int (*allied)(void *context, int32_t player);                     /* vtable +0x18 */
+    int (*neutral)(void *context, int32_t player);                    /* vtable +0x1c */
+    void (*diplomacy_set)(void *context, int32_t player, int32_t kind, int32_t value); /* 0x0040ab40 */
+    void (*diplomacy_flag)(void *context, int32_t player, int32_t v);  /* 0x0040ac80 */
+    void (*personality)(void *context, int32_t preset);               /* 0x0040b2d0 */
+    void (*load_learn)(void *context, const char *name);              /* 0x004c3820 */
+} AoeTribeAiLoadOpsRor;
+void aoe_tribe_player_load_ai_ror(const AoeTribeAiLoadOpsRor *o, const char *build_list,
+                                  const char *city_plan, const char *rule_set, int32_t personality);
+
 #endif

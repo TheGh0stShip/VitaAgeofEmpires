@@ -751,4 +751,150 @@ typedef struct {
 void aoe_game_ror_notify_ror(const AoeGameNotifyOpsRor *o, int32_t kind, int32_t a, int32_t b,
                              int32_t c, int32_t d);
 
+
+/* ---- 0x004fe600: the tribe game's resources and first screen ---- */
+typedef struct {
+    void *context;
+    int32_t *error;              /* +0x40: 1 no language library, 0x17 no empires.exe */
+    const char *options;         /* settings +0x518 */
+    const char *data_dir;        /* settings +0xf26 */
+    const char *editor_name;     /* +0xc58 ("" none) */
+    const char *saved_name;      /* +0xd5c ("" none) */
+    int settings_890;            /* settings +0x890 */
+    int lobby_switch;            /* 0x0041bfe0("LOBBY") */
+    int (*load_library)(void *context, const char *name);     /* LoadLibraryA -> 0x007c0634 */
+    int (*file_exists)(void *context, const char *name);      /* 0x0052694c */
+    void (*register_drs)(void *context, const char *file, const char *group, const char *dir, int32_t flag); /* 0x0046afc0 */
+    int (*step_4166b0)(void *context);
+    void (*palette_entries)(void *context, int32_t first, int32_t count, const uint8_t *rgb);  /* SetPaletteEntries */
+    void (*input_window)(void *context);                      /* CreateWindowExA "STATIC" "InputDisabledWindow" -> +0x1dc */
+    void (*codec_check)(void *context);                       /* ICInfo(vidc, iv41) -> 0x007c0644 */
+    int32_t (*lobby_join)(void *context);                     /* 0x004241f0 */
+    int (*play_video)(void *context, const char *name);       /* 0x005003f0(0, name) */
+    int (*main_menu)(void *context);                          /* 0x00500c60 */
+    int (*start_file)(void *context, const char *name);       /* 0x00502d60 */
+    int (*open_editor)(void *context, const char *name);      /* 0x00502ad0 */
+    int (*screen_exists)(void *context, const char *name);    /* 0x00451ae0 */
+    void (*ok_dialog)(void *context, int32_t id);             /* 0x004578d0(id, 0, 0x1c2, 100) */
+    void (*set_flag_97e)(void *context);                      /* 0x0041ba90(1) */
+    int (*new_mp_setup)(void *context);                       /* 0x00487f40, +0xd8 clear */
+    void (*new_status)(void *context);                        /* 0x0049e9a0("Status Screen", 0x4bf, "scr1", 0xc383) */
+    int (*new_error_screen)(void *context, int32_t text_id);  /* 0x00486fd0 + 0x004871b0 */
+    void (*show)(void *context, const char *name);            /* 0x00451be0(name, 0) */
+    void (*remove)(void *context, const char *name);          /* 0x00451df0 */
+    void (*close_window)(void *context);                      /* 0x00419930 */
+    void (*after)(void *context);                             /* vtable +0x148 */
+    void (*log)(void *context, const char *text, int stamped); /* 0x004fdea0 */
+    /* The program (0x007d386c) / data (settings +0x1f8) file: 0 when missing. */
+    int (*file_info)(void *context, int which, char *name, int size, int32_t *bytes, int32_t *month,
+                     int32_t *year, int32_t *hour, int32_t *minute, int32_t *second);
+} AoeGameRorInitOpsRor;
+
+/* 0x004fe600 (+0x?): 0 at once with an error (+0x40). The options string
+   (255 chars, upper-cased) may hold "STRING=<name>": the characters up
+   to the next space name the language library, else "languagex.dll";
+   a library that fails to load sets error 1 (0); a missing "empires.exe"
+   sets 0x17 (0). The DRS archives register (0x0046afc0): sounds.drs
+   (flag 1), graphics.drs and Interfac.drs from the data directory,
+   then sounds.drs (1), graphics.drs, Terrain.drs, Border.drs and
+   Interfac.drs from "data\", all in group "tribe". 0x004166b0 failing
+   gives 0. Palette entries 0xf8..0xfe take the seven cycle colours, the
+   1x1 "InputDisabledWindow" is made and the Indeo codec checked. Without
+   the LOBBY switch: a lobby join (0x004241f0) other than 1 plays "logo1"
+   (settings +0x890 clear) or opens the main menu (0 when that fails),
+   or starts the saved game +0xd5c / the editor +0xc58 when given
+   (falling back to the main menu and, when "Main Menu" exists, OK dialog
+   0x961); a join of 1 sets +0x97e and shows a new "MP Setup Screen".
+   With it a "Status Screen" shows first; a join of 1 as above (a failed
+   setup gives 0), another result but -1 closes the window (1), -1 shows
+   the "Main Error Screen" with text 0x96a (0 when it cannot be made);
+   the status screen is removed. Finally vtable +0x148, a line of dashes
+   and a stamped empty line are logged, the program and data files are
+   logged as "program=%s, size=%d, date=%d/%d/%d, time=%d:%d:%d" /
+   "data=..." (the month twice, as the original does) and "options=%s".
+   1. */
+int aoe_game_ror_init_resources_ror(const AoeGameRorInitOpsRor *o);
+
+/* ---- 0x00503100: the random game's players and start ---- */
+typedef struct {
+    char name[0x41];
+    uint8_t kind;        /* 0 human, 4 computer */
+    uint8_t civ;
+    int16_t position;    /* colour - 1 */
+    int32_t color;
+} AoeRandomPlayerRor;
+typedef struct {
+    int kind;            /* 0 random map, 1 scenario file, 2 campaign */
+    int32_t map_type, map_w, map_h;
+    char path[0x104];
+} AoeRandomStartRor;
+typedef struct {
+    void *context;
+    AoeGameSettingsRor *settings;
+    int32_t *busy;                           /* +0x1250 */
+    void (*reset_fields)(void *context);     /* +0xc28..+0xc54 -1, +0x9a8 / +0x8e8..+0x8f0 0, 0x0041bc10(0), 0x0041bc30(0), +0xa16[8] / 0x007c0504[8] / +0xa38[8] 0, 0x00580e24 / 0x00580e28 / 0x007c0654 0 */
+    int global_7c0640;
+    int global_580de0;
+    int32_t own_seed;                        /* +0x28 (-1 none) */
+    int32_t comm_seed;                       /* 0x00423be0 */
+    int32_t our_slot;                        /* 0x00423c10 */
+    const char *scenario_dir;                /* settings +0xc17 */
+    int has_sound;                           /* +0x60 */
+    int32_t *global_554738;
+    int32_t *slot_types;                     /* +0x1170..: 8 entries for slots 1..8 */
+    int32_t (*rand_)(void *context);
+    void (*srand_)(void *context, int32_t seed);
+    int32_t (*slot_type)(void *context, int32_t slot);     /* 0x00423d10 */
+    int32_t (*slot_player)(void *context, int32_t slot);   /* 0x0041c080 */
+    void (*set_slot_player)(void *context, int32_t slot, int32_t player); /* 0x0041c090 */
+    int (*file_exists)(void *context, const char *path);
+    int (*scenario_load)(void *context, const char *path, int32_t campaign); /* 0x00417670; 0 failure */
+    void (*scenario_delete)(void *context);
+    int32_t (*scenario_civ)(void *context, int32_t slot);  /* 0x00476230 */
+    const char *(*scenario_name)(void *context, int32_t slot); /* 0x00476200 */
+    const char *(*settings_name)(void *context);           /* 0x0043ce80 */
+    void (*string)(void *context, int32_t id, char *out, int size);
+    int32_t (*pick_name)(void *context, int32_t civ);      /* 0x00505f90 */
+    void (*clear_names)(void *context);                    /* 0x00506040 */
+    void (*set_comm_name)(void *context, int32_t slot, const char *name); /* 0x004244a0 */
+    const char *(*comm_name)(void *context, int32_t slot); /* 0x004241a0 */
+    void (*sound_hold)(void *context, int held);
+    int (*world_start)(void *context, const AoeRandomPlayerRor *players, int count,
+                       const AoeRandomStartRor *start, int32_t our_player); /* world +0xd0 */
+    int16_t (*world_player_count)(void *context);
+    void (*world_stop)(void *context);                     /* world +0xb8 */
+    void (*clear_wonder)(void *context, int32_t i);        /* 0x0041c0b0 */
+    void (*refresh_world)(void *context);                  /* 0x00520c60 */
+    int32_t (*owner_kind)(void *context, int32_t player);  /* 0x00454150 */
+    void (*explore_all)(void *context, int32_t player);    /* 0x00517780 */
+} AoeGameRorRandomOpsRor;
+
+/* 0x00503100: +0x1250 cleared and the fields reset. With byte 0x1190
+   set: 0x007c0640 == 1 gives map size 2 and type 4, else size 3 and a
+   type from rand % 10 (0 / 1 -> 4, 2 -> 3, 3 -> 2, 4 -> 1, 5..7 kept, 8
+   -> 8, 9 -> 0); the names clear and each player below byte 0x988 gets
+   a random civilisation 1..16 and its name index (0x00505f90). The
+   start: campaign (int 0x9a0) or, in scenario mode (+0x8fc), "<dir>
+   <name>.scn" (".scx" when missing), else the random map (type, width,
+   height). The seed: the comm's when networked, else +0x28 or rand.
+   Civilisations outside 0..16 are randomised (rand * 16 / 0x7fff + 1,
+   noted in +0xa58). Computer slots get a name index; the scenario (or
+   campaign) must load. Positions: slots 1..count, humans by colour
+   (byte 0xac4) in order of appearance, computers taking the first colour
+   no human holds; 0x0041c090 maps each slot. Players 0..7 then take the
+   slot mapped to them (none ends the list): kind 4 for computers, or
+   with 0x00580de0 1, or 2 beyond the first; the civilisation from the
+   scenario slot (campaign) or byte 0xa94; the name: a networked human's
+   comm name, else the scenario's (scenario / campaign), the settings
+   name (campaign, human), string 0x286d (random-map human), or the
+   civilisation name (string 0x1130 + byte 0xacd, else + the picked
+   index). No player gives 0. The sound held, the world starts (+0xd0
+   with our mapped player); fewer than two world players stop it (0).
+   Then the wonder countdowns clear, the world refreshes
+   (0x00520c60), 0x0041bc10(0), full tech (byte 0x985) explores the map
+   for every computer player (0x00517780), 0x0041bc30(byte 0x986), the
+   path budget (0x00554738: 5000 / 7500 / 2500 from byte 0x983 or 0xa14)
+   and the slot types are kept. */
+int aoe_game_ror_setup_random_game_ror(const AoeGameRorRandomOpsRor *o);
+
 #endif

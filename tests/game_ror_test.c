@@ -427,6 +427,105 @@ static void notify_tests(void) {
     gn_n = 0; aoe_game_ror_notify_ror(&o, 0x7e, 1, 0, 1, 2); assert(strcmp(gn_log, "1(16,0) 5(1,2) ") == 0);
     gn_n = 0; o.has_game_screen = 0; aoe_game_ror_notify_ror(&o, 0x7e, 1, 0, 1, 2); assert(gn_n == 0);
 }
+
+static char ir_log[2048]; static int ir_n, ir_lib_ok = 1, ir_exists = 1, ir_lobby_switch, ir_menu_ok = 1, ir_screen = 1, ir_mp_ok = 1, ir_err_ok = 1; static int32_t ir_join = 0; static char ir_dll[64];
+static void ir_add(const char *fmt, ...) { va_list ap; va_start(ap, fmt); ir_n += vsnprintf(ir_log + ir_n, sizeof ir_log - (size_t)ir_n, fmt, ap); va_end(ap); }
+static int ir_loadlib(void *c, const char *n) { (void)c; snprintf(ir_dll, sizeof ir_dll, "%s", n); return ir_lib_ok; }
+static int ir_fexists(void *c, const char *n) { (void)c; (void)n; return ir_exists; }
+static void ir_drs(void *c, const char *f, const char *g, const char *d, int32_t fl) { (void)c; ir_add("drs(%s,%s,%s,%d) ", f, g, d, (int)fl); }
+static int ir_4166b0(void *c) { (void)c; ir_add("4166b0 "); return 1; }
+static void ir_pal(void *c, int32_t a, int32_t n, const uint8_t *rgb) { (void)c; ir_add("pal(%d,%d,%02x) ", (int)a, (int)n, rgb[20]); }
+static void ir_win(void *c) { (void)c; ir_add("win "); }
+static void ir_codec(void *c) { (void)c; ir_add("codec "); }
+static int32_t ir_lobby(void *c) { (void)c; return ir_join; }
+static int ir_video(void *c, const char *n) { (void)c; ir_add("video(%s) ", n); return 1; }
+static int ir_menu(void *c) { (void)c; ir_add("menu "); return ir_menu_ok; }
+static int ir_start(void *c, const char *n) { (void)c; ir_add("start(%s) ", n); return 0; }
+static int ir_editor(void *c, const char *n) { (void)c; ir_add("editor(%s) ", n); return 1; }
+static int ir_screenf(void *c, const char *n) { (void)c; (void)n; return ir_screen; }
+static void ir_ok(void *c, int32_t id) { (void)c; ir_add("ok%x ", (unsigned)id); }
+static void ir_97e(void *c) { (void)c; ir_add("97e "); }
+static int ir_mp(void *c) { (void)c; ir_add("mp "); return ir_mp_ok; }
+static void ir_status(void *c) { (void)c; ir_add("status "); }
+static int ir_errscr(void *c, int32_t id) { (void)c; ir_add("err%x ", (unsigned)id); return ir_err_ok; }
+static void ir_show(void *c, const char *n) { (void)c; ir_add("show(%s) ", n); }
+static void ir_remove(void *c, const char *n) { (void)c; ir_add("rm(%s) ", n); }
+static void ir_close(void *c) { (void)c; ir_add("close "); }
+static void ir_after(void *c) { (void)c; ir_add("after "); }
+static void ir_logf(void *c, const char *t, int s) { (void)c; ir_add("log%d[%s] ", s, t); }
+static int ir_finfo(void *c, int w, char *name, int n, int32_t *b, int32_t *mo, int32_t *y, int32_t *h, int32_t *mi, int32_t *s) { (void)c; if (w) return 0; snprintf(name, (size_t)n, "E.EXE"); *b = 100; *mo = 3; *y = 1998; *h = 1; *mi = 2; *s = 3; return 1; }
+static void init_tests(void) {
+    int32_t err = 0;
+    AoeGameRorInitOpsRor o = {NULL, &err, "x string=lang2.dll y", "D:\\", "", "", 0, 0, ir_loadlib, ir_fexists, ir_drs, ir_4166b0, ir_pal, ir_win, ir_codec, ir_lobby, ir_video, ir_menu, ir_start, ir_editor, ir_screenf, ir_ok, ir_97e, ir_mp, ir_status, ir_errscr, ir_show, ir_remove, ir_close, ir_after, ir_logf, ir_finfo};
+    assert(aoe_game_ror_init_resources_ror(&o) == 1 && strcmp(ir_dll, "LANG2.DLL") == 0);
+    assert(strstr(ir_log, "drs(sounds.drs,tribe,D:\\,1) drs(graphics.drs,tribe,D:\\,0) drs(Interfac.drs,tribe,D:\\,0) drs(sounds.drs,tribe,data\\,1) drs(graphics.drs,tribe,data\\,0) drs(Terrain.drs,tribe,data\\,0) drs(Border.drs,tribe,data\\,0) drs(Interfac.drs,tribe,data\\,0) 4166b0 pal(248,7,7b) win codec video(logo1) after log0[------------------------------] log1[] log0[program=E.EXE, size=100, date=3/3/1998, time=1:2:3] log0[options=x string=lang2.dll y] ") == ir_log);
+    /* A saved game that fails to start falls back to the menu with the OK dialog; the editor name wins. */
+    ir_n = 0; o.options = ""; o.saved_name = "save1";
+    assert(aoe_game_ror_init_resources_ror(&o) == 1 && strcmp(ir_dll, "languagex.dll") == 0 && strstr(ir_log, "codec start(save1) menu ok961 after "));
+    ir_n = 0; o.editor_name = "scn";
+    assert(aoe_game_ror_init_resources_ror(&o) == 1 && strstr(ir_log, "codec editor(scn) after "));
+    /* A lobby join of 1 opens the MP setup; the LOBBY switch path shows the status screen first. */
+    ir_n = 0; ir_join = 1;
+    assert(aoe_game_ror_init_resources_ror(&o) == 1 && strstr(ir_log, "codec 97e mp show(MP Setup Screen) rm(Status Screen) after "));
+    ir_n = 0; o.lobby_switch = 1; ir_join = -1;
+    assert(aoe_game_ror_init_resources_ror(&o) == 1 && strstr(ir_log, "codec status show(Status Screen) err96a show(Main Error Screen) rm(Status Screen) after "));
+    ir_n = 0; ir_join = 2;
+    assert(aoe_game_ror_init_resources_ror(&o) == 1 && strstr(ir_log, "show(Status Screen) close ") && !strstr(ir_log, "after"));
+    ir_n = 0; ir_join = 1; ir_mp_ok = 0;
+    assert(aoe_game_ror_init_resources_ror(&o) == 0 && strstr(ir_log, "97e mp ") && !strstr(ir_log, "show(MP"));
+    ir_exists = 0; assert(aoe_game_ror_init_resources_ror(&o) == 0 && err == 0x17);
+    err = 0; ir_exists = 1; ir_lib_ok = 0; assert(aoe_game_ror_init_resources_ror(&o) == 0 && err == 1);
+    assert(aoe_game_ror_init_resources_ror(&o) == 0);
+}
+static char rg_log[2048]; static int rg_n, rg_rand_i, rg_scn_ok = 1, rg_world_ok = 1; static int32_t rg_rands[16] = {7, 3, 9, 100, 200, 300, 400, 500, 0x7fff, 0, 0, 0, 0, 0, 0, 0}, rg_types[9] = {0, 2, 4, 2, 0, 0, 0, 0, 0}, rg_slot_player[9], rg_slot_types[8], rg_554738; static int16_t rg_wplayers = 3; static AoeRandomPlayerRor rg_players[8]; static int rg_count; static AoeRandomStartRor rg_start;
+static void rg_add(const char *fmt, ...) { va_list ap; va_start(ap, fmt); rg_n += vsnprintf(rg_log + rg_n, sizeof rg_log - (size_t)rg_n, fmt, ap); va_end(ap); }
+static void rg_reset(void *c) { (void)c; rg_add("reset "); }
+static int32_t rg_rand(void *c) { (void)c; return rg_rands[rg_rand_i++ & 15]; }
+static void rg_srand(void *c, int32_t s) { (void)c; rg_add("srand%d ", (int)s); }
+static int32_t rg_stype(void *c, int32_t s) { (void)c; return rg_types[s]; }
+static int32_t rg_splayer(void *c, int32_t s) { (void)c; return rg_slot_player[s]; }
+static void rg_setsplayer(void *c, int32_t s, int32_t p) { (void)c; rg_slot_player[s] = p; }
+static int rg_fexists(void *c, const char *p) { (void)c; (void)p; return 1; }
+static int rg_scnload(void *c, const char *p, int32_t camp) { (void)c; rg_add("scn(%s,%d) ", p ? p : "-", (int)camp); return rg_scn_ok; }
+static void rg_scndel(void *c) { (void)c; rg_add("scndel "); }
+static int32_t rg_scnciv(void *c, int32_t s) { (void)c; return 10 + s; }
+static const char *rg_scnname(void *c, int32_t s) { (void)c; return s == 0 ? "Ramses" : "Hatshepsut"; }
+static const char *rg_setname(void *c) { (void)c; return "Steve"; }
+static void rg_string(void *c, int32_t id, char *o, int n) { (void)c; snprintf(o, (size_t)n, "S%x", (unsigned)id); }
+static int32_t rg_pick(void *c, int32_t civ) { (void)c; return civ * 10 + 1; }
+static void rg_clear(void *c) { (void)c; rg_add("clr "); }
+static void rg_setcomm(void *c, int32_t s, const char *n) { (void)c; rg_add("cn%d=%s ", (int)s, n); }
+static const char *rg_commname(void *c, int32_t s) { (void)c; return s == 1 ? "Ann" : "Cy"; }
+static void rg_hold(void *c, int h) { (void)c; rg_add("hold%d ", h); }
+static int rg_wstart(void *c, const AoeRandomPlayerRor *p, int n, const AoeRandomStartRor *st, int32_t our) { (void)c; memcpy(rg_players, p, sizeof(AoeRandomPlayerRor) * (size_t)n); rg_count = n; rg_start = *st; rg_add("start(%d,our%d) ", n, (int)our); return rg_world_ok; }
+static int16_t rg_wcount(void *c) { (void)c; return rg_wplayers; }
+static void rg_wstop(void *c) { (void)c; rg_add("wstop "); }
+static void rg_wonder(void *c, int32_t i) { (void)c; rg_add("w%d ", (int)i); }
+static void rg_refresh(void *c) { (void)c; rg_add("refresh "); }
+static int32_t rg_okind(void *c, int32_t p) { (void)c; return p == 2 ? 0 : 1; }
+static void rg_explore(void *c, int32_t p) { (void)c; rg_add("explore%d ", (int)p); }
+static void random_game_tests(void) {
+    static AoeGameSettingsRor g; int32_t busy = 1;
+    AoeGameRorRandomOpsRor o = {NULL, &g, &busy, rg_reset, 0, 0, -1, 55, 1, "D:/", 1, &rg_554738, rg_slot_types, rg_rand, rg_srand, rg_stype, rg_splayer, rg_setsplayer, rg_fexists, rg_scnload, rg_scndel, rg_scnciv, rg_scnname, rg_setname, rg_string, rg_pick, rg_clear, rg_setcomm, rg_commname, rg_hold, rg_wstart, rg_wcount, rg_wstop, rg_wonder, rg_refresh, rg_okind, rg_explore};
+    memset(&g, 0, sizeof g);
+    /* A single player random map with byte 0x1190: size 3, type from rand 7 % 10 = 7; three slots (human, computer, human). */
+    g.byte_1190 = 1; aoe_settings_set_byte_988_ror(&g, 3); aoe_settings_set_byte_ac4_ror(&g, 0, 2); aoe_settings_set_byte_ac4_ror(&g, 2, 1); aoe_settings_set_byte_a14_ror(&g, 2);
+    assert(aoe_game_ror_setup_random_game_ror(&o) == 1 && busy == 0);
+    assert(g.map_size == 3 && aoe_settings_int_a80_ror(&g) == 7 && aoe_settings_byte_a94_ror(&g, 0) == 4 && aoe_settings_byte_acd_ror(&g, 0) == 41);
+    /* Positions in slot order: slot 1 colour 2 -> player 1, slot 2 (computer) takes the free colour 3 -> player 2, slot 3 colour 1 -> player 3. */
+    assert(rg_slot_player[1] == 1 && rg_slot_player[2] == 2 && rg_slot_player[3] == 3 && aoe_settings_byte_ac4_ror(&g, 1) == 3);
+    assert(rg_count == 3 && rg_players[0].kind == 0 && rg_players[0].color == 2 && rg_players[0].position == 1 && strcmp(rg_players[0].name, "S286d") == 0 && rg_players[1].kind == 4 && rg_players[1].color == 3 && strncmp(rg_players[1].name, "S1", 2) == 0 && rg_players[2].kind == 0 && rg_players[2].color == 1 && strcmp(rg_players[2].name, "S286d") == 0);
+    assert(rg_start.kind == 0 && rg_start.map_type == 7 && strstr(rg_log, "start(3,our1) hold0 w0 w1 w2 refresh ") && rg_554738 == 7500 && rg_slot_types[0] == 2 && rg_slot_types[1] == 4 && !strstr(rg_log, "scn("));
+    assert(strstr(rg_log, "srand200 ") && strstr(rg_log, "cn1=S286d cn2=S1") && strstr(rg_log, "cn3=S286d "));
+    /* Networked scenario: the comm seed, comm names for humans, the scenario loaded and deleted, full tech explores computer players. */
+    rg_n = 0; g.byte_1190 = 0; g.flag_97e = 1; aoe_settings_set_flag_8fc_ror(&g, 1); aoe_settings_set_scenario_name_ror(&g, "hill"); g.byte_985 = 1; o.global_580de0 = 0; aoe_settings_set_byte_983_ror(&g, 1);
+    { int r = aoe_game_ror_setup_random_game_ror(&o); if (!(r == 1 && strstr(rg_log, "srand55 ") && strstr(rg_log, "scn(hill.scn,0) ") && strstr(rg_log, "scndel hold1 start(3,our1) hold0 w0 w1 w2 refresh explore2 ") && rg_554738 == 5000)) { fprintf(stderr, "RGLOG r=%d [%s] %d\n", r, rg_log, (int)rg_554738); abort(); } }
+    assert(strcmp(rg_players[0].name, "Ann") == 0 && strcmp(rg_players[1].name, "Hatshepsut") == 0 && strcmp(rg_players[2].name, "Cy") == 0 && rg_start.kind == 1 && strcmp(rg_start.path, "hill.scn") == 0);
+    /* A world with one player stops; a failed scenario load fails. */
+    rg_n = 0; rg_wplayers = 1;
+    assert(aoe_game_ror_setup_random_game_ror(&o) == 0 && strstr(rg_log, "wstop "));
+    rg_wplayers = 3; rg_scn_ok = 0; assert(aoe_game_ror_setup_random_game_ror(&o) == 0);
+}
 int main(void) {
     char coded[64];
     AoeGameRorCommandOpsRor cops = {NULL, ns, sp, bc};
@@ -632,5 +731,7 @@ int main(void) {
     sounds_tests();
     cheat_tests();
     notify_tests();
+    init_tests();
+    random_game_tests();
     return 0;
 }

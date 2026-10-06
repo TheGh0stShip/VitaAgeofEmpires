@@ -898,12 +898,12 @@ else()
     add_test(NAME ror_campaign_start_real COMMAND ui_host_tool
       "${CMAKE_SOURCE_DIR}/build/demo_root" "${CMAKE_BINARY_DIR}"
       c:320,198 c:320,188 t:Tester k:13 c:100,240 c:190,455 c:560,460 i:5 d:39 i:5 u:39
-      c:520,380 i:5)
+      c:520,380 i:5 c:520,410 i:2 c:220,90 r:420,250 i:20)
     set_tests_properties(ror_campaign_start_real PROPERTIES
       FIXTURES_REQUIRED ror_user
       ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_test"
       PASS_REGULAR_EXPRESSION
-      "c:190,455 -> Mission Dialog\nc:560,460 -> Game Screen\ni:5 -> Game Screen\nd:39 -> Game Screen\ni:5 -> Game Screen\nu:39 -> Game Screen\nc:520,380 -> Game Screen")
+      "c:190,455 -> Mission Dialog\nc:560,460 -> Game Screen\ni:5 -> Game Screen\nd:39 -> Game Screen\ni:5 -> Game Screen\nu:39 -> Game Screen\nc:520,380 -> Game Screen(.|\n)*r:420,250 -> Game Screen\ni:20 -> Game Screen")
     add_test(NAME ror_shell_touch_and_buttons_real COMMAND shell_app_real
       "${CMAKE_SOURCE_DIR}/build/demo_root" "${CMAKE_BINARY_DIR}/shell_frame.ppm")
     set_tests_properties(ror_shell_touch_and_buttons_real PROPERTIES

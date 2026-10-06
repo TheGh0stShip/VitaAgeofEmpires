@@ -47,6 +47,7 @@ typedef struct {
     const uint8_t *table;
     int32_t layer, row;
     uint32_t sequence;
+    const void *object;    /* the node's object (+0x08 holds its ID) */
 } AoeSpriteDrawQueueEntry;
 
 /* The view's sprite list (RoR 1.0a disc, view +0x338; constructor
@@ -68,6 +69,11 @@ struct AoeSpriteDrawQueue {
     AoeSpriteDrawQueueEntry *entries;
     size_t count, capacity;
     int32_t row_key;       /* set by the live-unit draw before each unit */
+    const void *object;    /* likewise: the unit whose parts are queued */
+    /* After a flush the entries keep the drawn parts in draw order until
+       the next reset: the view's rows, which the original's picks
+       (0x00514d70) read. */
+    size_t drawn;
     int32_t row_min, row_max;
     DrsArchive *const *archives;
     size_t archive_count;

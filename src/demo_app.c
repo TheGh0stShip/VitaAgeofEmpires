@@ -106,6 +106,18 @@ struct AoeDemo {
     uint8_t *(*map_bitmap)(void *context, const char *name, int32_t id, int32_t *width,
                            int32_t *height);
     void *map_bitmap_context;
+    /* The viewed player's selection (+0x138[25]) and, per frame, where
+       each selected unit was drawn (its graphic and tile anchor). */
+    AoeLiveUnit *selected[AOE_DEMO_SELECTION];
+    int selected_count;
+    struct {
+        const AoeLiveUnit *unit;
+        const void *graphic;
+        int32_t x, y;
+    } drawn_selected[AOE_DEMO_SELECTION];
+    int drawn_selected_count;
+    TerrainViewCamera last_camera;
+    int last_camera_valid;
     int poi;
     int hud;
     int paused;
@@ -272,6 +284,29 @@ static int resolve_color(void *opaque, const void *selected,
     return 1;
 }
 
+/* The live draw's sprite call: the backend's, after noting where a
+   selected unit is drawn (its tile anchor: the bounds' left / top less
+   the unit's +0x28 / +0x2a). */
+static int demo_sprite(void *context, void *renderer, const AoeLiveUnitCore *unit,
+                       const AoeSpriteRuntime *sprites, const void *graphic,
+                       uint8_t owner_color, uint8_t frame, int32_t draw_id,
+                       int16_t left, int16_t top, int16_t right, int16_t bottom) {
+    AoeDemo *demo = context;
+    for (int i = 0; i < demo->selected_count; ++i)
+        if (&demo->selected[i]->core == unit &&
+            demo->drawn_selected_count < AOE_DEMO_SELECTION) {
+            int n = demo->drawn_selected_count++;
+            demo->drawn_selected[n].unit = demo->selected[i];
+            demo->drawn_selected[n].graphic = graphic;
+            demo->drawn_selected[n].x = (int16_t)(left - unit->draw_left);
+            demo->drawn_selected[n].y = (int16_t)(top - unit->draw_top);
+            break;
+        }
+    return aoe_live_unit_sprite_indexed_ror(&demo->backend, renderer, unit, sprites, graphic,
+                                            owner_color, frame, draw_id, left, top, right,
+                                            bottom);
+}
+
 /* ------------------------------------------------------------------ */
 /* Open / close */
 
@@ -436,8 +471,8 @@ AoeDemo *aoe_demo_open_view(const char *root, AoeDemoClock clock,
     demo->backend.resolve_color_source = resolve_color;
     demo->backend.color_source_context = &demo->backend;
     demo->draw_ops = (AoeLiveUnitDrawRorOps){
-        .context = &demo->backend,
-        .sprite = aoe_live_unit_sprite_indexed_ror};
+        .context = demo,
+        .sprite = demo_sprite};
     demo_status(demo, "Loaded %u scenarios", (unsigned)demo->scenario_count);
     return demo;
 fail:
@@ -449,6 +484,9 @@ fail:
 
 static void unload_scenario(AoeDemo *demo) {
     demo->map_features_valid = 0;
+    demo->selected_count = 0;
+    demo->drawn_selected_count = 0;
+    demo->last_camera_valid = 0;
     if (!demo->loaded) return;
     aoe_world_combat_destroy_ror(&demo->combat);
     aoe_world_motion_destroy_ror(&demo->motion);
@@ -1392,6 +1430,191 @@ void aoe_demo_set_parallel(AoeDemo *demo, AoeDemoParallel run, void *context,
     demo->parallel_parts = parts > 0 ? parts : 1;
 }
 
+/* ------------------------------------------------------------------ */
+/* Selection, picking and orders */
+
+/* A queued part's frame from the art cache (borrowed until the next
+   miss), or NULL. */
+static const SlpFrame *part_frame(AoeDemo *demo, const AoeSpriteDrawQueueEntry *e) {
+    const SlpFrame *f = NULL;
+    if (aoe_graphic_art_cache_get(&demo->graphic_cache, e->graphic, &e->frame,
+                                  demo->graphic_archives, 6, &f) != AOE_GRAPHIC_ART_OK)
+        return NULL;
+    return f;
+}
+
+static int32_t part_left(const AoeSpriteDrawQueueEntry *e, const SlpFrame *f) {
+    return e->frame.mirror_horizontal ? e->anchor_x + f->hotspot_x - (int32_t)f->width
+                                      : e->anchor_x - f->hotspot_x;
+}
+
+typedef struct {
+    AoeDemo *demo;
+    const AoeLiveUnit *unit;
+    int32_t ax, ay;     /* the unit's anchor plus +0x28 / +0x2a */
+} SelectionBox;
+
+/* The box of the parts drawn for the unit this frame, relative to its
+   anchor (the port's stand-in for the sprite list's first-sprite bounds,
+   0x00415980). */
+static int sel_bounds(void *context, const void *graphic, uint8_t frame, int16_t *x0,
+                      int16_t *y0, int16_t *x1, int16_t *y1) {
+    SelectionBox *b = context;
+    const AoeSpriteDrawQueue *q = &b->demo->runtime.sprite_queue;
+    int found = 0;
+    int32_t l = 0, t = 0, r = 0, btm = 0;
+    (void)graphic;
+    (void)frame;
+    for (size_t i = 0; i < q->drawn; ++i) {
+        const AoeSpriteDrawQueueEntry *e = &q->entries[i];
+        const SlpFrame *f;
+        int32_t el, et;
+        if (e->object != &b->unit->core || !(f = part_frame(b->demo, e))) continue;
+        el = part_left(e, f);
+        et = e->anchor_y - f->hotspot_y;
+        if (!found || el < l) l = el;
+        if (!found || et < t) t = et;
+        if (!found || el + (int32_t)f->width - 1 > r) r = el + (int32_t)f->width - 1;
+        if (!found || et + (int32_t)f->height - 1 > btm) btm = et + (int32_t)f->height - 1;
+        found = 1;
+    }
+    if (!found) return 0;
+    *x0 = (int16_t)(l - b->ax);
+    *y0 = (int16_t)(t - b->ay);
+    *x1 = (int16_t)(r - b->ax);
+    *y1 = (int16_t)(btm - b->ay);
+    return 1;
+}
+
+static void sel_plot_box(AoeDemo *demo, int32_t x0, int32_t y0, int32_t x1, int32_t y1,
+                         uint8_t color, int filled) {
+    if (x0 > x1) { int32_t t = x0; x0 = x1; x1 = t; }
+    if (y0 > y1) { int32_t t = y0; y0 = y1; y1 = t; }
+    for (int32_t y = y0; y <= y1; ++y) {
+        if (y < 0 || (uint32_t)y >= demo->height) continue;
+        for (int32_t x = x0; x <= x1; ++x) {
+            if (x < 0 || (uint32_t)x >= demo->width) continue;
+            if (filled || y == y0 || y == y1 || x == x0 || x == x1)
+                demo->pixels[(size_t)y * demo->width + (size_t)x] = color;
+        }
+    }
+}
+static void sel_rect(void *context, void *renderer, int32_t x0, int32_t y0, int32_t x1,
+                     int32_t y1, uint8_t color) {
+    (void)renderer;
+    sel_plot_box(((SelectionBox *)context)->demo, x0, y0, x1, y1, color, 0);
+}
+static void sel_fill(void *context, void *renderer, int32_t x0, int32_t y0, int32_t x1,
+                     int32_t y1, uint8_t color) {
+    (void)renderer;
+    sel_plot_box(((SelectionBox *)context)->demo, x0, y0, x1, y1, color, 1);
+}
+
+/* The selection boxes (0x004a8e00: outline and health bar), drawn over
+   the sprites. The original's 8-bit view draws them from the live
+   draw's selected-unit hook (0x004a7520) as each unit is drawn; the
+   port's sprites are queued and drawn after the terrain walk, so the
+   boxes follow the flush. */
+static void draw_selection(AoeDemo *demo) {
+    for (int i = 0; i < demo->drawn_selected_count; ++i) {
+        SelectionBox box = {demo, demo->drawn_selected[i].unit,
+                            demo->drawn_selected[i].x + demo->drawn_selected[i].unit->core.draw_left,
+                            demo->drawn_selected[i].y + demo->drawn_selected[i].unit->core.draw_top};
+        AoeLiveUnitSelectionOps ops = {&box, NULL, sel_bounds, sel_rect, sel_fill, NULL};
+        aoe_live_unit_draw_selection_ror(&box.unit->core, demo->drawn_selected[i].graphic,
+                                         demo->pixels, demo->drawn_selected[i].x,
+                                         demo->drawn_selected[i].y, &ops);
+    }
+}
+
+AoeLiveUnit *aoe_demo_pick(AoeDemo *demo, int32_t x, int32_t y) {
+    const AoeSpriteDrawQueue *q;
+    if (!demo || !demo->loaded) return NULL;
+    q = &demo->runtime.sprite_queue;
+    /* The last part drawn under the point (the top one) wins. */
+    for (size_t i = q->drawn; i-- > 0;) {
+        const AoeSpriteDrawQueueEntry *e = &q->entries[i];
+        const SlpFrame *f;
+        int32_t col, row;
+        if (!e->object || !(f = part_frame(demo, e))) continue;
+        col = x - part_left(e, f);
+        row = y - (e->anchor_y - f->hotspot_y);
+        if (col < 0 || row < 0 || col >= (int32_t)f->width || row >= (int32_t)f->height) continue;
+        if (e->frame.mirror_horizontal) col = (int32_t)f->width - 1 - col;
+        if (f->pixels[(size_t)row * f->width + (size_t)col].kind != SLP_TRANSPARENT) {
+            AoeLiveUnit *u = (AoeLiveUnit *)e->object;
+            if (alive(u)) return u;
+        }
+    }
+    return NULL;
+}
+
+int aoe_demo_screen_to_map(const AoeDemo *demo, int32_t sx, int32_t sy, float *mx, float *my) {
+    const DatMapGeometry *g;
+    float a, b, x, y;
+    int pass;
+    if (!demo || !demo->loaded || !demo->last_camera_valid) return 0;
+    g = &demo->geometry;
+    if (g->tile_half_width <= 0 || g->tile_half_height <= 0) return 0;
+    a = (float)(sx + demo->last_camera.camera_pixel_x) / (float)g->tile_half_width;
+    /* Flat ground first, then once more with the elevation of the tile
+       found. */
+    for (pass = 0, x = y = 0.0f; pass < 2; ++pass) {
+        float lift = 0.0f;
+        if (pass) {
+            int32_t tx = (int32_t)x, ty = (int32_t)y;
+            if (tx >= 0 && ty >= 0 && (uint32_t)tx < demo->runtime.map.width &&
+                (uint32_t)ty < demo->runtime.map.height)
+                lift = (float)demo->runtime.map.tiles[(size_t)ty * demo->runtime.map.width +
+                                                      (size_t)tx].elevation *
+                       (float)g->elevation_height;
+        }
+        b = (float)(sy + demo->last_camera.camera_pixel_y) + lift;
+        b /= (float)g->tile_half_height;
+        x = (a - b) * 0.5f;
+        y = (a + b) * 0.5f;
+    }
+    if (x < 0.0f || y < 0.0f || x >= (float)demo->runtime.map.width ||
+        y >= (float)demo->runtime.map.height)
+        return 0;
+    *mx = x;
+    *my = y;
+    return 1;
+}
+
+void aoe_demo_select(AoeDemo *demo, AoeLiveUnit *unit) {
+    if (!demo) return;
+    demo->selected_count = 0;
+    if (unit) demo->selected[demo->selected_count++] = unit;
+}
+
+int aoe_demo_selection(const AoeDemo *demo, AoeLiveUnit **out, int max) {
+    int n = 0;
+    if (!demo) return 0;
+    for (int i = 0; i < demo->selected_count && n < max; ++i) out[n++] = demo->selected[i];
+    return n;
+}
+
+int aoe_demo_order(AoeDemo *demo, int32_t sx, int32_t sy) {
+    AoeLiveUnit *target = aoe_demo_pick(demo, sx, sy);
+    float x, y;
+    int ordered = 0;
+    if (!demo || !demo->selected_count) return 0;
+    if (target) {
+        x = target->core.position.x38;
+        y = target->core.position.y3c;
+    } else if (!aoe_demo_screen_to_map(demo, sx, sy, &x, &y)) {
+        return 0;
+    }
+    for (int i = 0; i < demo->selected_count; ++i) {
+        AoeLiveUnit *u = demo->selected[i];
+        int16_t code = 0;
+        if (!alive(u) || u->runtime_owner_index != 1 || u == target) continue;
+        if (aoe_world_combat_order_ror(&demo->combat, u, target, x, y, 0.0f, &code)) ++ordered;
+    }
+    return ordered;
+}
+
 /* Draws the indexed scene into demo->pixels and updates draw stats. */
 static void render_scene(AoeDemo *demo) {
     TerrainViewCamera camera;
@@ -1417,8 +1640,12 @@ static void render_scene(AoeDemo *demo) {
                (size_t)demo->width * demo->height);
         scene_draw_init(demo, &draw, &camera, &surface,
                         AOE_SCENE_PASS_OBJECTS);
+        demo->drawn_selected_count = 0;
         ok = ok && aoe_scenario_runtime_draw_scene_ror(&demo->runtime, &draw,
                                                        &result);
+        demo->last_camera = camera;
+        demo->last_camera_valid = 1;
+        if (ok) draw_selection(demo);
         demo->stats.objects_ms = (float)(now_us(demo) - t1) / 1000.0f;
         if (!ok)
             demo_status(demo, "Scene draw failed: unit %d graphic %.20s "

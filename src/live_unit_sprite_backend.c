@@ -25,6 +25,7 @@ int aoe_live_unit_sprite_indexed_ror(
         /* 0x004a8b16: the sprite-list row key is the tile screen y plus
            unit +0x2e, the same sum as `bottom` within screen range. */
         surface->queue->row_key = bottom;
+        surface->queue->object = unit;
         surface->queue->skip_missing_art = backend->skip_missing_art;
     }
     backend->last_status = aoe_sprite_draw_runtime_bounds_cached_indexed_ror(

@@ -347,6 +347,7 @@ int aoe_sprite_draw_instance_bounds_cached_indexed_ror(
             e->layer = parts[i].graphic->layer; /* minimum 0 (disc 0x00416190 (patched 0x00415b30)) */
             e->row = q->row_key;
             e->sequence = q->next_sequence++;
+            e->object = q->object;
         }
         if (parts != stack_parts) free(parts);
         return first_error;
@@ -439,7 +440,9 @@ void aoe_sprite_draw_queue_reset(AoeSpriteDrawQueue *queue,
                                  int32_t row_min, int32_t row_max) {
     if (!queue) return;
     queue->count = 0;
+    queue->drawn = 0;
     queue->row_key = 0;
+    queue->object = NULL;
     queue->row_min = row_min;
     queue->row_max = row_max;
     queue->next_sequence = 0;
@@ -499,6 +502,7 @@ int aoe_sprite_draw_queue_flush(AoeSpriteDrawQueue *queue,
         if (status != AOE_GRAPHIC_ART_OK && first_error == AOE_GRAPHIC_ART_OK)
             first_error = status;
     }
+    queue->drawn = queue->count;
     queue->count = 0;
     return first_error;
 }

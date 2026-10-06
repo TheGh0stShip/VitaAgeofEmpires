@@ -391,6 +391,25 @@ static int make_minimap(AoeGameScreenHostRor *s) {
     return 1;
 }
 
+/* A press on the world view (no child panel overlaps it; help mode
+   first): with mouse style 2 the left button selects
+   the unit drawn there (or clears the selection) and the right button
+   orders the selection there. The original's view panel does this
+   through its mouse handlers (0x0050f420's game view; not assembled). */
+static int32_t gs_mouse_down(AoeUiPanelRor *p, uint8_t button, int32_t x, int32_t y, int32_t c,
+                             int32_t sh) {
+    AoeGameScreenHostRor *s = GS(p);
+    int32_t vx = x - p->x - s->view_x, vy = y - p->y - s->view_y;
+    if (!s->world || vx < 0 || vy < 0 || vx >= s->view_w || vy >= s->view_h ||
+        (button != 1 && button != 2) || aoe_ui_ez_help_press_ror(&s->ez, button, x, y))
+        return aoe_ui_ez_mouse_down_slot_ror(p, button, x, y, c, sh);
+    if (button == 1) aoe_demo_select(s->world, aoe_demo_pick(s->world, vx, vy));
+    else aoe_demo_order(s->world, vx, vy);
+    render_view(s);
+    p->vt->set_redraw(p, 1);
+    return 1;
+}
+
 static AoeUiEzVtblRor vtable = {
     AOE_UI_EZ_SLOTS_MD(gs_destroy, gs_draw, gs_idle, aoe_ui_panel_handle_paint_ror,
                        aoe_ui_ez_no_key_action_ror, aoe_ui_panel_zero_ror,
@@ -414,6 +433,7 @@ int aoe_game_screen_host_init_ror(AoeGameScreenHostRor *s, AoeGameUiRor *ui, Aoe
     s->resource_context = resource_context;
     s->mouse_x = s->mouse_y = -1;
     vtable.base.mouse_move = gs_mouse_move;
+    vtable.base.mouse_down = gs_mouse_down;
     aoe_ui_screen_init_ror(ez, ui->system, ui->ez_ops, NAME);
     ez->panel.vt = &vtable.base;
     if (!aoe_ui_screen_setup_ror(ez, area, "", 0xc388, 1)) {

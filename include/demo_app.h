@@ -21,6 +21,10 @@
      scenario/  optional *.scx / *.scn files
      campaign/  optional Rise of Rome *.cpx campaign files */
 
+enum { AOE_DEMO_SELECTION = 25 };   /* the player's +0x138[25] */
+
+typedef struct AoeLiveUnit AoeLiveUnit;
+
 enum {
     AOE_DEMO_WIDTH = 960,
     AOE_DEMO_HEIGHT = 544
@@ -94,6 +98,26 @@ void aoe_demo_minimap_ops(AoeDemo *demo, AoeDiamondMapOpsRor *ops,
                           uint8_t *(*load_bitmap)(void *context, const char *name, int32_t id,
                                                   int32_t *width, int32_t *height),
                           void *bitmap_context);
+/* The unit drawn at view pixel (x, y) in the last frame: the drawn
+   sprite parts (the view's sprite list in draw order, the original's
+   rows) from the top down, the first non-transparent pixel winning, as
+   the view's pick 0x00514d70 tests its rows. NULL for none. */
+AoeLiveUnit *aoe_demo_pick(AoeDemo *demo, int32_t x, int32_t y);
+/* View pixel to map tile coordinates under the last frame's camera: the
+   inverse of the tile projection on flat ground, refined once by the
+   found tile's elevation (the original finds ground points through its
+   view's pick-mode draw). 0 off the map. */
+int aoe_demo_screen_to_map(const AoeDemo *demo, int32_t sx, int32_t sy, float *mx, float *my);
+/* The viewed player's selection: one unit (NULL clears), and the
+   selected units. Selected units drawn get the selection box with its
+   health bar (0x004a8e00). */
+void aoe_demo_select(AoeDemo *demo, AoeLiveUnit *unit);
+int aoe_demo_selection(const AoeDemo *demo, AoeLiveUnit **out, int max);
+/* The selected units of player 1 ordered at view pixel (x, y): the unit
+   drawn there as the target, else the ground point, through the order
+   step 0x00405f20 (task selection: gather, attack or move). Returns the
+   number ordered. */
+int aoe_demo_order(AoeDemo *demo, int32_t sx, int32_t sy);
 /* The camera (map tile coordinates). */
 void aoe_demo_camera(const AoeDemo *demo, float *x, float *y);
 /* The DAT's terrain count (scn_load_map's `terrain_count`). */

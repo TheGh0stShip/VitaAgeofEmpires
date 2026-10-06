@@ -35,8 +35,95 @@ jobs:
       - name: Build parser tests and WAV tool
         run: >-
           cmake --build build/parser-sanitize --parallel 2 --target
-          drs_format_test slp_decode_test dat_load_test wav_test wav_tool
+          drs_format_test slp_decode_test dat_load_test dat_random_map_test
+          wav_test wav_tool
       - name: Run parser sanitizer tests
         run: >-
           ctest --test-dir build/parser-sanitize --output-on-failure
-          -R "^(drs_format_and_bounds|slp_format_decode|dat_raw_deflate_boundary|wav_riff_parser)$"
+          -R "^(drs_format_and_bounds|slp_format_decode|dat_raw_deflate_boundary|dat_random_map_records|wav_riff_parser)$"
+
+  # The full host suite as ARMv7-A Thumb-2 hard-float ILP32 code under
+  # qemu-user, with VitaSDK's signed char and small enums. See docs/VITA_ABI.md;
+  # this is a Linux lane and does not establish correctness on Vita hardware.
+  armv7-hardfloat:
+    name: ARMv7 hard-float ILP32 (${{ matrix.name }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Release
+            build_type: Release
+            cflags: ""
+            ldflags: ""
+          - name: Debug UBSan
+            build_type: Debug
+            cflags: -fsanitize=undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer
+            ldflags: -fsanitize=undefined
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install armhf compiler, qemu-user and armhf runtime libraries
+        run: |
+          sudo dpkg --add-architecture armhf
+          # Keep the configured Ubuntu mirror amd64-only; armhf comes from ports.
+          if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+            sudo sed -i '/^Types:/a Architectures: amd64' /etc/apt/sources.list.d/ubuntu.sources
+          fi
+          if [ -f /etc/apt/sources.list ]; then
+            sudo sed -i -E 's/^deb (https?:|mirror)/deb [arch=amd64] \1/' /etc/apt/sources.list
+          fi
+          printf '%s\n' \
+            'Types: deb' \
+            'URIs: http://ports.ubuntu.com/ubuntu-ports/' \
+            'Suites: noble noble-updates noble-security' \
+            'Components: main universe' \
+            'Architectures: armhf' \
+            'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg' \
+            | sudo tee /etc/apt/sources.list.d/ubuntu-ports-armhf.sources
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc-arm-linux-gnueabihf qemu-user zlib1g-dev:armhf libubsan1:armhf
+      - name: Configure
+        # Extra flags go through CFLAGS/LDFLAGS so the toolchain's ABI flags stay.
+        env:
+          CFLAGS: ${{ matrix.cflags }}
+          LDFLAGS: ${{ matrix.ldflags }}
+        run: >-
+          cmake -S . -B build/armhf
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/armv7-linux-gnueabihf.cmake
+      - name: Build
+        run: cmake --build build/armhf --parallel 4
+      - name: Verify object ABI attributes
+        run: >-
+          cmake -DAOE_ABI_DIR=build/armhf
+          -DAOE_ABI_READELF=arm-linux-gnueabihf-readelf
+          -DAOE_ABI_AR=arm-linux-gnueabihf-ar
+          -P cmake/VerifyVitaArchives.cmake
+      - name: Test under qemu-arm
+        run: ctest --test-dir build/armhf --output-on-failure
+
+  vita-cross:
+    name: VitaSDK cross-build and ABI gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container:
+      # Pinned so toolchain updates are deliberate; when refreshing the digest,
+      # keep both the configure-time gate and the archive check passing.
+      image: vitasdk/vitasdk@sha256:fd82d88ff456d118eef16533ebf9a3a6ae0e292684fb8a3a35f15f0707b4692d
+    steps:
+      - uses: actions/checkout@v7
+      - name: Configure (runs the Vita ABI gate)
+        run: >-
+          cmake -S . -B build/vita
+          -DCMAKE_TOOLCHAIN_FILE="$VITASDK/share/vita.toolchain.cmake"
+          -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build/vita --parallel 4
+      - name: Verify object ABI attributes
+        run: >-
+          cmake -DAOE_ABI_DIR=build/vita
+          -DAOE_ABI_READELF=arm-vita-eabi-readelf
+          -DAOE_ABI_AR=arm-vita-eabi-ar
+          -P cmake/VerifyVitaArchives.cmake

@@ -354,6 +354,21 @@ int main(int argc, char **argv) {
         printf("random map %d: %u lands, %u terrains, %u units, %u elevations\n",
                map->map_id, map->land_count, map->terrain_count,
                map->unit_count, map->elevation_count);
+        printf("  margins %d %d %d %d, +0x14 %d, land edge distance %d, "
+               "+0x1c %d, land percent %d, +0x24 %d\n",
+               map->edge_margin[0], map->edge_margin[1], map->edge_margin[2],
+               map->edge_margin[3], map->field_14, map->land_edge_distance,
+               map->field_1c, map->land_percent, map->field_24);
+        for (uint32_t l = 0; l < map->land_count; ++l) {
+            const DatRandomMapLand *land = &map->lands[l];
+            printf("  land %u: id %d, +0x04 %u, placement %u at %d,%d, "
+                   "area %u%%, per player %u, +0x10 %u, +0x20 %d, "
+                   "+0x24 %d, +0x28 %d\n",
+                   l, land->id, land->field_04, land->placement_mode,
+                   land->x, land->y, land->area_percent, land->per_player,
+                   land->field_10, land->field_20, land->field_24,
+                   land->field_28);
+        }
     }
     printf("next section offset: 0x%zx\n", random_maps.next_offset);
     if (!dat_parse_effects(&blob, &random_maps, &effects)) {

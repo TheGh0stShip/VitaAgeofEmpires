@@ -190,12 +190,70 @@ typedef struct {
     size_t next_offset;
 } DatMapGeometry;
 
+/* Random-map records, decoded field by field from the DAT stream read by
+   patched RoR 1.0a 0x0046da10 (base 1.0c 0x0046e5e0). Widths come from the
+   same class's text loader RoR 0x0046d580; the serialized padding bytes are
+   not retained. Consumers named below are RoR 1.0a; see docs/RANDOM_MAP.md.
+   "Generator x/y" are the axes sized by generator +0x14/+0x18. */
+
+/* Land record, 44 bytes. */
+typedef struct {
+    int32_t id;              /* +0x00, to the object setup's land table */
+    uint8_t field_04;        /* +0x04, zero-extended to land work +0x40 */
+    int32_t field_08;        /* +0x08, to land work +0x50 */
+    int32_t field_0c;        /* +0x0c, to land work +0x4c */
+    uint8_t field_10;        /* +0x10, to land work +0x54 (see per_player) */
+    uint8_t placement_mode;  /* +0x11: 0 random, 1 fixed x/y, 2 spaced random */
+    int32_t x, y;            /* +0x14/+0x18, used by placement mode 1 */
+    uint8_t area_percent;    /* +0x1c: share of the map's land area */
+    /* +0x1d: 0 places one land; otherwise one per player, and only 1 keeps
+       +0x10 as the work byte (other values use the player index). */
+    uint8_t per_player;
+    int32_t field_20;        /* +0x20; nonnegative adds the land to the
+                                terrain and elevation position lists */
+    int32_t field_24;        /* +0x24, copied beside +0x20 */
+    int32_t field_28;        /* +0x28, to land work +0x58; text default 8 */
+} DatRandomMapLand;
+
+/* Terrain record, 24 bytes. Setup 0x0046ead0 copies +0x04..+0x14 to its
+   work entry; +0x00 is not copied directly. Text default for +0x14 is 20. */
+typedef struct {
+    int32_t field_00, field_04, field_08, field_0c, field_10, field_14;
+} DatRandomMapTerrain;
+
+/* Object record, 44 bytes, copied unchanged by setup 0x0046ec90. */
+typedef struct {
+    int32_t field_00, field_04;
+    uint8_t field_08, field_09;
+    int32_t field_0c, field_10, field_14, field_18;
+    int32_t field_1c, field_20, field_24, field_28;
+} DatRandomMapObject;
+
+/* Elevation record, 24 bytes. Both revisions load, save and free these but
+   no generator code reads them; elevation setup uses fixed layers. */
+typedef struct {
+    int32_t values[6];
+} DatRandomMapElevation;
+
 typedef struct {
     int32_t map_id;
     uint32_t land_count;
     uint32_t terrain_count;
-    uint32_t unit_count;
+    uint32_t unit_count;      /* object records */
     uint32_t elevation_count;
+    /* Header +0x04..+0x24 from the second pass, as the original overwrites. */
+    /* +0x04/+0x08/+0x0c/+0x10: low-x, low-y, high-x, high-y edge margins;
+       the land bounds are x in [m0, gen_x - m2] and y in [m1, gen_y - m3]. */
+    int32_t edge_margin[4];
+    int32_t field_14;           /* +0x14, low byte to every land work +0x6c */
+    int32_t land_edge_distance; /* +0x18, placement distance from the edge */
+    int32_t field_1c;           /* +0x1c, low byte to generator +0x145c */
+    int32_t land_percent;       /* +0x20, percent of the map area in lands */
+    int32_t field_24;           /* +0x24, not read by either generator */
+    DatRandomMapLand *lands;
+    DatRandomMapTerrain *terrains;
+    DatRandomMapObject *objects;
+    DatRandomMapElevation *elevations;
 } DatRandomMap;
 
 typedef struct {

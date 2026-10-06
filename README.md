@@ -40,6 +40,8 @@ ctest --test-dir build/host --output-on-failure
 
 The host tests use synthetic fixtures unless optional original game files are present locally. The parser-focused CI path also runs DRS/SLP/DAT/WAV regressions under AddressSanitizer and UndefinedBehaviorSanitizer.
 
+CI also runs the full suite as ARMv7 hard-float ILP32 code under qemu (Release and UBSan) and cross-builds with VitaSDK, checking every object's ELF ABI attributes; see [Vita ABI and test lanes](docs/VITA_ABI.md).
+
 Vita cross-compilation requires [VitaSDK](https://github.com/vitasdk/vita-toolchain); see [Building a Vita update](docs/BUILDING_UPDATE.md). A successful library build does not mean the game boots.
 
 ## Project map

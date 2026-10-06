@@ -2,6 +2,7 @@
 #include "unit_ai_base.h"
 
 #include <assert.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -117,6 +118,58 @@ static void record_tests(void) {
                b.field_10c == 1000 && b.byte_130 == 0 && !b.has_members);
     }
     free(nb.records); free(na.records); free(b.group); free(qb.records);
+}
+
+static char up_log[1024]; static int up_n; static uint8_t up_state = 2, up_tstate; static int up_tfound = 1, up_thas_ai = 1, up_attackers, up_130 = 0, up_e8 = 1;
+static int32_t up_tai_target = 7, up_d4 = 5, up_needs = 1, up_move_ok = 1, up_rec[4], up_offer_at = 1;
+static void up_add(const char *fmt, ...) { va_list ap; va_start(ap, fmt); up_n += vsnprintf(up_log + up_n, sizeof up_log - (size_t)up_n, fmt, ap); va_end(ap); }
+static void up_clear(void *c) { (void)c; up_add("dbg "); }
+static int up_130f(void *c) { (void)c; return up_130; }
+static void up_12c(void *c, int32_t v) { (void)c; up_add("12c(%d) ", (int)v); }
+static int up_e8f(void *c) { (void)c; return up_e8; }
+static void up_ec(void *c, int32_t v) { (void)c; up_add("ec(%d) ", (int)v); }
+static int up_resolve(void *c, int32_t id, uint8_t *st, int *has, int32_t *t) { (void)c; up_add("res%d ", (int)id); if (id >= 100) { *st = 0; *has = id != 102; *t = id == 103 ? 9 : 7; return id != 101; } *st = up_tstate; *has = up_thas_ai; *t = up_tai_target; return up_tfound; }
+static int32_t up_needsf(void *c, int32_t o) { (void)c; (void)o; return up_needs; }
+static int32_t up_d4f(void *c, int32_t a) { (void)c; up_add("d4(%d) ", (int)a); return up_d4; }
+static float up_range(void *c) { (void)c; return 2.5f; }
+static int up_move(void *c, float x, float y, float z, float r) { (void)c; up_add("move(%g,%g,%g,%g) ", (double)x, (double)y, (double)z, (double)r); return up_move_ok; }
+static void up_cleart(void *c) { (void)c; up_add("clear "); }
+static void up_stop(void *c, int32_t f) { (void)c; up_add("stop%d ", (int)f); }
+static float up_dist(void *c, int32_t id) { (void)c; (void)id; return 4.0f; }
+static int32_t up_recf(void *c, int i, int32_t e) { (void)c; (void)e; up_add("rec%d ", i); return up_rec[i]; }
+static void up_notes(void *c, int32_t e) { (void)c; up_add("notes%d ", (int)e); }
+static void up_group(void *c) { (void)c; up_add("group "); }
+static int32_t up_offer(void *c, int i) { (void)c; up_add("offer%d ", i); return i == up_offer_at; }
+static void up_d8(void *c) { (void)c; up_add("d8 "); }
+static void up_report(void *c) { (void)c; up_add("report "); }
+static void update_tests(void) {
+    AoeUnitAiRor ai; int32_t group[4] = {100, 101, 102, 103}; float f;
+    AoeUnitAiUpdateOpsRor o = {NULL, &up_state, 7, 7, 1.5f, 2.5f, 0.5f, 0, 1, 3, 2, up_clear, up_130f, up_12c, up_e8f, up_ec, up_resolve, up_needsf, up_d4f, up_range, up_move, up_cleart, up_stop, up_dist, up_recf, up_notes, up_group, up_offer, up_d8, up_report};
+    memset(&ai, 0, sizeof ai);
+    ai.order = 600; ai.target_id = 50; ai.target_x = 3.0f; ai.target_y = 4.0f; ai.target_z = 0.0f; ai.action = 0x2c6; ai.field_2c = 5; ai.byte_130 = 1;
+    ai.group = group; ai.group_count = 4; ai.timer = 1000; ai.field_10c = 1000; ai.timer_base = 77;
+    up_tstate = 3; up_130 = 1;
+    /* A dead target under order 600: the +0xd4 answer 5 moves to the point and retires the action;
+       the human owner's +0x2c from the distance; member 101 is dropped; the walk ends there. */
+    assert(aoe_unit_ai_update_ror(&ai, 100, &o) == 1);
+    assert(strcmp(up_log, "dbg 12c(0) res50 d4(0) move(3,4,0,2.5) res100 res101 rec0 rec1 notes100 group offer0 offer1 d8 ") == 0);
+    assert(ai.byte_130 == 0 && ai.last_action == 0x2c6 && ai.action == -1 && ai.field_2c == -1 && ai.group_count == 3 && group[1] == 102 && group[2] == 103);
+    memcpy(&f, &ai.field_110[1], sizeof f); assert(f == 2.5f);
+    assert(ai.field_f8 == 0 && ai.field_104 == 100 && ai.order == -1 && ai.target_id == 50);
+    /* Record 1 answering 4 runs the notes and gives 0; a missing target under order 600 clears and stops. */
+    up_n = 0; up_tfound = 0; ai.order = 600; up_rec[1] = 4;
+    assert(aoe_unit_ai_update_ror(&ai, 10, &o) == 0 && strcmp(up_log, "dbg 12c(0) res50 clear stop1 res100 res102 rec0 rec1 notes10 ") == 0);
+    assert(ai.target_id == -1 && ai.group_count == 2 && group[1] == 103 && ai.field_f8 == 77 + 10);
+    /* The timer: with no order and no target past +0xfc, +0xd4(1); a leader not itself skips the group. */
+    up_n = 0; up_rec[1] = 0; o.unit_leader = 8; ai.field_f8 = 1500; ai.field_108 = 2000; up_e8 = 1;
+    assert(aoe_unit_ai_update_ror(&ai, 10, &o) == 1 && strcmp(up_log, "dbg 12c(0) res100 res103 rec0 rec1 notes10 offer0 offer1 d8 d4(1) report ") == 0);
+    assert(ai.group_count == 1 && ai.field_f8 == 0);
+    up_n = 0; ai.group_count = 0;
+    assert(aoe_unit_ai_update_ror(&ai, 10, &o) == 1 && strcmp(up_log, "dbg 12c(0) ec(0) rec0 rec1 notes10 offer0 offer1 d8 report ") == 0);
+    up_n = 0; up_attackers = 1; o.attackers_listed = 1; ai.order = 0x262; up_130 = 0;
+    assert(aoe_unit_ai_update_ror(&ai, 10, &o) == 1 && ai.order == 0x262 && strcmp(up_log, "dbg ec(0) rec0 rec1 notes10 d8 report ") == 0 && ai.field_f8 == 0);
+    up_state = 3;
+    assert(aoe_unit_ai_update_ror(&ai, 10, &o) == 1);
 }
 int main(void) {
     order_slot_tests();
@@ -313,5 +366,6 @@ int main(void) {
         assert(post_d0_id == -2);
     }
     record_tests();
+    update_tests();
     return 0;
 }

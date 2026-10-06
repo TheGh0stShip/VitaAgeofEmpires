@@ -295,4 +295,67 @@ int aoe_unit_ai_save_ror(const AoeUnitAiRor *ai, const AoeUnitAiNotesRor *notes,
 int aoe_unit_ai_load_ror(AoeUnitAiRor *ai, AoeUnitAiNotesRor *notes, AoeUnitAiOutRor *out_queue,
                          float version, const AoeUnitAiRecordOpsRor *o, AoeOutcomeStream *in);
 
+
+/* 0x0040f700 (+0x18, `elapsed` ms): 1 at once for a unit at state 3 or
+   more. The four debug counters 0x00561458..0x00561464 are cleared.
+   With no attackers listed (0x00404520 on unit +0x184) and the unit's
+   +0x130 answering 1, its +0x12c(0). A target (+0x34) that no longer
+   resolves (0x00414f40) is dropped; for order 600 the target is cleared
+   (0x00412ed0), the AI stopped (+0x58 with 1) and +0xf8 reset to +0x100.
+   A resolved target at state 3 or more, with our unit at state 2 and
+   +0x2c(order) answering 1, clears +0x130; for order 600 the +0xd4(0)
+   answer 5 (an action other than 0x2d5) moves to the target point
+   (+0x90 with the unit's +0x10c(1) range; failure clears the target and
+   stops) and then, like any other +0xd4 answer, retires the action
+   (+0x50 = +0x28, +0x28 and +0x2c = -1); other orders clear and stop.
+   For a human owner (0x00454150 == 1) a +0x2c of 0..99 becomes
+   min(99, ftol(100 / distance to the target (0x004aaeb0))). The group
+   (+0x60, count +0x64): empty with the unit's +0xe8 set gives +0xec(0);
+   else the first member that no longer resolves, has no AI, is at state
+   3 or more, or whose AI target (0x0040f6e0) is not our unit is removed
+   (the array shifted down; the original also grows the array to the
+   index first, a no-op here) and the walk ends. Then +0x110..+0x118
+   take the unit's position, +0xf8 / +0x104 / +0x108 gain `elapsed`, the
+   +0x24 records (count +0x1c) each run through +0xcc(record, elapsed):
+   4 runs the notes (0x00414eb0) and returns 0, 3 stops the walk; the
+   notes run. With no attackers an order 600 / 0x261 / 0x262 / 0x265 /
+   0x26b / 0x26c becomes -1. A unit now at state 3 or more gives 0. A
+   unit leading itself (+0x78 == its ID) updates its group (0x40fbf0).
+   With no order the +0x18 table (count +0x10) is offered to +0xc8(entry,
+   i) until one answers 1; +0xd8 runs. +0xf8 past +0xfc with no order and
+   no target: +0xf8 reset and +0xd4(1); otherwise +0xf8 is reset unless
+   there is neither order nor target. A human owner with +0x108 past
+   +0x10c reports (0x004130e0). 1. */
+typedef struct {
+    void *context;
+    uint8_t *unit_state;        /* unit +0x48 (re-read after the records) */
+    int32_t unit_id, unit_leader; /* unit +0x04, +0x78 */
+    float unit_x, unit_y, unit_z; /* unit +0x38..+0x40 */
+    int attackers_listed;       /* 0x00404520 on unit +0x184 */
+    int32_t owner_kind;         /* 0x00454150 */
+    int32_t table_count;        /* +0x10 */
+    int32_t record_count;       /* +0x1c */
+    void (*clear_debug)(void *context);
+    int (*unit_130)(void *context);
+    void (*unit_12c)(void *context, int32_t v);
+    int (*unit_e8)(void *context);
+    void (*unit_ec)(void *context, int32_t v);
+    /* 0x00414f40 (0 when missing); `has_ai` 0x00407a60, `ai_target` its 0x0040f6e0. */
+    int (*resolve)(void *context, int32_t id, uint8_t *state, int *has_ai, int32_t *ai_target);
+    int32_t (*order_needs_target)(void *context, int32_t order); /* +0x2c */
+    int32_t (*query_d4)(void *context, int32_t arg);             /* +0xd4 */
+    float (*unit_range)(void *context);                          /* unit +0x10c(1) */
+    int (*move_to)(void *context, float x, float y, float z, float range); /* +0x90 */
+    void (*clear_target)(void *context);                         /* 0x00412ed0 */
+    void (*stop)(void *context, int32_t force);                  /* +0x58 */
+    float (*distance_to)(void *context, int32_t id);             /* 0x004aaeb0 */
+    int32_t (*record_update)(void *context, int index, int32_t elapsed); /* +0xcc */
+    void (*run_notes)(void *context, int32_t elapsed);           /* 0x00414eb0 */
+    void (*group_update)(void *context);                         /* 0x40fbf0 */
+    int32_t (*table_offer)(void *context, int index);            /* +0xc8 */
+    void (*step_d8)(void *context);                              /* +0xd8 */
+    void (*report)(void *context);                               /* 0x004130e0 */
+} AoeUnitAiUpdateOpsRor;
+int aoe_unit_ai_update_ror(AoeUnitAiRor *ai, int32_t elapsed, const AoeUnitAiUpdateOpsRor *o);
+
 #endif

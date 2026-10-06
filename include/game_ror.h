@@ -503,7 +503,7 @@ int aoe_game_ror_play_video_ror(AoeGameRorVideoStateRor *s, const AoeGameRorVide
    and its name (0x0041dfa0), given to the "Multiplayer Wait Screen"
    when it is up (0x00451ae0, 0x0049ebe0); past the start the game
    begins (0x5046e0). 4 / 5 / 6 with 0x00580e28 clear and a game
-   screen (+0xc24): its idle (0x47fc60). */
+   screen (+0xc24): its idle (0x0047fc60). */
 typedef struct {
     void *context;
     int32_t mode;                /* +0x1b0 */
@@ -527,7 +527,7 @@ typedef struct {
     int (*wait_screen_up)(void *context);               /* 0x00451ae0 */
     void (*wait_screen_text)(void *context, const char *text); /* 0x0049ebe0 */
     void (*start_game)(void *context);                  /* 0x5046e0 */
-    void (*screen_idle)(void *context);                 /* 0x47fc60 */
+    void (*screen_idle)(void *context);                 /* 0x0047fc60 */
 } AoeGameRorIdleOpsRor;
 int aoe_game_ror_idle_ror(const AoeGameRorIdleOpsRor *o);
 

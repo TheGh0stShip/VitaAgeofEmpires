@@ -656,4 +656,116 @@ typedef struct {
 } AoeGameScreenDrawOpsRor;
 void aoe_game_screen_draw_ror(const AoeGameScreenRor *s, const AoeGameScreenDrawOpsRor *o);
 
+
+/* ---- 0x0047fc60: the game screen's idle tick ---- */
+
+typedef struct {
+    uint32_t interval, last;          /* +0x5b8, +0x5bc */
+    int32_t dialog;                   /* +0x7b4 (also the game-over latch) */
+    int32_t timers_dirty;             /* +0x7a4 */
+    int32_t centre_pending;           /* +0x7b0 */
+    int32_t viewed_unit;              /* +0x5c8 */
+    int16_t viewed_count;             /* +0x5cc */
+    int32_t field_730;                /* +0x730 */
+    int32_t end_pending;              /* +0x720 */
+    uint32_t end_time;                /* +0x71c */
+    int32_t age;                      /* +0x710 */
+    uint32_t scores_interval, scores_time; /* +0x7a8, +0x7ac */
+    uint32_t view_interval, view_time;     /* +0x728, +0x72c */
+    uint32_t map_interval, map_time;       /* +0x5c0, +0x5c4 */
+} AoeGameScreenIdleRor;
+
+enum {
+    AOE_GS_IDLE_VIEW_F4 = 1,     /* view +0xf4 */
+    AOE_GS_IDLE_HIGHLIGHT,       /* 0x0050ffd0(-1, -1, -1, -1) */
+    AOE_GS_IDLE_GAME_10,         /* game +0x10(0, 0) */
+    AOE_GS_IDLE_CLEAR_SELECTION, /* 0x004856b0 */
+    AOE_GS_IDLE_MP_END,          /* 0x50cef0 */
+    AOE_GS_IDLE_STATE_6,         /* game +0xc(6) */
+    AOE_GS_IDLE_TIMERS,          /* 0x004839a0 */
+    AOE_GS_IDLE_CENTRE,          /* 0x00485700 */
+    AOE_GS_IDLE_OBJECT_CHANGED,  /* 0x004f8720(arg) */
+    AOE_GS_IDLE_PLAYER_CHANGED,  /* 0x00481f70 */
+    AOE_GS_IDLE_LEAVE,           /* 0x00503060 */
+    AOE_GS_IDLE_PANEL_584_SHOW,  /* +0x584 +0x14(arg) */
+    AOE_GS_IDLE_RESUME_FLAGS,    /* 0x0041bc10(1), 0x0041bc30(0) */
+    AOE_GS_IDLE_VIEW_REDRAW,     /* view +0x20(arg) */
+    AOE_GS_IDLE_MAP_REDRAW,      /* +0x4bc +0x20(arg) */
+    AOE_GS_IDLE_PANEL_510_SHOW,  /* +0x510 +0x14(1) */
+    AOE_GS_IDLE_PANEL_540_HIDE,  /* +0x540 +0x14(0) */
+    AOE_GS_IDLE_ESCAPE,          /* 0x00484900 */
+    AOE_GS_IDLE_CLEAR_LINES,     /* 0x00465d10 seven times */
+    AOE_GS_IDLE_STATE_5,         /* game +0xc(5) */
+    AOE_GS_IDLE_RELEASE_CAPTURE, /* 0x00453db0 on 0x00451ac0 */
+    AOE_GS_IDLE_SHOW_GAME_SCREEN,/* 0x00451be0("Game Screen", 0) */
+    AOE_GS_IDLE_FOCUS_VIEW,      /* 0x00453eb0(view) */
+    AOE_GS_IDLE_DELETE_SCREENS,  /* 0x004fe490(0) */
+    AOE_GS_IDLE_PANEL_584_TEXT,  /* +0x584 +0xe8(arg) */
+    AOE_GS_IDLE_END_SOUND,       /* +0x7b8 replaced: won.wav 0xc490 / lost.wav 0xc491 (arg), played */
+    AOE_GS_IDLE_CLOSE_WINDOW,    /* 0x00419930 */
+    AOE_GS_IDLE_AGE_TITLE,       /* 0x00482040 */
+    AOE_GS_IDLE_MAP_SCORES,      /* 0x00483c40 */
+    AOE_GS_IDLE_UPDATE_WINDOW    /* 0x00419ba0 */
+};
+typedef struct {
+    void *context;
+    uint8_t game_state;          /* game +0x1b0 */
+    int networked;               /* 0x0041b760 */
+    int global_558738;
+    int32_t own_latency;         /* comm +0x14d4 -> +0x1bc[0x00423c10] */
+    int pause_request;           /* 0x007c033c */
+    int is_current_screen;       /* 0x00451ab0 == this */
+    int sound_enabled;           /* settings +0x8a8 and game +0x60 */
+    int has_focus_panel;         /* 0x00451ac0 */
+    int scores_visible;          /* +0x58c and its +0x6c */
+    int has_focus_dialog;        /* 0x00453f30, or +0x3c is the quick message / help dialog */
+    int view_dirty;              /* view +0x38 */
+    uint32_t time_limit;         /* game +0xe60 */
+    uint32_t (*now)(void *context);
+    uint32_t (*timing_last)(void *context, int32_t slot);   /* 0x00417410 */
+    uint32_t (*timing_total)(void *context, int32_t slot);  /* 0x004173f0 */
+    uint32_t (*timing_count)(void *context);                /* 0x00417450 */
+    void (*timing_set_last)(void *context, int32_t slot, uint32_t v); /* 0x004173d0 */
+    void (*sample_frame)(void *context, uint32_t ms);       /* 0x00417370(1, ms), 0x004173b0 */
+    int (*aborted)(void *context);                          /* 0x00580e28 */
+    int32_t (*world_update)(void *context);                 /* world +0xbc */
+    int (*world_running)(void *context);                    /* world +0xc */
+    uint32_t (*world_time)(void *context);                  /* world +0x4 */
+    int (*viewed_defeated)(void *context);                  /* players[world +0x7c] +0x80 == 2 */
+    int32_t (*player_unit)(void *context);                  /* 0x00419b70 +0x134 */
+    int16_t (*player_count)(void *context);                 /* 0x00419b70 +0x1a0 */
+    int (*player_won)(void *context);                       /* 0x00419b70 +0x80 == 1 */
+    int32_t (*player_age)(void *context);                   /* ftol(0x00419b70 +0x50 -> +0x18) */
+    int32_t (*comm_value)(void *context);                   /* 0x004199c0 */
+    void (*step)(void *context, int32_t id, int32_t arg);
+} AoeGameScreenIdleOpsRor;
+
+/* 0x0047fc60 (+0x4c): nothing before `interval` ms since `last`. State 6
+   skips to the tail. Networked: two world updates when the latency
+   lies in 0x43..0x7d (with 0x00558738) and the frame average (timing
+   slot 1's total over the count, 1 when 0) over the last of slots 3 + 2
+   is at most 2.0; slots 2 and 3 reset. Each update: a pause request
+   sets state 6; else a dialog counts as done, otherwise the world
+   updates (an abort returns at once) and a 1 latches the dialog, runs
+   the view's +0xf4, clears the highlight, the game's +0x10(0, 0), the
+   selection and, networked, 0x50cef0. `last` is the time; a running
+   world samples the frame. Dirty timers (0x004839a0), a pending centre
+   (0x00485700), a changed current unit or selection count
+   (0x004f8720, 0x00481f70). Without a pause request, when done, the
+   viewed player is defeated or +0x730 is 1: in state 5 a pending end
+   older than 5 s is cleared and, not networked, the view reset as above
+   and the game left (0x00503060, return); networked, +0x584 hidden
+   when 0x004199c0 is 0, done redraws the view and map (2) after
+   0x0041bc10(1) / 0x0041bc30(0), +0x510 shown and +0x540 hidden; in
+   other states the escape, selection and lines clear, state 5, the
+   capture released, "Game Screen" shown, the view focused, the screens
+   deleted, +0x584 shown with 0x232c (won) / 0x232d, the view redrawn
+   (1), the end sound played, and the end noted. A running world past
+   the time limit closes the window. The tail (the current screen only):
+   after an update the age title follows the viewed age and the map
+   scores refresh on their interval; with a focus dialog the view (after
+   an update or on its interval) and map (its interval) redraw, and a
+   dirty view updates the window. */
+void aoe_game_screen_idle_tick_ror(AoeGameScreenIdleRor *s, const AoeGameScreenIdleOpsRor *o);
+
 #endif

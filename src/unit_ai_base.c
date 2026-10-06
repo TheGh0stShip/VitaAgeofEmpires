@@ -1,6 +1,8 @@
 #include "unit_ai_base.h"
 
 #include <stdlib.h>
+
+#include "aoe_ftol.h"
 #include <string.h>
 
 #include <math.h>
@@ -559,4 +561,116 @@ int aoe_unit_ai_load_ror(AoeUnitAiRor *ai, AoeUnitAiNotesRor *notes, AoeUnitAiOu
     if (ai->has_members && o && o->members_load && !o->members_load(o->context, in)) return 0;
     if (version >= 7.02f) ai->byte_130 = aoe_stream_u8(in);
     return !in->failed;
+}
+
+/* 0x0040f700 */
+int aoe_unit_ai_update_ror(AoeUnitAiRor *ai, int32_t elapsed, const AoeUnitAiUpdateOpsRor *o) {
+    int32_t i;
+    if (*o->unit_state > 2) return 1;
+    o->clear_debug(o->context);
+    if (!o->attackers_listed && o->unit_130(o->context) == 1) o->unit_12c(o->context, 0);
+    if (ai->target_id != -1) {
+        uint8_t tstate = 0;
+        int has_ai;
+        int32_t ai_target;
+        if (!o->resolve(o->context, ai->target_id, &tstate, &has_ai, &ai_target)) {
+            ai->target_id = -1;
+            if (ai->order == 600) {
+                o->clear_target(o->context);
+                o->stop(o->context, 1);
+                ai->field_f8 = (int32_t)ai->timer_base;
+            }
+        } else {
+            if (*o->unit_state == 2 && tstate > 2 &&
+                o->order_needs_target(o->context, ai->order) == 1) {
+                ai->byte_130 = 0;
+                if (ai->order == 600) {
+                    int32_t r = o->query_d4(o->context, 0);
+                    if (r == 5) {
+                        if (ai->action != 0x2d5) {
+                            float range = o->unit_range(o->context);
+                            if (!o->move_to(o->context, ai->target_x, ai->target_y, ai->target_z,
+                                            range)) {
+                                o->clear_target(o->context);
+                                o->stop(o->context, 1);
+                            } else {
+                                ai->last_action = ai->action;
+                                ai->action = -1;
+                                ai->field_2c = -1;
+                            }
+                        }
+                    } else if (ai->action != 0x2d5) {
+                        ai->last_action = ai->action;
+                        ai->action = -1;
+                        ai->field_2c = -1;
+                    }
+                } else {
+                    o->clear_target(o->context);
+                    o->stop(o->context, 1);
+                }
+            }
+            if (o->owner_kind == 1 && ai->field_2c != -1 && ai->field_2c < 100) {
+                int32_t v = aoe_ftol32(100.0f / o->distance_to(o->context, ai->target_id));
+                ai->field_2c = v > 99 ? 99 : v;
+            }
+        }
+    }
+    if (ai->group_count == 0) {
+        if (o->unit_e8(o->context)) o->unit_ec(o->context, 0);
+    } else {
+        for (i = 0; i < ai->group_count; ++i) {
+            uint8_t st = 0;
+            int has_ai = 0;
+            int32_t ai_target = -1;
+            int drop = !o->resolve(o->context, ai->group[i], &st, &has_ai, &ai_target) || !has_ai ||
+                       st > 2 || ai_target != o->unit_id;
+            if (drop) {
+                int32_t k, id = ai->group[i];
+                for (k = 0; k < ai->group_count && ai->group[k] != id; ++k) {}
+                if (k < ai->group_count) {
+                    for (; k < ai->group_count - 1; ++k) ai->group[k] = ai->group[k + 1];
+                    if (--ai->group_count < 0) ai->group_count = 0;
+                }
+                break;
+            }
+        }
+    }
+    memcpy(&ai->field_110[0], &o->unit_x, sizeof(float));
+    memcpy(&ai->field_110[1], &o->unit_y, sizeof(float));
+    memcpy(&ai->field_110[2], &o->unit_z, sizeof(float));
+    ai->field_f8 += elapsed;
+    ai->field_104 += elapsed;
+    ai->field_108 += elapsed;
+    for (i = 0; i < o->record_count; ++i) {
+        int32_t r = o->record_update(o->context, i, elapsed);
+        if (r == 4) {
+            o->run_notes(o->context, elapsed);
+            return 0;
+        }
+        if (r == 3) break;
+    }
+    o->run_notes(o->context, elapsed);
+    if (!o->attackers_listed) {
+        switch (ai->order) {
+        case 600: case 0x261: case 0x262: case 0x265: case 0x26b: case 0x26c:
+            ai->order = -1;
+            break;
+        default: break;
+        }
+    }
+    if (*o->unit_state > 2) return 0;
+    if (o->unit_leader == o->unit_id) o->group_update(o->context);
+    if (ai->order == -1) {
+        for (i = 0; i < o->table_count; ++i)
+            if (o->table_offer(o->context, i) == 1) break;
+    }
+    o->step_d8(o->context);
+    if ((uint32_t)ai->timer < (uint32_t)ai->field_f8 && ai->order == -1 && ai->target_id == -1) {
+        ai->field_f8 = 0;
+        o->query_d4(o->context, 1);
+    } else if (!(ai->order == -1 && ai->target_id == -1)) {
+        ai->field_f8 = 0;
+    }
+    if (o->owner_kind == 1 && (uint32_t)ai->field_10c < (uint32_t)ai->field_108) o->report(o->context);
+    return 1;
 }

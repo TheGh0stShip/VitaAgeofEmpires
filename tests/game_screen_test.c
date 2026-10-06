@@ -1,6 +1,7 @@
 #include "game_screen.h"
 
 #include <assert.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -523,6 +524,62 @@ static void draw_tests(void) {
     assert(dr_box_color == 0x74 && dr_set_clip[1] == 250 && dr_set_clip[5] == 0 && dr_nset == 2 && dr_ys[1] == 0x162 &&
            strcmp(dr_last_lock, "scr_game::draw2") == 0);
 }
+
+static char it_log[1024]; static int it_n, it_aborted, it_running = 1, it_defeated, it_won = 1; static uint32_t it_time = 10000, it_wtime = 500; static int32_t it_update = 0, it_unit = 5, it_age = 1, it_comm = 0; static int16_t it_count = 1;
+static void it_add(const char *fmt, ...) { va_list ap; va_start(ap, fmt); it_n += vsnprintf(it_log + it_n, sizeof it_log - (size_t)it_n, fmt, ap); va_end(ap); }
+static uint32_t it_now(void *c) { (void)c; return it_time += 10; }
+static uint32_t it_tlast(void *c, int32_t s) { (void)c; return s == 3 ? 30 : 20; }
+static uint32_t it_ttotal(void *c, int32_t s) { (void)c; (void)s; return 400; }
+static uint32_t it_tcount(void *c) { (void)c; return 4; }
+static void it_setlast(void *c, int32_t s, uint32_t v) { (void)c; it_add("reset%d=%u ", (int)s, (unsigned)v); }
+static void it_sample(void *c, uint32_t ms) { (void)c; it_add("frame%u ", (unsigned)ms); }
+static int it_abortf(void *c) { (void)c; return it_aborted; }
+static int32_t it_wupdate(void *c) { (void)c; it_add("update "); return it_update; }
+static int it_wrunning(void *c) { (void)c; return it_running; }
+static uint32_t it_wtimef(void *c) { (void)c; return it_wtime; }
+static int it_defeatedf(void *c) { (void)c; return it_defeated; }
+static int32_t it_punit(void *c) { (void)c; return it_unit; }
+static int16_t it_pcount(void *c) { (void)c; return it_count; }
+static int it_pwon(void *c) { (void)c; return it_won; }
+static int32_t it_page(void *c) { (void)c; return it_age; }
+static int32_t it_commf(void *c) { (void)c; return it_comm; }
+static void it_step(void *c, int32_t id, int32_t a) { (void)c; it_add("%d(%d) ", (int)id, (int)a); }
+static void idle_tick_tests(void) {
+    AoeGameScreenIdleRor s; AoeGameScreenIdleOpsRor o = {NULL, 4, 1, 1, 0x50, 0, 1, 1, 1, 1, 1, 1, 0, it_now, it_tlast, it_ttotal, it_tcount, it_setlast, it_sample, it_abortf, it_wupdate, it_wrunning, it_wtimef, it_defeatedf, it_punit, it_pcount, it_pwon, it_page, it_commf, it_step};
+    memset(&s, 0, sizeof s); s.interval = 50; s.viewed_unit = 5; s.viewed_count = 1; s.age = 1; s.scores_interval = 100; s.view_interval = 100; s.map_interval = 100; s.timers_dirty = 1;
+    /* Networked with latency 0x50 and average 100 over 50: two updates; the dirty timers once. */
+    aoe_game_screen_idle_tick_ror(&s, &o);
+    assert(strcmp(it_log, "reset2=0 reset3=0 update frame10 7(0) update frame10 29(0) 14(1) 15(1) 30(0) ") == 0 && s.timers_dirty == 0 && s.last > 0 && s.view_time == s.map_time && s.view_time > 0);
+    /* Too soon: nothing. */
+    it_n = 0; it_time = s.last; aoe_game_screen_idle_tick_ror(&s, &o); assert(it_n == 0);
+    /* The world ends (1): the dialog latch, the view reset, the MP end; state 4 goes to the end sequence with the won text and sound. */
+    it_n = 0; it_time += 100; it_update = 1; o.global_558738 = 0; it_unit = 6; o.has_focus_dialog = 0; o.scores_visible = 0;
+    aoe_game_screen_idle_tick_ror(&s, &o);
+    assert(strcmp(it_log, "reset2=0 reset3=0 update 1(0) 2(0) 3(0) 4(0) 5(0) frame10 9(6) 10(0) 18(0) 4(0) 19(0) 20(0) 21(0) 22(0) 23(0) 24(0) 12(1) 25(9004) 14(1) 26(1) ") == 0);
+    assert(s.dialog == 1 && s.end_pending == 1 && s.end_time > 0);
+    /* State 5 with the dialog latched: the end older than 5 s shows the panels (networked, comm 0). */
+    it_n = 0; it_time += 6000; o.game_state = 5; it_update = 0;
+    aoe_game_screen_idle_tick_ror(&s, &o);
+    assert(strcmp(it_log, "reset2=0 reset3=0 frame10 12(0) 13(0) 14(2) 15(2) 16(1) 17(0) ") == 0 && s.end_pending == 0);
+    /* Not networked: the game is left. */
+    it_n = 0; it_time += 100; o.networked = 0; s.end_pending = 1; s.end_time = it_time - 6000;
+    aoe_game_screen_idle_tick_ror(&s, &o);
+    assert(strcmp(it_log, "frame10 1(0) 2(0) 3(0) 4(0) 11(0) ") == 0);
+    /* A pause request sets state 6; the time limit closes the window; state 6 only runs the tail. */
+    it_n = 0; it_time += 100; o.pause_request = 1; o.time_limit = 400;
+    aoe_game_screen_idle_tick_ror(&s, &o);
+    assert(strcmp(it_log, "6(0) frame10 27(0) ") == 0);
+    it_n = 0; it_time += 100; o.pause_request = 0; o.time_limit = 0; o.game_state = 6; o.has_focus_dialog = 1; o.view_dirty = 1; s.view_time = 0;
+    aoe_game_screen_idle_tick_ror(&s, &o);
+    assert(strcmp(it_log, "14(1) 30(0) ") == 0);
+    /* The tail after an update: the age title and the map scores. */
+    it_n = 0; it_time += 100; o.game_state = 4; s.dialog = 0; it_age = 2; o.scores_visible = 1; s.scores_time = 0; s.map_time = 0;
+    aoe_game_screen_idle_tick_ror(&s, &o);
+    assert(strcmp(it_log, "update frame10 28(0) 29(0) 14(1) 15(1) 30(0) ") == 0);
+    it_n = 0; it_time += 100; it_aborted = 1;
+    aoe_game_screen_idle_tick_ror(&s, &o);
+    assert(strcmp(it_log, "update ") == 0);
+}
 int main(void) {
     AoeGameScreenRor s;
     AoeGameScreenButtonRor b;
@@ -895,5 +952,6 @@ int main(void) {
     player_changed_tests();
     help_text_tests();
     draw_tests();
+    idle_tick_tests();
     return 0;
 }

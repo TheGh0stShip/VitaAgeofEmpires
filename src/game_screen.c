@@ -1040,3 +1040,130 @@ void aoe_game_screen_draw_ror(const AoeGameScreenRor *s, const AoeGameScreenDraw
     draw_logo(s, o, "scr_game::draw3");
     o->end_draw(o->context);
 }
+
+/* 0x0047fc60 */
+void aoe_game_screen_idle_tick_ror(AoeGameScreenIdleRor *s, const AoeGameScreenIdleOpsRor *o) {
+    uint32_t now, t0;
+    int32_t ran = 0, done, iterations = 1, i;
+    uint8_t state = o->game_state;
+    now = o->now(o->context);
+    if (now - s->last < s->interval) return;
+    if (state == 6) goto tail;
+    if (o->networked) {
+        uint32_t span = o->timing_last(o->context, 3) + o->timing_last(o->context, 2);
+        uint32_t count = o->timing_count(o->context), avg = 1;
+        if (count) { avg = o->timing_total(o->context, 1) / count; if (!avg) avg = 1; }
+        if (o->global_558738 && o->own_latency >= 0x43 && o->own_latency <= 0x7d &&
+            (float)avg / (float)(int32_t)span <= 2.0f)
+            iterations = 2;
+        o->timing_set_last(o->context, 2, 0);
+        o->timing_set_last(o->context, 3, 0);
+    }
+    for (i = 0; i < iterations; ++i) {
+        t0 = o->now(o->context);
+        if (o->pause_request) {
+            done = 0;
+            o->step(o->context, AOE_GS_IDLE_STATE_6, 0);
+            if (o->aborted(o->context)) return;
+        } else if (s->dialog) {
+            done = 1;
+            if (o->aborted(o->context)) return;
+        } else {
+            done = o->world_update(o->context);
+            if (o->aborted(o->context)) return;
+            if (done == 1) {
+                s->dialog = 1;
+                o->step(o->context, AOE_GS_IDLE_VIEW_F4, 0);
+                o->step(o->context, AOE_GS_IDLE_HIGHLIGHT, 0);
+                o->step(o->context, AOE_GS_IDLE_GAME_10, 0);
+                o->step(o->context, AOE_GS_IDLE_CLEAR_SELECTION, 0);
+                if (o->networked) o->step(o->context, AOE_GS_IDLE_MP_END, 0);
+                if (o->aborted(o->context)) return;
+            }
+        }
+        now = o->now(o->context);
+        s->last = now;
+        if (o->world_running(o->context)) o->sample_frame(o->context, now - t0);
+        if (s->timers_dirty) { o->step(o->context, AOE_GS_IDLE_TIMERS, 0); s->timers_dirty = 0; }
+        if (s->centre_pending) o->step(o->context, AOE_GS_IDLE_CENTRE, 0);
+        if (s->viewed_unit != o->player_unit(o->context) ||
+            s->viewed_count != o->player_count(o->context)) {
+            o->step(o->context, AOE_GS_IDLE_OBJECT_CHANGED, o->player_unit(o->context));
+            o->step(o->context, AOE_GS_IDLE_PLAYER_CHANGED, 0);
+            /* 0x00481f70 records the new unit and count in +0x5c8 / +0x5cc. */
+            s->viewed_unit = o->player_unit(o->context);
+            s->viewed_count = o->player_count(o->context);
+        }
+        if (!o->pause_request &&
+            (done == 1 || o->viewed_defeated(o->context) || s->field_730 == 1)) {
+            if (state == 5) {
+                /* With no end pending the original counts the players still in
+                   the game and discards the count. */
+                if (s->end_pending && o->now(o->context) - s->end_time > 5000) {
+                    s->end_pending = 0;
+                    if (!o->networked) {
+                        o->step(o->context, AOE_GS_IDLE_VIEW_F4, 0);
+                        o->step(o->context, AOE_GS_IDLE_HIGHLIGHT, 0);
+                        o->step(o->context, AOE_GS_IDLE_GAME_10, 0);
+                        o->step(o->context, AOE_GS_IDLE_CLEAR_SELECTION, 0);
+                        o->step(o->context, AOE_GS_IDLE_LEAVE, 0);
+                        return;
+                    }
+                    if (o->comm_value(o->context) == 0) o->step(o->context, AOE_GS_IDLE_PANEL_584_SHOW, 0);
+                    if (done == 1) {
+                        o->step(o->context, AOE_GS_IDLE_RESUME_FLAGS, 0);
+                        o->step(o->context, AOE_GS_IDLE_VIEW_REDRAW, 2);
+                        o->step(o->context, AOE_GS_IDLE_MAP_REDRAW, 2);
+                    }
+                    o->step(o->context, AOE_GS_IDLE_PANEL_510_SHOW, 1);
+                    o->step(o->context, AOE_GS_IDLE_PANEL_540_HIDE, 0);
+                }
+            } else {
+                int won = o->player_won(o->context);
+                o->step(o->context, AOE_GS_IDLE_ESCAPE, 0);
+                o->step(o->context, AOE_GS_IDLE_CLEAR_SELECTION, 0);
+                o->step(o->context, AOE_GS_IDLE_CLEAR_LINES, 0);
+                o->step(o->context, AOE_GS_IDLE_STATE_5, 0);
+                if (o->has_focus_panel) o->step(o->context, AOE_GS_IDLE_RELEASE_CAPTURE, 0);
+                o->step(o->context, AOE_GS_IDLE_SHOW_GAME_SCREEN, 0);
+                o->step(o->context, AOE_GS_IDLE_FOCUS_VIEW, 0);
+                o->step(o->context, AOE_GS_IDLE_DELETE_SCREENS, 0);
+                o->step(o->context, AOE_GS_IDLE_PANEL_584_SHOW, 1);
+                o->step(o->context, AOE_GS_IDLE_PANEL_584_TEXT, won ? 0x232c : 0x232d);
+                o->step(o->context, AOE_GS_IDLE_VIEW_REDRAW, 1);
+                if (o->sound_enabled) o->step(o->context, AOE_GS_IDLE_END_SOUND, won);
+                s->end_time = o->now(o->context);
+                s->end_pending = 1;
+            }
+        }
+        {
+            int running = o->world_running(o->context);
+            if (running && o->time_limit && o->time_limit <= o->world_time(o->context)) {
+                o->step(o->context, AOE_GS_IDLE_CLOSE_WINDOW, 0);
+                return;
+            }
+            ran += running;
+        }
+    }
+tail:
+    if (!o->is_current_screen) return;
+    now = o->now(o->context);
+    if (ran) {
+        if (o->player_age(o->context) != s->age) o->step(o->context, AOE_GS_IDLE_AGE_TITLE, 0);
+        if (o->scores_visible && s->scores_interval <= now - s->scores_time) {
+            o->step(o->context, AOE_GS_IDLE_MAP_SCORES, 0);
+            s->scores_time = o->now(o->context);
+        }
+    }
+    if (o->has_focus_dialog) {
+        if (ran || s->view_interval <= now - s->view_time) {
+            o->step(o->context, AOE_GS_IDLE_VIEW_REDRAW, 1);
+            s->view_time = now;
+        }
+        if (ran && s->map_interval <= now - s->map_time) {
+            o->step(o->context, AOE_GS_IDLE_MAP_REDRAW, 1);
+            s->map_time = now;
+        }
+        if (o->view_dirty) o->step(o->context, AOE_GS_IDLE_UPDATE_WINDOW, 0);
+    }
+}

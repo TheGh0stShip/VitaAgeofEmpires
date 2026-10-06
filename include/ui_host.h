@@ -12,6 +12,7 @@
 #include "ui_ez.h"
 #include "ui_font.h"
 #include "ui_panel.h"
+#include "ui_picture.h"
 
 /* The platform beneath the translated panel system (ui_panel.h, ui_ez.h):
    the user's original data (DRS archives, language libraries, TrueType
@@ -52,6 +53,11 @@ typedef struct AoeUiHostRor {
     AoeUiEzOpsRor ez_ops;
     AoeShapeOpsRor shape_ops;
     AoeShapeDrawOpsRor shape_draw;
+    AoeUiPictureOpsRor picture_ops;
+    uint8_t keys[256];          /* GetKeyState: held virtual keys */
+    uint32_t buttons;           /* MK_LBUTTON 1, MK_RBUTTON 2 */
+    int32_t mouse_x, mouse_y;
+    uint8_t help_mode;          /* 0x00583bc0: 0 none, 1 WinHelp, 2 a help dialog is up */
     int32_t shape_batching, shapes_drawn, shape_loads;
     AoeUiSystemRor system;
     AoeUiHostPaletteRor palettes[AOE_UI_HOST_PALETTES];
@@ -84,5 +90,23 @@ uint8_t *aoe_ui_host_resource_ror(AoeUiHostRor *h, uint32_t type, int32_t id, ui
 /* Paints the current screen (its handle_paint) and presents the back
    buffer to the primary. */
 void aoe_ui_host_paint_ror(AoeUiHostRor *h);
+
+/* Input, as the window procedure (0x00419dc0) hands it to the current
+   screen's handle_message first: a window message with its wParam /
+   lParam. The helpers below build the mouse and key messages
+   (WM_MOUSEMOVE 0x200, WM_LBUTTONDOWN 0x201 / UP 0x202, WM_RBUTTONDOWN
+   0x204 / UP 0x205, WM_KEYDOWN 0x100 / UP 0x101, WM_CHAR 0x102) and keep
+   the held keys and buttons for GetKeyState. Returns the screen's
+   result. */
+int32_t aoe_ui_host_message_ror(AoeUiHostRor *h, uint32_t msg, uint32_t wparam, uint32_t lparam);
+void aoe_ui_host_mouse_move_ror(AoeUiHostRor *h, int32_t x, int32_t y);
+/* button 1 left, 2 right. */
+void aoe_ui_host_mouse_button_ror(AoeUiHostRor *h, int button, int down, int32_t x, int32_t y);
+/* A click: move, down, up. */
+void aoe_ui_host_click_ror(AoeUiHostRor *h, int32_t x, int32_t y);
+void aoe_ui_host_key_ror(AoeUiHostRor *h, int32_t vk, int down);
+void aoe_ui_host_char_ror(AoeUiHostRor *h, int32_t c);
+/* The screen's idle work (WM_TIMER -> the game's idle: handle_idle). */
+void aoe_ui_host_idle_ror(AoeUiHostRor *h);
 
 #endif

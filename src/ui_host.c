@@ -244,6 +244,30 @@ static const AoeFontFileRor *resolve_font(void *c, const char *face, int bold) {
     return NULL;
 }
 
+/* ---- pictures (pnl_pic) ---- */
+
+static void *pic_load_shape(void *c, const char *name, int32_t id) {
+    (void)name;   /* loose files are off: the resource ID names it */
+    return ez_load_shape(c, NULL, id);
+}
+static int pic_shape_valid(void *c, void *shape) { (void)c; return shape && aoe_shape_loaded_ror(shape); }
+static int pic_shape_size(void *c, void *shape, int32_t frame, int16_t *w, int16_t *hgt) {
+    (void)c;
+    return aoe_shape_size_ror(shape, frame, w, hgt);
+}
+static void *pic_load_bitmap(void *c, const char *name) { (void)c; (void)name; return NULL; }
+static void pic_bitmap_size(void *c, void *b, int32_t *w, int32_t *hgt) { (void)c; (void)b; *w = *hgt = 0; }
+static void pic_free_bitmap(void *c, void *b) { (void)c; (void)b; }
+static void pic_draw_bitmap(void *c, AoeUiAreaRor *a, void *b, int32_t x, int32_t y) {
+    (void)c; (void)a; (void)b; (void)x; (void)y;
+}
+static void draw_shape(void *c, AoeUiAreaRor *area, void *shape, int32_t frame, int32_t x,
+                       int32_t y);
+static void pic_draw_shape(void *c, AoeUiAreaRor *area, void *shape, int32_t x, int32_t y,
+                           int32_t frame) {
+    draw_shape(c, area, shape, frame, x, y);
+}
+
 static int32_t text_width(void *c, uintptr_t font, const char *text, int32_t count) {
     (void)c;
     return aoe_ui_font_text_width_ror((const AoeUiFontRor *)font, text, count);
@@ -336,7 +360,7 @@ static void clip(void *c, AoeUiAreaRor *area, const AoeUiRectRor *r) {
 static void capture(void *c, AoeUiAreaRor *area) { (void)c; (void)area; }
 static void release(void *c) { (void)c; }
 static uint32_t now_ms(void *c) { return HOST(c)->now_ms ? HOST(c)->now_ms(HOST(c)->now_context) : 0; }
-static int key_down(void *c, int vk) { (void)c; (void)vk; return 0; }
+static int key_down(void *c, int vk) { return vk >= 0 && vk < 256 && HOST(c)->keys[vk]; }
 static int iconic(void *c, AoeUiAreaRor *area) { (void)c; (void)area; return 0; }
 
 static void draw_shape(void *c, AoeUiAreaRor *area, void *shape, int32_t frame, int32_t x,
@@ -463,6 +487,18 @@ int aoe_ui_host_open_ror(AoeUiHostRor *h, const char *root, int32_t width, int32
     h->ez_ops.set_area_palette = ez_set_area_palette;
     h->ez_ops.shape_ops = &h->shape_draw;
     h->ez_ops.caret_blink_ms = 500;
+    h->ez_ops.help_mode = &h->help_mode;
+
+    h->picture_ops.context = h;
+    h->picture_ops.load_shape = pic_load_shape;
+    h->picture_ops.shape_valid = pic_shape_valid;
+    h->picture_ops.free_shape = ez_free_shape;
+    h->picture_ops.shape_size = pic_shape_size;
+    h->picture_ops.load_bitmap = pic_load_bitmap;
+    h->picture_ops.bitmap_size = pic_bitmap_size;
+    h->picture_ops.free_bitmap = pic_free_bitmap;
+    h->picture_ops.draw_bitmap = pic_draw_bitmap;
+    h->picture_ops.draw_shape = pic_draw_shape;
 
     /* The game's default palette: base Interfac.drs 50500. */
     h->default_palette = create_palette(h, "palette", 50500);
@@ -490,4 +526,57 @@ void aoe_ui_host_paint_ror(AoeUiHostRor *h) {
     AoeUiPanelRor *screen = h->system.screen;
     if (screen) screen->vt->handle_paint(screen);
     aoe_draw_present_ror(&h->draw, NULL);
+}
+
+/* ---- input ---- */
+
+int32_t aoe_ui_host_message_ror(AoeUiHostRor *h, uint32_t msg, uint32_t wparam, uint32_t lparam) {
+    AoeUiPanelRor *screen = h->system.screen;
+    if (msg == 0x100 || msg == 0x104) h->keys[wparam & 0xff] = 1;
+    if (msg == 0x101 || msg == 0x105) h->keys[wparam & 0xff] = 0;
+    if (!screen) return 0;
+    return screen->vt->handle_message(screen, h->area.window, msg, wparam, lparam);
+}
+
+static uint32_t mouse_wparam(const AoeUiHostRor *h) {
+    return h->buttons | (h->keys[0x10] ? 4u : 0u) | (h->keys[0x11] ? 8u : 0u);
+}
+
+static uint32_t mouse_lparam(int32_t x, int32_t y) {
+    return ((uint32_t)(uint16_t)y << 16) | (uint16_t)x;
+}
+
+void aoe_ui_host_mouse_move_ror(AoeUiHostRor *h, int32_t x, int32_t y) {
+    h->mouse_x = x;
+    h->mouse_y = y;
+    aoe_ui_host_message_ror(h, 0x200, mouse_wparam(h), mouse_lparam(x, y));
+}
+
+void aoe_ui_host_mouse_button_ror(AoeUiHostRor *h, int button, int down, int32_t x, int32_t y) {
+    uint32_t bit = button == 2 ? 2u : 1u, msg;
+    h->mouse_x = x;
+    h->mouse_y = y;
+    if (down) h->buttons |= bit; else h->buttons &= ~bit;
+    h->keys[button == 2 ? 2 : 1] = (uint8_t)(down != 0);   /* VK_LBUTTON 1, VK_RBUTTON 2 */
+    msg = button == 2 ? (down ? 0x204u : 0x205u) : (down ? 0x201u : 0x202u);
+    aoe_ui_host_message_ror(h, msg, mouse_wparam(h), mouse_lparam(x, y));
+}
+
+void aoe_ui_host_click_ror(AoeUiHostRor *h, int32_t x, int32_t y) {
+    aoe_ui_host_mouse_move_ror(h, x, y);
+    aoe_ui_host_mouse_button_ror(h, 1, 1, x, y);
+    aoe_ui_host_mouse_button_ror(h, 1, 0, x, y);
+}
+
+void aoe_ui_host_key_ror(AoeUiHostRor *h, int32_t vk, int down) {
+    aoe_ui_host_message_ror(h, down ? 0x100u : 0x101u, (uint32_t)vk, down ? 1u : 0xc0000001u);
+}
+
+void aoe_ui_host_char_ror(AoeUiHostRor *h, int32_t c) {
+    aoe_ui_host_message_ror(h, 0x102u, (uint32_t)c, 1u);
+}
+
+void aoe_ui_host_idle_ror(AoeUiHostRor *h) {
+    AoeUiPanelRor *screen = h->system.screen;
+    if (screen) screen->vt->handle_idle(screen);
 }

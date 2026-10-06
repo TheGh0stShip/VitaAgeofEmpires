@@ -1,6 +1,7 @@
 #include "mp_setup_screen.h"
 
 #include <assert.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -113,6 +114,94 @@ static int a_host(void *c) { (void)c; return 0; }
 static int a_base(void *c, void *p, int32_t ac, int32_t x, int32_t y) { (void)c; (void)p; (void)ac; (void)x; (void)y; ++base_calls; return 9; }
 static const char *a_name(void *c, void *p) { (void)c; (void)p; return "Other"; }
 
+
+/* ---- 0x0048c010 / 0x0048b640 ---- */
+static char in_log[4096]; static int in_n, in_exists = 1, in_load_ok = 1, in_slots[9] = {1, 1, 0, 1, 1, 0, 0, 0, 0}, in_kinds[9] = {1, 2, 0, 1, 1}; static char in_name[64] = "";
+static void in_add(const char *fmt, ...) { va_list ap; va_start(ap, fmt); in_n += vsnprintf(in_log + in_n, sizeof in_log - (size_t)in_n, fmt, ap); va_end(ap); }
+static void in_store(void *c, const char *n) { (void)c; snprintf(in_name, sizeof in_name, "%s", n); }
+static int in_fexists(void *c, const char *p) { (void)c; in_add("exists(%s) ", p); return in_exists; }
+static void in_sdel(void *c) { (void)c; in_add("del "); }
+static int in_sload(void *c, const char *p) { (void)c; in_add("load(%s) ", p); return in_load_ok; }
+static int in_sactive(void *c, int32_t s) { (void)c; return in_slots[s]; }
+static int32_t in_skind(void *c, int32_t s) { (void)c; return in_kinds[s]; }
+static int32_t in_fixed(void *c) { (void)c; return 0; }
+static int32_t in_sinfo(void *c, const char *p) { (void)c; (void)p; return 77; }
+static void in_pclear(void *c, int32_t j) { (void)c; if (j == 0) in_add("pclear "); }
+static void in_pappend(void *c, int32_t j, const char *t, int32_t id) { (void)c; if (j == 0) in_add("p%s/%d ", t, (int)id); }
+static void in_string(void *c, int32_t id, char *o, int n) { (void)c; snprintf(o, (size_t)n, id == 0x25ed || id == 0x25da || id == 0x25b6 || id == 0x25bc || id == 0x25e4 || id == 0x25e5 || id == 0x25e0 || id == 0x25e9 || id == 0x25b8 || id == 0x25ec || id == 0x25bb || id == 0x25f1 ? "F%x:%%s" : id == 0x25f0 ? "Pop:%%d" : id == 0x25be ? "V%%s=%%d" : "S%x", (unsigned)id); }
+static void in_header(void *c, const char *t) { (void)c; in_add("hdr[%s] ", t); }
+static void in_line(void *c, int32_t i, const char *t) { (void)c; in_add("L%d[%s] ", (int)i, t); }
+static void in_hide(void *c) { (void)c; in_add("hide "); }
+static void in_count(void *c, int s) { (void)c; in_add("count%d ", s); }
+static void in_rows(void *c) { (void)c; in_add("rows "); }
+static void info_tests(void) {
+    static AoeGameSettingsRor g; static AoeMpSetupScreenRor m;
+    AoeMpSetupInfoOpsRor o = {NULL, "D:/scn/", in_name, in_store, in_fexists, in_sdel, in_sload, in_sactive, in_skind, in_fixed, in_sinfo, in_pclear, in_pappend, in_string, in_header, in_line, in_hide, in_count, in_rows};
+    memset(&g, 0, sizeof g); memset(&m, 0, sizeof m); m.settings = &g; m.ops = &ops;
+    /* Random map (no scenario): the lists hold 1..8, players 1..8; the header with 0x25b5; map lines. */
+    aoe_settings_set_map_size_ror(&g, 2); aoe_settings_set_int_a80_ror(&g, 4); aoe_settings_set_a8c_a90_ror(&g, 7, 5000); aoe_settings_set_byte_993_ror(&g, 1);
+    aoe_mp_setup_screen_info_ror(&m, &o);
+    assert(strstr(in_log, "pclear p1/0 p2/1 p3/2 p4/3 p5/4 p6/5 p7/6 p8/7 hide hdr[F25ed:S25b5] L1[F25da:S2975] L2[F25b6:S296e] L3[S25b7 2 - 8] L4[VS10e9=5000] L5[F25e4:S10e7] L6[F25e5:S10e7] L7[F25e0:S2bd1] L8[F25e9:Sfa3] L9[F25b8:Sfa4] L10[F25ec:Sfa4] L11[F25f1:S260e] L12[Pop:50] rows ") == in_log);
+    assert(m.max_list == 8 && m.max_players == 8 && m.colors[7] == 8 && aoe_settings_byte_ac4_ror(&g, 3) == 4 && m.settings_flag == 1 && in_name[0] == '\0' && m.field_73c == 0);
+    /* A scenario "hill" with 97d: slots 0, 1, 3, 4 active; kind 1 slots 0, 3, 4 become positions; the name stored. */
+    in_n = 0; aoe_settings_set_flag_8fc_ror(&g, 1); aoe_settings_set_scenario_name_ror(&g, "hill"); g.flag_97d = 1; m.settings_flag = 1;
+    aoe_mp_setup_screen_info_ror(&m, &o);
+    assert(strstr(in_log, "exists(D:/scn/hill.scn) load(hill.scn) pclear p1/0 p4/3 p5/4 exists(D:/scn/hill.scn) hide hdr[F25ed:hill] L3[S25b7 2 - 4] L4[VS10e9=5000] ") == in_log);
+    assert(m.max_list == 4 && m.max_players == 3 && m.colors[0] == 1 && m.colors[1] == 2 && m.colors[2] == 4 && m.colors[3] == 5 && strcmp(in_name, "hill") == 0 && m.field_73c == 77 && m.settings_flag == 0);
+    assert(strstr(in_log, "L12[Pop:50] count1 rows "));
+    /* The same name again: no reload; a missing .scn falls back to .scx and a failed load clears the scenario flag. */
+    in_n = 0; aoe_mp_setup_screen_info_ror(&m, &o);
+    assert(strstr(in_log, "hide hdr[F25ed:hill] ") == in_log);
+    in_n = 0; aoe_settings_set_scenario_name_ror(&g, "lake"); in_exists = 0; in_load_ok = 0;
+    aoe_mp_setup_screen_info_ror(&m, &o);
+    assert(strstr(in_log, "del exists(D:/scn/lake.scn) load(lake.scx) ") == in_log && aoe_settings_flag_8fc_ror(&g) == 0 && m.settings_flag == 1);
+}
+static char rw_log[4096]; static int rw_n, rw_host = 1, rw_types[9] = {0, 2, 4, 2, 0}, rw_stats[9] = {0, 1, 1, 0, 0}, rw_unknown[8]; static int32_t rw_sel[AOE_MPS_CONTROLS][8], rw_first_id = 0;
+static void rw_add(const char *fmt, ...) { va_list ap; va_start(ap, fmt); rw_n += vsnprintf(rw_log + rw_n, sizeof rw_log - (size_t)rw_n, fmt, ap); va_end(ap); }
+static int rw_statsf(void *c, int32_t s) { (void)c; return rw_stats[s]; }
+static int32_t rw_typef(void *c, int32_t s) { (void)c; return rw_types[s]; }
+static const char *rw_cname(void *c, int32_t s) { (void)c; return s == 1 ? "Ann" : s == 3 ? "Cy" : "X"; }
+static int rw_unknownf(void *c, int32_t i) { (void)c; return rw_unknown[i]; }
+static int32_t rw_selid(void *c, int ctl, int32_t i) { (void)c; return rw_sel[ctl][i]; }
+static int rw_open(void *c, int ctl, int32_t i) { (void)c; (void)ctl; (void)i; return 0; }
+static void rw_selval(void *c, int ctl, int32_t i, int32_t v) { (void)c; rw_sel[ctl][i] = v; rw_add("sel%d.%d=%d ", ctl, (int)i, (int)v); }
+static const char *rw_seltext(void *c, int ctl, int32_t i) { (void)c; static char b[32]; snprintf(b, sizeof b, "T%d.%d:%d", ctl, (int)i, (int)rw_sel[ctl][i]); return b; }
+static int32_t rw_firstid(void *c, int32_t i) { (void)c; (void)i; return rw_first_id; }
+static void rw_rmfirst(void *c, int32_t i) { (void)c; rw_add("rm%d ", (int)i); }
+static void rw_insfirst(void *c, int32_t i, const char *t, int32_t id) { (void)c; rw_add("ins%d(%s,%d) ", (int)i, t, (int)id); }
+static void rw_cstate(void *c, int32_t i, int32_t color, const char **t, uint32_t *c1, uint32_t *c2) { (void)c; (void)i; static char b[16]; snprintf(b, sizeof b, "C%d", (int)color); *t = b; *c1 = 10u + (uint32_t)color; *c2 = 20u; }
+static void rw_tsel(void *c, int32_t i, int32_t idx) { (void)c; rw_add("team%d=%d ", (int)i, (int)idx); }
+static const char *rw_ttext(void *c, int32_t i) { (void)c; (void)i; return "tt"; }
+static void rw_active(void *c, int ctl, int32_t i, int32_t v) { (void)c; rw_add("a%d.%d=%d ", ctl, (int)i, (int)v); }
+static void rw_text(void *c, int ctl, int32_t i, const char *t) { (void)c; rw_add("t%d.%d[%s] ", ctl, (int)i, t); }
+static void rw_textid(void *c, int ctl, int32_t i, int32_t id) { (void)c; rw_add("id%d.%d=%x ", ctl, (int)i, (unsigned)id); }
+static void rw_colors(void *c, int ctl, int32_t i, uint32_t a, uint32_t b) { (void)c; rw_add("col%d.%d=%u,%u ", ctl, (int)i, (unsigned)a, (unsigned)b); }
+static void rw_ncolor(void *c, int32_t i, uint32_t rgb) { (void)c; rw_add("nc%d=%x ", (int)i, (unsigned)rgb); }
+static void rw_enable(void *c, int ctl, int32_t i) { (void)c; rw_add("en%d.%d ", ctl, (int)i); }
+static void rw_logf(void *c, const char *t) { (void)c; rw_add("log[%s] ", t); }
+static void rw_share(void *c) { (void)c; rw_add("share "); }
+static void rows_tests(void) {
+    static AoeGameSettingsRor g; static AoeMpSetupScreenRor m;
+    AoeMpSetupRowsOpsRor o = {NULL, 1, 1, rw_statsf, rw_typef, rw_cname, rw_unknownf, rw_selid, rw_open, rw_selval, rw_seltext, rw_firstid, rw_rmfirst, rw_insfirst, rw_cstate, rw_tsel, rw_ttext, rw_active, rw_text, rw_textid, rw_colors, rw_ncolor, rw_enable, rw_logf, rw_share};
+    memset(&g, 0, sizeof g); memset(&m, 0, sizeof m); m.settings = &g; m.ops = &ops; m.field_730 = -1;
+    g.flag_97e = 1; aoe_settings_set_byte_988_ror(&g, 3);
+    for (int i = 0; i < 8; ++i) { aoe_settings_set_byte_ac4_ror(&g, i, (uint8_t)(i + 1)); aoe_settings_set_byte_a94_ror(&g, i, (uint8_t)(5 + i)); aoe_settings_set_player_994_ror(&g, i, (uint8_t)(i + 1)); aoe_settings_set_int_aa0_ror(&g, i, i); }
+    /* Networked host, our slot 1: slot 2 is a computer, slot 3 a human without stats. */
+    aoe_mp_setup_screen_rows_ror(&m, &o);
+    assert(strstr(rw_log, "a3.0=0 t4.0[] a4.0=1 t5.0[C1] col5.0=11,20 a7.0=0 a5.0=0 a7.0=1 en7.0 team0=0 t6.0[tt] a8.0=0 a6.0=0 a8.0=1 en8.0 nc0=ff00 ins0(Ann,2) sel9.0=2 t0.0[T9.0:2] sel10.0=5 t1.0[T10.0:5] sel11.0=0 t2.0[T11.0:0] a9.0=0 a0.0=1 a10.0=0 a1.0=0 a10.0=1 a11.0=0 a2.0=0 ") == rw_log);
+    assert(strstr(rw_log, "a3.1=0 a4.1=0 t5.1[C2] col5.1=12,20 a7.1=0 a5.1=0 team1=1 t6.1[tt] a8.1=0 a6.1=0 a8.1=1 en8.1 nc1=ff00 sel9.1=4 t0.1[T9.1:4] sel10.1=6 t1.1[T10.1:6] sel11.1=1 t2.1[T11.1:1] a9.1=1 a0.1=0 a10.1=0 a1.1=0 a10.1=1 a11.1=0 a2.1=0 "));
+    assert(strstr(rw_log, "a3.2=0 t4.2[] a4.2=1 t5.2[C3] col5.2=13,20 a7.2=0 a5.2=0 a5.2=1 team2=2 t6.2[tt] a8.2=0 a6.2=0 a6.2=1 nc2=ff ins2(Cy,2) sel9.2=2 t0.2[T9.2:2] sel10.2=7 t1.2[T10.2:7] sel11.2=2 t2.2[T11.2:2] a9.2=1 a0.2=0 a10.2=0 a1.2=0 a1.2=1 a11.2=0 a2.2=0 a0.3=0 a1.3=0 "));
+    assert(strstr(rw_log, "a11.7=0 ") && !strstr(rw_log, "log["));
+    /* A slot sharing colour 1 with slot 0 whose kind shows "?": slot 0's civ/team + 50 copied, shared. */
+    rw_n = 0; rw_unknown[0] = 1; aoe_settings_set_byte_ac4_ror(&g, 2, 1); rw_stats[3] = 1;
+    aoe_mp_setup_screen_rows_ror(&m, &o);
+    assert(strstr(rw_log, "log[    SETTING CIV TEAM 50 0 2] share ") == rw_log && aoe_settings_byte_a94_ror(&g, 2) == 55 && aoe_settings_player_994_ror(&g, 2) == 51);
+    assert(strstr(rw_log, "team2=0 ") && strstr(rw_log, "sel10.2=5 "));
+    /* Not networked: the first row is a human, the second follows its kind list (0 -> hidden colour/team texts). */
+    rw_n = 0; g.flag_97e = 0; rw_sel[AOE_MPS_KIND_LIST][1] = 4; aoe_settings_set_byte_988_ror(&g, 2);
+    aoe_mp_setup_screen_rows_ror(&m, &o);
+    assert(strstr(rw_log, "a3.0=0 a4.0=0 t5.0[C1] col5.0=11,20 a7.0=0 a5.0=0 a5.0=1 team0=0 t6.0[tt] a8.0=0 a6.0=0 a6.0=1 t0.0[T9.0:2] ") == rw_log && strstr(rw_log, "a3.1=0 a4.1=0 t5.1[C2] col5.1=12,20 a7.1=0 a5.1=0 team1=1 t6.1[tt] a8.1=0 a6.1=0 a6.1=1 t0.1[T9.1:4] ") && strstr(rw_log, "a0.2=0 a1.2=0 a2.2=0 a3.2=0 "));
+}
 int main(void) {
     static AoeGameSettingsRor g;
     static AoeMpSetupScreenRor m;
@@ -306,5 +395,7 @@ int main(void) {
     }
 
     puts("mp_setup_screen_test: ok");
+    info_tests();
+    rows_tests();
     return 0;
 }

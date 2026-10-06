@@ -311,4 +311,130 @@ int aoe_mp_setup_screen_start_ror(AoeMpSetupScreenRor *m);
 int aoe_mp_setup_screen_action_ror(AoeMpSetupScreenRor *m, void *panel, int32_t action,
                                    int32_t a, int32_t b);
 
+
+/* ---- 0x0048b640 player rows and 0x0048c010 settings text ---- */
+
+/* The twelve controls of a player row. */
+enum {
+    AOE_MPS_NAME = 0,      /* +0x490 */
+    AOE_MPS_CIV_TEXT,      /* +0x4b0 */
+    AOE_MPS_POS_TEXT,      /* +0x4d0 */
+    AOE_MPS_KIND_LABEL,    /* +0x4f0 */
+    AOE_MPS_VERSION,       /* +0x510 */
+    AOE_MPS_COLOR_TEXT,    /* +0x530 */
+    AOE_MPS_TEAM_TEXT,     /* +0x550 */
+    AOE_MPS_COLOR_BUTTON,  /* +0x570 */
+    AOE_MPS_TEAM_BUTTON,   /* +0x590 */
+    AOE_MPS_KIND_LIST,     /* +0x5b0 */
+    AOE_MPS_CIV_LIST,      /* +0x5d0 */
+    AOE_MPS_POS_LIST,      /* +0x5f0 */
+    AOE_MPS_CONTROLS
+};
+typedef struct {
+    void *context;
+    int host;                                           /* 0x00423c20 */
+    int32_t our_slot;                                   /* 0x00423c10 */
+    int (*slot_stats)(void *context, int32_t slot);     /* 0x004253b0 */
+    int32_t (*slot_type)(void *context, int32_t slot);  /* 0x00423d10 */
+    const char *(*comm_name)(void *context, int32_t slot); /* 0x004241a0 */
+    int (*kind_shows_unknown)(void *context, int32_t i);   /* kind list +0x120 == 0xff */
+    int32_t (*list_selected_id)(void *context, int control, int32_t i);  /* 0x00461ed0 */
+    int (*list_open)(void *context, int control, int32_t i);             /* its +0x104 == 2 */
+    void (*list_select_value)(void *context, int control, int32_t i, int32_t value); /* 0x00461e70 + 0x00461d50 */
+    const char *(*list_selected_text)(void *context, int control, int32_t i);        /* 0x00461eb0 */
+    int32_t (*list_first_id)(void *context, int32_t i);                  /* kind list 0x00461ef0(0) */
+    void (*list_remove_first)(void *context, int32_t i);                 /* 0x00461e30(0) */
+    void (*list_insert_first)(void *context, int32_t i, const char *text, int32_t id); /* 0x00461e00 */
+    /* The colour button's state for the colour id (0x0045f310 ..
+       0x0045f470): its text and two colours. */
+    void (*color_state)(void *context, int32_t i, int32_t color, const char **text, uint32_t *c1, uint32_t *c2);
+    void (*team_select)(void *context, int32_t i, int32_t index);        /* team button +0xe4 */
+    const char *(*team_text)(void *context, int32_t i);                  /* its state's text */
+    void (*set_active)(void *context, int control, int32_t i, int32_t v);
+    void (*set_text)(void *context, int control, int32_t i, const char *text);
+    void (*set_text_id)(void *context, int control, int32_t i, int32_t id); /* +0xe8 */
+    void (*set_colors)(void *context, int control, int32_t i, uint32_t c1, uint32_t c2); /* 0x00469070 */
+    void (*name_color)(void *context, int32_t i, uint32_t rgb);          /* 0x00461130 + 0x00469070 */
+    void (*enable)(void *context, int control, int32_t i);               /* 0x0045f3a0(0) */
+    void (*log)(void *context, const char *text);                        /* 0x0042c330 */
+    void (*share)(void *context);                                        /* game +0x48 */
+} AoeMpSetupRowsOpsRor;
+
+/* 0x0048b640: the player rows. A networked host first gives every human
+   slot (type 2) sharing a colour with a slot whose kind list shows "?"
+   (+0x120 0xff) that slot's civilisation and team plus 50 ("SETTING CIV
+   TEAM 50" logged), then shares the settings. For each player below the
+   count: the kind (comm slot type when networked, else 2 for the first
+   and the kind list's selection); not a human slot: kind label and
+   version hidden; human: the label follows the player flag, the version
+   text shown when hosting or player 0 has a version, for player 0, or
+   for our own slot after setting version 2; else hidden. The colour
+   (our pending +0x734 when set, else byte 0xac4) picks the button
+   state whose text and colours go to the colour text; both hidden, then
+   the button shown and enabled for ourselves (networked, +0x85c clear)
+   or with +0x97d and more than one player, else the text for a human.
+   The team button selects +0x738 - 1 (ours, when set) or byte 0x994 -
+   1 (less 50 above 49); the team text takes its text; both hidden, then
+   the button for ourselves / a host's computer slot (+0x85c clear) or
+   with +0x97d (ours or computer), else the text for kinds 2 / 4.
+   Networked: the name colour is red (0xff) for a human slot without
+   stats, else green (0xff00). The name: not networked, ours shows string
+   0x25b3, others the kind list's text; networked, a leading item of ID 2
+   is dropped, a human slot's comm name is inserted first with ID 2, the
+   kind is selected and its text shown. A closed civilisation list
+   selects +0x72c (ours, when set) or byte 0xa94 (less 50 above 49), a
+   closed position list +0x730 (ours, not -1) or int 0xaa0; their texts
+   follow. The kind list shows only for a networked host's other slots
+   (the name hides then); the civilisation list / text and position list
+   / text follow the team rule. Rows from the count to 7 are hidden
+   entirely. Then the colour buttons refill (0x0048d250). */
+void aoe_mp_setup_screen_rows_ror(AoeMpSetupScreenRor *m, const AoeMpSetupRowsOpsRor *o);
+
+typedef struct {
+    void *context;
+    const char *scenario_dir;                            /* settings +0xc17 */
+    const char *stored_name;                             /* +0x740 */
+    void (*store_name)(void *context, const char *name);
+    int (*file_exists)(void *context, const char *path); /* 0x0052694c != -1 */
+    void (*scenario_delete)(void *context);              /* +0x848 vtable +4(1) */
+    int (*scenario_load)(void *context, const char *path); /* 0x00417670(path, 0) */
+    int (*slot_active)(void *context, int32_t slot);     /* 0x00476250 */
+    int32_t (*slot_kind)(void *context, int32_t slot);   /* 0x00476210 */
+    int32_t (*fixed_positions)(void *context);           /* 0x00507e00 */
+    int32_t (*scenario_info)(void *context, const char *path); /* 0x0041c040 */
+    void (*pos_clear)(void *context, int32_t j);         /* 0x00461f10 on list j */
+    void (*pos_append)(void *context, int32_t j, const char *text, int32_t id); /* 0x00461da0 */
+    void (*string)(void *context, int32_t id, char *out, int size); /* 0x00454270 / 0x004542a0 */
+    void (*header)(void *context, const char *text);     /* +0x624 +0xec */
+    void (*line)(void *context, int32_t i, const char *text); /* +0x62c + 4 i: +0xec and shown */
+    void (*hide_lines)(void *context);                   /* the 20 lines hidden */
+    void (*count_controls)(void *context, int shown);    /* +0x6dc, +0x6e0 */
+    void (*rows)(void *context);                         /* 0x0048b640 */
+} AoeMpSetupInfoOpsRor;
+
+/* 0x0048c010: the settings text. The scenario is (re)loaded when not in
+   scenario mode with +0x840 clear, or in scenario mode with +0x840 set
+   or the name changed from +0x740: in scenario mode the old one is
+   deleted, "<dir><name>.scn" (or ".scx" when that is missing) loaded
+   (0x00417670; a name starting with '.' is skipped) and a failure clears
+   +0x8fc; with one, the eight position lists are cleared, +0x84c takes
+   0x00507e00, every active slot counts into +0x728 and, networked or
+   (with +0x97d) of kind 1, into +0x850 with "%d" entries in all eight
+   lists; the first eight active slots become the players' positions,
+   colours (slot + 1, also +0x860) and team byte 1. With +0x840's source
+   (0x0041b710) the lists instead hold "1".."8" with the players
+   1..8 and +0x728 / +0x850 8, +0x84c 0. With +0x97d the players follow
+   the settings (0x0048cfb0). +0x840 is refreshed, the name stored (or
+   cleared), +0x868 cleared and +0x73c set from the scenario's info
+   (0x0041c040; 0 outside scenario mode). Then the 20 lines are hidden
+   and refilled as the wait screen does (header 0x25ed with 0x2617 /
+   0x25b5 or the scenario name; lines from 1 or 3: map size and type
+   with 0x0041b710; players "%s 2 - 8" (0x25b7) in random mode, "%s %d -
+   %d" (2, +0x728) without fixed positions and more than two, else "%s
+   %d"; victory; age; resources; difficulty; options 0xad8, 0x985,
+   0xad9; networked 0x982; path finding; population). With +0x97d the
+   count controls show in random mode or with free positions and more
+   than two players. Then the rows (0x0048b640). */
+void aoe_mp_setup_screen_info_ror(AoeMpSetupScreenRor *m, const AoeMpSetupInfoOpsRor *o);
+
 #endif

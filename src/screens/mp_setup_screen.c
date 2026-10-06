@@ -663,3 +663,271 @@ int aoe_mp_setup_screen_action_ror(AoeMpSetupScreenRor *m, void *panel, int32_t 
     }
     return OPS->base_action(CTX, panel, action, a, b);
 }
+
+/* 0x0048b640 */
+void aoe_mp_setup_screen_rows_ror(AoeMpSetupScreenRor *m, const AoeMpSetupRowsOpsRor *o) {
+    const AoeGameSettingsRor *g = m->settings;
+    int networked = aoe_settings_flag_97e_ror(g) != 0, flag_97d = aoe_settings_flag_97d_ror(g) != 0;
+    int32_t count = aoe_settings_byte_988_ror(g), i, j, c;
+    if (networked && o->host) {
+        int changed = 0;
+        for (i = 0; i < count; ++i) {
+            if (!o->slot_stats(o->context, i + 1) || !o->kind_shows_unknown(o->context, i)) continue;
+            for (j = 0; j < count; ++j) {
+                char text[96];
+                if (j == i || !o->slot_stats(o->context, j + 1)) continue;
+                if (aoe_settings_byte_ac4_ror(g, j) != aoe_settings_byte_ac4_ror(g, i)) continue;
+                if (o->slot_type(o->context, j + 1) != 2) continue;
+                snprintf(text, sizeof text, "    SETTING CIV TEAM 50 %d %d", (int)i, (int)j);
+                o->log(o->context, text);
+                aoe_settings_set_byte_a94_ror(m->settings, j, (uint8_t)(aoe_settings_byte_a94_ror(g, i) + 0x32));
+                aoe_settings_set_player_994_ror(m->settings, j, (uint8_t)(aoe_settings_player_994_ror(g, i) + 0x32));
+                changed = 1;
+            }
+        }
+        if (changed) o->share(o->context);
+    }
+    for (i = 0; i < count && i < AOE_MP_SETUP_PLAYERS; ++i) {
+        int32_t kind, color, team, v;
+        int ours = networked && i + 1 == o->our_slot;
+        const char *text;
+        uint32_t c1, c2;
+        if (networked) kind = o->slot_type(o->context, i + 1);
+        else kind = i == 0 ? 2 : o->list_selected_id(o->context, AOE_MPS_KIND_LIST, i);
+        if (!networked || kind != 2) {
+            o->set_active(o->context, AOE_MPS_KIND_LABEL, i, 0);
+            o->set_active(o->context, AOE_MPS_VERSION, i, 0);
+        } else {
+            o->set_active(o->context, AOE_MPS_KIND_LABEL, i, aoe_settings_player_flag_ror(g, i));
+            if (o->host || aoe_settings_player_version_ror(g, 0) != 0 || i == 0) {
+                o->set_text(o->context, AOE_MPS_VERSION, i, aoe_settings_player_version_text_ror(g, i));
+                o->set_active(o->context, AOE_MPS_VERSION, i, 1);
+            } else if (ours) {
+                aoe_settings_set_player_version_ror(m->settings, i, 2);
+                o->set_text(o->context, AOE_MPS_VERSION, i, aoe_settings_player_version_text_ror(g, i));
+                o->set_active(o->context, AOE_MPS_VERSION, i, 1);
+            } else {
+                o->set_active(o->context, AOE_MPS_VERSION, i, 0);
+            }
+        }
+        color = ours && m->field_734 ? m->field_734 : aoe_settings_byte_ac4_ror(g, i);
+        o->color_state(o->context, i, color, &text, &c1, &c2);
+        o->set_text(o->context, AOE_MPS_COLOR_TEXT, i, text);
+        o->set_colors(o->context, AOE_MPS_COLOR_TEXT, i, c1, c2);
+        o->set_active(o->context, AOE_MPS_COLOR_BUTTON, i, 0);
+        o->set_active(o->context, AOE_MPS_COLOR_TEXT, i, 0);
+        if ((networked && ours && !m->field_85c) || (flag_97d && ours && m->max_players > 1)) {
+            o->set_active(o->context, AOE_MPS_COLOR_BUTTON, i, 1);
+            o->enable(o->context, AOE_MPS_COLOR_BUTTON, i);
+        } else if (kind == 2) {
+            o->set_active(o->context, AOE_MPS_COLOR_TEXT, i, 1);
+        }
+        if (ours && m->field_738) team = m->field_738 - 1;
+        else { team = aoe_settings_player_994_ror(g, i); if (team > 0x31) team -= 0x32; team -= 1; }
+        o->team_select(o->context, i, team);
+        o->set_text(o->context, AOE_MPS_TEAM_TEXT, i, o->team_text(o->context, i));
+        o->set_active(o->context, AOE_MPS_TEAM_BUTTON, i, 0);
+        o->set_active(o->context, AOE_MPS_TEAM_TEXT, i, 0);
+        if ((networked && ((ours && !m->field_85c) || (o->host && kind == 4 && !m->field_85c))) ||
+            (flag_97d && (ours || kind == 4))) {
+            o->set_active(o->context, AOE_MPS_TEAM_BUTTON, i, 1);
+            o->enable(o->context, AOE_MPS_TEAM_BUTTON, i);
+        } else if (kind == 2 || kind == 4) {
+            o->set_active(o->context, AOE_MPS_TEAM_TEXT, i, 1);
+        }
+        if (networked)
+            o->name_color(o->context, i, kind == 2 && !o->slot_stats(o->context, i + 1) ? 0xffu : 0xff00u);
+        if (!networked) {
+            if (ours) o->set_text_id(o->context, AOE_MPS_NAME, i, 0x25b3);
+            else o->set_text(o->context, AOE_MPS_NAME, i, o->list_selected_text(o->context, AOE_MPS_KIND_LIST, i));
+        } else {
+            if (o->list_first_id(o->context, i) == 2) o->list_remove_first(o->context, i);
+            if (kind == 2) o->list_insert_first(o->context, i, o->comm_name(o->context, i + 1), 2);
+            o->list_select_value(o->context, AOE_MPS_KIND_LIST, i, kind);
+            o->set_text(o->context, AOE_MPS_NAME, i, o->list_selected_text(o->context, AOE_MPS_KIND_LIST, i));
+        }
+        if (!o->list_open(o->context, AOE_MPS_CIV_LIST, i)) {
+            if (ours && m->field_72c) v = m->field_72c;
+            else { v = aoe_settings_byte_a94_ror(g, i); if (v > 0x31) v -= 0x32; }
+            o->list_select_value(o->context, AOE_MPS_CIV_LIST, i, v);
+        }
+        o->set_text(o->context, AOE_MPS_CIV_TEXT, i, o->list_selected_text(o->context, AOE_MPS_CIV_LIST, i));
+        if (!o->list_open(o->context, AOE_MPS_POS_LIST, i)) {
+            v = ours && m->field_730 != -1 ? m->field_730 : aoe_settings_int_aa0_ror(g, i);
+            o->list_select_value(o->context, AOE_MPS_POS_LIST, i, v);
+        }
+        o->set_text(o->context, AOE_MPS_POS_TEXT, i, o->list_selected_text(o->context, AOE_MPS_POS_LIST, i));
+        if (!networked || !o->host || ours) {
+            o->set_active(o->context, AOE_MPS_KIND_LIST, i, 0);
+            o->set_active(o->context, AOE_MPS_NAME, i, 1);
+        } else {
+            o->set_active(o->context, AOE_MPS_KIND_LIST, i, 1);
+            o->set_active(o->context, AOE_MPS_NAME, i, 0);
+        }
+        o->set_active(o->context, AOE_MPS_CIV_LIST, i, 0);
+        o->set_active(o->context, AOE_MPS_CIV_TEXT, i, 0);
+        if ((networked && ((ours && !m->field_85c) || (o->host && kind == 4 && !m->field_85c))) ||
+            (flag_97d && (ours || kind == 4)))
+            o->set_active(o->context, AOE_MPS_CIV_LIST, i, 1);
+        else if (kind == 2 || kind == 4)
+            o->set_active(o->context, AOE_MPS_CIV_TEXT, i, 1);
+        o->set_active(o->context, AOE_MPS_POS_LIST, i, 0);
+        o->set_active(o->context, AOE_MPS_POS_TEXT, i, 0);
+    }
+    for (; i < AOE_MP_SETUP_PLAYERS; ++i)
+        for (c = 0; c < AOE_MPS_CONTROLS; ++c) o->set_active(o->context, c, i, 0);
+    aoe_mp_setup_screen_fill_colors_ror(m);
+}
+
+/* 0x0048c010 */
+static void mps_line(AoeMpSetupScreenRor *m, const AoeMpSetupInfoOpsRor *o, int32_t i, int32_t fmt_id,
+                     const char *arg) {
+    char fmt[0x100], text[0x200];
+    (void)m;
+    fmt[0] = '\0';
+    o->string(o->context, fmt_id, fmt, sizeof fmt);
+    snprintf(text, sizeof text, fmt, arg);
+    o->line(o->context, i, text);
+}
+static void mps_line_id(AoeMpSetupScreenRor *m, const AoeMpSetupInfoOpsRor *o, int32_t i, int32_t fmt_id,
+                        int32_t arg_id) {
+    char arg[0x100];
+    arg[0] = '\0';
+    o->string(o->context, arg_id, arg, sizeof arg);
+    mps_line(m, o, i, fmt_id, arg);
+}
+void aoe_mp_setup_screen_info_ror(AoeMpSetupScreenRor *m, const AoeMpSetupInfoOpsRor *o) {
+    const AoeGameSettingsRor *g = m->settings;
+    int scenario_mode = aoe_settings_flag_8fc_ror(g) != 0, reload;
+    int networked = aoe_settings_flag_97e_ror(g) != 0, flag_97d = aoe_settings_flag_97d_ror(g) != 0;
+    char path[0x104], text[0x200], arg[0x100], fmt[0x100];
+    int32_t i, j, line, v;
+    if (!scenario_mode) reload = m->settings_flag == 0;
+    else reload = m->settings_flag != 0 || strcmp(aoe_settings_scenario_name_ror(g), o->stored_name) != 0;
+    if (reload) {
+        if (scenario_mode) {
+            const char *name = aoe_settings_scenario_name_ror(g);
+            if (m->scenario) { o->scenario_delete(o->context); m->scenario = 0; }
+            snprintf(path, sizeof path, "%s%s.scn", o->scenario_dir, name);
+            if (!o->file_exists(o->context, path)) snprintf(path, sizeof path, "%s.scx", name);
+            else snprintf(path, sizeof path, "%s.scn", name);
+            if (path[0] != '.') m->scenario = o->scenario_load(o->context, path);
+            if (!m->scenario) {
+                aoe_settings_set_flag_8fc_ror(m->settings, 0);
+            } else {
+                for (j = 0; j < 8; ++j) o->pos_clear(o->context, j);
+                m->field_84c = o->fixed_positions(o->context);
+                m->max_players = 0;
+                m->max_list = 0;
+                for (i = 0; i < 9; ++i) {
+                    if (!o->slot_active(o->context, i)) continue;
+                    ++m->max_list;
+                    snprintf(text, sizeof text, "%d", (int)i + 1);
+                    if (networked || (flag_97d && o->slot_kind(o->context, i) == 1)) {
+                        ++m->max_players;
+                        for (j = 0; j < 8; ++j) o->pos_append(o->context, j, text, i);
+                    }
+                }
+                i = -1;
+                for (j = 0; j < 8; ++j) {
+                    do { ++i; } while (i < 9 && !o->slot_active(o->context, i));
+                    if (i >= 9) break;
+                    m->colors[j] = (uint8_t)(i + 1);
+                    aoe_settings_set_int_aa0_ror(m->settings, j, i);
+                    aoe_settings_set_byte_ac4_ror(m->settings, j, m->colors[j]);
+                    aoe_settings_set_player_994_ror(m->settings, j, 1);
+                }
+            }
+        }
+        if (aoe_settings_flag_8fc_clear_ror(g)) {
+            for (j = 0; j < 8; ++j) o->pos_clear(o->context, j);
+            m->max_list = 8;
+            m->max_players = 8;
+            m->field_84c = 0;
+            for (i = 0; i < 8; ++i) {
+                m->colors[i] = (uint8_t)(i + 1);
+                aoe_settings_set_int_aa0_ror(m->settings, i, i);
+                aoe_settings_set_byte_ac4_ror(m->settings, i, m->colors[i]);
+                aoe_settings_set_player_994_ror(m->settings, i, 1);
+                snprintf(text, sizeof text, "%d", (int)i + 1);
+                for (j = 0; j < 8; ++j) o->pos_append(o->context, j, text, i);
+            }
+        }
+        if (flag_97d) aoe_mp_setup_screen_players_ror(m);
+        m->settings_flag = aoe_settings_flag_8fc_clear_ror(g);
+        o->store_name(o->context, m->settings_flag == 0 ? aoe_settings_scenario_name_ror(g) : "");
+        memset(m->field_868, 0, sizeof m->field_868);
+        scenario_mode = aoe_settings_flag_8fc_ror(g) != 0;
+        if (!scenario_mode) {
+            m->field_73c = 0;
+        } else {
+            const char *name = aoe_settings_scenario_name_ror(g);
+            snprintf(path, sizeof path, "%s%s.scn", o->scenario_dir, name);
+            if (!o->file_exists(o->context, path)) snprintf(path, sizeof path, "%s.scx", name);
+            else snprintf(path, sizeof path, "%s.scn", name);
+            m->field_73c = o->scenario_info(o->context, path);
+        }
+    }
+    o->hide_lines(o->context);
+    if (!scenario_mode) {
+        arg[0] = '\0';
+        o->string(o->context, aoe_settings_option_ae5_ror(g) ? 0x2617 : 0x25b5, arg, sizeof arg);
+        line = 1;
+    } else {
+        snprintf(arg, sizeof arg, "%s", aoe_settings_scenario_name_ror(g));
+        line = 3;
+    }
+    fmt[0] = '\0';
+    o->string(o->context, 0x25ed, fmt, sizeof fmt);
+    snprintf(text, sizeof text, fmt, arg);
+    o->header(o->context, text);
+    if (aoe_settings_flag_8fc_clear_ror(g)) {
+        v = aoe_settings_map_size_ror(g);
+        arg[0] = '\0';
+        if (v >= 0 && v <= 5) o->string(o->context, 0x2973 + v, arg, sizeof arg);
+        mps_line(m, o, line, 0x25da, arg);
+        v = aoe_settings_int_a80_ror(g);
+        arg[0] = '\0';
+        if (v >= 0 && v <= 8) o->string(o->context, 0x296a + v, arg, sizeof arg);
+        mps_line(m, o, line + 1, 0x25b6, arg);
+        line += 2;
+    }
+    fmt[0] = '\0';
+    o->string(o->context, 0x25b7, fmt, sizeof fmt);
+    if (!scenario_mode) snprintf(text, sizeof text, "%s 2 - 8", fmt);
+    else if (m->field_84c == 0 && m->max_list != 2) snprintf(text, sizeof text, "%s %d - %d", fmt, 2, (int)m->max_list);
+    else snprintf(text, sizeof text, "%s %d", fmt, (int)m->max_list);
+    o->line(o->context, line, text);
+    v = aoe_settings_int_a8c_ror(g);
+    if (v == 7 || v == 8) {
+        char a[0x100];
+        arg[0] = '\0';
+        o->string(o->context, v == 7 ? 0x10e9 : 0x10ea, arg, sizeof arg);
+        fmt[0] = '\0';
+        o->string(o->context, 0x25be, fmt, sizeof fmt);
+        snprintf(a, sizeof a, fmt, arg, (int)aoe_settings_int_a90_ror(g));
+        o->line(o->context, line + 1, a);
+    } else {
+        mps_line_id(m, o, line + 1, 0x25bc,
+                    v == 1 ? 0x10e1 : v == 9 ? 0x10ec : aoe_settings_flag_8fc_clear_ror(g) ? 0x10ec : 0x10e7);
+    }
+    v = aoe_settings_starting_age_ror(g);
+    mps_line_id(m, o, line + 2, 0x25e4, v == 0 ? 0x10e7 : v == 1 ? 0x106e : 0x1067 + v);
+    v = aoe_settings_resource_level_ror(g);
+    mps_line_id(m, o, line + 3, 0x25e5, v == 0 ? 0x10e7 : 0x25e5 + v);
+    mps_line_id(m, o, line + 4, 0x25e0, 0x2bd0 + aoe_settings_byte_993_ror(g));
+    mps_line_id(m, o, line + 5, 0x25e9, aoe_settings_option_ad8_ror(g) ? 0xfa4 : 0xfa3);
+    mps_line_id(m, o, line + 6, 0x25b8, aoe_settings_byte_985_ror(g) ? 0xfa3 : 0xfa4);
+    mps_line_id(m, o, line + 7, 0x25ec, aoe_settings_option_ad9_ror(g) ? 0xfa3 : 0xfa4);
+    line += 8;
+    if (networked) mps_line_id(m, o, line++, 0x25bb, aoe_settings_byte_982_ror(g) ? 0xfa3 : 0xfa4);
+    mps_line_id(m, o, line, 0x25f1,
+                0x260e + (networked ? aoe_settings_byte_983_ror(g) : aoe_settings_byte_a14_ror(g)));
+    fmt[0] = '\0';
+    o->string(o->context, 0x25f0, fmt, sizeof fmt);
+    snprintf(text, sizeof text, fmt, (int)aoe_settings_population_limit_ror(g));
+    o->line(o->context, line + 1, text);
+    if (flag_97d)
+        o->count_controls(o->context, !scenario_mode || (m->field_84c == 0 && m->max_list > 2));
+    o->rows(o->context);
+}

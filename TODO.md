@@ -47,6 +47,15 @@ The objective is a faithful, native PS Vita port of *Age of Empires I*, with Ris
 - [ ] Maintain revision-qualified evidence and repeatable extraction/audit scripts. Never commit original executables, disc images, archives, music, or other proprietary game data.
 - [ ] Publish status estimates only when evidence changes; distinguish decompilation coverage from port implementation and playable functionality.
 
+## Translation status (2026-10-06)
+
+- [x] Translate every Ghidra-discovered patched RoR 1.0a game-code function (4,510/4,510 cited; `docs/PORT_COVERAGE.md`). Excludes the hand-written assembly module (0x00524e90.., 32 functions) and the C runtime (0x00525c24.., 1,308 functions).
+- [ ] Integrate the translations: replace the callback ("ops") seams with the reconstructed game/world/player/unit/panel objects and run them from one game loop and state machine.
+- [ ] Native equivalents for the assembly module (shape rasterizers, copy kernels), audited against the existing sprite/draw code.
+- [ ] Vita platform layer for the translated screens: panel/surface rendering, fonts, input mapping, audio (effects, MIDI, user-extracted CD music), settings persistence, string resources from the user's `language.dll`.
+- [ ] Saved games and campaign progress on Vita storage; decide the multiplayer transport (or exclude multiplayer).
+- [ ] Base AoE 1.0c translation coverage (the worklist counts RoR 1.0a only).
+
 ## Current verified baseline (2026-09-29)
 
 - Patched AoE 1.0c: 5,870 Ghidra-discovered functions exported, zero decompilation failures; 31,055 call sites, 4,435 unresolved; 6,185 decoded instruction bytes outside function bodies in 548 islands.

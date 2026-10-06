@@ -26,37 +26,42 @@ mapping, `tools/revision_match.py`.
   estimate, not proof of translation. Original-behaviour claims still need
   evidence and tests.
 
-## Snapshot (2026-10-04 evening: computer-player AI merged)
+## Snapshot (2026-10-06: every discovered game-code function cited)
 
-Counted with the marked-citation rule described above; earlier snapshots
-(41.6% and before) overstate coverage because every RoR address was also
-looked up as a base-game address.
+Every Ghidra-discovered function of the patched RoR 1.0a game code now
+has an 8-digit citation in `src/`/`include/` (a translated function), or is
+covered through a disc-revision match. This is a citation count, not proof
+of a working game: most translations reach their neighbours through
+callback ("ops") tables verified by focused host tests, and the
+integration of those seams into a running game is the remaining work
+(see `TODO.md`). Functions reached only through unresolved indirect calls
+or undiscovered islands are outside this count.
 
-Patched RoR 1.0a game code: 2307/4510 functions cited (51.2%), 450812/1195664 bytes (37.7%)
+Patched RoR 1.0a game code: 4510/4510 functions cited (100.0%), 1195664/1195664 bytes (100.0%)
 Excluded: assembly module 32 functions, C runtime 1308 functions
-Ready now (all callees cited): 1025
+Ready now (all callees cited): 0
 
 | Region | Functions | Cited | Bytes | Cited bytes |
 | --- | ---: | ---: | ---: | ---: |
-| 0x00400000 | 405 | 318 (79%) | 62192 | 46480 (75%) |
-| 0x00410000 | 392 | 160 (41%) | 64992 | 10544 (16%) |
-| 0x00420000 | 330 | 117 (35%) | 65520 | 19856 (30%) |
-| 0x00430000 | 258 | 166 (64%) | 65392 | 36560 (56%) |
-| 0x00440000 | 219 | 56 (26%) | 65568 | 21680 (33%) |
-| 0x00450000 | 388 | 335 (86%) | 65525 | 55429 (85%) |
-| 0x00460000 | 322 | 270 (84%) | 66699 | 56624 (85%) |
-| 0x00470000 | 163 | 34 (21%) | 65392 | 14496 (22%) |
-| 0x00480000 | 137 | 2 (1%) | 64848 | 256 (0%) |
-| 0x00490000 | 117 | 10 (9%) | 65536 | 3840 (6%) |
-| 0x004a0000 | 269 | 155 (58%) | 65152 | 35344 (54%) |
-| 0x004b0000 | 205 | 97 (47%) | 69200 | 28208 (41%) |
-| 0x004c0000 | 178 | 161 (90%) | 63280 | 41872 (66%) |
-| 0x004d0000 | 71 | 31 (44%) | 64112 | 9392 (15%) |
-| 0x004e0000 | 300 | 181 (60%) | 65584 | 32887 (50%) |
-| 0x004f0000 | 174 | 31 (18%) | 65744 | 8336 (13%) |
-| 0x00500000 | 302 | 150 (50%) | 65392 | 18528 (28%) |
-| 0x00510000 | 191 | 17 (9%) | 65792 | 7104 (11%) |
-| 0x00520000 | 89 | 16 (18%) | 19744 | 3376 (17%) |
+| 0x00400000 | 405 | 405 (100%) | 62192 | 62192 (100%) |
+| 0x00410000 | 392 | 392 (100%) | 64992 | 64992 (100%) |
+| 0x00420000 | 330 | 330 (100%) | 65520 | 65520 (100%) |
+| 0x00430000 | 258 | 258 (100%) | 65392 | 65392 (100%) |
+| 0x00440000 | 219 | 219 (100%) | 65568 | 65568 (100%) |
+| 0x00450000 | 388 | 388 (100%) | 65525 | 65525 (100%) |
+| 0x00460000 | 322 | 322 (100%) | 66699 | 66699 (100%) |
+| 0x00470000 | 163 | 163 (100%) | 65392 | 65392 (100%) |
+| 0x00480000 | 137 | 137 (100%) | 64848 | 64848 (100%) |
+| 0x00490000 | 117 | 117 (100%) | 65536 | 65536 (100%) |
+| 0x004a0000 | 269 | 269 (100%) | 65152 | 65152 (100%) |
+| 0x004b0000 | 205 | 205 (100%) | 69200 | 69200 (100%) |
+| 0x004c0000 | 178 | 178 (100%) | 63280 | 63280 (100%) |
+| 0x004d0000 | 71 | 71 (100%) | 64112 | 64112 (100%) |
+| 0x004e0000 | 300 | 300 (100%) | 65584 | 65584 (100%) |
+| 0x004f0000 | 174 | 174 (100%) | 65744 | 65744 (100%) |
+| 0x00500000 | 302 | 302 (100%) | 65392 | 65392 (100%) |
+| 0x00510000 | 191 | 191 (100%) | 65792 | 65792 (100%) |
+| 0x00520000 | 89 | 89 (100%) | 19744 | 19744 (100%) |
 
 ## Commands
 

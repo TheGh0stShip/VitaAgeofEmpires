@@ -9,9 +9,9 @@
 | | Current state |
 |---|---|
 | Target | Rise of Rome 1.0a, with base AoE 1.0c retained |
-| Implemented | Portable C reconstruction for original data formats, terrain/scenario interpretation, selected world/unit/update/rendering behavior, host-side populated-scene composition, and asset/audio inspection |
+| Implemented | Portable C translations of every Ghidra-discovered Rise of Rome 1.0a game-code function (4,510; see [Port coverage](docs/PORT_COVERAGE.md)) with focused host tests, original data formats, host-side populated-scene composition, and asset/audio inspection |
 | Verified | Host regression suite, optional retail-data audits, source-backed executable analysis, and focused ASan/UBSan parser CI |
-| Missing | Complete simulation/gameplay, AI/pathfinding, Vita UI/input/audio playback, save/load, campaign flow, integrated Vita application, playable VPK |
+| Missing | Integration of the translated functions (most are reached through callback seams) into one running game: object model and game loop, Vita UI/input/audio/fonts, save/load, campaign flow, hardware validation, playable VPK |
 
 The status illustration below is a reproducible estimate of the **full port**, not a screenshot of running code and not a decompilation-completion metric.
 

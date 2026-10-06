@@ -956,4 +956,70 @@ typedef struct {
    command 6 or 0xb). Then the unused buttons are hidden. */
 void aoe_game_screen_buttons_ror(const AoeGameScreenButtonsOpsRor *o);
 
+
+/* ---- 0x0047d440: the game screen constructor ---- */
+
+/* The fields the constructor sets before any control is made. */
+typedef struct {
+    uint32_t now;
+    int32_t field_7c4;            /* 0x7fffffff */
+    uint32_t idle_interval, idle_last; /* +0x5b8 (settings +0x888), +0x5bc */
+    uint32_t map_interval, map_time;   /* +0x5c0 (0x14d), +0x5c4 */
+    int16_t pages, page, shown;        /* +0x5e0, +0x5e2, +0x5e4 (-1) */
+    int32_t field_68c;            /* 1 */
+    int32_t mouse_x, mouse_y;     /* -1 */
+    int32_t field_714;            /* -1 */
+    int32_t view_interval;        /* +0x728: 100 */
+    uint32_t view_time;           /* +0x72c */
+    char key_group, key_select, key_idle; /* +0x76c, +0x774, +0x77c: strings 0x103f, 0x104a, 0x103a */
+    int32_t field_780;            /* 0x41 */
+    char key_number[8];           /* +0x784..: strings 0x1040 + i */
+    int32_t field_7a8, field_7a4; /* 3000, 1 */
+    uint32_t time_7ac;
+    uint32_t cue_interval, cue_time, cycle_period, cycle_time; /* +0x678 20000, +0x67c, +0x690 200, +0x694 */
+    uint8_t cycle_rgb[21];        /* +0x69e */
+} AoeGameScreenDefaultsRor;
+
+enum {
+    AOE_GSC_BASE = 1,         /* 0x00468150("Game Screen"), the vtable, the globals */
+    AOE_GSC_SETUP,            /* 0x00468180(game +0x4c, "", 0xc388, 1) */
+    AOE_GSC_SHAPE,            /* a: 0 unit "btnunit.shp" 0xc62a, 1 tech 0xc629, 2 cmd 0xc621, 3+i "btnbldg%d.shp" (0xc610 + i, 0xcf0d from 4) */
+    AOE_GSC_VIEW,             /* new game view; 0x0050f420(..., 1, "bordline"); map (0x0050fee0), player (0x0050ffa0) */
+    AOE_GSC_MINIMAP,          /* 0x005085a0; 0x0042c4f0 setup; help 0x4e33; world, "map.bmp" 0xc4e1, player; its +0x150 */
+    AOE_GSC_RESOURCES,        /* 0x004f7c00 with font record 11; help 0x4e25 */
+    AOE_GSC_OBJECT_PANEL,     /* 0x004f83d0 with record 7, the unit and building shapes; help 0x19bb8 / 0x265ac */
+    AOE_GSC_BUTTON,           /* a: button i (0x004f7420 with font 1 and record 11; shapes +0x47c below 12, +0x484); colour, sound 1 */
+    AOE_GSC_BUTTON_FIXED,     /* a: 12..16 (0x0045ef40(0, id, 0) and help) then draw type 3 and bevel for 12..14 */
+    AOE_GSC_BUTTON_TEXT,      /* a: 15 / 16: draw type 3, bevel 4, +0x2c0 3, text 0xfa9 / 0x1023; the help line 0x1024 */
+    AOE_GSC_TEXT_PANEL,       /* 0x00465730 (record 11), setup, alignment (2, 1, 1); view +0x34c */
+    AOE_GSC_TEXT_FROM_ID,     /* a: 0 +0x510 (0x232e, style 0xb), 1 +0x584 (0x2329, style 1); white, hidden */
+    AOE_GSC_TIMER_PANEL,      /* a: 0 +0x514, 1 +0x540 (0x004fa150), 2 + i the ten +0x518; hidden */
+    AOE_GSC_LINE,             /* a: message line i (+0x544), chat line 6 + i (+0x55c): 0x00465730 and setup */
+    AOE_GSC_LIST,             /* a: 0 +0x580 (record 11, 0x004f7cf0(0, 0), help 0x4e35), 1 +0x588 (record 10, (0, 1)) */
+    AOE_GSC_SCORE,            /* a: score panel i */
+    AOE_GSC_OVERLAY,          /* 0x00473d70 (record 7, font 1); hidden */
+    AOE_GSC_FINISH            /* 17 x 0x00453f40(1, 0), the layout (0x0047f000), focus, notify, timers, resources, 0x00484f90 */
+};
+typedef struct {
+    void *context;
+    int settings_paused;      /* 0x0041b750 == 1: button 12 hidden */
+    int global_580e48;        /* hides +0x580; with +0x8e8 clear +0x588 hidden and +0x4c0 shown, else the reverse */
+    int field_8e8;            /* game +0x8e8 */
+    int networked;            /* 0x0041b760 */
+    int32_t world_players;    /* world +0x3c */
+    int (*slot_counts)(void *context, int32_t slot); /* 0x00423d10(slot) == 2 or 4 */
+    void (*set_active)(void *context, uint16_t offset, int32_t v);
+    int (*step)(void *context, int32_t id, int32_t a);
+} AoeGameScreenConstructOpsRor;
+
+/* 0x0047d440: the defaults above, then the steps in order; the first
+   failing step sets +0xd8 and returns (0). The hotkey letters come from
+   the strings; the shapes must load (0x0049f9e0); every panel must come
+   back with +0xd8 clear and set up. Score panels: one per world player
+   but the first, or networked one per comm slot of type 2 or 4 (at
+   least one). Returns 1 when complete. */
+int aoe_game_screen_construct_ror(AoeGameScreenDefaultsRor *d, const AoeGameScreenConstructOpsRor *o,
+                                  uint32_t now, uint32_t idle_interval,
+                                  const char *(*string)(void *context, int32_t id));
+
 #endif

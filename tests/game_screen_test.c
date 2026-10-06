@@ -701,6 +701,23 @@ static void buttons_tests(void) {
     aoe_game_screen_buttons_ror(&o);
     assert(strcmp(bt_log, "tl0(118) 3:1(100,13,109,0,U0) 3:0(101,13,87,0,U1) 4:5(40,c,0,1d4d7) 4:11(41,b,0,1d4d9) hide ") == 0);
 }
+
+static char cs_log[1024]; static int cs_n, cs_fail_at = -1, cs_calls;
+static const char *cs_string(void *c, int32_t id) { (void)c; static char b[4]; b[0] = (char)('A' + (id & 15)); b[1] = 0; return b; }
+static int cs_slot(void *c, int32_t s) { (void)c; return s == 2 || s == 5; }
+static void cs_active(void *c, uint16_t off, int32_t v) { (void)c; cs_n += snprintf(cs_log + cs_n, sizeof cs_log - (size_t)cs_n, "a%x=%d ", off, (int)v); }
+static int cs_step(void *c, int32_t id, int32_t a) { (void)c; ++cs_calls; cs_n += snprintf(cs_log + cs_n, sizeof cs_log - (size_t)cs_n, "%d.%d ", (int)id, (int)a); return cs_calls != cs_fail_at; }
+static void construct_tests(void) {
+    AoeGameScreenDefaultsRor d; AoeGameScreenConstructOpsRor o = {NULL, 1, 0, 0, 1, 3, cs_slot, cs_active, cs_step};
+    assert(aoe_game_screen_construct_ror(&d, &o, 5000, 300, cs_string) == 1);
+    assert(d.field_7c4 == 0x7fffffff && d.idle_interval == 300 && d.map_interval == 0x14d && d.shown == -1 && d.key_group == 'P' && d.key_number[7] == 'H' && d.field_780 == 0x41 && d.cue_interval == 20000 && d.cycle_rgb[2] == 0x7c && d.cycle_rgb[20] == 0x7b);
+    assert(strstr(cs_log, "1.0 2.0 3.0 3.1 3.2 3.3 3.4 3.5 3.6 3.7 4.0 5.0 6.0 7.0 8.0 ") == cs_log && strstr(cs_log, "8.16 9.12 9.13 9.14 9.15 9.16 a4f8=0 10.15 10.16 11.0 12.0 12.1 13.0 ") && strstr(cs_log, "13.11 14.0 ") && strstr(cs_log, "14.13 15.0 15.1 a588=0 a4c0=1 a580=1 16.0 16.1 17.0 18.0 ") && !strstr(cs_log, "16.2"));
+    /* Not networked: world players - 1 score panels; a failing panel stops the chain (0). */
+    cs_n = 0; cs_calls = 0; o.networked = 0; o.settings_paused = 0; o.field_8e8 = 1; o.global_580e48 = 1;
+    assert(aoe_game_screen_construct_ror(&d, &o, 1, 2, cs_string) == 1 && strstr(cs_log, "15.0 a580=0 15.1 a588=1 a4c0=0 16.0 16.1 17.0 18.0 ") && !strstr(cs_log, "a4f8"));
+    cs_n = 0; cs_calls = 0; cs_fail_at = 12;
+    assert(aoe_game_screen_construct_ror(&d, &o, 1, 2, cs_string) == 0 && strstr(cs_log, "5.0 ") && !strstr(cs_log, "6.0 "));
+}
 int main(void) {
     AoeGameScreenRor s;
     AoeGameScreenButtonRor b;
@@ -1077,5 +1094,6 @@ int main(void) {
     action_tests();
     layout_tests();
     buttons_tests();
+    construct_tests();
     return 0;
 }

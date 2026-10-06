@@ -1444,3 +1444,83 @@ void aoe_game_screen_buttons_ror(const AoeGameScreenButtonsOpsRor *o) {
     o->set(o->context, 4, 0xb, page_frame, page_cmd, 0, 0x1d4d9, -1, 0, 0, 0, NULL, NULL);
     o->hide_unused(o->context);
 }
+
+/* 0x0047d440 */
+int aoe_game_screen_construct_ror(AoeGameScreenDefaultsRor *d, const AoeGameScreenConstructOpsRor *o,
+                                  uint32_t now, uint32_t idle_interval,
+                                  const char *(*string)(void *context, int32_t id)) {
+    static const uint8_t cycle[21] = {0x17, 0x27, 0x7c, 0x27, 0x3f, 0x90, 0x3f, 0x5f, 0x9f, 0x57, 0x7b,
+                                      0xb4, 0x3f, 0x5f, 0xa0, 0x27, 0x3f, 0x91, 0x17, 0x27, 0x7b};
+    int32_t i, scores;
+    memset(d, 0, sizeof *d);
+    d->now = now;
+    d->field_7c4 = 0x7fffffff;
+    d->idle_interval = idle_interval;
+    d->idle_last = now;
+    d->map_interval = 0x14d;
+    d->map_time = now;
+    d->shown = -1;
+    d->field_68c = 1;
+    d->mouse_x = d->mouse_y = -1;
+    d->field_714 = -1;
+    d->view_interval = 100;
+    d->view_time = now;
+    d->key_group = string(o->context, 0x103f)[0];
+    d->key_select = string(o->context, 0x104a)[0];
+    d->key_idle = string(o->context, 0x103a)[0];
+    d->field_780 = 0x41;
+    for (i = 0; i < 8; ++i) d->key_number[i] = string(o->context, 0x1040 + i)[0];
+    d->field_7a8 = 3000;
+    d->field_7a4 = 1;
+    d->time_7ac = now;
+    o->step(o->context, AOE_GSC_BASE, 0);
+    if (!o->step(o->context, AOE_GSC_SETUP, 0)) return 0;
+    for (i = 0; i < 8; ++i)
+        if (!o->step(o->context, AOE_GSC_SHAPE, i)) return 0;
+    if (!o->step(o->context, AOE_GSC_VIEW, 0)) return 0;
+    if (!o->step(o->context, AOE_GSC_MINIMAP, 0)) return 0;
+    if (!o->step(o->context, AOE_GSC_RESOURCES, 0)) return 0;
+    if (!o->step(o->context, AOE_GSC_OBJECT_PANEL, 0)) return 0;
+    for (i = 0; i < 17; ++i)
+        if (!o->step(o->context, AOE_GSC_BUTTON, i)) return 0;
+    for (i = 12; i < 17; ++i) o->step(o->context, AOE_GSC_BUTTON_FIXED, i);
+    if (o->settings_paused) o->set_active(o->context, 0x4f8, 0);
+    o->step(o->context, AOE_GSC_BUTTON_TEXT, 15);
+    o->step(o->context, AOE_GSC_BUTTON_TEXT, 16);
+    if (!o->step(o->context, AOE_GSC_TEXT_PANEL, 0)) return 0;
+    o->step(o->context, AOE_GSC_TEXT_FROM_ID, 0);
+    o->step(o->context, AOE_GSC_TEXT_FROM_ID, 1);
+    for (i = 0; i < 12; ++i)
+        if (!o->step(o->context, AOE_GSC_TIMER_PANEL, i)) return 0;
+    for (i = 0; i < 14; ++i)
+        if (!o->step(o->context, AOE_GSC_LINE, i)) return 0;
+    if (!o->step(o->context, AOE_GSC_LIST, 0)) return 0;
+    if (o->global_580e48) o->set_active(o->context, 0x580, 0);
+    if (!o->step(o->context, AOE_GSC_LIST, 1)) return 0;
+    if (!o->field_8e8) {
+        o->set_active(o->context, 0x588, 0);
+        o->set_active(o->context, 0x4c0, 1);
+        if (!o->global_580e48) o->set_active(o->context, 0x580, 1);
+    } else {
+        o->set_active(o->context, 0x588, 1);
+        o->set_active(o->context, 0x4c0, 0);
+        if (!o->global_580e48) o->set_active(o->context, 0x580, 0);
+    }
+    if (!o->networked) {
+        scores = o->world_players - 1;
+    } else {
+        scores = 0;
+        for (i = 1; i < 9; ++i) if (o->slot_counts(o->context, i)) ++scores;
+        if (scores == 0) scores = 1;
+    }
+    for (i = 0; i < scores; ++i)
+        if (!o->step(o->context, AOE_GSC_SCORE, i)) return 0;
+    if (!o->step(o->context, AOE_GSC_OVERLAY, 0)) return 0;
+    o->step(o->context, AOE_GSC_FINISH, 0);
+    d->cue_interval = 20000;
+    d->cue_time = now;
+    d->cycle_period = 200;
+    d->cycle_time = now;
+    memcpy(d->cycle_rgb, cycle, sizeof cycle);
+    return 1;
+}

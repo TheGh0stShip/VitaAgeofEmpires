@@ -1247,4 +1247,51 @@ typedef struct {
 int32_t aoe_view_edit_click_ror(const AoeViewEditClickOpsRor *o, int32_t x, int32_t y, int32_t a,
                                 int32_t b);
 
+
+/* 0x005156a0 (+0x?: x, y): the mouse moved over the view. Nothing (0)
+   at the last point (+0x16c / +0x170). By the drag kind (+0x168): 2
+   stores the point pulled into the panel (0x00453e60) and redraws (0).
+   6: over the view (+0xc0) with a map point under the cursor (0x00511430
+   == '3') the view goes there (0x0045d330 with +0.5); the point is
+   stored. 7: a vertical step under 100 adds ftol(dy / 2) to the player's
+   +0x122 and takes it from +0x120, a horizontal one adds ftol(dx / 2) to
+   both; within 8 of the press point (+0xc4 / +0xc8) the point is stored
+   and the view redrawn (1), else the cursor is warped back to the press
+   point, which becomes the point; redraw, 1. 8: like 7 but scrolling the
+   view by ftol(d / 2) (y: -s, +s; x: +s, +s). Other kinds: for 3 / 4 / 9
+   only near the panel's edges (64 wide, 32 high) and moving outward,
+   steps under 200 scroll the view by d / 16 (y: -, +; x: +, +); the point
+   is stored; near: more than 8 from the press point warps the cursor
+   back; not near: the press point follows. Then kind 3 highlights the
+   tile from +0x144 / +0x148 to the one under the cursor (0x0050ffd0);
+   kind 4 moves the current unit (+0x134) to the point (+0x34), its
+   +0x18 asking 0x004159d0, else its +0x10 asking 0x004a6030, a 0 answer
+   redrawing with 2, otherwise 1; kind 9 reports the drag rectangle
+   (+0xf8: old point, new point, 2) and redraws. Finally an unchanged
+   view position gives 0, else a redraw and 1. */
+enum {
+    AOE_VIEW_MOVE_PULL = 1,    /* 0x00453e60 on the point */
+    AOE_VIEW_MOVE_HIGHLIGHT,   /* 0x0050ffd0(+0x144, +0x148, a, b) */
+    AOE_VIEW_MOVE_UNIT,        /* current unit +0x34(point) then 0x004159d0 / 0x004a6030 -> result in arg */
+    AOE_VIEW_MOVE_DRAG_RECT,   /* +0xf8(old, new, 2) */
+    AOE_VIEW_MOVE_WARP,        /* ClientToScreen + SetCursorPos to the press point */
+    AOE_VIEW_MOVE_REDRAW       /* +0x20(a) */
+};
+typedef struct {
+    void *context;
+    uint8_t kind;                    /* +0x168 */
+    int32_t *last_x, *last_y;        /* +0x16c, +0x170 */
+    int32_t *press_x, *press_y;      /* +0xc4, +0xc8 */
+    int32_t left, top, right, bottom; /* +0x24..+0x30 */
+    float *view_x, *view_y;          /* player +0x118, +0x11c */
+    int16_t *player_120, *player_122;
+    int has_current_unit;            /* player +0x134 */
+    int unit_18, unit_10;            /* that unit's +0x18, +0x10 */
+    int (*over_view)(void *context, int32_t x, int32_t y);  /* +0xc0 */
+    int (*map_point)(void *context, int32_t x, int32_t y, float *px, float *py); /* 0x00511430 == '3' */
+    void (*set_view)(void *context, float x, float y);      /* 0x0045d330 */
+    int32_t (*step)(void *context, int32_t id, int32_t a, int32_t b, int32_t c, int32_t d);
+} AoeViewMoveOpsRor;
+int32_t aoe_view_mouse_move_ror(const AoeViewMoveOpsRor *o, int32_t x, int32_t y);
+
 #endif

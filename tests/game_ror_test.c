@@ -368,6 +368,32 @@ static void sounds_tests(void) {
     assert(strncmp(snd_log, "button1.wav=c47c button2.wav=c47d chatrcvd.wav=c47e cantdo.wav=c47f ", 66) == 0 && strstr(snd_log, "farmdie.wav=c48c "));
     free(s);
 }
+
+static int32_t ch_code = -2, ch_gaia = -1, ch_p54 = -1;
+static void ch_cheat(void *c, int32_t code) { (void)c; ch_code = code; }
+static void ch_gaiaf(void *c, int g) { (void)c; ch_gaia = g; }
+static void ch_p54f(void *c, int32_t p) { (void)c; ch_p54 = p; }
+static void cheat_tests(void) {
+    AoeGameRorCheatOpsRor o = {NULL, 4, 1, 0, 6, 1, ch_cheat, ch_gaiaf, ch_p54f};
+    assert(aoe_game_ror_cheat_ror(&o, 1, "photon man") == 1 && ch_code == 0);
+    assert(aoe_game_ror_cheat_ror(&o, 1, "Photon MQN") == 1 && ch_code == 0);  /* A and Q share a code */
+    assert(aoe_game_ror_cheat_ror(&o, 1, "I say big momma now") == 1 && ch_code == 0x10);
+    assert(aoe_game_ror_cheat_ror(&o, 1, "HOME RUN") == 0 && ch_code == 0x10);
+    assert(aoe_game_ror_cheat_ror(&o, 1, "KILL3") == 0);
+    assert(aoe_game_ror_cheat_ror(&o, 1, "gaia") == 1 && ch_code == -1 && ch_gaia == -1);
+    o.flag_41b750 = 1;
+    assert(aoe_game_ror_cheat_ror(&o, 1, "HOME RUN") == 1 && ch_code == 0x66);
+    assert(aoe_game_ror_cheat_ror(&o, 1, "KILL3") == 1 && ch_code == 0xcb);
+    assert(aoe_game_ror_cheat_ror(&o, 1, "kill9") == 1 && ch_code == 0xd0 && aoe_game_ror_cheat_ror(&o, 1, "kill8") == 0);
+    assert(aoe_game_ror_cheat_ror(&o, 1, "gaia") == 1 && ch_gaia == 1);
+    assert(aoe_game_ror_cheat_ror(&o, 1, "no fog") == 1 && ch_code == 0xe7);
+    assert(aoe_game_ror_cheat_ror(&o, 1, "e=mc2 trooper") == 1 && ch_code == 1);
+    assert(aoe_game_ror_cheat_ror(&o, 2, "zeus") == 1 && ch_p54 == 2);
+    assert(aoe_game_ror_cheat_ror(&o, 2, "zeus please") == 0);
+    assert(aoe_game_ror_cheat_ror(&o, 4, "zeus") == 0 && aoe_game_ror_cheat_ror(&o, 1, NULL) == 0);
+    o.cheats_on = 0;
+    assert(aoe_game_ror_cheat_ror(&o, 1, "zeus") == 0);
+}
 int main(void) {
     char coded[64];
     AoeGameRorCommandOpsRor cops = {NULL, ns, sp, bc};
@@ -571,5 +597,6 @@ int main(void) {
     start_file_tests();
     start_game_tests();
     sounds_tests();
+    cheat_tests();
     return 0;
 }

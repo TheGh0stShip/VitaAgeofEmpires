@@ -487,3 +487,67 @@ void aoe_scenario_editor_clear_controls_ror(AoeScenarioEditorControlsRor *c) {
     memset(c->group_668, 0, sizeof c->group_668);
     c->ptr_894 = NULL;
 }
+
+/* 0x00490450 */
+int aoe_scenario_editor_open_dropdown_ror(const AoeScenarioEditorDropdownOpsRor *o, int32_t offset) {
+    int32_t width, select = 0, i;
+    int known = 1;
+    switch (offset) {
+    case 0x738: case 0x744: case 0x748: case 0x74c: case 0x600: case 0x604: case 0x608: case 0x700:
+        width = 0xdc; break;
+    case 0x734: width = 0xb4; break;
+    case 0x7b4: case 0x7b8: case 0x7bc: case 0x7c0: case 0x528: case 0x530: case 0x538:
+        width = 0xaa; break;
+    case 0x5bc: case 0x5b4: case 0x5b8: case 0x618: case 0x73c: case 0x7cc: case 0x894: case 0x740:
+        width = 0x96; break;
+    default: width = 0x82; break;
+    }
+    if (!o->create(o->context, width)) return 0;
+    o->to_front(o->context);
+    o->hide(o->context);
+    o->clear(o->context);
+    switch (offset) {
+    case 0x530: for (i = 0; i < 6; ++i) o->add_id(o->context, 0x2973 + i, 0); select = 3; break;
+    case 0x538: for (i = 0; i < 9; ++i) o->add_id(o->context, 0x296a + i, 0); select = 3; break;
+    case 0x5b8: case 0x740: for (i = 0; i < 8; ++i) o->add_id(o->context, 0x2877 + i, 0); break;
+    case 0x744: {
+        static const int32_t pairs[7][2] = {{0x2882, 0x2b}, {0x2883, 0x29}, {0x2884, 0x2c}, {0x2886, 0x28},
+                                            {0x2887, 0x15}, {0x2888, 0x14}, {0x2889, 0x25}};
+        for (i = 0; i < 7; ++i) o->add_id(o->context, pairs[i][0], pairs[i][1]);
+        break;
+    }
+    case 0x528: o->add_id(o->context, 0x297d, 0); o->add_id(o->context, 0x297e, 0); o->add_id(o->context, 0x2980, 0); o->add_id(o->context, 0x2985, 0); break;
+    case 0x5f8: o->add_id(o->context, 0x27e3, 0); o->add_id(o->context, 0x27e4, 0); break;
+    case 0x734: for (i = 0x2851; i <= 0x2862; ++i) o->add_id(o->context, i, 0); o->add_id(o->context, 0x284f, 0); break;
+    case 0x5fc:
+        for (i = 0x27f7; i <= 0x2802; ++i) o->add_id(o->context, i, 0);
+        o->add_id(o->context, 0x2806, 0); o->add_id(o->context, 0x2807, 0); o->add_id(o->context, 0x2809, 0); o->add_id(o->context, 0x2808, 0);
+        break;
+    case 0x748: for (i = 0; i < 4; ++i) o->add_id(o->context, 0x1069 + i, 0); break;
+    case 0x74c:
+        o->sorted(o->context, 1);
+        for (i = 0; i < o->scenario_count; ++i) {
+            const char *n = o->scenario_name(o->context, i);
+            if (n && *n) o->add_text(o->context, n, i);
+        }
+        break;
+    case 0x608: o->files(o->context, 0, ".per", 0, 1); break;
+    case 0x600: o->files(o->context, 0, ".ai", 1, 1); break;
+    case 0x604: o->files(o->context, 0, ".cty", 1, 0); break;
+    case 0x7b4: case 0x7b8: case 0x7bc: o->files(o->context, 1, ".avi", 1, 0); break;
+    case 0x7c0: o->files(o->context, 2, ".bmp", 1, 0); break;
+    case 0x738: {
+        char buf[0x100];
+        o->sorted(o->context, 1);
+        o->clear(o->context);
+        for (i = 0; i < o->template_count; ++i) {
+            const char *n = o->template_name(o->context, i, buf, (int)sizeof buf);
+            if (n) o->add_text(o->context, n, i);
+        }
+        break;
+    }
+    default: known = 0; break;
+    }
+    if (known) o->select(o->context, select);
+    return !o->failed;
+}

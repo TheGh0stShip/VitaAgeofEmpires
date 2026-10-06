@@ -7,6 +7,7 @@
 #include "shape.h"
 
 #include <assert.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -328,6 +329,32 @@ static void clear_controls_tests(void) {
     assert(c.kept_5c0 != NULL && c.kept_614 != NULL && c.kept_854[0] != NULL && c.kept_854[15] != NULL);
     for (i = 0; i < sizeof c.group_5c4; ++i) assert(((const unsigned char *)c.group_5c4)[i] == 0);
     (void)b;
+}
+
+static char dd_log[1024]; static int dd_n, dd_create_ok = 1;
+static void dd_add(const char *fmt, ...) { va_list ap; va_start(ap, fmt); dd_n += vsnprintf(dd_log + dd_n, sizeof dd_log - (size_t)dd_n, fmt, ap); va_end(ap); }
+static int dd_create(void *c, int32_t w) { (void)c; dd_add("new%x ", (unsigned)w); return dd_create_ok; }
+static void dd_front(void *c) { (void)c; dd_add("front "); }
+static void dd_hide(void *c) { (void)c; dd_add("hide "); }
+static void dd_clear(void *c) { (void)c; dd_add("clear "); }
+static void dd_id(void *c, int32_t id, int32_t v) { (void)c; dd_add("%x:%x ", (unsigned)id, (unsigned)v); }
+static void dd_text(void *c, const char *t, int32_t v) { (void)c; dd_add("%s:%d ", t, (int)v); }
+static void dd_sorted(void *c, int32_t f) { (void)c; dd_add("sorted%d ", (int)f); }
+static void dd_files(void *c, int d, const char *e, int32_t a, int32_t b) { (void)c; dd_add("files(%d,%s,%d,%d) ", d, e, (int)a, (int)b); }
+static const char *dd_scn(void *c, int32_t i) { (void)c; return i == 1 ? "" : i == 0 ? "Hill" : "Lake"; }
+static const char *dd_tmpl(void *c, int32_t i, char *b, int n) { (void)c; if (i == 1) return NULL; snprintf(b, (size_t)n, "T%d", (int)i); return b; }
+static void dd_select(void *c, int32_t i) { (void)c; dd_add("sel%d ", (int)i); }
+static void dropdown_tests(void) {
+    AoeScenarioEditorDropdownOpsRor o = {NULL, dd_create, dd_front, dd_hide, dd_clear, dd_id, dd_text, dd_sorted, dd_files, 3, dd_scn, 3, dd_tmpl, dd_select, 0};
+    assert(aoe_scenario_editor_open_dropdown_ror(&o, 0x530) == 1 && strcmp(dd_log, "newaa front hide clear 2973:0 2974:0 2975:0 2976:0 2977:0 2978:0 sel3 ") == 0);
+    dd_n = 0; assert(aoe_scenario_editor_open_dropdown_ror(&o, 0x744) == 1 && strcmp(dd_log, "newdc front hide clear 2882:2b 2883:29 2884:2c 2886:28 2887:15 2888:14 2889:25 sel0 ") == 0);
+    dd_n = 0; assert(aoe_scenario_editor_open_dropdown_ror(&o, 0x74c) == 1 && strcmp(dd_log, "newdc front hide clear sorted1 Hill:0 Lake:2 sel0 ") == 0);
+    dd_n = 0; assert(aoe_scenario_editor_open_dropdown_ror(&o, 0x738) == 1 && strcmp(dd_log, "newdc front hide clear sorted1 clear T0:0 T2:2 sel0 ") == 0);
+    dd_n = 0; assert(aoe_scenario_editor_open_dropdown_ror(&o, 0x7b8) == 1 && strcmp(dd_log, "newaa front hide clear files(1,.avi,1,0) sel0 ") == 0);
+    dd_n = 0; assert(aoe_scenario_editor_open_dropdown_ror(&o, 0x608) == 1 && strcmp(dd_log, "newdc front hide clear files(0,.per,0,1) sel0 ") == 0);
+    dd_n = 0; assert(aoe_scenario_editor_open_dropdown_ror(&o, 0x734) == 1 && strstr(dd_log, "newb4 front hide clear 2851:0 ") == dd_log && strstr(dd_log, "2862:0 284f:0 sel0 "));
+    dd_n = 0; o.failed = 1; assert(aoe_scenario_editor_open_dropdown_ror(&o, 0x4c4) == 0 && strcmp(dd_log, "new82 front hide clear ") == 0);
+    dd_n = 0; dd_create_ok = 0; assert(aoe_scenario_editor_open_dropdown_ror(&o, 0x894) == 0 && strcmp(dd_log, "new96 ") == 0);
 }
 int main(void) {
     AoeUiPlatformRor pf = {0};
@@ -915,5 +942,6 @@ int main(void) {
     editor_key_tests();
     new_scenario_tests();
     clear_controls_tests();
+    dropdown_tests();
     return 0;
 }

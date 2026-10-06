@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "aoe_ftol.h"
+
 /* 0x0050fee0 */
 void aoe_main_view_set_map_ror(AoeMainViewRor *v, void *map)
 {
@@ -1733,5 +1735,107 @@ int32_t aoe_view_edit_click_ror(const AoeViewEditClickOpsRor *o, int32_t x, int3
     }
     if (!ok) o->step(o->context, AOE_VIEW_CLICK_REFUSE, 0, 0);
     o->step(o->context, AOE_VIEW_CLICK_GAME_10, 0, 0);
+    return 1;
+}
+
+/* 0x005156a0 */
+int32_t aoe_view_mouse_move_ror(const AoeViewMoveOpsRor *o, int32_t x, int32_t y) {
+    float vx0 = *o->view_x, vy0 = *o->view_y, px, py;
+    int32_t d, s, old_x, old_y;
+    if (x == *o->last_x && y == *o->last_y) return 0;
+    switch (o->kind) {
+    case 2:
+        *o->last_x = x; *o->last_y = y;
+        o->step(o->context, AOE_VIEW_MOVE_PULL, 0, 0, 0, 0);
+        o->step(o->context, AOE_VIEW_MOVE_REDRAW, 1, 0, 0, 0);
+        return 0;
+    case 6:
+        if (o->over_view(o->context, x, y) && o->map_point(o->context, x, y, &px, &py))
+            o->set_view(o->context, px + 0.5f, py + 0.5f);
+        *o->last_x = x; *o->last_y = y;
+        break;
+    case 7:
+        d = y - *o->last_y;
+        if (d != 0 && d < 100 && d > -100) {
+            s = aoe_ftol32((float)d * 0.5f);
+            *o->player_122 = (int16_t)(*o->player_122 + s);
+            *o->player_120 = (int16_t)(*o->player_120 - s);
+        }
+        d = x - *o->last_x;
+        if (d != 0 && d < 100 && d > -100) {
+            s = aoe_ftol32((float)d * 0.5f);
+            *o->player_122 = (int16_t)(*o->player_122 + s);
+            *o->player_120 = (int16_t)(*o->player_120 + s);
+        }
+        if (abs(y - *o->press_y) < 9 && abs(x - *o->press_x) < 9) {
+            *o->last_x = x; *o->last_y = y;
+        } else {
+            o->step(o->context, AOE_VIEW_MOVE_WARP, 0, 0, 0, 0);
+            *o->last_x = *o->press_x; *o->last_y = *o->press_y;
+        }
+        o->step(o->context, AOE_VIEW_MOVE_REDRAW, 1, 0, 0, 0);
+        return 1;
+    case 8:
+        d = y - *o->last_y;
+        if (d != 0 && d < 100 && d > -100) {
+            s = aoe_ftol32((float)d * 0.5f);
+            o->set_view(o->context, *o->view_x - (float)s, *o->view_y + (float)s);
+        }
+        d = x - *o->last_x;
+        if (d != 0 && d < 100 && d > -100) {
+            s = aoe_ftol32((float)d * 0.5f);
+            o->set_view(o->context, *o->view_x + (float)s, *o->view_y + (float)s);
+        }
+        if (abs(y - *o->press_y) < 9 && abs(x - *o->press_x) < 9) {
+            *o->last_x = x; *o->last_y = y;
+        } else {
+            o->step(o->context, AOE_VIEW_MOVE_WARP, 0, 0, 0, 0);
+            *o->last_x = *o->press_x; *o->last_y = *o->press_y;
+            o->step(o->context, AOE_VIEW_MOVE_REDRAW, 1, 0, 0, 0);
+            return 1;
+        }
+        break;
+    default: {
+        int near = 1;
+        if (o->kind == 3 || o->kind == 4 || o->kind == 9)
+            near = (x < o->left + 0x40 && x < *o->last_x) || (x > o->right - 0x40 && x > *o->last_x) ||
+                   (y < o->top + 0x20 && y < *o->last_y) || (y > o->bottom - 0x20 && y > *o->last_y);
+        d = y - *o->last_y;
+        if (d != 0 && d < 200 && d > -200 && near)
+            o->set_view(o->context, *o->view_x - (float)d * 0.0625f, *o->view_y + (float)d * 0.0625f);
+        d = x - *o->last_x;
+        if (d != 0 && d < 200 && d > -200 && near)
+            o->set_view(o->context, *o->view_x + (float)d * 0.0625f, *o->view_y + (float)d * 0.0625f);
+        old_x = *o->last_x; old_y = *o->last_y;
+        *o->last_x = x; *o->last_y = y;
+        if (near) {
+            if (abs(y - *o->press_y) > 8 || abs(x - *o->press_x) > 8) {
+                o->step(o->context, AOE_VIEW_MOVE_WARP, 0, 0, 0, 0);
+                *o->last_x = *o->press_x; *o->last_y = *o->press_y;
+            }
+        } else {
+            *o->press_x = x; *o->press_y = y;
+        }
+        if (o->kind == 3) {
+            if (o->map_point(o->context, x, y, &px, &py))
+                o->step(o->context, AOE_VIEW_MOVE_HIGHLIGHT, aoe_ftol32(px), aoe_ftol32(py), 0, 0);
+        } else if (o->kind == 4) {
+            if (o->has_current_unit && o->map_point(o->context, x, y, &px, &py)) {
+                int32_t ok = o->step(o->context, AOE_VIEW_MOVE_UNIT, aoe_ftol32(px), aoe_ftol32(py), 0, 0);
+                if ((o->unit_18 || o->unit_10) && !ok) {
+                    o->step(o->context, AOE_VIEW_MOVE_REDRAW, 2, 0, 0, 0);
+                } else {
+                    o->step(o->context, AOE_VIEW_MOVE_REDRAW, 1, 0, 0, 0);
+                }
+            }
+        } else if (o->kind == 9) {
+            o->step(o->context, AOE_VIEW_MOVE_DRAG_RECT, old_x, old_y, x, y);
+            o->step(o->context, AOE_VIEW_MOVE_REDRAW, 1, 0, 0, 0);
+        }
+        break;
+    }
+    }
+    if (vx0 == *o->view_x && vy0 == *o->view_y) return 0;
+    o->step(o->context, AOE_VIEW_MOVE_REDRAW, 1, 0, 0, 0);
     return 1;
 }

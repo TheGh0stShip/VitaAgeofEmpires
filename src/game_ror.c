@@ -956,3 +956,56 @@ int aoe_game_ror_load_sounds_ror(const AoeGameRorSoundOpsRor *o, void ***sounds,
         if ((*sounds)[i]) o->preload(o->context, (*sounds)[i]);
     return 1;
 }
+
+/* 0x00503cb0 */
+static int coded_is(const char *coded, const char *plain) {
+    char key[0x80];
+    aoe_game_ror_encode_ror(plain, key, (int32_t)sizeof key - 2);
+    return strcmp(coded, key) == 0;
+}
+int aoe_game_ror_cheat_ror(const AoeGameRorCheatOpsRor *o, int32_t player, const char *text) {
+    static const struct { const char *name; int32_t code; } searched[6] = {
+        {"STORMBILLY", 0xe}, {"CONVERT THIS!", 0xf}, {"BIG MOMMA", 0x10}, {"POW", 0x11},
+        {"GRANTLINKSPENCE", 0x12}, {"KING ARTHUR", 0x13}};
+    static const struct { const char *name; int32_t code; } plain_codes[11] = {
+        {"PHOTON MAN", 0}, {"E=MC2 TROOPER", 1}, {"JACK BE NIMBLE", 2}, {"BIG BERTHA", 3},
+        {"FLYING DUTCHMAN", 4}, {"UPSIDFLINTMOBILE", 7}, {"HOYOHOYO", 8}, {"DARK RAIN", 10},
+        {"BLACK RIDER", 0xb}, {"MEDUSA", 0xc}, {"ICBM", 0xd}};
+    static const struct { const char *name; int32_t code; } kill_codes[9] = {
+        {"DIEDIEDIE", 100}, {"KILL1", 0xc9}, {"KILL2", 0xca}, {"KILL3", 0xcb}, {"KILL4", 0xcc},
+        {"KILL5", 0xcd}, {"KILL6", 0xce}, {"KILL7", 0xcf}, {"KILL9", 0xd0}};
+    static const struct { const char *name; int32_t code; } late_codes[7] = {
+        {"PEPPERONI PIZZA", 0x14}, {"COINAGE", 0x15}, {"WOODSTOCK", 0x17}, {"QUARRY", 0x16},
+        {"STEROIDS", 0x18}, {"BIGDADDY", 0xdc}, {"REVEAL MAP", 0xe6}};
+    char upper[0x100], coded[0x202];
+    int i;
+    if (!text || player < 0 || player >= o->player_count) return 0;
+    snprintf(upper, sizeof upper, "%s", text);
+    for (i = 0; upper[i]; ++i) upper[i] = (char)toupper((unsigned char)upper[i]);
+    aoe_game_ror_encode_ror(upper, coded, 0x200);
+    if (!o->cheats_on) return 0;
+    if (coded_is(coded, "HOME RUN") && o->flag_41b750) { o->cheat(o->context, 0x66); return 1; }
+    for (i = 0; i < 6; ++i)
+        if (strstr(upper, searched[i].name)) { o->cheat(o->context, searched[i].code); return 1; }
+    for (i = 0; i < 11; ++i)
+        if (coded_is(coded, plain_codes[i].name)) { o->cheat(o->context, plain_codes[i].code); return 1; }
+    if (o->flag_41b750)
+        for (i = 0; i < 9; ++i)
+            if (coded_is(coded, kill_codes[i].name)) { o->cheat(o->context, kill_codes[i].code); return 1; }
+    if (coded_is(coded, "HARI KARI")) { o->cheat(o->context, 0x65); return 1; }
+    if (coded_is(coded, "RESIGN")) { o->cheat(o->context, 0x67); return 1; }
+    if (coded_is(coded, "GAIA")) {
+        if (o->flag_41b750) {
+            o->gaia(o->context, o->edit_mode == 6 && o->field_1b8 == 1);
+            return 1;
+        }
+        o->cheat(o->context, -1);
+        return 1;
+    }
+    for (i = 0; i < 7; ++i)
+        if (coded_is(coded, late_codes[i].name)) { o->cheat(o->context, late_codes[i].code); return 1; }
+    if (coded_is(coded, "NO FOG")) { o->cheat(o->context, 0xe7); return 1; }
+    /* The original also scans the first word (sscanf "%s ") and discards it. */
+    if (coded_is(coded, "ZEUS")) { o->player_54(o->context, player); return 1; }
+    return 0;
+}

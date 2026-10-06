@@ -660,4 +660,37 @@ typedef struct {
 } AoeGameRorSoundOpsRor;
 int aoe_game_ror_load_sounds_ror(const AoeGameRorSoundOpsRor *o, void ***sounds, int16_t *count);
 
+
+/* 0x00503cb0 (player, text): a chat line checked for cheats. 0 without
+   text, for a player outside the world's count or with cheats off
+   (settings byte 0x982). The text is upper-cased and letter-coded
+   (0x004fde40); the coded form is compared whole, the plain form
+   searched (strstr). Codes to 0x0050c550 (the viewed player's world
+   command): "HOME RUN" 0x66 (with 0x0041b750 only), STORMBILLY 0xe,
+   "CONVERT THIS!" 0xf, "BIG MOMMA" 0x10, POW 0x11, GRANTLINKSPENCE 0x12,
+   "KING ARTHUR" 0x13 (these six searched), "PHOTON MAN" 0, "E=MC2
+   TROOPER" 1, "JACK BE NIMBLE" 2, "BIG BERTHA" 3, "FLYING DUTCHMAN" 4,
+   UPSIDFLINTMOBILE 7, HOYOHOYO 8, "DARK RAIN" 10, "BLACK RIDER" 0xb,
+   MEDUSA 0xc, ICBM 0xd; with 0x0041b750: DIEDIEDIE 100, KILL1..KILL7
+   0xc9..0xcf and KILL9 0xd0; "HARI KARI" 0x65, RESIGN 0x67; GAIA with
+   0x0041b750 clears the viewed player's selection (0x0045dcb0), runs the
+   game's +0x10(0, 0) in edit mode 6 with +0x1b8 == 1 and its +0x14(0),
+   and gives 1 (without it the original passes an uninitialised code; the
+   port passes -1); "PEPPERONI PIZZA" 0x14, COINAGE 0x15, WOODSTOCK 0x17,
+   QUARRY 0x16, STEROIDS 0x18, BIGDADDY 0xdc, "REVEAL MAP" 0xe6, "NO FOG"
+   0xe7; ZEUS runs the player's +0x54(player, 0, 0, 0, 0). Anything else
+   0; a code gives 1. The letter code maps A and Q alike, so a coded
+   comparison accepts either. */
+typedef struct {
+    void *context;
+    int16_t player_count;      /* world +0x3c */
+    int cheats_on;             /* 0x0041b7a0 */
+    int flag_41b750;           /* 0x0041b750 */
+    int32_t edit_mode, field_1b8; /* game +0x1b4, +0x1b8 */
+    void (*cheat)(void *context, int32_t code);         /* 0x0050c550 */
+    void (*gaia)(void *context, int game_10);           /* 0x0045dcb0, +0x10(0, 0)?, +0x14(0) */
+    void (*player_54)(void *context, int32_t player);   /* players[player] +0x54(player, 0, 0, 0, 0) */
+} AoeGameRorCheatOpsRor;
+int aoe_game_ror_cheat_ror(const AoeGameRorCheatOpsRor *o, int32_t player, const char *text);
+
 #endif

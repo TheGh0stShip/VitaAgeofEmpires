@@ -318,4 +318,50 @@ typedef struct {
 } AoeScenarioEditorControlsRor;
 void aoe_scenario_editor_clear_controls_ror(AoeScenarioEditorControlsRor *c);
 
+
+/* 0x00490450 (parent, &control): a drop-down list for the editor control
+   at `offset` (the pointer's offset in the screen). Width 0xdc for
+   +0x738, +0x744, +0x748, +0x74c, +0x600, +0x604, +0x608, +0x700; 0xb4
+   for +0x734; 0xaa for +0x7b4..+0x7c0, +0x528, +0x530, +0x538; 0x96 for
+   +0x5b4..+0x5bc, +0x618, +0x73c, +0x7cc, +0x894, +0x740; else 0x82.
+   Created (0x00456bf0(parent, &control, w, 100, 0, 0, w, 0x16, 10); 0
+   when that fails), brought to the front (0x00453f40(1, 0)), hidden
+   (+0x14(0)) and cleared (0x00461f10). Filled by string IDs
+   (0x00461dd0(id, value)): +0x530 map sizes 0x2973..0x2978 and +0x538
+   map types 0x296a..0x2972 (both selecting 3); +0x5b8 / +0x740 players
+   0x2877 + 0..7; +0x744 (0x2882, 0x2b), (0x2883, 0x29), (0x2884, 0x2c),
+   (0x2886, 0x28), (0x2887, 0x15), (0x2888, 0x14), (0x2889, 0x25); +0x528
+   0x297d, 0x297e, 0x2980, 0x2985; +0x5f8 0x27e3, 0x27e4; +0x734
+   0x2851..0x2862 then 0x284f; +0x5fc 0x27f7..0x2802, 0x2806, 0x2807,
+   0x2809, 0x2808; +0x748 0x1069..0x106c; +0x74c sorted (0x00461d30(1))
+   with each world scenario's name (+0x104 list, string 0x004542a0 of the
+   entry's +0x2a; empty ones skipped) and index; +0x738 sorted and
+   cleared with player 1's unit templates (+0x22 count, +0x24 array;
+   byte +0x4e clear): the string of +0xc when positive else the +0x8
+   name, and the index. File lists (0x0049a1a0): +0x608 the settings
+   +0x102b directory with ".per" (0, 1); +0x600 ".ai" (1, 1); +0x604
+   ".cty" (1, 0); +0x7b4..+0x7bc the +0x1130 directory with ".avi" (1,
+   0); +0x7c0 "" with ".bmp" (1, 0). Known controls then select
+   (0x00461d50) their index (3 or 0). Returns whether the control's +0xd8
+   is clear. */
+typedef struct {
+    void *context;
+    int (*create)(void *context, int32_t width);          /* 0x00456bf0 */
+    void (*to_front)(void *context);                      /* 0x00453f40(1, 0) */
+    void (*hide)(void *context);                          /* +0x14(0) */
+    void (*clear)(void *context);                         /* 0x00461f10 */
+    void (*add_id)(void *context, int32_t id, int32_t value);        /* 0x00461dd0 */
+    void (*add_text)(void *context, const char *text, int32_t value); /* 0x00461da0 */
+    void (*sorted)(void *context, int32_t flag);          /* 0x00461d30 */
+    void (*files)(void *context, int dir_1130, const char *ext, int32_t a, int32_t b); /* 0x0049a1a0 */
+    int32_t scenario_count;
+    const char *(*scenario_name)(void *context, int32_t i); /* NULL / "" skipped */
+    int32_t template_count;
+    /* NULL for a missing template or one with byte +0x4e set. */
+    const char *(*template_name)(void *context, int32_t i, char *buf, int size);
+    void (*select)(void *context, int32_t index);         /* 0x00461d50 */
+    int failed;                                           /* control +0xd8 */
+} AoeScenarioEditorDropdownOpsRor;
+int aoe_scenario_editor_open_dropdown_ror(const AoeScenarioEditorDropdownOpsRor *o, int32_t offset);
+
 #endif

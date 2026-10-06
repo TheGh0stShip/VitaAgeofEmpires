@@ -1212,6 +1212,41 @@ static void edit_click_tests(void) {
     o.game_state = 2;
     assert(aoe_view_edit_click_ror(&o, 20, 30, 0, 0) == 0);
 }
+
+static char mv_log[256]; static int mv_n, mv_over = 1, mv_point = 1; static float mv_vx = 10.0f, mv_vy = 20.0f; static int32_t mv_unit_ok = 1;
+static int mv_overf(void *c, int32_t x, int32_t y) { (void)c; (void)x; (void)y; return mv_over; }
+static int mv_pointf(void *c, int32_t x, int32_t y, float *px, float *py) { (void)c; *px = (float)x; *py = (float)y; return mv_point; }
+static void mv_setview(void *c, float x, float y) { (void)c; mv_vx = x; mv_vy = y; mv_n += snprintf(mv_log + mv_n, sizeof mv_log - (size_t)mv_n, "v(%g,%g) ", (double)x, (double)y); }
+static int32_t mv_step(void *c, int32_t id, int32_t a, int32_t b, int32_t d, int32_t e) { (void)c; mv_n += snprintf(mv_log + mv_n, sizeof mv_log - (size_t)mv_n, "%d(%d,%d,%d,%d) ", (int)id, (int)a, (int)b, (int)d, (int)e); return id == AOE_VIEW_MOVE_UNIT ? mv_unit_ok : 0; }
+static void mouse_move_tests(void) {
+    int32_t lx = 100, ly = 100, px = 100, py = 100; int16_t p120 = 0, p122 = 0;
+    AoeViewMoveOpsRor o = {NULL, 0, &lx, &ly, &px, &py, 0, 0, 640, 400, &mv_vx, &mv_vy, &p120, &p122, 1, 1, 0, mv_overf, mv_pointf, mv_setview, mv_step};
+    assert(aoe_view_mouse_move_ror(&o, 100, 100) == 0 && mv_n == 0);
+    /* Kind 0 always counts as near: a 16-pixel step scrolls by 1 tile and warps the cursor back. */
+    assert(aoe_view_mouse_move_ror(&o, 116, 100) == 1 && strcmp(mv_log, "v(11,21) 5(0,0,0,0) 6(1,0,0,0) ") == 0 && lx == 100 && px == 100);
+    /* Kind 3 away from the edges: no scroll, just the highlight; the view is unchanged -> 0. */
+    mv_n = 0; o.kind = 3; mv_vx = 11.0f;
+    assert(aoe_view_mouse_move_ror(&o, 120, 110) == 0 && strcmp(mv_log, "2(120,110,0,0) ") == 0 && px == 120 && py == 110);
+    /* Kind 3 at the left edge moving outward: scrolls, and a far press point warps the cursor. */
+    mv_n = 0; lx = 30; ly = 110; px = 300; py = 300;
+    assert(aoe_view_mouse_move_ror(&o, 14, 110) == 1 && strcmp(mv_log, "v(10,20) 5(0,0,0,0) 2(14,110,0,0) 6(1,0,0,0) ") == 0 && lx == 300 && ly == 300);
+    /* Kind 7: shorts; kind 8: view by half the step. */
+    mv_n = 0; o.kind = 7; lx = 100; ly = 100; px = 100; py = 100;
+    assert(aoe_view_mouse_move_ror(&o, 104, 96) == 1 && p122 == 0 && p120 == 4 && strcmp(mv_log, "6(1,0,0,0) ") == 0 && lx == 104);
+    mv_n = 0; o.kind = 8; mv_vx = 10.0f; mv_vy = 20.0f;
+    assert(aoe_view_mouse_move_ror(&o, 110, 106) == 1 && strcmp(mv_log, "v(5,25) v(8,28) 5(0,0,0,0) 6(1,0,0,0) ") == 0 && lx == 100);
+    mv_n = 0;
+    assert(aoe_view_mouse_move_ror(&o, 106, 104) == 1 && strcmp(mv_log, "v(6,30) v(9,33) 6(1,0,0,0) ") == 0 && lx == 106);
+    /* Kind 2 pulls the point; kind 6 jumps the view; kind 4 moves the unit; kind 9 reports the rectangle. */
+    mv_n = 0; o.kind = 2;
+    assert(aoe_view_mouse_move_ror(&o, 5, 5) == 0 && strcmp(mv_log, "1(0,0,0,0) 6(1,0,0,0) ") == 0 && lx == 5);
+    mv_n = 0; o.kind = 6;
+    assert(aoe_view_mouse_move_ror(&o, 7, 9) == 1 && strcmp(mv_log, "v(7.5,9.5) 6(1,0,0,0) ") == 0);
+    mv_n = 0; o.kind = 4; lx = 200; ly = 200; px = 200; py = 200; mv_unit_ok = 0;
+    assert(aoe_view_mouse_move_ror(&o, 204, 200) == 0 && strcmp(mv_log, "3(204,200,0,0) 6(2,0,0,0) ") == 0);
+    mv_n = 0; o.kind = 9; lx = 200;
+    assert(aoe_view_mouse_move_ror(&o, 210, 205) == 0 && strcmp(mv_log, "4(200,200,210,205) 6(1,0,0,0) ") == 0);
+}
 int main(void)
 {
     AoeMainViewRor v;
@@ -1401,5 +1436,6 @@ int main(void)
     test_queue_scroll();
     game_view_default_tests();
     edit_click_tests();
+    mouse_move_tests();
     return 0;
 }

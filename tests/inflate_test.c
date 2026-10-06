@@ -130,8 +130,8 @@ int main(void) {
             seed = seed * 1103515245u + 12345u;
             in[i] = (uint8_t)(i % 7 == 0 ? (seed >> 16) : "the quick brown fox "[i % 20]);
         }
-        w = aoe_deflate_writer_new_ror(9, sink, &p);
-        assert(w && aoe_deflate_writer_write_ror(w, in, sizeof in, 1) == 0);
+        w = aoe_deflate_writer_new_ror(sink, &p);
+        assert(w && aoe_deflate_writer_write_ror(w, in, sizeof in, 1) == 1);
         aoe_deflate_writer_free_ror(w);
         assert(run(packed, (size_t)(p - packed), 0x10000, out, &n, &s) == -1);
         assert(n == sizeof in && memcmp(out, in, n) == 0);

@@ -4,55 +4,69 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* The compressed stream writer of patched Rise of Rome 1.0a (the
-   writing side of 0x0046ba40 / 0x0046b6b0). The original links its own
-   deflate encoder (0x005223e0..0x00524fc0, state magic 0x12345678, done
-   0xabcd1234, one global current state 0x007d32c8). Its output is
-   standard raw deflate (no zlib header): a shipped 1.11 .scx body
-   inflates completely with a -15 window. The port replaces the encoder
-   with zlib's raw deflate, so compressed bytes differ from the original
-   while the inflated data is the same.
+/* The stream encoder patched Rise of Rome 1.0a links for its compressed
+   files (the writing side of 0x0046ba40 / 0x0046b6b0): 0x005223e0 with
+   its state from 0x00524ef0 (work size 0x00525050, 0x3817c bytes zeroed
+   by the caller; magic 0x12345678 while open, 0xabcd1234 once finished).
+   The executable contains no zlib; the output is raw deflate, read back
+   by its decoder (inflate.h).
 
-   Original encoder, for reference (all reached only through 0x00524ef0
-   and 0x005223e0):
-   - 0x00524ef0 init (tuning clamped to 1..1500, block type flags, output
-     buffer and size, the output callback; 4 KB input steps); 0x00524fc0
-     clears the three hash heads/chains to 0xffff and the bit buffer.
-   - 0x005223e0 write(input, size, finish): loads the state into globals,
-     runs 0x00522570, stores them back; 2 for a bad state.
-   - 0x00522570 the loop: 0x00524dc0 takes up to 4 KB into the 32 KB
-     window (0x00524e90 zero-fills the rest when finishing); 0x00522930 /
-     0x00522980 drop and rebuild hash chains for the step (3-byte hash
-     <<5 ^); 0x005226d0 copies (the window slide); 0x00523ea0 /
-     0x00524da0 match up to a limit through 0x00523ee0, which picks the
-     lazy (0x005245b0) or greedy (0x00524980) matcher, both using the
-     longest-match search 0x005243b0; finishing flushes the last block
-     (0x00522a70), aligns (0x00522790) and hands the output on
-     (0x00522730).
-   - 0x00524560 a 32-bit word of literal/match flags done; at 0x3000
-     symbols a block is emitted by 0x00522af0: header bits (0x005227c0,
-     LSB-first bit writer), stored (0x00523d30), fixed (0x00523330 with
-     the fixed tables of 0x005230a0: 144 x 8, 112 x 9, 24 x 7, 8 x 8 and
-     32 x 5 bits) or dynamic (0x00523b60, headers 0x00523b90: HLIT - 257,
-     HDIST - 1, the code-length codes) chosen by size, symbols by
-     0x00522e50.
-   - Huffman building: 0x00523350 counts, 0x005237a0 the code-length
-     codes (run symbols 16 by 0x00523a80, 17/18 by 0x00523ae0;
-     0x00523a60 copies); 0x00523540 builds a length-limited tree with
-     the heap sift 0x00523660; 0x005236f0 limits lengths (bit-length
-     counts at 0x007d32e0); 0x005231b0 counts lengths and 0x00523240
-     assigns canonical codes (bit-reversed). */
+   0x0046ba40 always initialises it as 0x00524ef0(work, 75, 2, 1, a
+   64 KB output buffer, 0x00010000, callback 0x0046ba10): a hash-chain
+   search of at most 75 links, each block stored, fixed or dynamic by
+   size, and the chain matcher 0x005245b0. This translation is that
+   configuration; the paths those arguments never reach (fixed-only and
+   dynamic-only blocks, the other matchers 0x00524980 and the loop in
+   0x00523ee0) are not translated.
+
+   - Input (0x00524dc0): copied into a 32 KB window in 4 KB steps; a step
+     is processed once full, or when finishing (the rest of the step is
+     zeroed, 0x00524e90). The step's positions are hashed
+     (0x00522980: (b0 << 5 ^ b1) & 0xff, << 5 ^ b2, 13 bits) into heads
+     (+0x9102), newer-to-older links (+0xd102) and back links (+0x1d102)
+     that let 0x00522930 drop the step about to be overwritten; the last
+     two positions of each step are never hashed. The first 0x1102 bytes
+     are mirrored after the window when step 0 is processed (0x005226d0)
+     so matches run past its end.
+   - Matching (0x00523ea0, 0x005245b0, 0x005243b0): from the position up
+     to 0xefd bytes into the step (all of it when finishing, 0x00524da0);
+     no chain or no match longer than 2 is a literal; the longest of up
+     to 75 links (compared two bytes at a time, at most 258; a full 258
+     stops the search; ties keep the nearer) is clamped to the bytes
+     left, and is a literal when under 3, or when 3 at a distance over
+     0x3fff.
+   - Symbols: one byte for a literal, three (length - 3, distance) for a
+     match, with a 32-bit word of flags (most significant first); at
+     0x3000 symbols a block is written (0x00524560 -> 0x00522af0).
+   - Blocks (0x00522af0): BFINAL 0, then: under 0x80 symbols, the fixed,
+     dynamic and stored sizes are measured and the smallest written
+     (stored only when strictly smaller than both, fixed only when
+     strictly smaller than dynamic); else under 0x3999 bytes, dynamic or
+     stored; else dynamic. Finishing (0x00522a70) writes the last block,
+     then an empty fixed block with BFINAL 1, pads to a byte (0x00522790)
+     and hands on the output (0x00522730).
+   - Codes: lengths by repeatedly merging the two least frequent groups
+     (0x00523540, heap 0x00523660 with ties to the higher symbol), limited
+     to 15 bits (7 for the code-length code) by 0x005236f0, assigned in
+     length-then-symbol order (0x005231b0) as canonical bit-reversed codes
+     (0x00523240). The dynamic header (0x005237a0, 0x00523b90) uses 16 for
+     repeats of the previous length (3..6), 17 / 18 for zero runs.
+   - Bits (0x005227c0): LSB first; the output buffer goes to the sink
+     whenever it is full and once at the end, even when empty (the
+     game's callback 0x0046ba10 then records a write error, since
+     _write returns 0). */
 typedef struct AoeDeflateWriterRor AoeDeflateWriterRor;
 
 /* Output sink: returns 0 on success (as 0x00522730's callback). */
 typedef int (*AoeDeflateSinkRor)(void *context, const uint8_t *data,
                                  size_t size);
 
-AoeDeflateWriterRor *aoe_deflate_writer_new_ror(int level,
-                                                AoeDeflateSinkRor sink,
+/* 0x00524ef0 with the game's arguments (75, 2, 1, 64 KB). */
+AoeDeflateWriterRor *aoe_deflate_writer_new_ror(AoeDeflateSinkRor sink,
                                                 void *context);
-/* write(..., finish): 0 success, 2 failure (as 0x005223e0). With finish
-   the stream is closed; no more writes are accepted. */
+/* 0x005223e0(work, data, size, finish): 0 when the input is taken and
+   more may follow; 1 once finished (and also when the sink failed); 2
+   when the writer is not open (including after finishing). */
 int aoe_deflate_writer_write_ror(AoeDeflateWriterRor *w, const void *data,
                                  size_t size, int finish);
 void aoe_deflate_writer_free_ror(AoeDeflateWriterRor *w);

@@ -28,7 +28,7 @@ set(CMAKE_C_FLAGS_INIT
   "-march=armv7-a -mtune=cortex-a9 -mfpu=neon -mfloat-abi=hard -mthumb -fsigned-char -fshort-enums")
 
 # glibc's startup objects use 32-bit enums. Project code passes no enum values
-# to glibc or zlib, so the per-executable mismatch warning is not actionable.
+# to glibc, so the per-executable mismatch warning is not actionable.
 set(CMAKE_EXE_LINKER_FLAGS_INIT "-Wl,--no-enum-size-warning")
 
 find_program(AOE_QEMU_ARM NAMES qemu-arm qemu-arm-static REQUIRED)

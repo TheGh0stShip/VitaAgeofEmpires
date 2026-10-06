@@ -1,6 +1,6 @@
 # Verify every object in a build directory's static archives against the Vita
 # ELF ABI, after a build. The configure-time gate (VerifyVitaAbi.cmake) only
-# inspects a compiler probe and zlib; this covers the project's own objects.
+# inspects a compiler probe; this covers the project's own objects.
 #
 #   cmake -DAOE_ABI_DIR=build/vita -DAOE_ABI_READELF=arm-vita-eabi-readelf \
 #         -DAOE_ABI_AR=arm-vita-eabi-ar -P cmake/VerifyVitaArchives.cmake

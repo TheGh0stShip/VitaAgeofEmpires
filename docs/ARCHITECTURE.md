@@ -82,9 +82,9 @@ The long-term shape is an integrated native Vita application that loads user-sup
 
 The Vita target is little-endian 32-bit ARMv7-A with an ILP32 ABI and a
 hard-float procedure-call standard. Vita configuration compiles an ABI probe,
-checks its ELF header/ARM attributes, and checks the resolved zlib dependency
-before building project libraries. A target build fails early if it is
-AArch64, non-ILP32, big-endian, or mixes floating-point calling conventions.
+checks its ELF header/ARM attributes before building project libraries. A
+target build fails early if it is AArch64, non-ILP32, big-endian, or mixes
+floating-point calling conventions.
 
 Host builds intentionally retain their native LP64 or LLP64 ABI. Original
 32-bit values at disk, wire, checksum, or emulated pointer-token boundaries

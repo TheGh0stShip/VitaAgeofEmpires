@@ -265,16 +265,23 @@ static uint8_t *camp_read_pif(void *c, const char *path, uint32_t *size) {
 typedef struct {
     uint8_t *data;
     size_t size, cap;
+    int failed;
 } Sink;
 
+/* The output callback (as 0x0046ba10, which records a failed write
+   rather than stopping the encoder). */
 static int sink_write(void *c, const uint8_t *data, size_t size) {
     Sink *s = c;
+    if (!size || s->failed) return 0;
     if (s->size + size > s->cap) {
         size_t cap = s->cap ? s->cap : 1024;
         uint8_t *grown;
         while (cap < s->size + size) cap *= 2;
         grown = realloc(s->data, cap);
-        if (!grown) return 1;
+        if (!grown) {
+            s->failed = 1;
+            return 0;
+        }
         s->data = grown;
         s->cap = cap;
     }
@@ -283,14 +290,15 @@ static int sink_write(void *c, const uint8_t *data, size_t size) {
     return 0;
 }
 
-/* Written with the game's own compressor (deflate_writer.h). */
+/* Written with the game's own encoder (deflate_writer.h); finishing
+   returns 1. */
 static int camp_write_pif(void *c, const char *path, const uint8_t *data, uint32_t size) {
-    Sink sink = {NULL, 0, 0};
-    AoeDeflateWriterRor *w = aoe_deflate_writer_new_ror(9, sink_write, &sink);
+    Sink sink = {NULL, 0, 0, 0};
+    AoeDeflateWriterRor *w = aoe_deflate_writer_new_ror(sink_write, &sink);
     int ok;
     (void)c;
     if (!w) return 0;
-    ok = aoe_deflate_writer_write_ror(w, data, size, 1) == 0;
+    ok = aoe_deflate_writer_write_ror(w, data, size, 1) == 1 && !sink.failed;
     aoe_deflate_writer_free_ror(w);
     ok = ok && write_whole(path, sink.data, (uint32_t)sink.size);
     free(sink.data);

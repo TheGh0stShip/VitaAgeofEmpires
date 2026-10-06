@@ -53,7 +53,7 @@ port glue; their headers say which parts are original.
 | DRS archives | `src/drs.c` | Registration 0x0046afc0 (0x40-byte header, `tribe` at +0x2c, table count +0x38, first data +0x3c), lookup 0x0046b280 (12-byte tables from +0x40, 12-byte entries) |
 | SLP shapes | `src/slp.c`, `src/shape.c` | Loader 0x0049f5f0, frame count 0x0049fa90, size 0x0049fa00, bounds 0x0049fac0, pixel test 0x0049fb90, draw 0x0049fe00, rasterizer 0x005409a0 (command loop 0x005410a0, tables 0x0053f440 / 0x0053f4c0, 0x00541b60) |
 | SHP shapes | `src/shape.c` | The same shape functions' SHP branch |
-| Compressed streams (DAT, scenario bodies, player file) | `src/inflate.c` | The executable's decoder 0x00525b0b (work size 0x00525b05), reached from the stream read 0x0046b800: raw deflate with its own tables at 0x00525060..0x00525290 |
+| Compressed streams (DAT, scenario bodies, player file) | `src/inflate.c`, `src/deflate_writer.c` | Decoder 0x00525b0b (work size 0x00525b05), reached from the stream read 0x0046b800, with its tables at 0x00525060..0x00525290; encoder 0x005223e0 (state 0x00524ef0, size 0x00525050, tables 0x0055fa20..0x00560738), driven by the stream write 0x0046ba40 as (75, 2, 1, 64 KB) |
 | DAT graphics | `src/dat.c` | Reader 0x004a4c40, writer 0x004a5220, delta use in 0x004a5d60 |
 | DAT terrains, borders, tile geometry | `src/dat.c` | Map object read as one 0x8dd0-byte image (0x00443ce0); the map's text loader 0x00446bb0 and its format string name the terrain fields; the view's reads of +0x8d96..+0x8d9e |
 | DAT units | `src/dat_units.c` | Template loader 0x004413b0 and the class loaders; copy 0x00441f50 |
@@ -79,15 +79,19 @@ helper code in one. Each now rests on the executables instead.
 | DAT terrain record | Another project's terrain schema | 0x00443ce0 / 0x00446bb0 and the view's offsets |
 | Scenario file | Another project's scenario and map readers, as cross-checks; its field names | 0x00417670 and the record readers; the header fields renamed to the executable's meaning (`record_version`, `has_conditions`) |
 | WAV | A RIFF parser adapted from a generated helper-code bundle | Removed; `wav_tool` uses the translated reader 0x0043a6f0 |
+| Compressed streams | zlib, to inflate the DAT, scenario and player-file bodies and to deflate the player file | The executable's decoder 0x00525b0b (`src/inflate.c`) and encoder 0x005223e0 (`src/deflate_writer.c`, with 0x0046ba40's configuration). The encoder reproduces the installed DAT and all 20 campaign scenario bodies byte for byte (`ror_original_deflate_roundtrip_real`), which also confirms the decoder, the hash chains, the block choice and the Huffman construction at once. |
 | Planning | A survey of other reconstructions (architecture, subsystem checklists, planned use of format libraries as test oracles) | Removed; none of it is used |
 
 The commit history before 2026-10-06 still contains the removed documents.
 
 ## Third-party code in the build
 
+No compression library is linked: the executable's own decoder and
+encoder are translated (`src/inflate.c`, `src/deflate_writer.c`), and zlib
+was removed from the build on 2026-10-06.
+
 | Component | Where | Licence | Note |
 | --- | --- | --- | --- |
-| zlib | Linked (system / VitaSDK library) only to deflate player files (`src/deflate_writer.c`) and in tests that make deflate input | zlib | Not vendored. Decoding no longer uses it: the DAT, scenario and player-file bodies go through `src/inflate.c`, the translation of the executable's own decoder 0x00525b0b, which matches zlib byte for byte on the installed DAT and all 20 Rise of Rome campaign scenarios. The executable's encoder (0x005223e0..0x00524fc0, documented in `deflate_writer.h`) is not yet translated; translating it would remove this dependency. |
 | stb_truetype | `third_party/stb/stb_truetype.h`, vendored | MIT or public domain (dual) | Renders the user's Windows fonts in place of GDI. Under the public-domain option no notice is required; it is still someone else's code. A port-owned TrueType rasterizer would remove it. |
 | VitaSDK runtime | The Vita build links its C library and system stubs | VitaSDK's licences | Platform requirement for any Vita program. |
 | Host C library | Host builds | — | Platform. |

@@ -48,7 +48,7 @@ Consequences for portable reconstruction code:
 ### VitaSDK cross-build (`vita-cross`)
 
 Configures with the VitaSDK toolchain, which runs the configure-time ABI gate
-(`cmake/VerifyVitaAbi.cmake`: compiler probe plus zlib), builds everything,
+(`cmake/VerifyVitaAbi.cmake`: the compiler probe), builds everything,
 then runs `cmake/VerifyVitaArchives.cmake`. That script extracts every object
 from the build's static archives and requires ELF32, little-endian, ARM,
 `Tag_CPU_arch: v7`, application profile, VFP-register arguments and small
@@ -85,7 +85,7 @@ On Ubuntu 24.04 or WSL, with armhf multiarch enabled (see the workflow for
 the apt source setup):
 
 ```sh
-sudo apt-get install gcc-arm-linux-gnueabihf qemu-user zlib1g-dev:armhf libubsan1:armhf
+sudo apt-get install gcc-arm-linux-gnueabihf qemu-user libubsan1:armhf
 cmake -S . -B build/armhf -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/armv7-linux-gnueabihf.cmake
 cmake --build build/armhf --parallel

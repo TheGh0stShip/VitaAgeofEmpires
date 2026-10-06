@@ -1,28 +1,34 @@
+/* dat_load through the translated decoder (inflate.h); the fixtures are
+   made with the translated encoder (deflate_writer.h). */
 #include "dat.h"
 
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
-#include <zlib.h>
 
-static int raw_deflate(const uint8_t *input, size_t input_size,
-                       uint8_t *output, size_t output_capacity,
-                       size_t *output_size) {
-    z_stream stream = {0};
-    int status;
-    if (input_size > UINT_MAX || output_capacity > UINT_MAX) return 0;
-    if (deflateInit2(&stream, Z_BEST_SPEED, Z_DEFLATED, -MAX_WBITS, 8,
-                     Z_DEFAULT_STRATEGY) != Z_OK)
-        return 0;
-    stream.next_in = (Bytef *)input;
-    stream.avail_in = (uInt)input_size;
-    stream.next_out = output;
-    stream.avail_out = (uInt)output_capacity;
-    status = deflate(&stream, Z_FINISH);
-    if (status == Z_STREAM_END)
-        *output_size = output_capacity - stream.avail_out;
-    deflateEnd(&stream);
-    return status == Z_STREAM_END;
+#include "deflate_writer.h"
+
+typedef struct {
+    uint8_t bytes[1024];
+    size_t size;
+} Out;
+
+static int sink(void *context, const uint8_t *data, size_t size) {
+    Out *out = context;
+    if (out->size + size > sizeof out->bytes) return 1;
+    if (size) memcpy(out->bytes + out->size, data, size);
+    out->size += size;
+    return 0;
+}
+
+static int pack(const uint8_t *input, size_t input_size, Out *out) {
+    AoeDeflateWriterRor *w = aoe_deflate_writer_new_ror(sink, out);
+    int r;
+    out->size = 0;
+    if (!w) return 0;
+    r = aoe_deflate_writer_write_ror(w, input, input_size, 1);
+    aoe_deflate_writer_free_ror(w);
+    return r == 1;
 }
 
 static int write_file(const char *path, const uint8_t *bytes, size_t size) {
@@ -35,28 +41,26 @@ static int write_file(const char *path, const uint8_t *bytes, size_t size) {
 int main(void) {
     const char *path = "dat_load_fixture.bin";
     uint8_t raw[16] = {'V','E','R',' ','3','.','7','\0', 1,0, 2,0, 0,0,0,0};
-    uint8_t compressed[128];
-    size_t compressed_size = 0;
+    Out out;
     DatBlob blob = {0};
 
-    assert(raw_deflate(raw, sizeof(raw), compressed, sizeof(compressed),
-                       &compressed_size));
-    assert(write_file(path, compressed, compressed_size));
+    assert(pack(raw, sizeof(raw), &out));
+    assert(write_file(path, out.bytes, out.size));
     assert(dat_load(path, &blob));
     assert(blob.size == sizeof(raw) && memcmp(blob.bytes, raw, sizeof(raw)) == 0);
     dat_free(&blob);
 
+    /* The wrong version string is refused. */
     raw[6] = '8';
-    assert(raw_deflate(raw, sizeof(raw), compressed, sizeof(compressed),
-                       &compressed_size));
-    assert(write_file(path, compressed, compressed_size));
+    assert(pack(raw, sizeof(raw), &out));
+    assert(write_file(path, out.bytes, out.size));
     assert(!dat_load(path, &blob));
 
+    /* A truncated stream is refused. */
     raw[6] = '7';
-    assert(raw_deflate(raw, sizeof(raw), compressed, sizeof(compressed),
-                       &compressed_size));
-    assert(compressed_size > 1);
-    assert(write_file(path, compressed, compressed_size - 1));
+    assert(pack(raw, sizeof(raw), &out));
+    assert(out.size > 1);
+    assert(write_file(path, out.bytes, out.size - 1));
     assert(!dat_load(path, &blob));
 
     remove(path);

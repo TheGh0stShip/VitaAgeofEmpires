@@ -15,21 +15,9 @@ target_include_directories(aoe_palette PUBLIC include)
 target_compile_options(aoe_palette PRIVATE -Wall -Wextra)
 
 
-find_package(ZLIB REQUIRED)
-
 if(VITA)
   include(cmake/VerifyVitaAbi.cmake)
   aoe_verify_vita_abi()
-
-  get_target_property(aoe_zlib_location ZLIB::ZLIB IMPORTED_LOCATION)
-  if(NOT aoe_zlib_location)
-    get_target_property(aoe_zlib_location ZLIB::ZLIB IMPORTED_LOCATION_RELEASE)
-  endif()
-  if(aoe_zlib_location)
-    aoe_verify_vita_elf("Vita zlib" "${aoe_zlib_location}")
-  else()
-    message(FATAL_ERROR "Cannot resolve the Vita zlib ELF for ABI validation")
-  endif()
 endif()
 
 add_library(aoe_tribute STATIC src/tribute.c)
@@ -50,7 +38,6 @@ target_compile_options(aoe_inflate PRIVATE -Wall -Wextra)
 
 add_library(aoe_deflate_writer STATIC src/deflate_writer.c)
 target_include_directories(aoe_deflate_writer PUBLIC include)
-target_link_libraries(aoe_deflate_writer PUBLIC ZLIB::ZLIB)
 target_compile_options(aoe_deflate_writer PRIVATE -Wall -Wextra)
 
 add_library(aoe_dat STATIC src/dat.c src/dat_units.c src/dat_tech.c)
@@ -1170,7 +1157,7 @@ else()
   target_compile_options(dat_random_map_test PRIVATE -UNDEBUG)
   add_test(NAME dat_random_map_records COMMAND dat_random_map_test)
   add_executable(dat_load_test tests/dat_load_test.c)
-  target_link_libraries(dat_load_test PRIVATE aoe_dat ZLIB::ZLIB)
+  target_link_libraries(dat_load_test PRIVATE aoe_dat aoe_deflate_writer)
   target_compile_options(dat_load_test PRIVATE -UNDEBUG)
   add_test(NAME dat_raw_deflate_boundary COMMAND dat_load_test)
   add_executable(world_clock_test tests/world_clock_test.c)
@@ -1699,6 +1686,16 @@ else()
       "${CMAKE_SOURCE_DIR}/build/ror/disc/GAME/DATA2/EMPIRES.DAT"
       ${AOE_ROR_CAMPAIGN_SCENARIOS})
   endif()
+  add_executable(deflate_roundtrip_real tests/deflate_roundtrip_real.c)
+  target_link_libraries(deflate_roundtrip_real PRIVATE aoe_inflate aoe_deflate_writer)
+  target_compile_options(deflate_roundtrip_real PRIVATE -UNDEBUG)
+  if(AOE_ROR_CAMPAIGN_SCENARIOS AND
+     EXISTS "${CMAKE_SOURCE_DIR}/build/ror/disc/GAME/DATA2/EMPIRES.DAT")
+    # The translated encoder must reproduce every shipped stream exactly.
+    add_test(NAME ror_original_deflate_roundtrip_real COMMAND deflate_roundtrip_real
+      "${CMAKE_SOURCE_DIR}/build/ror/disc/GAME/DATA2/EMPIRES.DAT"
+      ${AOE_ROR_CAMPAIGN_SCENARIOS})
+  endif()
   add_executable(game_start_real tests/game_start_real.c)
   target_link_libraries(game_start_real PRIVATE aoe_scenario_runtime aoe_dat)
   target_compile_options(game_start_real PRIVATE -UNDEBUG)
@@ -1790,7 +1787,7 @@ else()
   add_test(NAME original_inflate COMMAND inflate_test)
 
   add_executable(deflate_writer_test tests/deflate_writer_test.c)
-  target_link_libraries(deflate_writer_test PRIVATE aoe_deflate_writer)
+  target_link_libraries(deflate_writer_test PRIVATE aoe_deflate_writer aoe_inflate)
   target_compile_options(deflate_writer_test PRIVATE -UNDEBUG)
   add_test(NAME original_deflate_writer COMMAND deflate_writer_test)
   add_executable(scenario_info_test tests/scenario_info_test.c)

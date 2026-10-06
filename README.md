@@ -29,7 +29,7 @@ The status illustration below is a reproducible estimate of the **full port**, n
 
 ## Build and test
 
-Requirements: CMake 3.16+, a C11 compiler, zlib development files, and Python 3.
+Requirements: CMake 3.16+, a C11 compiler, and Python 3. No third-party library is needed.
 
 ~~~sh
 cmake -S . -B build/host -DCMAKE_BUILD_TYPE=Release

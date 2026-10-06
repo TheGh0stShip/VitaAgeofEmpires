@@ -121,8 +121,13 @@ static void apply_input(AoeShell *s, const AoeShellInput *in, float dt) {
     if (pressed & AOE_SHELL_SQUARE) aoe_ui_host_mouse_button_ror(&s->host, 2, 1, x, y);
     if (released & AOE_SHELL_SQUARE) aoe_ui_host_mouse_button_ror(&s->host, 2, 0, x, y);
     if (pressed & (AOE_SHELL_CIRCLE | AOE_SHELL_START)) {
-        key(s, 0x1b, 1);
-        key(s, 0x1b, 0);
+        /* Start in a game is the menu key (F10), elsewhere Escape. */
+        int32_t vk = (pressed & AOE_SHELL_START) &&
+                             strcmp(aoe_ui_director_screen_name_ror(&s->director), "Game Screen") == 0
+                         ? 0x79
+                         : 0x1b;
+        key(s, vk, 1);
+        key(s, vk, 0);
     }
     if (pressed & AOE_SHELL_TRIANGLE) {
         key(s, 0x0d, 1);

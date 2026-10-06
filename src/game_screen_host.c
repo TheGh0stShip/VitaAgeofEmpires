@@ -410,11 +410,135 @@ static int32_t gs_mouse_down(AoeUiPanelRor *p, uint8_t button, int32_t x, int32_
     return 1;
 }
 
+/* The translated methods' calls on the screen (the escape, menu and
+   selection paths). */
+#define SO(c) ((AoeGameScreenHostRor *)(c))
+static int32_t so_zero(void *c) { (void)c; return 0; }
+static int so_none_int(void *c) { (void)c; return 0; }
+static void so_none(void *c) { (void)c; }
+static int32_t so_edit_mode(void *c, int32_t *sub) {
+    (void)c;
+    if (sub) *sub = 0;
+    return 0;
+}
+static void so_view_cancel(void *c, void *view) { (void)c; (void)view; }
+static void so_set_mode(void *c, int32_t mode, int32_t sub) { (void)c; (void)mode; (void)sub; }
+static void so_clear_selection(void *c) { aoe_demo_select(SO(c)->world, NULL); }
+static void so_redraw(void *c, void *panel, int all) {
+    (void)panel;
+    (void)all;
+    render_view(SO(c));
+    SO(c)->ez.panel.vt->set_redraw(&SO(c)->ez.panel, 1);
+}
+static int32_t so_state(void *c) { return SO(c)->game_state; }
+static void so_comm_pause(void *c, int32_t on, int32_t flag) { (void)c; (void)on; (void)flag; }
+/* The dialogs the screen makes by name: the Menu Dialog (0x00433c30). */
+static void so_open_dialog(void *c, const char *name) {
+    AoeGameScreenHostRor *s = SO(c);
+    if (strcmp(name, "Menu Dialog") == 0) {
+        AoeMenuDialogRor *m = calloc(1, sizeof *m);
+        if (m && !aoe_menu_dialog_init_ror(m, s->ui, &s->ez.panel)) {
+            m->dialog.ez.panel.vt->destroy(&m->dialog.ez.panel);
+            free(m);
+        }
+    }
+}
+
+static void screen_ops(AoeGameScreenHostRor *s) {
+    AoeGameScreenOpsRor *o = &s->screen_ops;
+    memset(o, 0, sizeof *o);
+    o->context = s;
+    o->escape_armed = so_none_int;
+    o->escape_disarm = so_none;
+    o->comm_waiting = so_zero;
+    o->edit_mode = so_edit_mode;
+    o->view_cancel = so_view_cancel;
+    o->outline_reset = so_none;
+    o->set_mode = so_set_mode;
+    o->clear_selection = so_clear_selection;
+    o->clear_block = so_none;
+    o->redraw = so_redraw;
+    o->game_state = so_state;
+    o->run_commands = so_none;
+    o->paused = so_none_int;
+    o->comm_pause = so_comm_pause;
+    o->open_dialog = so_open_dialog;
+    s->screen.ops = o;
+}
+
+/* The key table's Escape and F10 (the screen's +0xb0 keys). */
+static int32_t gs_key_action(AoeUiPanelRor *p, int32_t key, int32_t count, int32_t alt,
+                             int32_t ctrl, int32_t shift) {
+    AoeGameScreenHostRor *s = GS(p);
+    (void)count;
+    if (alt || ctrl || shift) return 0;
+    if (key == 0x1b) {
+        aoe_game_screen_escape_ror(&s->screen);
+        return 1;
+    }
+    if (key == 0x79) {
+        aoe_game_screen_menu_ror(&s->screen);
+        return 1;
+    }
+    return 0;
+}
+
+/* The action's steps (0x00480fe0). */
+static void leave_game(AoeGameScreenHostRor *s) {
+    const AoeGameUiOpsRor *ops = s->ui->ops;
+    AoeUiSystemRor *system = s->ez.panel.system;
+    if (!ops || !ops->open_main_menu) return;
+    ops->open_main_menu(ops->context);
+    if (aoe_ui_system_show_named_ror(system, "Main Menu", 0))
+        aoe_ui_system_close_ror(system, NAME);
+}
+static void act_step(void *c, int32_t id, int32_t a, int32_t b, int32_t arg) {
+    AoeGameScreenHostRor *s = c;
+    const AoeGameUiOpsRor *ops = s->ui->ops;
+    (void)a; (void)b; (void)arg;
+    switch (id) {
+    case AOE_GS_ACT_SHOW_GAME_SCREEN:
+        aoe_ui_system_show_named_ror(s->ez.panel.system, NAME, 0);
+        break;
+    case AOE_GS_ACT_LEAVE:
+        leave_game(s);
+        break;
+    case AOE_GS_ACT_CLOSE:
+        if (ops && ops->quit_program) ops->quit_program(ops->context);
+        break;
+    default:   /* restart, resign, load, resume, commands: not integrated */
+        break;
+    }
+}
+static const char *act_return_name(void *c) {
+    AoeGameScreenHostRor *s = c;
+    return s->action_from ? aoe_ui_panel_name_ror(s->action_from) : NULL;
+}
+static void act_remove(void *c, const char *name) { aoe_ui_system_close_ror(GS(c)->ez.panel.system, name); }
+static int32_t act_base(void *c, void *from, int32_t code, int32_t a, int32_t b) {
+    return aoe_ui_ez_action_slot_ror(&GS(c)->ez.panel, from, code, a, b);
+}
+
+static int32_t gs_action(AoeUiPanelRor *p, AoeUiPanelRor *from, int32_t code, int32_t a,
+                         int32_t b) {
+    AoeGameScreenHostRor *s = GS(p);
+    AoeGameScreenActionOpsRor o;
+    memset(&o, 0, sizeof o);
+    o.context = s;
+    o.return_name = act_return_name;
+    o.remove_screen = act_remove;
+    o.global_7c0338 = &s->ui->quit_requested;
+    o.field_730 = &s->field_730;
+    o.step = act_step;
+    o.base_action = act_base;
+    s->action_from = from;
+    return aoe_game_screen_action_ror(&o, from, code, a, b);
+}
+
 static AoeUiEzVtblRor vtable = {
     AOE_UI_EZ_SLOTS_MD(gs_destroy, gs_draw, gs_idle, aoe_ui_panel_handle_paint_ror,
-                       aoe_ui_ez_no_key_action_ror, aoe_ui_panel_zero_ror,
-                       aoe_ui_ez_action_slot_ror, aoe_ui_screen_focus_slot_ror,
-                       aoe_ui_ez_mouse_down_slot_ror),
+                       gs_key_action, aoe_ui_panel_zero_ror, gs_action,
+                       aoe_ui_screen_focus_slot_ror, aoe_ui_ez_mouse_down_slot_ror),
     aoe_ui_ez_draw_background_slot_ror,
     aoe_ui_ez_set_reference_slot_ror,
 };
@@ -451,6 +575,7 @@ int aoe_game_screen_host_init_ror(AoeGameScreenHostRor *s, AoeGameUiRor *ui, Aoe
     s->screen.self = &ez->panel;
     s->style = -1;
     s->game_state = 4;
+    screen_ops(s);
     if (!make_resources(s) || !make_minimap(s)) return 0;
     restyle(s);
     render_view(s);

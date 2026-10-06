@@ -20,7 +20,8 @@
      Triangle               - Enter
      L                      - held Ctrl, R - held Shift (for the original's
                               key combinations)
-     Start                  - Escape */
+     Start                  - Escape; in a game the menu key (F10)
+     In a game the pointer at a screen edge scrolls the view. */
 
 enum {
     AOE_SHELL_GAME_W = 640,

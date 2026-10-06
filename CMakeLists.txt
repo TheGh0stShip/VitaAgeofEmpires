@@ -904,6 +904,17 @@ else()
       ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_test"
       PASS_REGULAR_EXPRESSION
       "c:190,455 -> Mission Dialog\nc:560,460 -> Game Screen\ni:5 -> Game Screen\nd:39 -> Game Screen\ni:5 -> Game Screen\nu:39 -> Game Screen\nc:520,380 -> Game Screen(.|\n)*r:420,250 -> Game Screen\ni:20 -> Game Screen")
+    # In the game: Escape clears the selection, F10 opens the Menu Dialog,
+    # Quit Game asks, and Yes leaves for the Main Menu.
+    add_test(NAME ror_campaign_quit_real COMMAND ui_host_tool
+      "${CMAKE_SOURCE_DIR}/build/demo_root" "${CMAKE_BINARY_DIR}"
+      c:320,198 c:320,188 t:Tester k:13 c:100,240 c:190,455 c:560,460 i:5 c:220,90 k:27
+      k:121 k:27 k:121 c:320,65 c:230,268 i:5)
+    set_tests_properties(ror_campaign_quit_real PROPERTIES
+      FIXTURES_REQUIRED ror_user
+      ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_test"
+      PASS_REGULAR_EXPRESSION
+      "k:27 -> Game Screen\nk:121 -> Game Screen modal Menu Dialog\nk:27 -> Game Screen\nk:121 -> Game Screen modal Menu Dialog\nc:320,65 -> Game Screen modal QuitGameDialog\nc:230,268 -> Main Menu")
     add_test(NAME ror_shell_touch_and_buttons_real COMMAND shell_app_real
       "${CMAKE_SOURCE_DIR}/build/demo_root" "${CMAKE_BINARY_DIR}/shell_frame.ppm")
     set_tests_properties(ror_shell_touch_and_buttons_real PROPERTIES

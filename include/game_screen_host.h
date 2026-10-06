@@ -22,7 +22,11 @@
    translated draw (0x00484110) paints behind the view. The resource bar
    (0x004f7c00) and the minimap (0x005085a0) are the translated panels
    over the world; the object panel and command buttons are not
-   assembled yet. */
+   assembled yet. Keys: Escape (0x00484900) clears the selection, F10
+   (0x004850b0) opens the Menu Dialog; the dialogs' answers go through
+   the screen's action (0x00480fe0). Leaving a game returns to the Main
+   Menu (the original plays the end video and shows the Achievements
+   Screen first, 0x500740 case 4). */
 typedef struct {
     AoeUiEzRor ez;
     AoeGameUiRor *ui;
@@ -31,6 +35,9 @@ typedef struct {
     void *page_picture;           /* +0x4ac */
     int32_t style, style_width;   /* +0x714, +0x718 */
     int32_t game_state;           /* game +0x1b0: 4 once started (0x005046e0) */
+    AoeGameScreenOpsRor screen_ops;   /* the translated methods' calls */
+    AoeUiPanelRor *action_from;       /* the sender being answered */
+    int32_t field_730;                /* +0x730: resigned */
     AoeResourcePanelRor *resources;   /* +0x4c0 */
     AoeGameMinimapRor *map;           /* +0x4bc */
     uint32_t map_time;                /* +0x5c4 */

@@ -57,6 +57,11 @@ int aoe_action_list_update_ror(AoeActionList *list, const AoeActionTickOps *ops,
    0x00407680 / 0x00407690 (-1.0 when the list is empty); 0x00404580
    asks it +0x34 (0 when empty). 0x00403df0 (+0x10) and 0x00404600
    (+0x44 with three values) hand every action, in order, to `fn`. */
+/* 0x00404630 (the base list's vtable 0x00542600 slot +0x10): the head
+   action's type as text into `out`: "None" without a head; 1 "MoveTo", 4
+   "Explore", 5 "Gather", 8 "Missile", 9 "Attack", 10 "Bird", 0x14
+   "RunAway", 0x15 "Make", others "Unknown". */
+const char *aoe_action_type_name_ror(int has_head, int16_t type, char *out);
 /* 0x00427b80 (a unit slot): the head action's target (+0x4c) ID (its
    +4); -1 with an empty list or no target. `target_id` stands for the
    head's +0x4c and the ID read (-1 for none). */

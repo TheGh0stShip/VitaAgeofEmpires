@@ -243,6 +243,25 @@ typedef struct {
 } AoeUnitAiOutRor;
 int aoe_unit_ai_note_ror(AoeUnitAiNotesRor *q, int32_t sender, int32_t code, int32_t extra,
                          const int32_t values[6], int front);
+/* Base vtable +0x10 = 0x00410830(sender, code, six values, now, requeue,
+   extra): only for a unit below state 3 (else nothing). Not `now`: the
+   order is queued (first with `requeue`). Now: with `requeue` 1 the
+   current order (our unit, action +0x28, extra +0x2c, values target
+   +0x34, -1, the target point's raw +0x3c..+0x44 and +0x48) goes first,
+   then the new one before it; an order other than 0x2d9 clears the target
+   (0x00412ed0) and stops (+0x58 with 1); the queue is then run
+   (0x00414eb0 with 0) and the first record handed to +0xc8 with 0.
+   Always 1. */
+typedef struct {
+    void *context;
+    void (*self_stop)(void *context, int force);                    /* +0x58 */
+    void (*run_notes)(void *context, int32_t arg);                  /* 0x00414eb0 */
+    void (*handle_c8)(void *context, const int32_t record[9], int32_t arg);
+} AoeUnitAiOrderOpsRor;
+int aoe_unit_ai_order_ror(AoeUnitAiRor *ai, AoeUnitAiNotesRor *q, uint8_t unit_state,
+                          int32_t unit_id, int32_t sender, int32_t code, const int32_t values[6],
+                          int32_t now, int32_t requeue, int32_t extra,
+                          const AoeUnitAiOrderOpsRor *ops);
 int aoe_unit_ai_send_ror(AoeUnitAiOutRor *q, const int32_t values[6]);
 
 #endif

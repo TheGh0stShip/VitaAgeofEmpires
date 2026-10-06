@@ -79,6 +79,20 @@ typedef struct {
                         int32_t target_class, float x, float y, float z);
 } AoeUnitOrderOps;
 
+/* 0x00406670 (a unit slot): the unit's task list (+0xd8's +4) asked for
+   the target; without a task and with a task swap group (+0xec), the
+   first owner template of the same class, type and swap group whose list
+   has one becomes the unit's template (+0x54). 0 for a host failure;
+   `task` gets the task (NULL for none). */
+int aoe_unit_select_task_swap_ror(AoeLiveUnit *unit, AoeLiveUnit *target, float x, float y,
+                                  float z, const AoeUnitOrderOps *ops,
+                                  const DatUnitTask **task);
+/* 0x00406300 (a unit slot): the template that would take the order: the
+   unit's own unless, for another target and a swap group, only a swap
+   template's list has a task. */
+const DatUnit *aoe_unit_task_template_ror(AoeLiveUnit *unit, AoeLiveUnit *target, float x,
+                                          float y, float z, const AoeUnitOrderOps *ops);
+
 /* 0x00406420(id): the template's task with ID `id` (0x0043e6a0; -1
    finds none) builds an action through the list factory with no target
    at (-1, -1, -1), which the unit adopts (+0x208). 1 when adopted. */

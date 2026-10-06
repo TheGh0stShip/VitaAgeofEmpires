@@ -1,3 +1,4 @@
+#include <string.h>
 #include "action_list.h"
 #include "building_update.h"
 #include <assert.h>
@@ -55,9 +56,18 @@ static void add_id(void *c, void *a) { *(int *)c = *(int *)c * 10 + *(int *)a; }
 
 static void count_clean(void *c) { ++*(int *)c; }
 
+static void type_name_tests(void) {
+    char out[16];
+    assert(!strcmp(aoe_action_type_name_ror(0, 9, out), "None") && !strcmp(out, "None"));
+    assert(!strcmp(aoe_action_type_name_ror(1, 9, out), "Attack"));
+    assert(!strcmp(aoe_action_type_name_ror(1, 0x15, out), "Make"));
+    assert(!strcmp(aoe_action_type_name_ror(1, 2, out), "Unknown"));
+}
+
 static int32_t head_target(void *c, void *a) { (void)c; return *(int *)a * 10; }
 
 int main(void) {
+    type_name_tests();
     uint8_t state=2;
     int a=1,b=2,c=3;
     Trace t={0};

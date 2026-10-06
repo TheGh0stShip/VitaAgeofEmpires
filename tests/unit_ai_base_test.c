@@ -43,7 +43,42 @@ static int pg_object(void *c, int32_t id, AoeUnitAiObjectRor *o) {
     (void)c; memset(o, 0, sizeof *o); return id == 9;
 }
 
+static int ord_stops, ord_runs, ord_c8_code;
+static void ord_stop(void *c, int f) { (void)c; assert(f == 1); ++ord_stops; }
+static void ord_run(void *c, int32_t a) { (void)c; assert(a == 0); ++ord_runs; }
+static void ord_c8(void *c, const int32_t r[9], int32_t a) { (void)c; (void)a; ord_c8_code = r[1]; }
+
+static void order_slot_tests(void) {
+    AoeUnitAiRor ai;
+    AoeUnitAiNotesRor q;
+    AoeUnitAiOrderOpsRor o = {NULL, ord_stop, ord_run, ord_c8};
+    int32_t v[6] = {1, 2, 3, 4, 5, 6};
+    memset(&ai, 0, sizeof ai);
+    q.capacity = 4;
+    q.count = 0;
+    q.records = calloc(4, sizeof *q.records);
+    ai.action = 0x2bc;
+    ai.target_id = 9;
+    /* Dead units take nothing; queued orders wait. */
+    aoe_unit_ai_order_ror(&ai, &q, 3, 1, 5, 0x2c6, v, 0, 0, 7, &o);
+    assert(q.count == 0);
+    aoe_unit_ai_order_ror(&ai, &q, 2, 1, 5, 0x2c6, v, 0, 0, 7, &o);
+    assert(q.count == 1 && q.records[0][1] == 0x2c6 && q.records[0][2] == 7 && ord_runs == 0);
+    /* At once with requeue: the current order first, then the new one in
+       front of it; the target is cleared and the unit stops. */
+    aoe_unit_ai_order_ror(&ai, &q, 2, 1, 5, 0x2bd, v, 1, 1, 8, &o);
+    assert(q.count == 3 && q.records[0][1] == 0x2bd && q.records[1][1] == 0x2bc &&
+           q.records[1][3] == 9 && q.records[1][4] == -1);
+    assert(ord_stops == 1 && ord_runs == 1 && ord_c8_code == 0x2bd && ai.target_id == -1);
+    /* 0x2d9 keeps the target. */
+    ai.target_id = 9;
+    aoe_unit_ai_order_ror(&ai, &q, 2, 1, 5, 0x2d9, v, 1, 0, 8, &o);
+    assert(ord_stops == 1 && ai.target_id == 9);
+    free(q.records);
+}
+
 int main(void) {
+    order_slot_tests();
     static AoeUnitAiRor ai;
     AoeUnitAiOpsRor ops = {0};
     ops.object = object;

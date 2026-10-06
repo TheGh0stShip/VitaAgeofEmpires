@@ -132,5 +132,13 @@ int main(void) {
     assert(aoe_sprite_list_add(&list, &animated_a, 1, 0, 0));
     aoe_sprite_list_destroy_ror(&list);
     assert(aoe_sprite_list_count(&list) == 0);
+    {
+        /* 0x00415390 */
+        AoeSpriteList *h = malloc(sizeof *h);
+        assert(h);
+        *h = list;
+        h->head = NULL;
+        assert(aoe_sprite_list_delete_ror(h, 1) == h);
+    }
     return 0;
 }

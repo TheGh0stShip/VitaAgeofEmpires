@@ -185,3 +185,9 @@ int aoe_graphic_on_layer_zero_ror(const DatGraphic *graphic) {
 void aoe_sprite_list_destroy_ror(AoeSpriteList *list) {
     aoe_sprite_list_clear(list);
 }
+
+AoeSpriteList *aoe_sprite_list_delete_ror(AoeSpriteList *list, uint8_t flags) {
+    aoe_sprite_list_destroy_ror(list);
+    if (list && (flags & 1)) free(list);
+    return list;
+}

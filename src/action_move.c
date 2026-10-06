@@ -300,3 +300,10 @@ void aoe_move_action_destroy_ror(AoeMoveActionRor *a, const AoeMoveActionOps *op
         a->sub_list = NULL;
     }
 }
+
+AoeMoveActionRor *aoe_move_action_delete_ror(AoeMoveActionRor *a, uint8_t flags,
+                                             const AoeMoveActionOps *ops) {
+    aoe_move_action_destroy_ror(a, ops);
+    if (a && (flags & 1)) free(a);
+    return a;
+}

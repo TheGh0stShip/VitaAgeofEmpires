@@ -1,4 +1,7 @@
 #include "game_frame.h"
+#include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 #include <stddef.h>
 
@@ -155,4 +158,56 @@ int aoe_game_play_sound_ror(void *const *sounds, int32_t i,
     if (!sounds || !sounds[i]) return 0;
     if (playing(context, sounds[i])) return 1;
     return play(context, sounds[i]);
+}
+
+int32_t aoe_game_frame_paint_ror(const AoeGamePaintFrameOpsRor *ops) {
+    if (!ops) return 0;
+    if (!ops->window_ok) {
+        if (ops->clear) ops->clear(ops->context);
+    } else if (ops->iconic && ops->iconic(ops->context)) {
+        if (ops->validate) ops->validate(ops->context);
+        return 0;
+    } else if (ops->draw_active) {
+        uint8_t r = ops->restore ? ops->restore(ops->context) : 0;
+        if (r == 1) return 0;
+        if (r == 2) {
+            if (ops->redraw) ops->redraw(ops->context);
+            if (ops->game_redraw) ops->game_redraw(ops->context);
+        } else if (r == 3) {
+            if (ops->validate) ops->validate(ops->context);
+            if (ops->destroy) ops->destroy(ops->context);
+            return 0;
+        }
+        return 1;
+    } else {
+        int32_t rect[4];
+        if (ops->update_rect && ops->update_rect(ops->context, rect)) {
+            if (ops->show_rect) ops->show_rect(ops->context, rect);
+            if (ops->validate) ops->validate(ops->context);
+            return 0;
+        }
+    }
+    if (ops->validate) ops->validate(ops->context);
+    return 0;
+}
+
+/* MulDiv: the 64-bit product divided with rounding half away from zero. */
+static int32_t mul_div(int32_t a, int32_t b, int32_t c) {
+    int64_t p = (int64_t)a * b, q;
+    if (c == 0) return -1;
+    q = (p < 0) == (c < 0) ? (p + (c < 0 ? -c : c) / 2) / c : (p - (c < 0 ? -c : c) / 2) / c;
+    return (int32_t)q;
+}
+
+void aoe_game_font_desc_ror(const char *face, int32_t points, int32_t weight, uint8_t flag,
+                            const char *charset_text, AoeLogFontRor *out) {
+    if (!out) return;
+    memset(out, 0, sizeof *out);
+    out->height = -mul_div(points, 0x60, 0x48);
+    out->weight = weight;
+    out->strikeout = flag;
+    out->charset = (uint8_t)atoi(charset_text ? charset_text : "0");
+    out->quality = 2;
+    out->pitch_family = 2;
+    snprintf(out->face, sizeof out->face, "%s", face ? face : "");
 }

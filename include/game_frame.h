@@ -57,6 +57,42 @@ void aoe_game_frame_close_ror(const AoeGameFrameOpsRor *ops);
 void aoe_game_frame_update_ror(const AoeGameFrameOpsRor *ops);
 void aoe_game_frame_clear_ror(const AoeGameFrameOpsRor *ops);
 void aoe_game_frame_caption_ror(const AoeGameFrameOpsRor *ops, const char *caption);
+/* 0x004197b0: WM_PAINT. Without a window (+0x14) the client area is
+   cleared (0x00419880); a minimised window is just validated; with the
+   draw system active (+0x18) its restore (0x004374d0) decides: 1 nothing,
+   2 a redraw (0x00437610, then the game's 0x0041c290) and 1, 3 the window
+   validated and destroyed; otherwise the update rectangle, when there is
+   one, is shown (0x00437ac0). The window is validated and 0 returned in
+   every case but 1 / 2. */
+typedef struct {
+    void *context;
+    int window_ok;                                       /* +0x14 */
+    int draw_active;                                     /* +0x18 */
+    int (*iconic)(void *context);
+    void (*validate)(void *context);
+    void (*clear)(void *context);
+    uint8_t (*restore)(void *context);
+    void (*redraw)(void *context);
+    void (*game_redraw)(void *context);
+    void (*destroy)(void *context);
+    int (*update_rect)(void *context, int32_t rect[4]);
+    void (*show_rect)(void *context, const int32_t rect[4]);
+} AoeGamePaintFrameOpsRor;
+int32_t aoe_game_frame_paint_ror(const AoeGamePaintFrameOpsRor *ops);
+
+/* 0x00419460(unused, face, points, weight, flag): a font description for
+   CreateFontIndirectA: height -MulDiv(points, 96, 72), weight, the flag
+   as the strike-out byte, the character set from string 0x65 (atoi),
+   proof quality (2), variable pitch (2) and the face name. */
+typedef struct {
+    int32_t height, width, escapement, orientation, weight;
+    uint8_t italic, underline, strikeout, charset;
+    uint8_t out_precision, clip_precision, quality, pitch_family;
+    char face[32];
+} AoeLogFontRor;
+void aoe_game_font_desc_ror(const char *face, int32_t points, int32_t weight, uint8_t flag,
+                            const char *charset_text, AoeLogFontRor *out);
+
 /* 0x00418080: the window procedure: the game's +0x08 (0 without a
    game). */
 int32_t aoe_game_frame_relay_ror(void *game, int32_t (*proc)(void *game, uint32_t window,

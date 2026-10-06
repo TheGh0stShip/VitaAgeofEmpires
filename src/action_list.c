@@ -1,4 +1,6 @@
 #include "action_list.h"
+
+#include <string.h>
 #include <stdlib.h>
 
 int aoe_action_list_valid(const AoeActionList *list) {
@@ -109,4 +111,25 @@ int32_t aoe_unit_action_target_id_ror(const AoeActionList *list,
     void *head = aoe_action_list_head_ror(list);
     if (!head || !target_id) return -1;
     return target_id(context, head);
+}
+
+const char *aoe_action_type_name_ror(int has_head, int16_t type, char *out) {
+    const char *name;
+    if (!has_head) {
+        name = "None";
+    } else {
+        switch (type) {
+        case 1: name = "MoveTo"; break;
+        case 4: name = "Explore"; break;
+        case 5: name = "Gather"; break;
+        case 8: name = "Missile"; break;
+        case 9: name = "Attack"; break;
+        case 10: name = "Bird"; break;
+        case 0x14: name = "RunAway"; break;
+        case 0x15: name = "Make"; break;
+        default: name = "Unknown"; break;
+        }
+    }
+    if (out) strcpy(out, name);
+    return name;
 }

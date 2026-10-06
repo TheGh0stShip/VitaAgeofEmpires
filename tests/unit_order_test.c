@@ -150,6 +150,13 @@ int main(void) {
     list = (AoeActionList){&unit.core.state, NULL, {0, destroy, state}};
     unit.derived_action_list = &list;
 
+    /* 0x00406300: the villager's own template has no task for the site;
+       its swap group's builder has. The tree is the villager's own. */
+    assert(aoe_unit_task_template_ror(&unit, &site, 5, 6, 0, &ops) == &builder);
+    assert(aoe_unit_task_template_ror(&unit, &tree_unit, 5, 6, 0, &ops) == &villager);
+    assert(aoe_unit_task_template_ror(&unit, &unit, 5, 6, 0, &ops) == &villager);
+    expect("");
+
     /* Gather a tree: task, tribe list defers 5 to the base target ctor. */
     assert(aoe_unit_order_ror(&unit, &tree_unit, 5, 6, 0, &ops, &code) &&
            code == 5);
@@ -176,6 +183,14 @@ int main(void) {
     assert(aoe_unit_order_ror(&unit, NULL, 5, 6, 0, &ops, &code) &&
            code == 9);
     expect("retarget ack2bc/258/-1/-1");
+    /* 0x00406670: a swap happens through the select alone too. */
+    {
+        const DatUnitTask *t = NULL;
+        unit.core.unit_template = &villager;
+        assert(aoe_unit_select_task_swap_ror(&unit, &site, 5, 6, 0, &ops, &t) &&
+               t == &builder_tasks[0] && unit.core.unit_template == &builder);
+        expect("swap->builder ");
+    }
     /* Ground point with no task: move, result 1. */
     head_action.type = 2;
     assert(aoe_unit_order_ror(&unit, NULL, 5, 6, 0, &ops, &code) && code == 1);

@@ -89,6 +89,10 @@ int aoe_move_action_init_point_ror(AoeMoveActionRor *action,
    destructor (0x00406ed0) releases the target, the second target and the
    owned sub-action list. */
 void aoe_move_action_destroy_ror(AoeMoveActionRor *action, const AoeMoveActionOps *ops);
+/* 0x00405230, its deleting form: the destructor and, with bit 0 of
+   `flags`, the allocator's free; the action is returned. */
+AoeMoveActionRor *aoe_move_action_delete_ror(AoeMoveActionRor *action, uint8_t flags,
+                                             const AoeMoveActionOps *ops);
 
 /* +0x5c = 0x00405490: store the state; states 1/0xd/0xe show the standing
    graphic unless quiet; state 4 shows the action graphic. */

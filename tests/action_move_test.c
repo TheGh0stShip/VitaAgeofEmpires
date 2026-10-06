@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include "action_move.h"
 
 #include <assert.h>
@@ -170,5 +171,14 @@ int main(void) {
     aoe_move_action_destroy_ror(&a, &ops);
     expect("wp 88 rel ");
     assert(a.target == NULL && a.secondary_id == -1);
+    {
+        /* 0x00405230: bit 0 frees the action after the destructor. */
+        AoeMoveActionRor *h = calloc(1, sizeof *h);
+        assert(h);
+        h->secondary_id = -1;
+        h->unit = &unit;
+        assert(aoe_move_action_delete_ror(h, 1, &ops) == h);
+        expect("wp 88 ");
+    }
     return 0;
 }

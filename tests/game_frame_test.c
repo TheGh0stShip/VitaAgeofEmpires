@@ -57,7 +57,38 @@ static int ch(void *c, int32_t v) { (void)c; return v >= 0; }
 static int playing(void *c, void *s) { (void)c; return s == (void *)1; }
 static int play(void *c, void *s) { (void)c; (void)s; return 7; }
 
+static int gpf_validates, gpf_clears, gpf_shows, gpf_redraws, gpf_destroys;
+static uint8_t gpf_restore_v = 2;
+static int gpf_iconic_v;
+static int gpf_iconic(void *c) { (void)c; return gpf_iconic_v; }
+static void gpf_validate(void *c) { (void)c; ++gpf_validates; }
+static void gpf_clear(void *c) { (void)c; ++gpf_clears; }
+static uint8_t gpf_restore(void *c) { (void)c; return gpf_restore_v; }
+static void gpf_redraw(void *c) { (void)c; ++gpf_redraws; }
+static void gpf_destroy(void *c) { (void)c; ++gpf_destroys; }
+static int gpf_rect(void *c, int32_t r[4]) { (void)c; r[0] = r[1] = 0; r[2] = r[3] = 9; return 1; }
+static void gpf_show(void *c, const int32_t r[4]) { (void)c; assert(r[2] == 9); ++gpf_shows; }
+
+static void paint_font_tests(void) {
+    AoeGamePaintFrameOpsRor o = {NULL, 1, 1, gpf_iconic, gpf_validate, gpf_clear, gpf_restore,
+                                 gpf_redraw, gpf_redraw, gpf_destroy, gpf_rect, gpf_show};
+    AoeLogFontRor f;
+    assert(aoe_game_frame_paint_ror(&o) == 1 && gpf_redraws == 2 && gpf_validates == 0);
+    gpf_restore_v = 3;
+    assert(aoe_game_frame_paint_ror(&o) == 0 && gpf_destroys == 1 && gpf_validates == 1);
+    o.draw_active = 0;
+    assert(aoe_game_frame_paint_ror(&o) == 0 && gpf_shows == 1 && gpf_validates == 2);
+    o.window_ok = 0;
+    assert(aoe_game_frame_paint_ror(&o) == 0 && gpf_clears == 1 && gpf_validates == 3);
+    aoe_game_font_desc_ror("Arial", 12, 700, 0, "0", &f);
+    assert(f.height == -16 && f.weight == 700 && f.quality == 2 && f.pitch_family == 2 &&
+           strcmp(f.face, "Arial") == 0);
+    aoe_game_font_desc_ror("Arial", 9, 400, 1, "238", &f);
+    assert(f.height == -12 && f.charset == 238 && f.strikeout == 1);
+}
+
 int main(void) {
+    paint_font_tests();
     AoeGameFrameOpsRor f;
     AoeGameCommOpsRor co;
     AoeGameDisplayOpsRor d;

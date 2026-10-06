@@ -403,3 +403,32 @@ int aoe_unit_ai_post_ror(const AoeUnitAiOpsRor *ops, const int32_t values[6]) {
 int aoe_unit_ai_post_record_ror(const AoeUnitAiOpsRor *ops, const int32_t record[6]) {
     return aoe_unit_ai_post_ror(ops, record);
 }
+
+int aoe_unit_ai_order_ror(AoeUnitAiRor *ai, AoeUnitAiNotesRor *q, uint8_t unit_state,
+                          int32_t unit_id, int32_t sender, int32_t code, const int32_t values[6],
+                          int32_t now, int32_t requeue, int32_t extra,
+                          const AoeUnitAiOrderOpsRor *ops) {
+    if (!ai || !q || !values || unit_state >= 3) return 1;
+    if (!now) {
+        aoe_unit_ai_note_ror(q, sender, code, extra, values, requeue);
+        return 1;
+    }
+    if (requeue == 1) {
+        int32_t cur[6];
+        cur[0] = ai->target_id;
+        cur[1] = -1;
+        memcpy(&cur[2], &ai->target_x, 4);
+        memcpy(&cur[3], &ai->target_y, 4);
+        memcpy(&cur[4], &ai->target_z, 4);
+        cur[5] = ai->field_48;
+        aoe_unit_ai_note_ror(q, unit_id, ai->action, ai->field_2c, cur, 1);
+    }
+    aoe_unit_ai_note_ror(q, sender, code, extra, values, 1);
+    if (code != 0x2d9) {
+        aoe_unit_ai_clear_target_ror(ai);
+        if (ops && ops->self_stop) ops->self_stop(ops->context, 1);
+    }
+    if (ops && ops->run_notes) ops->run_notes(ops->context, 0);
+    if (ops && ops->handle_c8 && q->count) ops->handle_c8(ops->context, q->records[0], 0);
+    return 1;
+}

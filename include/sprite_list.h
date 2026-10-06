@@ -36,6 +36,9 @@ typedef struct {
 /* 0x004153b0, the RoR list's destructor: the list is cleared
    (0x00415580). */
 void aoe_sprite_list_destroy_ror(AoeSpriteList *list);
+/* 0x00415390, its deleting form: the destructor and, with bit 0 of
+   `flags`, the allocator's free of the list; the list is returned. */
+AoeSpriteList *aoe_sprite_list_delete_ror(AoeSpriteList *list, uint8_t flags);
 int aoe_sprite_list_add(AoeSpriteList *list, const void *graphic,
                         uint8_t priority, int32_t arg1, int32_t arg2);
 int aoe_sprite_list_remove(AoeSpriteList *list, const void *graphic);

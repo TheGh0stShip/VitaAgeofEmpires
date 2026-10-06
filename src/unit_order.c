@@ -110,6 +110,59 @@ static int select_task(const AoeUnitOrderOps *ops, const DatUnit *list,
                                                     &ops->task, task);
 }
 
+/* The template among the unit's own and its swap group's that has a task
+   for the target (`own` when none). 0 for a host failure. */
+static int swap_template(const AoeUnitOrderOps *ops, AoeLiveUnit *unit, AoeLiveUnit *target,
+                         float x, float y, const DatUnit **chosen, const DatUnitTask **task) {
+    const DatUnit *own = unit->core.unit_template;
+    *chosen = own;
+    *task = NULL;
+    if (!select_task(ops, own, unit, target, x, y, task)) return 0;
+    if (!*task && own->task_swap_group) {
+        int16_t count = ops->owner_template_count(ops->context, unit);
+        for (int16_t i = 0; i < count; ++i) {
+            const DatUnit *other = ops->owner_template(ops->context, unit, i);
+            if (!other || other->unit_class != own->unit_class || other->type != own->type ||
+                other->task_swap_group != own->task_swap_group)
+                continue;
+            if (!select_task(ops, other, unit, target, x, y, task)) return 0;
+            if (*task) {
+                *chosen = other;
+                break;
+            }
+        }
+    }
+    return 1;
+}
+
+int aoe_unit_select_task_swap_ror(AoeLiveUnit *unit, AoeLiveUnit *target, float x, float y,
+                                  float z, const AoeUnitOrderOps *ops,
+                                  const DatUnitTask **task) {
+    const DatUnit *chosen;
+    (void)z;
+    if (!task) return 0;
+    *task = NULL;
+    if (!unit || !ops || !unit->core.unit_template || !ops->tribe_template ||
+        !ops->owner_template_count || !ops->owner_template || !ops->change_template)
+        return 0;
+    if (!swap_template(ops, unit, target, x, y, &chosen, task)) return 0;
+    if (chosen != unit->core.unit_template) ops->change_template(ops->context, unit, chosen);
+    return 1;
+}
+
+const DatUnit *aoe_unit_task_template_ror(AoeLiveUnit *unit, AoeLiveUnit *target, float x,
+                                          float y, float z, const AoeUnitOrderOps *ops) {
+    const DatUnit *chosen;
+    const DatUnitTask *task;
+    (void)z;
+    if (!unit || !unit->core.unit_template) return NULL;
+    if (target == unit || !unit->core.unit_template->task_swap_group || !ops ||
+        !ops->tribe_template || !ops->owner_template_count || !ops->owner_template)
+        return unit->core.unit_template;
+    if (!swap_template(ops, unit, target, x, y, &chosen, &task)) return unit->core.unit_template;
+    return chosen;
+}
+
 int aoe_unit_order_ror(AoeLiveUnit *unit, AoeLiveUnit *target, float x,
                        float y, float z, const AoeUnitOrderOps *ops,
                        int16_t *code) {
@@ -128,22 +181,7 @@ int aoe_unit_order_ror(AoeLiveUnit *unit, AoeLiveUnit *target, float x,
         return 0;
     *code = -1;
     if (target == unit) return 1;
-    if (!select_task(ops, own, unit, target, x, y, &task)) return 0;
-    if (!task && own->task_swap_group) {
-        int16_t count = ops->owner_template_count(ops->context, unit);
-        for (int16_t i = 0; i < count; ++i) {
-            const DatUnit *other = ops->owner_template(ops->context, unit, i);
-            if (!other || other->unit_class != own->unit_class ||
-                other->type != own->type ||
-                other->task_swap_group != own->task_swap_group)
-                continue;
-            if (!select_task(ops, other, unit, target, x, y, &task)) return 0;
-            if (task) {
-                ops->change_template(ops->context, unit, other);
-                break;
-            }
-        }
-    }
+    if (!aoe_unit_select_task_swap_ror(unit, target, x, y, z, ops, &task)) return 0;
     head = list->head ? list->head->action : NULL;
     if (head && task &&
         ops->action_task(ops->context, head) == task &&

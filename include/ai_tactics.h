@@ -39,6 +39,19 @@ typedef struct {
     uint8_t shortfall;  /* +0x1c4, members still missing */
 } AoeAiMembersRor;
 
+/* An integer point (x, y, z): 0x0046a7d0 zeroes it, 0x0046a7e0 sets it.
+   0x0046a800(origin, out, turns): `out` gets the point; with `turns`
+   (eighths of a full turn, times pi / 4) its offset from `origin` is
+   rotated and stored truncated as x and y (the origin is not added
+   back); z is kept. */
+typedef struct {
+    int32_t x, y, z;
+} AoeAiPointRor;
+void aoe_ai_point_zero_ror(AoeAiPointRor *p);
+void aoe_ai_point_set_ror(AoeAiPointRor *p, int32_t x, int32_t y, int32_t z);
+void aoe_ai_point_rotate_ror(const AoeAiPointRor *p, const AoeAiPointRor *origin,
+                             AoeAiPointRor *out, uint8_t turns);
+
 /* 0x0040d2f0: the play and +0x194 -1, the point +0x198 (0, 0, 0), +0x1b8
    0xfd, +0x1bc -1, +0x1c0 and +0x1c4 0, every slot free (ID -1, category
    and role 0xff) and the five totals -1. */

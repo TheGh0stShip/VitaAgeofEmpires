@@ -65,7 +65,7 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
     unit->type = u8(cursor);
     name_len = u16(cursor);
     unit->id = (int16_t)u16(cursor);
-    unit->language_name_id = u16(cursor); /* template +0x12 */
+    unit->language_name_id = u16(cursor); /* template +0x0c */
     take(cursor, 2); /* creation language ID */
     unit->unit_class = (int16_t)u16(cursor);
     unit->standing_graphic = (int16_t)u16(cursor);

@@ -60,7 +60,22 @@ static void fill_tests(void) {
     assert(aoe_ai_members_fill_ror(&m, 2, NULL, ids, 6, fill_category, NULL) == 0);
 }
 
+static void point_tests(void) {
+    AoeAiPointRor p, o, out;
+    aoe_ai_point_zero_ror(&p);
+    assert(p.x == 0 && p.y == 0 && p.z == 0);
+    aoe_ai_point_set_ror(&p, 12, 10, 3);
+    aoe_ai_point_set_ror(&o, 10, 10, 0);
+    aoe_ai_point_rotate_ror(&p, &o, &out, 0);
+    assert(out.x == 12 && out.y == 10 && out.z == 3);
+    /* A quarter turn (two eighths): the offset (2, 0) becomes (0, 2),
+       without the origin added back. */
+    aoe_ai_point_rotate_ror(&p, &o, &out, 2);
+    assert(out.x == 0 && out.y == 2 && out.z == 3);
+}
+
 int main(void) {
+    point_tests();
     static AoeAiGroupRor group;
     static AoeAiMembersRor m, m2;
     AoeAiCountersRor c;

@@ -151,7 +151,9 @@ void aoe_ui_button_colors_ror(const AoeUiButtonRor *b, int16_t state,
 /* Slots: +0x0c 0x0045f3e0 (the base set_rect), +0x48 0x004603a0 (key-up
    of the held key clicks), +0x58 0x00460100 (hotkey press), +0x70
    0x0045fcd0 (hit test first), +0x84 0x0045fd30 / +0x98 0x0045ff10
-   (press), +0x8c 0x0045fdd0 / +0xa0 0x0045ffb0 (drag in and out), +0x90
+   (press), +0x8c 0x0045fdd0 / +0xa0 0x0045ffb0 (drag in and out; the
+   function index's 0x00460045 is an instruction inside it, the notice
+   of a drag out), +0x90
    0x0045fe90 / +0xa4 0x00460070 (release), +0x94 / +0xa8 0x004072b0 (0),
    +0xac 0x00460230 (Enter/Space press, Up/Down move the tab focus),
    +0xd4 0x004606e0 (drop the sound), +0xd8 0x00460700 (reload it), +0xe8

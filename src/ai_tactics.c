@@ -1,5 +1,7 @@
 #include "ai_tactics.h"
 
+#include <math.h>
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -369,4 +371,30 @@ done:
     }
     m->shortfall = shortfall;
     return ok;
+}
+
+void aoe_ai_point_zero_ror(AoeAiPointRor *p) {
+    if (p) p->x = p->y = p->z = 0;
+}
+
+void aoe_ai_point_set_ror(AoeAiPointRor *p, int32_t x, int32_t y, int32_t z) {
+    if (!p) return;
+    p->x = x;
+    p->y = y;
+    p->z = z;
+}
+
+void aoe_ai_point_rotate_ror(const AoeAiPointRor *p, const AoeAiPointRor *origin,
+                             AoeAiPointRor *out, uint8_t turns) {
+    double a, sn, cs, dx, dy;
+    if (!p || !out) return;
+    *out = *p;
+    if (!turns || !origin) return;
+    a = (double)turns * (double)0.7853981852531433f;
+    sn = (double)(float)sin(a);
+    cs = cos(a);
+    dx = (double)(p->x - origin->x);
+    dy = (double)(p->y - origin->y);
+    out->x = aoe_ftol32(dx * cs - dy * sn);
+    out->y = aoe_ftol32(dx * sn + dy * cs);
 }

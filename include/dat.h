@@ -278,7 +278,7 @@ typedef struct {
        0x0044b910 / 0x004a9450 (-1 for none). */
     int16_t dead_unit_id;
     int16_t hit_points;
-    uint16_t language_name_id; /* original template +0x12 */
+    uint16_t language_name_id; /* original template +0x0c (loader 0x004413b0) */
     uint8_t garrison_capacity;  /* original template +0x2c */
     uint8_t hide_in_editor; /* template +0x4e */
     uint8_t enabled;        /* template +0x52 (effect type 2, 0x00443130) */

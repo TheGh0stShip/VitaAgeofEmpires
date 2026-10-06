@@ -682,7 +682,7 @@ add_library(aoe_ai_build STATIC src/ai_module.c src/ai_build.c
             src/ai_diplomacy.c src/ai_decision.c src/ai_group.c
             src/ai_tactics.c src/ai_unit_group.c)
 target_include_directories(aoe_ai_build PUBLIC include)
-target_link_libraries(aoe_ai_build PUBLIC aoe_player_outcome)
+target_link_libraries(aoe_ai_build PUBLIC aoe_player_outcome m)
 target_compile_options(aoe_ai_build PRIVATE -Wall -Wextra)
 
 add_library(aoe_player_outcome_dispatch STATIC src/player_outcome_dispatch.c)

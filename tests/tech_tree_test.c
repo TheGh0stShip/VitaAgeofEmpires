@@ -146,7 +146,7 @@ int main(void) {
         src->train_time = 30;
         assert(aoe_template_upgrade_copy_ror(slot, src));
         assert(slot->id == 4 && slot->enabled == 1 &&
-               slot->hide_in_editor == 0 && slot->language_name_id == 100 &&
+               slot->hide_in_editor == 0 && slot->language_name_id == 200 &&
                slot->hit_points == 50 && slot->train_time == 30 &&
                !strcmp(slot->name, "Axeman") && slot->name != src->name &&
                slot->attack_count == 1 && slot->attacks != &a &&

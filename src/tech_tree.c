@@ -326,14 +326,13 @@ int aoe_template_upgrade_copy_ror(DatUnit *slot, DatUnit *src) {
     slot->name = name;
     slot->damage_graphic_count = src->damage_graphic_count;
     slot->damage_graphics = damage;
-    /* Kept: ID, enable byte, editor-hide byte; the language name only when
-       the source's editor-hide byte is 1. */
+    /* Kept: ID, enable byte, editor-hide byte.  The language name (+0x0c)
+       is always copied; the original also keeps its +0x12 ID copy when the
+       source's editor-hide byte is 1, which the port does not model. */
     slot->id = keep.id;
     slot->enabled = keep.enabled;
     slot->hide_in_editor = keep.hide_in_editor;
-    slot->language_name_id =
-        src->hide_in_editor == 1 ? keep.language_name_id
-                                 : src->language_name_id;
+    slot->language_name_id = src->language_name_id;
     src->hide_in_editor = 1;
     /* 0x0043ecb0; type 25's slot 0x00440330 only forwards to it. */
     if (level >= 2) slot->speed = src->speed;

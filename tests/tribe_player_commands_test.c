@@ -306,6 +306,58 @@ static void test_player_tick(void) {
     assert(t_log[2] == 0 && r.rb4 == 7 && p.counter == 1);
 }
 
+
+static float tl_attr48 = 0.0f; static int tl_owns6d = 0;
+static int tl_info(void *c, int16_t slot, uint8_t *kind, uint8_t *en, int16_t *at, int16_t *f4c, const char **name) {
+    (void)c;
+    static const char *names[] = {"Villager", "Axeman", "Boat", "Priest"};
+    if (slot == 0x6d) { *kind = 'P'; *en = 0; *at = -1; *f4c = 9; *name = "Wonder"; return 1; }
+    if (slot < 0 || slot > 3) return 0;
+    *kind = slot == 2 ? 'E' : 'F'; *en = slot != 3; *at = slot == 0 ? 0x76 : 12; *f4c = (int16_t)(slot * 10); *name = names[slot]; return 1;
+}
+static void tl_costs(void *c, int16_t slot, int16_t t[3], int16_t a[3]) { (void)c; t[0] = 0; t[1] = 3; t[2] = -1; a[0] = (int16_t)(50 + slot); a[1] = 20; a[2] = 0; }
+static int32_t tl_help(void *c, int16_t s) { (void)c; return 1000 + s; }
+static int32_t tl_tree(void *c, int16_t s) { (void)c; return 2000 + s; }
+static float tl_a48(void *c) { (void)c; return tl_attr48; }
+static int tl_owns(void *c, int16_t id) { (void)c; (void)id; return tl_owns6d; }
+static char dump_log[2048]; static int dump_n;
+static void dp_civ(void *c, char *o, int n) { (void)c; snprintf(o, (size_t)n, "Greek"); }
+static const char *dp_bl(void *c) { (void)c; return "bl"; }
+static const char *dp_cp(void *c) { (void)c; return "cp"; }
+static const char *dp_vc(void *c) { (void)c; return "vc"; }
+static int32_t dp_pts(void *c, int k) { (void)c; return 10 + k; }
+static int32_t dp_ev(void *c, int i) { (void)c; return i; }
+static int32_t dp_smp(void *c, int i) { (void)c; return 100 + i; }
+static int32_t dp_score(void *c) { (void)c; return 999; }
+static float dp_attr(void *c, int i) { (void)c; return 5.0f + (float)i; }
+static void dp_bai(void *c, char *o, int n) { (void)c; snprintf(o, (size_t)n, "Build AI (last a, last2 b, Progress c, Phase d)"); }
+static void dp_civs(void *c, char *o, int n) { (void)c; snprintf(o, (size_t)n, "Civilians (Total 1, Exp 2 3 4 5 6, Need 7 8 9 10)"); }
+static int32_t dp_sold(void *c) { (void)c; return 17; }
+static void dp_line(void *c, const char *t) { (void)c; dump_n += snprintf(dump_log + dump_n, sizeof dump_log - (size_t)dump_n, "%s|", t); }
+static void train_and_dump_tests(void) {
+    AoeTribeTrainListOpsRor o = {NULL, 4, tl_info, tl_costs, tl_help, tl_tree, tl_a48, tl_owns};
+    AoeTribeDumpOpsRor d = {NULL, 3, 1, dp_civ, dp_bl, dp_cp, dp_vc, dp_pts, dp_ev, dp_smp, dp_score, dp_attr, dp_bai, dp_civs, dp_sold, dp_line};
+    AoeTribeTrainEntryRor *list = NULL; int16_t n = -1;
+    /* Building 12: slot 1 (Axeman); slot 2 is kind 'E', slot 3 disabled. */
+    aoe_tribe_player_train_list_ror(&o, 12, &list, &n);
+    assert(n == 1 && list && strcmp(list[0].name, "Axeman") == 0 && list[0].id == 1 && list[0].field_4c == 10 &&
+           list[0].cost_type[1] == 3 && list[0].cost_amount[0] == 51.0f && list[0].help == 1001 && list[0].tree_text == 2001);
+    /* Building 0x76 with attribute 48 at 0: the Villager plus the Wonder entry. */
+    aoe_tribe_player_train_list_ror(&o, 0x76, &list, &n);
+    assert(n == 2 && list[0].id == 0 && list[1].id == 0x6d && strcmp(list[1].name, "Wonder") == 0);
+    tl_owns6d = 1;
+    aoe_tribe_player_train_list_ror(&o, 0x76, &list, &n);
+    assert(n == 1);
+    aoe_tribe_player_train_list_ror(&o, 99, &list, &n);
+    assert(n == 0 && list == NULL);
+    aoe_tribe_player_dump_ror(&d, 1);
+    assert(strncmp(dump_log, "Player 3:|Computer Player: Greek|Build List: bl|City Plan: cp|VC File: vc|Points:|Combat 10|", 90) == 0);
+    assert(strstr(dump_log, "Total: 999|Population: 16|Kills: 100|Kill Ratio: 102|Razings: 101|Food: 5|Gold: 8|Stone: 7|Wood: 6|Technology: 117|Exploration: 107|Build AI") != NULL &&
+           strstr(dump_log, "|Number Soldiers 17|") != NULL);
+    dump_n = 0; d.is_computer = 0;
+    aoe_tribe_player_dump_ror(&d, 1);
+    assert(strstr(dump_log, "Human Player: Greek|Points:") != NULL && strstr(dump_log, "Soldiers") == NULL);
+}
 int main(void) {
     AoeTribePlayerOpsRor ops = {0, 2, collect, template_state, ack_b, ack_u, selected, object_type, object_class, queue};
     /* Build: villagers (min 4, class 4), template 118 acknowledges, 0x66. */
@@ -441,5 +493,6 @@ int main(void) {
     load_templates_tests();
     test_message_router();
     test_player_tick();
+    train_and_dump_tests();
     return 0;
 }

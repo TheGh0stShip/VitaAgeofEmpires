@@ -1,4 +1,5 @@
 #include "unit_order.h"
+#include <stdint.h>
 
 #include <stddef.h>
 
@@ -347,4 +348,89 @@ int aoe_unit_order_repair_ror(AoeLiveUnit *unit, AoeLiveUnit *target,
                          *code == 0x6a ? 0x26a : -1, target->core.unit_id,
                          tt->unit_class, x, y, z);
     return 1;
+}
+
+static int32_t iabs32(int32_t v) { return v < 0 ? -v : v; }
+
+void aoe_unit_order_by_code_ror(AoeUnitOrderCodeStateRor *st, const AoeUnitOrderCodeOpsRor *o,
+                                uint8_t code) {
+    if (!st || !o) return;
+    o->clear_actions(o->context);
+    st->code = code;
+    switch (code) {
+    case 1:
+    case 0xd:
+        o->set_graphic(o->context, o->standing_graphic);
+        break;
+    case 2:
+        o->set_graphic(o->context, o->standing_graphic);
+        o->slot_54(o->context, 0);
+        o->slot_58(o->context, 0);
+        st->saved_x = st->saved_y = st->saved_z = -1.0f;
+        break;
+    case 3:
+        if (o->game_mode(o->context) == 1) {
+            o->notify(o->context, o->owner, o->owner, 0x1fa, 0, 0, 0);
+            o->slot_5c(o->context, 1);
+        } else {
+            o->notify(o->context, o->owner, o->owner, 0x202, 0x25a, 0, 0);
+        }
+        o->set_graphic(o->context, o->standing_graphic);
+        break;
+    case 4:
+        if (o->has_target) {
+            st->saved_x = o->target_x;
+            st->saved_y = o->target_y;
+            st->saved_z = o->target_z;
+        }
+        if (!o->make_move_to_target(o->context, o->record_24, o->record_34)) {
+            o->slot_5c(o->context, 0xd);
+        } else {
+            o->push_action(o->context);
+            o->action_hook(o->context, 1);
+        }
+        break;
+    case 6:
+        o->set_graphic(o->context, o->record_34);
+        break;
+    case 7: {
+        int32_t tx, ty, ux, uy, dx, dy;
+        if (!o->has_target) {
+            o->slot_5c(o->context, 0xd);
+            return;
+        }
+        tx = (int32_t)o->target_x; ty = (int32_t)o->target_y;
+        ux = (int32_t)o->unit_x; uy = (int32_t)o->unit_y;
+        if ((float)(int32_t)o->target_size_x == o->target_size_x &&
+            (float)(int32_t)o->target_size_y == o->target_size_y) {
+            if ((ty < uy && ux < tx) || (uy < ty && tx < ux)) uy -= 1;
+        }
+        dx = tx - ux; dy = ty - uy;
+        if (iabs32(dx) == iabs32(dy)) {
+            int32_t ax, ay, bx, by;
+            if (dx > 0 && dy > 0) { ax = tx; ay = ty - 1; bx = tx - 1; by = ty; }
+            else if (dx < 0 && dy > 0) { ax = tx - 1; ay = ty - 1; bx = tx + 1; by = ty; }
+            else if (dx < 0 && dy == 0) { ax = tx + 1; ay = ty; bx = tx; by = ty + 1; }
+            else { ax = tx - 1; ay = ty; bx = tx; by = ty + 1; }
+            if (o->find_unit(o->context, o->owner, 0x1b, ax, ay) != -1 &&
+                o->find_unit(o->context, o->owner, 0x1b, bx, by) != -1) {
+                o->slot_5c(o->context, 0xd);
+                return;
+            }
+        }
+        o->set_graphic(o->context, o->record_38);
+        if (o->record_has_sound) o->play_sound(o->context);
+        break;
+    }
+    case 0xb:
+        if (!o->make_move_to_point(o->context, st->saved_x, st->saved_y, st->saved_z, o->record_34)) {
+            o->slot_5c(o->context, 0xd);
+        } else {
+            o->action_hook(o->context, 1);
+            o->push_action(o->context);
+        }
+        break;
+    default:
+        break;
+    }
 }

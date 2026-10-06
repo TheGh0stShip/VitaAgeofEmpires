@@ -91,6 +91,49 @@ static void ack(void *c, AoeLiveUnit *u, int32_t a, int32_t b, int32_t id,
 static void destroy(void *c, void *a) { (void)c; (void)a; }
 static void state(void *c, void *a, uint8_t s) { (void)c; (void)a; (void)s; }
 
+
+static int oc_cleared, oc_graphic, oc_slot54, oc_slot58, oc_slot5c = -1, oc_mode = 1, oc_notify_code, oc_move_ok = 1, oc_pushed, oc_hook, oc_sound; static int32_t oc_found[2] = {-1, -1}, oc_nfind; static float oc_px;
+static void oc_clear(void *c) { (void)c; ++oc_cleared; }
+static void oc_setg(void *c, int32_t g) { (void)c; oc_graphic = g; }
+static void oc_s54(void *c, int32_t v) { (void)c; oc_slot54 = v + 1; }
+static void oc_s58(void *c, int32_t v) { (void)c; oc_slot58 = v + 1; }
+static void oc_s5c(void *c, int32_t v) { (void)c; oc_slot5c = v; }
+static int32_t oc_gmode(void *c) { (void)c; return oc_mode; }
+static void oc_notify(void *c, int16_t a, int16_t b, int32_t code, int32_t d, int32_t e, int32_t f) { (void)c; (void)a; (void)b; (void)d; (void)e; (void)f; oc_notify_code = code; }
+static int oc_mv_t(void *c, int32_t r, int32_t g) { (void)c; (void)r; (void)g; return oc_move_ok; }
+static int oc_mv_p(void *c, float x, float y, float z, int32_t g) { (void)c; (void)y; (void)z; (void)g; oc_px = x; return oc_move_ok; }
+static void oc_push(void *c) { (void)c; ++oc_pushed; }
+static void oc_hookf(void *c, int32_t v) { (void)c; oc_hook = v; }
+static int32_t oc_find(void *c, int16_t owner, int32_t type, int32_t x, int32_t y) { (void)c; (void)owner; (void)x; (void)y; assert(type == 0x1b); return oc_found[oc_nfind++ & 1]; }
+static void oc_snd(void *c) { (void)c; ++oc_sound; }
+static void order_code_tests(void) {
+    AoeUnitOrderCodeOpsRor o = {NULL, oc_clear, oc_setg, 500, 3, 600, 700, 1, oc_s54, oc_s58, oc_s5c, oc_gmode, 2, oc_notify, 1,
+                                 10.5f, 20.5f, 0.0f, 2.0f, 2.0f, 13.5f, 23.5f, oc_mv_t, oc_mv_p, oc_push, oc_hookf, oc_find, oc_snd};
+    AoeUnitOrderCodeStateRor st = {0, 0, 0, 0};
+    aoe_unit_order_by_code_ror(&st, &o, 1);
+    assert(oc_cleared == 1 && st.code == 1 && oc_graphic == 500);
+    aoe_unit_order_by_code_ror(&st, &o, 2);
+    assert(oc_slot54 == 1 && oc_slot58 == 1 && st.saved_x == -1.0f);
+    aoe_unit_order_by_code_ror(&st, &o, 3);
+    assert(oc_notify_code == 0x1fa && oc_slot5c == 1);
+    oc_mode = 0; aoe_unit_order_by_code_ror(&st, &o, 3);
+    assert(oc_notify_code == 0x202);
+    aoe_unit_order_by_code_ror(&st, &o, 4);
+    assert(st.saved_x == 10.5f && oc_pushed == 1 && oc_hook == 1);
+    oc_move_ok = 0; oc_slot5c = -1; aoe_unit_order_by_code_ror(&st, &o, 0xb);
+    assert(oc_slot5c == 0xd && oc_px == 10.5f);
+    aoe_unit_order_by_code_ror(&st, &o, 6);
+    assert(oc_graphic == 600);
+    /* Code 7: the diagonal (dx = dy = -3 after the row shift) with no 0x1b units: the +0x38 graphic and the sound. */
+    oc_slot5c = -1; aoe_unit_order_by_code_ror(&st, &o, 7);
+    assert(oc_graphic == 700 && oc_sound == 1 && oc_slot5c == -1);
+    oc_found[0] = 5; oc_found[1] = 6; oc_nfind = 0;
+    aoe_unit_order_by_code_ror(&st, &o, 7);
+    assert(oc_slot5c == 0xd && oc_sound == 1);
+    o.has_target = 0; oc_slot5c = -1;
+    aoe_unit_order_by_code_ror(&st, &o, 7);
+    assert(oc_slot5c == 0xd);
+}
 int main(void) {
     AoeUnitOrderOps ops = {
         {0, owner_id, accepts, hostile, map_size, terrain}, 0, tribe,
@@ -293,5 +336,6 @@ int main(void) {
         expect("");
         aoe_action_list_clear(&list);
     }
+    order_code_tests();
     return 0;
 }

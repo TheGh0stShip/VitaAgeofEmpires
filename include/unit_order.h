@@ -151,4 +151,50 @@ int aoe_unit_order_class_action_ror(AoeLiveUnit *unit, AoeLiveUnit *target,
                                     int force, int16_t action_type,
                                     const AoeUnitOrderOps *ops);
 
+
+/* 0x004b14c0 (the tribe action unit's order-by-code slot): the action
+   list cleared (0x00403e50) and the code stored (+0x0c). Codes: 1 and
+   0xd set the template's standing graphic (+0x18); 2 does that, slots
+   +0x54(0) and +0x58(0) and clears the saved point (-1.0 x3); 3 notifies
+   the owner (+0x148) with (owner, owner, 0x1fa) then +0x5c(1) when the
+   game mode (0x00454150) is 1, else (owner, owner, 0x202, 0x25a, 0, 0),
+   and sets the standing graphic; 4 saves the target's position and
+   makes a move action to it (0x004052d0 with the +0x30 record's +0x24
+   range and +0x34 graphic), failing with +0x5c(0xd), else pushing it
+   (0x00404400) and 0x004076a0(1); 6 sets the record's +0x34 graphic; 7
+   needs a target, else +0x5c(0xd): when the target's size (+0x30 /
+   +0x34) is whole, the unit and target tiles pick two tiles beside the
+   diagonal between them and a type-0x1b unit on both (0x00520590 with
+   the owner) answers +0x5c(0xd); otherwise the record's +0x38 graphic is
+   set and its +0x44 sound played (0x004a2370(1)); 0xb makes a move to
+   the saved point (0x00405250 with range 0 and the +0x34 graphic),
+   failing with +0x5c(0xd), else 0x004076a0(1) and the push. */
+typedef struct {
+    void *context;
+    void (*clear_actions)(void *context);
+    void (*set_graphic)(void *context, int32_t graphic);
+    int32_t standing_graphic;                 /* template +0x18 */
+    int32_t record_24, record_34, record_38;  /* the +0x30 record's fields */
+    int record_has_sound;                     /* its +0x44 */
+    void (*slot_54)(void *context, int32_t);
+    void (*slot_58)(void *context, int32_t);
+    void (*slot_5c)(void *context, int32_t);
+    int32_t (*game_mode)(void *context);      /* 0x00454150 */
+    int16_t owner;
+    void (*notify)(void *context, int16_t a, int16_t b, int32_t code, int32_t d, int32_t e, int32_t f);
+    int has_target;
+    float target_x, target_y, target_z;
+    float target_size_x, target_size_y;       /* target template +0x30 / +0x34 */
+    float unit_x, unit_y;
+    int (*make_move_to_target)(void *context, int32_t range, int32_t graphic); /* 0x004052d0 */
+    int (*make_move_to_point)(void *context, float x, float y, float z, int32_t graphic); /* 0x00405250 */
+    void (*push_action)(void *context);       /* 0x00404400 */
+    void (*action_hook)(void *context, int32_t); /* 0x004076a0 */
+    int32_t (*find_unit)(void *context, int16_t owner, int32_t type, int32_t x, int32_t y); /* 0x00520590 */
+    void (*play_sound)(void *context);        /* 0x004a2370(1) */
+} AoeUnitOrderCodeOpsRor;
+typedef struct { uint8_t code; float saved_x, saved_y, saved_z; } AoeUnitOrderCodeStateRor;
+void aoe_unit_order_by_code_ror(AoeUnitOrderCodeStateRor *st, const AoeUnitOrderCodeOpsRor *o,
+                                uint8_t code);
+
 #endif

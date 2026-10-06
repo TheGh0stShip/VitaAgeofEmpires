@@ -1,4 +1,6 @@
 #include "tribe_player_commands.h"
+#include <string.h>
+#include <stdlib.h>
 
 #include "command_production.h"
 
@@ -507,4 +509,98 @@ void aoe_tribe_player_tick_ror(AoeTribeTickStateRor *p, float dt, const AoeTribe
     }
     if (ops->global_flag(ops->context))
         ops->global_hook(ops->context);
+}
+
+void aoe_tribe_player_train_list_ror(const AoeTribeTrainListOpsRor *o, int16_t building,
+                                     AoeTribeTrainEntryRor **list, int16_t *count) {
+    int16_t i, n = 0, k = 0, extra = 0;
+    uint8_t kind, enabled;
+    int16_t at, f4c, types[3], amounts[3];
+    const char *name;
+    if (!o || !list || !count) return;
+    for (i = 0; i < o->template_count; ++i)
+        if (o->template_info(o->context, i, &kind, &enabled, &at, &f4c, &name) && kind > 'E' &&
+            enabled && at == building)
+            ++n;
+    if (building == 0x76 && o->attribute_48(o->context) == 0.0f &&
+        o->template_info(o->context, 0x6d, &kind, &enabled, &at, &f4c, &name) && !enabled &&
+        !o->owns_template(o->context, 0x6d)) {
+        extra = 1;
+        ++n;
+    }
+    free(*list);
+    *list = NULL;
+    *count = n;
+    if (n == 0) return;
+    *list = calloc((size_t)n, sizeof **list);
+    if (!*list) { *count = 0; return; }
+    for (i = 0; i < o->template_count && k < n - extra; ++i) {
+        AoeTribeTrainEntryRor *e;
+        if (!o->template_info(o->context, i, &kind, &enabled, &at, &f4c, &name) || kind <= 'E' ||
+            !enabled || at != building)
+            continue;
+        e = &(*list)[k++];
+        e->name = name; e->id = i; e->field_4c = f4c;
+        o->costs(o->context, i, types, amounts);
+        e->cost_type[0] = types[0]; e->cost_type[1] = types[1]; e->cost_type[2] = types[2];
+        e->cost_amount[0] = (float)amounts[0]; e->cost_amount[1] = (float)amounts[1];
+        e->cost_amount[2] = (float)amounts[2];
+        e->help = o->help(o->context, i);
+        e->tree_text = o->tree_text(o->context, i);
+    }
+    if (extra) {
+        AoeTribeTrainEntryRor *e = &(*list)[k];
+        o->template_info(o->context, 0x6d, &kind, &enabled, &at, &f4c, &name);
+        e->name = name; e->id = 0x6d; e->field_4c = f4c;
+        o->costs(o->context, 0x6d, types, amounts);
+        e->cost_type[0] = types[0]; e->cost_type[1] = types[1]; e->cost_type[2] = types[2];
+        e->cost_amount[0] = (float)amounts[0]; e->cost_amount[1] = (float)amounts[1];
+        e->cost_amount[2] = (float)amounts[2];
+        e->help = o->help(o->context, 0x6d);
+        e->tree_text = o->tree_text(o->context, 0x6d);
+    }
+}
+
+void aoe_tribe_player_dump_ror(const AoeTribeDumpOpsRor *o, int full) {
+    char line[512], civ[256];
+    if (!o) return;
+#define L(...) do { snprintf(line, sizeof line, __VA_ARGS__); o->line(o->context, line); } while (0)
+    L("Player %d:", (int)o->player);
+    if (full) {
+        civ[0] = 0;
+        o->civ_name(o->context, civ, (int)sizeof civ);
+        if (!o->is_computer) {
+            L("Human Player: %s", civ);
+        } else {
+            L("Computer Player: %s", civ);
+            L("Build List: %s", o->build_list(o->context));
+            L("City Plan: %s", o->city_plan(o->context));
+            L("VC File: %s", o->vc_file(o->context));
+        }
+    }
+    L("Points:");
+    L("Combat %d", (int)o->points(o->context, 0));
+    L("Economy %d", (int)o->points(o->context, 1));
+    L("Religion %d", (int)o->points(o->context, 2));
+    L("Science %d", (int)o->points(o->context, 3));
+    L("Survival %d", (int)o->event_points(o->context, 0x16));
+    L("Wonder %d", (int)o->event_points(o->context, 0x17));
+    L("Total: %d", (int)o->score(o->context));
+    L("Population: %d", (int)o->attribute(o->context, 11));
+    L("Kills: %d", (int)o->samples(o->context, 0));
+    L("Kill Ratio: %d", (int)o->samples(o->context, 2));
+    L("Razings: %d", (int)o->samples(o->context, 1));
+    L("Food: %d", (int)o->attribute(o->context, 0));
+    L("Gold: %d", (int)o->attribute(o->context, 3));
+    L("Stone: %d", (int)o->attribute(o->context, 2));
+    L("Wood: %d", (int)o->attribute(o->context, 1));
+    L("Technology: %d", (int)o->samples(o->context, 0x11));
+    L("Exploration: %d", (int)o->samples(o->context, 7));
+    if (o->is_computer) {
+        char buf[256];
+        buf[0] = 0; o->build_ai(o->context, buf, (int)sizeof buf); o->line(o->context, buf);
+        buf[0] = 0; o->civilians(o->context, buf, (int)sizeof buf); o->line(o->context, buf);
+        L("Number Soldiers %d", (int)o->soldiers(o->context));
+    }
+#undef L
 }

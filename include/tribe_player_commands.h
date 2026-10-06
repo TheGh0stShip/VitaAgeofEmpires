@@ -407,4 +407,69 @@ typedef struct {
 } AoeTribeTickOpsRor;
 void aoe_tribe_player_tick_ror(AoeTribeTickStateRor *p, float dt, const AoeTribeTickOpsRor *ops);
 
+
+/* 0x004f0db0: the units a building can train, for a list: every template
+   slot whose kind byte (+4) is above 'E', enabled (+0x52) and trained at
+   this building (+0x15c) becomes a 0x28-byte entry: the template's name
+   (+8), the slot, its +0x4c, the two first cost types and three amounts
+   (0x004f0830 with scale 1.0), and the AI help / tree text (0x0040c1a0 /
+   0x00407ae0). Building 0x76 with attribute 48 at 0.0 and template 0x6d
+   disabled adds a 0x6d entry when the player owns no 0x6d object. The
+   previous list is freed first; `*count` tells how many. */
+typedef struct {
+    const char *name;
+    int16_t id;
+    int16_t field_4c;
+    int16_t cost_type[3];
+    float cost_amount[3];
+    int32_t help, tree_text;
+} AoeTribeTrainEntryRor;
+typedef struct {
+    void *context;
+    int16_t template_count;                                        /* +0x22 */
+    /* Slot i: 0 when empty; else its kind byte, enabled byte, +0x15c, +0x4c and name. */
+    int (*template_info)(void *context, int16_t slot, uint8_t *kind, uint8_t *enabled,
+                         int16_t *trained_at, int16_t *field_4c, const char **name);
+    void (*costs)(void *context, int16_t slot, int16_t types[3], int16_t amounts[3]);
+    int32_t (*help)(void *context, int16_t slot);
+    int32_t (*tree_text)(void *context, int16_t slot);
+    float (*attribute_48)(void *context);                          /* resources +0xc0 */
+    int (*owns_template)(void *context, int16_t id);               /* an object of it in +0x28 */
+} AoeTribeTrainListOpsRor;
+void aoe_tribe_player_train_list_ror(const AoeTribeTrainListOpsRor *o, int16_t building,
+                                     AoeTribeTrainEntryRor **list, int16_t *count);
+
+/* 0x004f6770: the player's debug dump, one line per call of `line`:
+   "Player %d:", with `full` the civilisation (string 0x27f6 + civ) as
+   "Human Player: %s" or, for a computer, "Computer Player: %s", "Build
+   List: %s", "City Plan: %s", "VC File: %s"; then "Points:", "Combat %d",
+   "Economy %d", "Religion %d", "Science %d" (category points), "Survival
+   %d", "Wonder %d" (event points 0x16 / 0x17), "Total: %d" (the score),
+   "Population: %d" (attribute 11), "Kills: %d", "Kill Ratio: %d",
+   "Razings: %d" (samples 0, 2, 1), "Food: %d", "Gold: %d", "Stone: %d",
+   "Wood: %d" (attributes 0, 3, 2, 1), "Technology: %d", "Exploration:
+   %d" (samples 0x11, 7); for a computer the build AI line "Build AI
+   (last %s, last2 %s, Progress %s, Phase %s)" and the civilian counts
+   "Civilians (Total %d, Exp %d %d %d %d %d, Need %d %d %d %d)" and
+   "Number Soldiers %d". */
+typedef struct {
+    void *context;
+    int16_t player;
+    int is_computer;
+    void (*civ_name)(void *context, char *out, int size);
+    const char *(*build_list)(void *context);
+    const char *(*city_plan)(void *context);
+    const char *(*vc_file)(void *context);
+    int32_t (*points)(void *context, int category);
+    int32_t (*event_points)(void *context, int index);
+    int32_t (*samples)(void *context, int index);
+    int32_t (*score)(void *context);
+    float (*attribute)(void *context, int index);
+    void (*build_ai)(void *context, char *out, int size);
+    void (*civilians)(void *context, char *out, int size);
+    int32_t (*soldiers)(void *context);
+    void (*line)(void *context, const char *text);
+} AoeTribeDumpOpsRor;
+void aoe_tribe_player_dump_ror(const AoeTribeDumpOpsRor *o, int full);
+
 #endif

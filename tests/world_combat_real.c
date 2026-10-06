@@ -668,6 +668,26 @@ int main(int argc, char **argv) {
                     ok = 0;
                     goto done;
                 }
+                /* The villager walks to the foundation and builds it (the
+                   build action 0x004b13c0 adding work through 0x004ad7b0);
+                   the house completes within its build time plus the walk. */
+                {
+                    int bt = 0;
+                    uint8_t res = 0;
+                    while (bt < 6000 && f->core.state == 0) {
+                        (void)aoe_world_combat_tick_ror(&combat, villager, 0.05f, &res);
+                        (void)aoe_world_combat_update_unit_ror(&combat, f, 0.05f);
+                        ++bt;
+                    }
+                    printf("place: built after %d ticks, state %d, hp %.0f of %d\n", bt,
+                           (int)f->core.state, f->core.hit_points,
+                           (int)f->core.unit_template->hit_points);
+                    if (f->core.state == 0) {
+                        fprintf(stderr, "the house was never completed\n");
+                        ok = 0;
+                        goto done;
+                    }
+                }
             }
         }
         printf("pop: room(4) %.1f pop(11) %.1f limit(32) %.1f\n",

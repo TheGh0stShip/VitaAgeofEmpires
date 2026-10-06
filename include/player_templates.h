@@ -24,8 +24,8 @@ void aoe_player_templates_free(AoePlayerTemplates *templates);
 
 /* Template vtable +0x1c: an independent copy of every parsed field (name,
    tasks, damage graphics, attacks, armors). NULL on allocation failure or
-   a template without a name. Free with aoe_template_free_ror. */
-DatUnit *aoe_template_clone_ror(const DatUnit *source);
-void aoe_template_free_ror(DatUnit *unit);
+   a template without a name. Free with aoe_player_template_free_ror. */
+DatUnit *aoe_player_template_clone_ror(const DatUnit *source);
+void aoe_player_template_free_ror(DatUnit *unit);
 
 #endif

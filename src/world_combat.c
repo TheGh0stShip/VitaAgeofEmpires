@@ -1,5 +1,7 @@
 #include "world_combat.h"
 
+#include "command_place.h"
+
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -2253,17 +2255,17 @@ static void train_completed(void *ctx, AoeTrainAction *a, int32_t id) {
     (void)a; (void)id;
     ++((AoeWorldCombatRor *)ctx)->trained;
 }
-/* Template +0x20(owner, x, y, 0, 1, 1, 1, 0, overlap, 1): nonzero when
-   the point is refused. */
-static int placement_refused(AoeWorldCombatRor *c, const DatUnit *t,
-                             int16_t owner, float x, float y,
-                             int honor_overlap) {
+int aoe_world_combat_placement_ror(AoeWorldCombatRor *c, int16_t owner, const DatUnit *t,
+                                   float x, float y, const int32_t flags[6],
+                                   int32_t *blocker) {
     AoeScenarioRuntimeRor *r = c->motion->runtime;
     AoeUnitPlacementCheckContext check;
-    int32_t blocker = -1;
+    int32_t b = -1;
     if (!t || !r->intro || t->terrain_restriction < 0 ||
-        (uint16_t)t->terrain_restriction >= r->intro->restriction_count)
-        return 1;
+        (uint16_t)t->terrain_restriction >= r->intro->restriction_count) {
+        if (blocker) *blocker = -1;
+        return AOE_PLACEMENT_OUT_OF_BOUNDS;
+    }
     check = (AoeUnitPlacementCheckContext){
         &r->map,
         r->intro->terrain_restrictions +
@@ -2276,8 +2278,20 @@ static int placement_refused(AoeWorldCombatRor *c, const DatUnit *t,
         check.owner_visible_mask = g->visible_mask;
         check.owner_explored_mask = g->explored_mask;
     }
-    return aoe_unit_placement_check_ror(t, &check, x, y, &blocker, 1, 1, 1, 0,
-                                        honor_overlap, 1) != AOE_PLACEMENT_OK;
+    {
+        int code = aoe_unit_placement_check_ror(t, &check, x, y, &b, flags[0], (uint8_t)flags[1],
+                                                flags[2], flags[3], flags[4], flags[5]);
+        if (blocker) *blocker = b;
+        return code;
+    }
+}
+/* Template +0x20(owner, x, y, 0, 1, 1, 1, 0, overlap, 1): nonzero when
+   the point is refused. */
+static int placement_refused(AoeWorldCombatRor *c, const DatUnit *t,
+                             int16_t owner, float x, float y,
+                             int honor_overlap) {
+    const int32_t flags[6] = {1, 1, 1, 0, honor_overlap, 1};
+    return aoe_world_combat_placement_ror(c, owner, t, x, y, flags, NULL) != AOE_PLACEMENT_OK;
 }
 /* Trained template +0x20(owner, x, y, 0, 1, 1, 1, 0, 0, 1). */
 static int train_blocked(void *ctx, AoeTrainAction *a, float x, float y) {
@@ -2601,6 +2615,85 @@ int aoe_world_combat_command_production_ror(AoeWorldCombatRor *c,
     ops.player_research = command_player_research;
     result = aoe_command_execute_production_ror(command, size, &ops);
     return k.failed ? -1 : result;
+}
+
+/* ---- 0x66, building placement ---- */
+static int place_player_present(void *ctx, uint8_t player) {
+    AoeScenarioRuntimeRor *r = ((CommandContext *)ctx)->c->motion->runtime;
+    return player < AOE_SCENARIO_RUNTIME_PLAYERS && (int)player < r->player_count;
+}
+static const DatUnit *place_template(void *ctx, uint8_t player, int16_t index) {
+    AoeScenarioRuntimeRor *r = ((CommandContext *)ctx)->c->motion->runtime;
+    if (index < 0 || player >= AOE_SCENARIO_RUNTIME_PLAYERS) return NULL;
+    return aoe_player_templates_get(&r->players[player].templates, (uint16_t)index);
+}
+static AoePlayerResources *place_resources(void *ctx, uint8_t player) {
+    AoeScenarioRuntimeRor *r = ((CommandContext *)ctx)->c->motion->runtime;
+    return player < AOE_SCENARIO_RUNTIME_PLAYERS ? &r->players[player].resources : NULL;
+}
+static uint8_t place_check(void *ctx, uint8_t player, const DatUnit *t, float x, float y,
+                           uint32_t *out, const int32_t flags[6]) {
+    int32_t blocker = -1;
+    int code = aoe_world_combat_placement_ror(((CommandContext *)ctx)->c, (int16_t)player, t, x,
+                                              y, flags, &blocker);
+    if (out) *out = (uint32_t)blocker;
+    return (uint8_t)code;
+}
+/* Player +0x28 list 0x00451370(id, ...): the player's own object. */
+static AoeLiveUnit *place_find(void *ctx, uint8_t player, int16_t id) {
+    AoeLiveUnit *u = resolve(((CommandContext *)ctx)->c, id);
+    return u && u->runtime_owner_index == (int16_t)player ? u : NULL;
+}
+static void place_failed(void *ctx, uint8_t player, uint8_t code, uint32_t out, int16_t index,
+                         uint32_t x_bits, uint32_t y_bits, uint32_t value_10,
+                         int32_t builder_id) {
+    (void)player; (void)code; (void)out; (void)index; (void)x_bits; (void)y_bits;
+    (void)value_10; (void)builder_id;
+    ++((CommandContext *)ctx)->c->placement_failures;
+}
+/* Template +0x3c(player, x, y, 0, +0x10): the unit made as the editor
+   makes one; a type-80 unit starts as a foundation (0x004ac8a0). */
+static AoeLiveUnit *place_create(void *ctx, uint8_t player, const DatUnit *t, float x, float y,
+                                 uint32_t value_10) {
+    AoeWorldCombatRor *c = ((CommandContext *)ctx)->c;
+    AoeLiveUnit *u = NULL;
+    (void)value_10;
+    if (!t || !aoe_scenario_runtime_editor_create_ror(c->motion->runtime, player, (uint16_t)t->id,
+                                                      x, y, 0.0f, &u) ||
+        !u)
+        return NULL;
+    ++c->placements;
+    return u;
+}
+static int32_t place_owner_kind(void *ctx, const AoeLiveUnit *u) {
+    return owner_kind_cb(((CommandContext *)ctx)->c, (AoeLiveUnit *)u);
+}
+/* Unit +0x98(target, x, y, 0): the builder's default order on the foundation. */
+static void place_order(void *ctx, AoeLiveUnit *u, AoeLiveUnit *target, float x, float y) {
+    int16_t code = 0;
+    (void)aoe_world_combat_order_ror(((CommandContext *)ctx)->c, u, target, x, y, 0.0f, &code);
+}
+
+int aoe_world_combat_command_place_ror(AoeWorldCombatRor *c, const uint8_t *command,
+                                       size_t size) {
+    CommandContext k = {c, 0};
+    AoeCommandPlaceOps ops;
+    if (!c || !c->motion || !c->motion->runtime) return -1;
+    refresh_registry(c);
+    memset(&ops, 0, sizeof ops);
+    ops.world.context = c;
+    ops.world.resolve = command_resolve;
+    ops.context = &k;
+    ops.player_present = place_player_present;
+    ops.player_template = place_template;
+    ops.resources = place_resources;
+    ops.placement_check = place_check;
+    ops.find_object = place_find;
+    ops.placement_failed = place_failed;
+    ops.create = place_create;
+    ops.owner_kind = place_owner_kind;
+    ops.order = place_order;
+    return aoe_command_execute_place_ror(command, size, &ops);
 }
 
 /* One unit through the whole chain, outside the player list. */

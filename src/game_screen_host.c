@@ -5,7 +5,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "command_place.h"
 #include "command_production.h"
+#include "main_view.h"
 #include "draw_system.h"
 #include "game_ror_flow.h"
 #include "player_costs.h"
@@ -194,9 +196,12 @@ static void gs_draw(AoeUiPanelRor *p) {
 
 /* The world drawn into the view's pixels, once per idle (the panel's
    draw may run several times a frame for its children's rectangles). */
+static void draw_place_preview(AoeGameScreenHostRor *s);
 static void render_view(AoeGameScreenHostRor *s) {
-    if (s->world && s->pixels)
+    if (s->world && s->pixels) {
         s->rendered = aoe_demo_render_indexed(s->world, s->pixels, (size_t)s->view_w);
+        if (s->rendered) draw_place_preview(s);
+    }
 }
 
 static int key_held(const AoeUiPanelRor *p, int vk) {
@@ -456,6 +461,134 @@ static int make_minimap(AoeGameScreenHostRor *s) {
    orders the selection there. The original's view panel does this
    through its mouse handlers (0x0050f420's game view; not assembled). */
 static void selection_changed(AoeGameScreenHostRor *s);
+/* ---- building placement, edit mode 0x15 ---- */
+static void so_set_mode(void *c, int32_t mode, int32_t sub);
+
+typedef struct {
+    AoeGameScreenHostRor *s;
+    const DatUnit *t;      /* the unit to place (game +0x3fc) */
+    float fx, fy;          /* the tile centre under the pointer */
+    int ok;                /* placeable there */
+    int16_t corners[8];    /* 0x004433c0's offsets about the tile */
+} PlaceCtx;
+
+static const DatUnit *place_template(AoeGameScreenHostRor *s) {
+    const AoePlayerTemplates *ts = aoe_demo_player_templates(s->world, 1);
+    return ts && s->place_unit >= 0 ? aoe_player_templates_get(ts, (uint16_t)s->place_unit) : NULL;
+}
+
+/* The preview under the pointer (0x00511080) over the demo's world. */
+static int pv_has_template(void *c) { return ((PlaceCtx *)c)->t != NULL; }
+static void pv_mouse(void *c, int32_t *x, int32_t *y) {
+    *x = ((PlaceCtx *)c)->s->mouse_x;
+    *y = ((PlaceCtx *)c)->s->mouse_y;
+}
+static int pv_pick_terrain(void *c, int32_t vx, int32_t vy) {
+    AoeDemo *w = ((PlaceCtx *)c)->s->world;
+    float fx, fy;
+    return !aoe_demo_pick(w, vx, vy) && aoe_demo_screen_to_map(w, vx, vy, &fx, &fy);
+}
+static int pv_tile_at(void *c, int32_t vx, int32_t vy, int32_t *tx, int32_t *ty) {
+    float fx, fy;
+    if (!aoe_demo_screen_to_map(((PlaceCtx *)c)->s->world, vx, vy, &fx, &fy)) return 0;
+    *tx = (int32_t)fx;
+    *ty = (int32_t)fy;
+    return 1;
+}
+static void pv_corners(void *c, float fx, float fy, int16_t out[8]) {
+    PlaceCtx *p = c;
+    p->fx = fx;
+    p->fy = fy;
+    aoe_demo_footprint_corners(p->s->world, p->t, fx, fy, out);
+    memcpy(p->corners, out, sizeof p->corners);
+}
+static int pv_can_place(void *c, float fx, float fy) {
+    PlaceCtx *p = c;
+    p->ok = aoe_demo_can_place(p->s->world, 1, p->s->place_unit, fx, fy);
+    return p->ok;
+}
+static uint32_t pv_flags(void *c) { return ((PlaceCtx *)c)->t->type; }          /* +0x04 */
+static int pv_has_graphic(void *c) { return ((PlaceCtx *)c)->t->standing_graphic >= 0; }
+static uint8_t pv_facing(void *c) { return ((PlaceCtx *)c)->t->selection_flags; } /* +0xa8 */
+static uint8_t pv_shape(void *c) { return ((PlaceCtx *)c)->t->selection_color; }  /* +0xa9 */
+static int pv_relocating(void *c) { (void)c; return 0; }
+/* The view's +0x34 preview as the port draws it: the footprint outline
+   about the tile, the selection box's healthy colour (0x4a) when the
+   building may be placed and its lost colour (0x97) when not. The
+   building's picture at the midpoint is not drawn yet. */
+static void pv_draw(void *c, int32_t cx, int32_t cy, int relocated, uint32_t facing,
+                    uint32_t shape) {
+    PlaceCtx *p = c;
+    int32_t sx, sy;
+    (void)cx; (void)cy; (void)relocated; (void)facing; (void)shape;
+    if (!p->s->pixels || !aoe_demo_map_to_screen(p->s->world, p->fx, p->fy, &sx, &sy)) return;
+    aoe_demo_draw_footprint(p->s->world, p->s->pixels, (size_t)p->s->view_w, sx, sy, p->corners,
+                            p->ok ? 0x4a : 0x97);
+}
+static void draw_place_preview(AoeGameScreenHostRor *s) {
+    PlaceCtx p = {s, place_template(s), 0.0f, 0.0f, 0, {0}};
+    AoeMainViewEditorPreviewOps o = {&p,          pv_has_template, pv_mouse,  pv_pick_terrain,
+                                     pv_tile_at,  pv_corners,      pv_can_place, pv_flags,
+                                     pv_has_graphic, pv_facing,    pv_shape,  pv_relocating,
+                                     pv_draw};
+    int32_t code = 0, py = 0, left = s->ez.panel.x + s->view_x, top = s->ez.panel.y + s->view_y;
+    if (s->edit_mode != 0x15 || !p.t || s->mouse_x < 0) return;
+    aoe_main_view_editor_preview(&o, left, top, left + s->view_w - 1, top + s->view_h - 1, &code,
+                                 &py);
+}
+
+/* A click placing the building (0x00508d50) over the demo's world. */
+static int pc_base_click(void *c, int32_t x, int32_t y, int32_t flag) {
+    PlaceCtx *p = c;
+    (void)flag;
+    aoe_demo_select(p->s->world, aoe_demo_pick(p->s->world, x, y));
+    selection_changed(p->s);
+    return 1;
+}
+static uint8_t pc_pick(void *c, int32_t x, int32_t y, float point[2]) {
+    AoeDemo *w = ((PlaceCtx *)c)->s->world;
+    if (aoe_demo_pick(w, x, y)) return '4';
+    return aoe_demo_screen_to_map(w, x, y, &point[0], &point[1]) ? '3' : 0;
+}
+/* 0x0051b070 keeps the point on the map: the pick yields on-map points. */
+static void pc_snap(void *c, float point[2]) { (void)c; (void)point; }
+/* The template's +0x24: the tile centre (0x00508bb0). */
+static void pc_adjust(void *c, float point[2]) {
+    (void)c;
+    point[0] = (float)(int32_t)point[0] + 0.5f;
+    point[1] = (float)(int32_t)point[1] + 0.5f;
+}
+static int pc_blocked(void *c, float x, float y) {
+    PlaceCtx *p = c;
+    return !aoe_demo_can_place(p->s->world, 1, p->s->place_unit, x, y);
+}
+static void pc_game_10(void *c) { so_set_mode(((PlaceCtx *)c)->s, 0, 0); }
+/* 0x004f10e0: the selected villagers (class 4) build `id` there: opcode
+   0x66 for player 1, run by the world. */
+static int pc_build(void *c, int16_t id, float x, float y) {
+    PlaceCtx *p = c;
+    AoeLiveUnit *sel[AOE_DEMO_SELECTION];
+    int32_t ids[AOE_DEMO_SELECTION];
+    uint8_t cmd[AOE_COMMAND_PLACE_HEADER_ROR + 4 * AOE_DEMO_SELECTION];
+    int n = aoe_demo_selection(p->s->world, sel, AOE_DEMO_SELECTION), i, count = 0;
+    size_t size;
+    for (i = 0; i < n; ++i) {
+        const DatUnit *t = sel[i]->core.unit_template;
+        if (t && t->unit_class == 4 && sel[i]->runtime_owner_index == 1)
+            ids[count++] = aoe_demo_unit_id(sel[i]);
+    }
+    if (!count) return 0;
+    size = aoe_command_encode_place_ror(cmd, sizeof cmd, 1, x, y, id, 0, ids, (uint8_t)count);
+    return size && aoe_demo_command_place(p->s->world, cmd, size) == 1;
+}
+static void place_click(AoeGameScreenHostRor *s, int32_t vx, int32_t vy) {
+    PlaceCtx p = {s, place_template(s), 0.0f, 0.0f, 0, {0}};
+    AoeMainViewPlaceOpsRor o = {&p,       1,        s->edit_mode, s->place_unit, p.t != NULL,
+                                pc_base_click, pc_pick, pc_snap,  pc_adjust,     pc_blocked,
+                                pc_game_10, pc_build};
+    aoe_main_view_place_click_ror(&o, vx, vy, 1);
+}
+
 static int32_t gs_mouse_down(AoeUiPanelRor *p, uint8_t button, int32_t x, int32_t y, int32_t c,
                              int32_t sh) {
     AoeGameScreenHostRor *s = GS(p);
@@ -463,6 +596,15 @@ static int32_t gs_mouse_down(AoeUiPanelRor *p, uint8_t button, int32_t x, int32_
     if (!s->world || vx < 0 || vy < 0 || vx >= s->view_w || vy >= s->view_h ||
         (button != 1 && button != 2) || aoe_ui_ez_help_press_ror(&s->ez, button, x, y))
         return aoe_ui_ez_mouse_down_slot_ror(p, button, x, y, c, sh);
+    if (s->edit_mode == 0x15 && s->place_unit >= 0) {
+        /* 0x00508d50 places on a left click; a right click leaves the mode
+           (0x00519ed0: sub-mode 0x15 clears the box and redraws). */
+        if (button == 1) place_click(s, vx, vy);
+        else so_set_mode(s, 0, 0);
+        render_view(s);
+        p->vt->set_redraw(p, 1);
+        return 1;
+    }
     if (button == 1) {
         aoe_demo_select(s->world, aoe_demo_pick(s->world, vx, vy));
         selection_changed(s);
@@ -481,12 +623,15 @@ static int32_t so_zero(void *c) { (void)c; return 0; }
 static int so_none_int(void *c) { (void)c; return 0; }
 static void so_none(void *c) { (void)c; }
 static int32_t so_edit_mode(void *c, int32_t *sub) {
-    (void)c;
-    if (sub) *sub = 0;
-    return 0;
+    if (sub) *sub = SO(c)->edit_sub;
+    return SO(c)->edit_mode;
 }
 static void so_view_cancel(void *c, void *view) { (void)c; (void)view; }
-static void so_set_mode(void *c, int32_t mode, int32_t sub) { (void)c; (void)mode; (void)sub; }
+/* The game's +0x10 mode change (+0x1b4, +0x1b8). */
+static void so_set_mode(void *c, int32_t mode, int32_t sub) {
+    SO(c)->edit_mode = mode;
+    SO(c)->edit_sub = sub;
+}
 static void so_clear_selection(void *c) {
     aoe_demo_select(SO(c)->world, NULL);
     selection_changed(SO(c));
@@ -700,7 +845,15 @@ static int so_can_afford(void *c, int16_t id, int16_t *failing) {
         return 0;
     return ok;
 }
-static void so_place_unit(void *c, int16_t id) { (void)c; (void)id; }
+static void so_place_unit(void *c, int16_t id) { SO(c)->place_unit = id; } /* game +0x3fc */
+/* The game's +0x10 as the screen's "action" (0x00484820 asks 0x15 for a
+   building, 7 otherwise); a template's +0x04 flag is being a building. */
+static void so_action(void *c, int32_t action, int32_t arg) { so_set_mode(c, action, arg); }
+static int so_template_flag(void *c, int16_t id) {
+    const AoePlayerTemplates *ts = aoe_demo_player_templates(SO(c)->world, 1);
+    const DatUnit *t = ts && id >= 0 ? aoe_player_templates_get(ts, (uint16_t)id) : NULL;
+    return t && t->type == 80;
+}
 static void production(AoeGameScreenHostRor *s, uint8_t opcode, int16_t item) {
     uint8_t cmd[AOE_COMMAND_PRODUCTION_SIZE_ROR];
     AoeLiveUnit *b = current_unit(s);
@@ -755,6 +908,8 @@ static void screen_button_ops(AoeGameScreenOpsRor *o) {
     o->instant_train = so_instant_train;
     o->can_afford = so_can_afford;
     o->set_place_unit = so_place_unit;
+    o->action = so_action;
+    o->template_flag = so_template_flag;
     o->train_at_current = so_train_at_current;
     o->research_at_current = so_research_at_current;
     o->can_research = so_can_research;
@@ -1064,6 +1219,7 @@ static void command_run(void *c, uint32_t handler, int32_t arg, int32_t arg2) {
     AoeGameScreenHostRor *s = c;
     switch (handler) {
     case 0x485520u: aoe_game_screen_train_button_ror(&s->screen, (int16_t)arg, arg2); break;
+    case 0x484820u: aoe_game_screen_train_ror(&s->screen, (int16_t)arg); break; /* a building to place */
     case 0x4852f0u: aoe_game_screen_research_button_ror(&s->screen, (int16_t)arg); break;
     case 0x485140u:
         s->button_page = (int16_t)(s->button_page + 1 >= 2 ? 0 : s->button_page + 1);
@@ -1305,6 +1461,7 @@ int aoe_game_screen_host_init_ror(AoeGameScreenHostRor *s, AoeGameUiRor *ui, Aoe
     s->resource = resource;
     s->resource_context = resource_context;
     s->mouse_x = s->mouse_y = -1;
+    s->place_unit = -1;
     vtable.base.mouse_move = gs_mouse_move;
     vtable.base.mouse_down = gs_mouse_down;
     aoe_ui_screen_init_ror(ez, ui->system, ui->ez_ops, NAME);

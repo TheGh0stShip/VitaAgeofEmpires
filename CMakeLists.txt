@@ -46,8 +46,10 @@ target_link_libraries(aoe_dat PUBLIC aoe_inflate)
 target_compile_options(aoe_dat PRIVATE -Wall -Wextra)
 
 add_library(aoe_scn STATIC src/scn.c src/scenario_object.c)
-add_library(aoe_action_io STATIC src/action_io.c src/player_history.c src/unit_template.c src/combat_stats.c src/comm_queue.c src/comm_handler.c src/net_misc.c src/dib_util.c src/unit_tasks.c src/mouse_pointer.c src/tile_map.c src/player_tile_map.c src/civ_table.c src/timeline_panel.c)
-target_link_libraries(aoe_action_io PUBLIC m)
+add_library(aoe_tile_map STATIC src/tile_map.c)
+target_include_directories(aoe_tile_map PUBLIC include)
+add_library(aoe_action_io STATIC src/action_io.c src/player_history.c src/unit_template.c src/combat_stats.c src/comm_queue.c src/comm_handler.c src/net_misc.c src/dib_util.c src/unit_tasks.c src/mouse_pointer.c src/player_tile_map.c src/civ_table.c src/timeline_panel.c)
+target_link_libraries(aoe_action_io PUBLIC m aoe_tile_map)
 target_include_directories(aoe_action_io PUBLIC include)
 add_library(aoe_comm_system_message STATIC src/comm_system_message.c)
 target_link_libraries(aoe_comm_system_message PUBLIC aoe_action_io)
@@ -498,7 +500,7 @@ target_link_libraries(aoe_world_combat PUBLIC aoe_world_motion
   aoe_action_heal aoe_action_convert aoe_live_unit_owner
   aoe_action_trade aoe_action_artifact
   aoe_action_base aoe_unit_garrison aoe_zone_map
-  aoe_game_settings)
+  aoe_game_settings aoe_command_place)
 target_compile_options(aoe_world_combat PRIVATE -Wall -Wextra)
 
 add_library(aoe_scenario_editor_catalog STATIC src/scenario_editor_catalog.c)
@@ -531,7 +533,7 @@ add_library(aoe_demo_app STATIC src/demo_app.c)
 target_include_directories(aoe_demo_app PUBLIC include)
 target_link_libraries(aoe_demo_app PUBLIC aoe_scenario_scene aoe_world_combat
   aoe_live_unit_sprite_backend aoe_live_unit_draw aoe_main_view aoe_color_table aoe_palette
-  aoe_cpx aoe_dat m)
+  aoe_cpx aoe_dat m aoe_tile_map)
 target_compile_options(aoe_demo_app PRIVATE -Wall -Wextra)
 
 add_library(aoe_rng STATIC src/aoe_rng.c)

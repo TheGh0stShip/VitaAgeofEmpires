@@ -9,6 +9,8 @@
 #include "palette.h"
 #include "scenario_scene.h"
 #include "world_combat.h"
+#include "unit_placement_check.h"
+#include "tile_map.h"
 
 #include <ctype.h>
 #include <dirent.h>
@@ -1070,6 +1072,85 @@ int32_t aoe_demo_unit_id(const AoeLiveUnit *unit) { return unit ? unit->core.uni
 int aoe_demo_command_production(AoeDemo *demo, const uint8_t *command, size_t size) {
     if (!demo || !demo->loaded) return -1;
     return aoe_world_combat_command_production_ror(&demo->combat, command, size);
+}
+
+int aoe_demo_command_place(AoeDemo *demo, const uint8_t *command, size_t size) {
+    if (!demo || !demo->loaded) return -1;
+    return aoe_world_combat_command_place_ror(&demo->combat, command, size);
+}
+
+/* 0x00508bb0's check: +0x20(player, point, 0, 1, +0x64, 0, 1, 1, 1). */
+int aoe_demo_can_place(AoeDemo *demo, int player, int16_t template_id, float x, float y) {
+    const DatUnit *t;
+    int32_t flags[6] = {1, 0, 0, 1, 1, 1};
+    if (!demo || !demo->loaded || player < 0 || player >= AOE_SCENARIO_RUNTIME_PLAYERS ||
+        template_id < 0)
+        return 0;
+    t = aoe_player_templates_get(&demo->runtime.players[player].templates, (uint16_t)template_id);
+    if (!t) return 0;
+    flags[1] = t->placement_class;
+    return aoe_world_combat_placement_ror(&demo->combat, (int16_t)player, t, x, y, flags, NULL) ==
+           AOE_PLACEMENT_OK;
+}
+
+int aoe_demo_footprint_corners(const AoeDemo *demo, const DatUnit *t, float fx, float fy,
+                               int16_t out[8]) {
+    AoeTileMapRor m;
+    if (!demo || !t) return 0;
+    memset(&m, 0, sizeof m);
+    m.half_w = demo->geometry.tile_half_width;
+    m.half_h = demo->geometry.tile_half_height;
+    return aoe_tilemap_footprint_corners_ror(&m, t->size[0], t->size[1], fx, fy, out);
+}
+
+/* The inverse of aoe_demo_screen_to_map: 0x00448cc0 about the camera, the
+   tile's elevation in tile heights (its +1 and -16 cancel at the game's
+   16-pixel half height). */
+int aoe_demo_map_to_screen(const AoeDemo *demo, float mx, float my, int32_t *sx, int32_t *sy) {
+    const DatMapGeometry *g;
+    int32_t tx, ty;
+    float z = 0.0f;
+    int16_t ox = 0, oy = 0;
+    if (!demo || !demo->loaded || !demo->last_camera_valid) return 0;
+    g = &demo->geometry;
+    if (g->tile_half_height <= 0 || g->tile_half_width <= 0) return 0;
+    tx = (int32_t)mx;
+    ty = (int32_t)my;
+    if (tx >= 0 && ty >= 0 && (uint32_t)tx < demo->runtime.map.width &&
+        (uint32_t)ty < demo->runtime.map.height)
+        z = (float)demo->runtime.map.tiles[(size_t)ty * demo->runtime.map.width + (size_t)tx]
+                .elevation *
+            (float)g->elevation_height / (float)g->tile_half_height;
+    aoe_map_screen_offset_ror(g, mx, my, z, -demo->last_camera.camera_pixel_x,
+                              -demo->last_camera.camera_pixel_y, &ox, &oy);
+    *sx = ox;
+    *sy = oy;
+    return 1;
+}
+
+static void line_into(uint8_t *dst, size_t stride, int32_t w, int32_t h, int32_t x0, int32_t y0,
+                      int32_t x1, int32_t y1, uint8_t colour) {
+    int32_t dx = x1 > x0 ? x1 - x0 : x0 - x1, sx = x0 < x1 ? 1 : -1;
+    int32_t dy = y1 > y0 ? y0 - y1 : y1 - y0, sy = y0 < y1 ? 1 : -1, err = dx + dy;
+    for (;;) {
+        int32_t e2;
+        if (x0 >= 0 && y0 >= 0 && x0 < w && y0 < h) dst[(size_t)y0 * stride + (size_t)x0] = colour;
+        if (x0 == x1 && y0 == y1) break;
+        e2 = 2 * err;
+        if (e2 >= dy) { err += dy; x0 += sx; }
+        if (e2 <= dx) { err += dx; y0 += sy; }
+    }
+}
+
+void aoe_demo_draw_footprint(const AoeDemo *demo, uint8_t *dst, size_t stride, int32_t sx,
+                             int32_t sy, const int16_t c[8], uint8_t colour) {
+    int i;
+    if (!demo || !dst) return;
+    for (i = 0; i < 4; ++i) {
+        int j = (i + 1) & 3;
+        line_into(dst, stride, (int32_t)demo->width, (int32_t)demo->height, sx + c[2 * i],
+                  sy + c[2 * i + 1], sx + c[2 * j], sy + c[2 * j + 1], colour);
+    }
 }
 
 void aoe_demo_camera(const AoeDemo *demo, float *x, float *y) {

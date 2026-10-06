@@ -142,6 +142,25 @@ int aoe_demo_owns_template(AoeDemo *demo, int player, int16_t template_id);
 const DatTechs *aoe_demo_techs(const AoeDemo *demo);
 int32_t aoe_demo_unit_id(const AoeLiveUnit *unit);
 int aoe_demo_command_production(AoeDemo *demo, const uint8_t *command, size_t size);
+/* Tribe command 0x66, building placement (aoe_world_combat_command_place_ror). */
+int aoe_demo_command_place(AoeDemo *demo, const uint8_t *command, size_t size);
+/* The template's +0x20 placement check for `player` at a map point, as
+   the view's preview asks it (0x00508bb0: visible, the template's
+   placement class as the shape mode, clearance, overlap mode, units):
+   1 when the building may be placed there. */
+int aoe_demo_can_place(AoeDemo *demo, int player, int16_t template_id, float x, float y);
+/* A map point to view pixels under the last rendered camera (the tile's
+   elevation lifts it as the renderer does). 0 before a render. */
+int aoe_demo_map_to_screen(const AoeDemo *demo, float mx, float my, int32_t *sx, int32_t *sy);
+/* Lines between the four footprint corners (screen offsets, l t r b
+   pairs as 0x004433c0 gives them) about view pixel (sx, sy), drawn into an
+   indexed frame of this view's size with the palette index `colour`. */
+void aoe_demo_draw_footprint(const AoeDemo *demo, uint8_t *dst, size_t stride, int32_t sx,
+                             int32_t sy, const int16_t corners[8], uint8_t colour);
+/* 0x004433c0 with this map's tile geometry: a template's footprint corners
+   about the tile holding (fx, fy). */
+int aoe_demo_footprint_corners(const AoeDemo *demo, const DatUnit *unit_template, float fx,
+                               float fy, int16_t out[8]);
 /* The camera (map tile coordinates). */
 void aoe_demo_camera(const AoeDemo *demo, float *x, float *y);
 /* The DAT's terrain count (scn_load_map's `terrain_count`). */

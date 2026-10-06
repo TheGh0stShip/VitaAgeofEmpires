@@ -1,6 +1,9 @@
 #include "dat.h"
 #include "live_unit_vision.h"
 #include "scenario_runtime.h"
+#include "unit_placement_check.h"
+#include "command_place.h"
+#include "player_costs.h"
 #include "scn.h"
 #include "world_combat.h"
 
@@ -588,6 +591,83 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "no house\n");
                 ok = 0;
                 goto done;
+            }
+        }
+        /* Building placement (tribe command 0x66, 0x004e8920): a villager
+           of player 1 told to build a house (70) at a free tile near the
+           town center. The foundation appears (type 80, state 0 as
+           0x004ac8a0 leaves it) and the villager gets the build order. */
+        {
+            AoeLiveUnit *villager = NULL;
+            const DatUnit *house_t = aoe_player_templates_get(&runtime.players[1].templates, 70);
+            float px = 0.0f, py = 0.0f;
+            int found = 0;
+            for (uint32_t i = 0; i < runtime.players[1].unit_count && !villager; ++i) {
+                AoeLiveUnit *u = &runtime.players[1].units[i];
+                if (u->constructed && u->core.state == 2 && u->core.unit_template &&
+                    u->core.unit_template->unit_class == 4)
+                    villager = u;
+            }
+            for (int r = 4; r <= 14 && !found; ++r)
+                for (int k = 0; k < 8 && !found; ++k) {
+                    const int32_t flags[6] = {1, 1, 1, 1, 1, 1};
+                    px = floorf(tc->core.position.x38) + 0.5f +
+                         (k & 1 ? r : -r) * (k < 4 ? 1 : 0);
+                    py = floorf(tc->core.position.y3c) + 0.5f +
+                         (k & 2 ? r : -r) * (k >= 4 ? 1 : 0);
+                    found = house_t && aoe_world_combat_placement_ror(&combat, 1, house_t, px, py,
+                                                                      flags, NULL) ==
+                                           AOE_PLACEMENT_OK;
+                }
+            if (!villager || !found) {
+                fprintf(stderr, "no villager or no free tile for a house\n");
+                ok = 0;
+                goto done;
+            }
+            /* A house costs wood and requires attribute 30, which the world
+               game start (0x0050aaa0, not run by this test) sets to 500;
+               0x004f1750 pays before the foundation. */
+            if (runtime.players[1].resources.values[1] < 100.0f)
+                runtime.players[1].resources.values[1] = 100.0f;
+            runtime.players[1].resources.values[30] = 500.0f;
+            {
+                uint8_t cmd[AOE_COMMAND_PLACE_HEADER_ROR + 4];
+                int32_t id = villager->core.unit_id;
+                uint32_t failures0 = combat.placement_failures;
+                float wood0 = runtime.players[1].resources.values[1];
+                size_t editors0 = runtime.editor_unit_count;
+                uint32_t placements0 = combat.placements;
+                size_t n = aoe_command_encode_place_ror(cmd, sizeof cmd, 1, px, py, 70, 0, &id, 1);
+                int r = n ? aoe_world_combat_command_place_ror(&combat, cmd, n) : -1;
+                AoeLiveUnit *f = runtime.editor_unit_count > editors0
+                                     ? runtime.editor_units[runtime.editor_unit_count - 1]
+                                     : NULL;
+                int ordered = villager->derived_action_list &&
+                              villager->derived_action_list->head != NULL;
+                {
+                    int16_t failing = -1;
+                    int afford = 0;
+                    aoe_player_cost_check_ror(&runtime.players[1].resources, house_t, 1.0f, 0,
+                                              &failing, &afford);
+                    printf("place: house costs (%d %d %d) (%d %d %d) (%d %d %d) afford %d failing %d\n",
+                           house_t->costs[0].resource_type, house_t->costs[0].amount,
+                           house_t->costs[0].paid, house_t->costs[1].resource_type,
+                           house_t->costs[1].amount, house_t->costs[1].paid,
+                           house_t->costs[2].resource_type, house_t->costs[2].amount,
+                           house_t->costs[2].paid, afford, failing);
+                }
+                printf("place: result %d placements +%u failures +%u wood %.0f -> %.0f "
+                       "foundation %s state %d ordered %d\n",
+                       r, combat.placements - placements0, combat.placement_failures - failures0,
+                       wood0, runtime.players[1].resources.values[1], f ? "yes" : "no",
+                       f ? (int)f->core.state : -1, ordered);
+                if (!(r == 1 && combat.placements == placements0 + 1 && f &&
+                      f->core.unit_template && f->core.unit_template->type == 80 &&
+                      f->core.state == 0 && ordered)) {
+                    fprintf(stderr, "placement failed\n");
+                    ok = 0;
+                    goto done;
+                }
             }
         }
         printf("pop: room(4) %.1f pop(11) %.1f limit(32) %.1f\n",

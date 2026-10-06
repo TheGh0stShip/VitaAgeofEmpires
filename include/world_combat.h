@@ -140,6 +140,9 @@ typedef struct AoeWorldCombatRor {
     /* Production commands answered by the player fallback (busy or
        missing building: owner +0x10c / +0x118). */
     uint32_t production_fallbacks;
+    /* Placement commands (0x66): foundations made, and placements the
+       player was told failed (owner +0x100). */
+    uint32_t placements, placement_failures;
     /* Repair actions (0x6a): unpaid repairs (event 0x6b) and portable
        dependency failures; completed repairs count in `repairs`. */
     uint32_t repair_unpaid, repair_failures;
@@ -254,6 +257,26 @@ int aoe_world_combat_train_ror(AoeWorldCombatRor *combat,
 int aoe_world_combat_command_production_ror(AoeWorldCombatRor *combat,
                                             const uint8_t *command,
                                             size_t size);
+
+/* Template +0x20 (0x004429d0) for `owner` with the owner's vision: the
+   reason code (0 placeable); `flags` are the six boolean arguments after
+   `out` (require visible, shape mode, reserved, clearance, overlap mode,
+   units), `blocker` the overlapping unit for code 6. A template without
+   a terrain restriction row counts as refused (7). */
+int aoe_world_combat_placement_ror(AoeWorldCombatRor *combat, int16_t owner,
+                                   const DatUnit *unit_template, float x, float y,
+                                   const int32_t flags[6], int32_t *blocker);
+
+/* Tribe command 0x66 (building placement, 0x004e8920) bound to this
+   world: the player's template table and resources, the +0x20 check with
+   the player's vision, the builders resolved through the world, the
+   foundation made as the editor creates a unit (every type-80 unit
+   starts as a foundation, 0x004ac8a0) and each builder ordered onto it
+   (+0x98). Failures the player would be told of are counted. Returns
+   aoe_command_execute_place_ror's result, or -1 when the world is
+   unusable. */
+int aoe_world_combat_command_place_ror(AoeWorldCombatRor *combat, const uint8_t *command,
+                                       size_t size);
 
 /* Unit +0xd0 bound to the runtime (aoe_unit_enter_ror): 1 entered, 0 no
    room, -1 bad input. */

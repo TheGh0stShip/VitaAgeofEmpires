@@ -107,10 +107,10 @@ DatUnit *aoe_player_templates_get(const AoePlayerTemplates *templates,
     return templates->slots[unit_id];
 }
 
-DatUnit *aoe_template_clone_ror(const DatUnit *source) {
+DatUnit *aoe_player_template_clone_ror(const DatUnit *source) {
     return source ? clone_unit(source) : NULL;
 }
 
-void aoe_template_free_ror(DatUnit *unit) {
+void aoe_player_template_free_ror(DatUnit *unit) {
     free_unit(unit);
 }

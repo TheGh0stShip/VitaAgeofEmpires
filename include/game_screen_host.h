@@ -70,6 +70,8 @@ typedef struct {
     int rendered;                 /* `pixels` hold a frame */
     uint32_t last_ms;
     int32_t mouse_x, mouse_y;     /* screen coordinates, -1 before any move */
+    int16_t place_unit;           /* game +0x3fc: the unit to place, -1 none */
+    int32_t edit_mode, edit_sub;  /* game +0x1b4 / +0x1b8: 0x15 places a building */
 } AoeGameScreenHostRor;
 
 /* The view rectangle for a screen size (0x0047f000 without the

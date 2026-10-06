@@ -63,7 +63,7 @@ void aoe_live_unit_destroy_ror(AoeLiveUnit *unit, AoePlayerUpdateState *owner,
     aoe_sprite_runtime_clear(&unit->sprites);
     free(unit->dependent_unit_ids);
     free(unit->group_unit_ids);
-    aoe_template_free_ror(unit->private_template);
+    aoe_player_template_free_ror(unit->private_template);
     memset(unit, 0, sizeof(*unit));
 }
 

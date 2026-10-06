@@ -76,7 +76,7 @@ static int change_tribe(AoeLiveUnit *u, int16_t to,
     if (u->core.state == 2) o->vision(o->context, u, from, 0, 0);
     u->runtime_owner_index = to;
     if (!u->private_template) {
-        DatUnit *copy = aoe_template_clone_ror(t);
+        DatUnit *copy = aoe_player_template_clone_ror(t);
         if (!copy) return 0;
         u->private_template = copy;
         u->core.unit_template = copy;

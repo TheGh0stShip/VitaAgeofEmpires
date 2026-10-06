@@ -66,12 +66,16 @@ screen with the game's own pointer (Interfac 51001) on top.
   host). The view starts on the player's town center, as the original's
   player start (0x004f1ae0) puts it. Checked on the host (with ASan);
   the VPK builds, not yet run past the menus in Vita3K.
-- In the game: the Roman (or the civilisation's) interface bars, the
-  resource bar, the minimap (click to move the view), unit selection
-  (Cross / left button) with the selection box, orders (Square / right
-  button: gather, attack or move), and the game menu (Start) with Quit
-  back to the Main Menu. Not yet: the object panel, command buttons
-  (training, building), drag selection, saving, the end of a scenario.
+- In the game: the civilisation's interface bars, the resource bar, the
+  minimap (click to move the view), the object panel (name, picture, hit
+  points, stats of the selected unit), unit selection (Cross / left
+  button) with the selection box, orders (Square / right button: gather,
+  attack or move), the command buttons for the selection (a town center
+  trains villagers; buildings list their units and techs), the top-bar
+  Menu (also Start) with Quit back to the Main Menu. Not yet: building
+  placement, unit command buttons beyond training (stop, groups), drag
+  selection, the message lines, chat and diplomacy, saving, fog, the end
+  of a scenario, sound.
 - Screen changes use the original's blocking 0.13 s palette fades; the
   intermediate fade frames are not presented (the picture holds, then
   switches).

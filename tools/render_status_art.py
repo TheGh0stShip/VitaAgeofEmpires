@@ -1,10 +1,19 @@
 #!/usr/bin/env python3
-"""Reproducible original-asset status art; see status/README.md."""
+"""Reproducible status art: a Roman city drawn by the port's own engine.
+
+The scene comes from `status_city_plan.py` (what stands where) and is
+created and drawn by `status_city_tool` (the scenario runtime and the
+viewport renderer of the port, on the original assets). This script only
+decides the Wonder's stage and the builder count from `status/current.json`,
+checks the engine agreed with the stage rule, and composes the title and
+progress bands; see status/README.md.
+"""
 import argparse
 from copy import deepcopy
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import platform
@@ -16,22 +25,24 @@ import tempfile
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
+HERE = Path(__file__).resolve().parent
 EFFORT = {"idle": 0, "low": 2, "steady": 4, "high": 8, "intensive": 12}
-# Ground anchors BEFORE camera shift; rear workers are drawn before Wonder.
-SLOTS = [
-    (205, 163, 54, True, "NE", "front"),
-    (407, 169, 54, False, "NW", "front"),
-    (268, 194, 52, True, "NE", "front"),
-    (357, 194, 52, False, "NW", "front"),
-    (250, 67, 22, True, "SE", "rear"),
-    (374, 67, 22, False, "SW", "rear"),
-    (202, 91, 20, True, "SE", "rear"),
-    (422, 91, 20, False, "SW", "rear"),
-    (237, 179, 54, True, "NE", "front"),
-    (382, 182, 54, False, "NW", "front"),
-    (226, 79, 22, True, "SE", "rear"),
-    (398, 79, 22, False, "SW", "rear"),
-]
+BAND_TOP, BAND_BOTTOM = 44, 104
+REGULAR = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+ASSETS = ("dat", "ror_graphics", "base_graphics", "terrain", "border",
+          "ror_interface", "base_interface", "tileedge", "color_dir")
+
+
+def load_city():
+    spec = importlib.util.spec_from_file_location("status_city_plan",
+                                                  HERE / "status_city_plan.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+city = load_city()
 
 
 def progress_value(value):
@@ -45,28 +56,30 @@ def progress_value(value):
 
 
 def construction_stage(value):
-    """RoR 004ae880: trunc(angle_count * build_accumulator / train_time).
+    """RoR 0x004ae880: trunc(angle_count * build_accumulator / train_time).
 
-    Wonder graphic 707 has 3 angles and one frame per angle, no mirror.
-    At completion 004ae500 selects the standing graphic.
+    The Wonder's construction graphic 707 has 3 angles and one frame per
+    angle, no mirror; at completion 0x004ae500 selects the standing graphic.
+    The engine runs this rule itself on the rendered foundation; this
+    prediction is checked against the angle it reports.
     """
     percent = progress_value(value)
     return None if percent == 100 else int(percent * 3 / 100)
 
 
 def worker_plan(count, complete=False):
-    if isinstance(count, bool) or not isinstance(count, int) or not 0 <= count <= len(SLOTS):
+    """The builders' spawn tiles around the Wonder; the engine walks them
+    to the footprint edge and runs their build actions."""
+    if isinstance(count, bool) or not isinstance(count, int) or \
+            not 0 <= count <= len(city.BUILDER_SLOTS):
         raise ValueError("workers must be an integer from 0 to 12")
-    return [] if complete else [dict(x=x, y=y, frame=f, mirror=m, facing=d, layer=l)
-                               for x, y, f, m, d, l in SLOTS[:count]]
+    return [] if complete else [dict(x=x, y=y) for x, y in city.BUILDER_SLOTS[:count]]
 
 
 def render_plan(config):
-    """Return the game-rule-derived choices without decoding or drawing assets.
-
-    This is deliberately separate from rendering so a status update can be
-    reviewed before it changes the published image or creates a history entry.
-    """
+    """Return the game-rule-derived choices without creating or drawing
+    anything, so a status update can be reviewed before it changes the
+    published image or creates a history entry."""
     progress = progress_value(config["progress_percent"])
     effort = config["effort"]
     if effort not in EFFORT:
@@ -81,6 +94,7 @@ def render_plan(config):
                 effort=effort,
                 requested_workers=requested,
                 rendered_workers=len(workers),
+                wonder=dict(x=city.WONDER_AT[0], y=city.WONDER_AT[1]),
                 workers=workers)
 
 
@@ -97,71 +111,28 @@ def resolve(path):
     return p if p.is_absolute() else ROOT / p
 
 
-def quoted(value):
-    return "'" + str(value).replace("\\", "\\\\").replace("'", "\\'") + "'"
-
-
 class Render:
     def __init__(self, config, scratch):
         self.config = config
         self.scratch = Path(scratch)
         self.commands = []
-        self.assets = {k: resolve(v) for k, v in config["assets"].items()}
-        self.decoder = ROOT / "build/host/slp_tool"
+        self.assets = {k: resolve(config["assets"][k]) for k in ASSETS}
+        self.tool = ROOT / "build/host/status_city_tool"
         self.convert = shutil.which("convert")
-        self.info_cache = {}
-        self.frame_cache = {}
-        self.used_art = []
         if not self.convert:
             raise ValueError("ImageMagick convert is required")
-        for p in [self.decoder, *self.assets.values()]:
-            if not p.is_file():
-                raise ValueError(f"missing decoder or original asset: {p}")
+        for key, p in self.assets.items():
+            if key == "color_dir" and not p.is_dir():
+                raise ValueError(f"missing colour table directory: {p}")
+            if key != "color_dir" and not p.is_file():
+                raise ValueError(f"missing original asset {key}: {p}")
+        if not self.tool.is_file():
+            raise ValueError(f"missing {self.tool}; build the status_city_tool target")
 
     def run(self, args):
         args = [str(a) for a in args]
         self.commands.append(args)
         return subprocess.run(args, check=True, text=True, capture_output=True).stdout
-
-    def frame(self, archive, resource, frame=0, mirror=False):
-        key = (archive, resource, frame, mirror)
-        if key in self.frame_cache:
-            return self.frame_cache[key]
-        info_key = (archive, resource)
-        if info_key not in self.info_cache:
-            info = self.run([self.decoder, "info", self.assets[archive], resource])
-            self.info_cache[info_key] = {
-                int(n): (int(w), int(h), int(x), int(y))
-                for n, w, h, x, y in re.findall(
-                    r"frame (\d+): (\d+)x(\d+) hotspot \((-?\d+),(-?\d+)\)", info)
-            }
-        if frame not in self.info_cache[info_key]:
-            raise ValueError(f"resource {resource} has no frame {frame}")
-        w, h, hx, hy = self.info_cache[info_key][frame]
-        path = self.scratch / f"{archive}-{resource}-{frame}-{int(mirror)}.pam"
-        self.run([self.decoder, "render", self.assets[archive], resource,
-                  self.assets["palette"], path, frame])
-        if mirror:
-            original = path.with_suffix(".original.pam")
-            path.rename(original)
-            self.run([self.convert, original, "-flop", path])
-            hx = w - hx
-        result = dict(path=path, width=w, height=h, hotspot_x=hx, hotspot_y=hy)
-        self.frame_cache[key] = result
-        self.used_art.append(dict(archive=archive, resource=resource, frame=frame,
-                                 mirror=mirror, width=w, height=h, hotspot_x=hx, hotspot_y=hy))
-        return result
-
-    def at(self, art, x, y, checked=True):
-        scene = self.config["scene"]
-        if checked and (x < 0 or y < 22 or x + art["width"] > scene["width"] or
-                        y + art["height"] > scene["height"]):
-            raise ValueError(f"sprite would be clipped: {art['path'].name} at {x},{y}; "
-                             "increase scene height/vertical shift")
-        return f"image over {x},{y} 0,0 {quoted(art['path'])}"
-
-    def anchored(self, art, x, y):
-        return self.at(art, x - art["hotspot_x"], y - art["hotspot_y"])
 
     def make(self, png, jpg):
         config = self.config
@@ -169,92 +140,111 @@ class Render:
         p = progress_value(plan["progress_percent"])
         stage = plan["construction_frame"]
         effort = plan["effort"]
-        count = plan["requested_workers"]
         workers = plan["workers"]
-        scene = config["scene"]
-        shift, width, height, scale = (scene[k] for k in
-                                      ("vertical_shift", "width", "height", "scale"))
-        if width != 480 or not all(isinstance(v, int) for v in (height, shift, scale)):
-            raise ValueError("scene width is 480; height, shift, scale must be integers")
-        if not 220 <= height <= 600 or not 0 <= shift <= 200 or scale != 2:
-            raise ValueError("height 220..600, vertical_shift 0..200, scale 2 required")
-        grass = self.frame("terrain", 15001)
-        # Oversized grid: no sprite crosses an MVG canvas edge.
-        terrain = [self.at(grass, col * 64 + row % 2 * 32, row * 16, False)
-                   for row in range(48) for col in range(17)]
-        terrain_path = self.scratch / "terrain.png"
-        self.run([self.convert, "-size", "1152x840", "xc:#416325", "-draw", " ".join(terrain),
-                  "-crop", f"{width}x{height}+96+64", "+repage", terrain_path])
-        drawing = [self.at(self.frame("ror_graphics", 720), 5, 26 + shift),
-                   self.at(self.frame("ror_graphics", 723), 5, 150 + shift),
-                   self.at(self.frame("ror_graphics", 723), 89, 150 + shift)]
-        for row in range(5):
-            for col in range(5):
-                dirt = self.frame("terrain", 15000, row % 3 * 3 + col % 3)
-                drawing.append(self.at(dirt, 280 + (col - row) * 32,
-                                       45 + (col + row) * 16 + shift))
-        for layer in ("rear", "front"):
-            if layer == "front":
-                art = self.frame("ror_graphics", 735) if stage is None else self.frame("base_graphics", 302, stage)
-                drawing.append(self.anchored(art, 312, 125 + shift))
-            for worker in sorted((w for w in workers if w["layer"] == layer), key=lambda w: w["y"]):
-                distance = abs(worker["x"] - 312) / 160 + abs(worker["y"] - 125) / 80
-                if distance <= 1:
-                    raise ValueError("worker is inside the Wonder footprint")
-                art = self.frame("base_graphics", 628, worker["frame"], worker["mirror"])
-                drawing.append(self.anchored(art, worker["x"], worker["y"] + shift))
-        sh = height * scale
-        total_height = sh + 104
-        regular = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-        bold = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+        scene = city.city_plan(plan["progress_percent"], plan["requested_workers"],
+                               lenient=True)
+        if scene.problems:
+            raise ValueError("city plan: " + "; ".join(scene.problems))
+        if scene.builders != len(workers):
+            raise ValueError("the city plan placed a different number of builders")
+        self.plan_path = self.scratch / "city.plan"
+        self.plan_path.write_text(scene.text())
+        ppm = self.scratch / "city.ppm"
+        a = self.assets
+        report = self.run([self.tool, self.plan_path, a["dat"], a["ror_graphics"],
+                           a["base_graphics"], a["terrain"], a["border"],
+                           a["ror_interface"], a["base_interface"], a["tileedge"],
+                           a["color_dir"], ppm])
+        # The engine selected the foundation's angle itself (0x004ae880);
+        # it must agree with the rule this script documents.
+        found = re.search(rf"foundation {city.WONDER}: [^,]*, state (\d+), "
+                          r"construction angle (\d+)", report)
+        if not found:
+            raise ValueError("the engine did not report the Wonder foundation")
+        engine_stage = None if int(found.group(1)) == 2 else int(found.group(2))
+        if engine_stage != stage:
+            raise ValueError(f"the engine selected construction stage {engine_stage}, "
+                             f"the rule predicts {stage}")
+        width, height = city.VIEW
+        total_height = BAND_TOP + height + BAND_BOTTOM
+        sh = BAND_TOP + height
         percent_text = format(p.quantize(Decimal("0.01")).normalize(), "f")
         heading = "WONDER COMPLETE" if stage is None else "WONDER UNDER CONSTRUCTION"
         right_label = ("CONSTRUCTION COMPLETE" if stage is None else
                        f"EFFORT: {effort.upper()} / {len(workers)} BUILDERS")
-        label = lambda x, y, s: f"text {x},{y} {quoted(s)}"
-        bar_start, bar_end = sh + 45, sh + 84
-        filled = int(p * 792 / 100)
-        ops = [self.convert, terrain_path, "-draw", " ".join(drawing), "-filter", "point",
-               "-resize", f"960x{sh}!", "-background", "#14251e", "-gravity", "northwest",
-               "-extent", f"960x{total_height}", "-gravity", "none", "-alpha", "off",
-               "-fill", "#14251e", "-draw", f"rectangle 0,0 959,43 rectangle 0,{sh} 959,{total_height-1}",
-               "-fill", "#e8d6a5", "-font", bold, "-pointsize", "20", "-draw", label(24, 29, config["labels"]["title"]),
-               "-fill", "#d6cdb9", "-font", regular, "-pointsize", "13", "-draw", label(662, 28, config["labels"]["provenance"]),
-               "-fill", "#e8d6a5", "-font", bold, "-pointsize", "18", "-draw", label(24, sh+29, heading),
-               "-fill", "#d6cdb9", "-font", regular, "-pointsize", "12", "-draw", label(654, sh+29, right_label),
-               "-fill", "#f6e3a7", "-font", bold, "-pointsize", "20" if "." in percent_text else "24", "-draw", label(24, sh+73, percent_text + "%"),
-               "-fill", "#f3e5ba", "-draw", f"rectangle 120,{bar_start} 919,{bar_end}",
-               "-fill", "#304c3c", "-draw", f"rectangle 124,{bar_start+4} 915,{bar_end-4}"]
+        bar_x0, bar_x1 = 120, width - 41
+        bar_y0, bar_y1 = sh + 45, sh + 84
+        filled = int(p * (bar_x1 - bar_x0 - 8) / 100)
+        labels = config["labels"]
+        ops = [self.convert, ppm, "-background", "#14251e",
+               "-gravity", "North", "-splice", f"0x{BAND_TOP}",
+               "-gravity", "South", "-splice", f"0x{BAND_BOTTOM}",
+               "-fill", "#e8d6a5", "-font", BOLD, "-pointsize", "20",
+               "-gravity", "NorthWest", "-annotate", "+24+11", labels["title"],
+               "-fill", "#d6cdb9", "-font", REGULAR, "-pointsize", "13",
+               "-gravity", "NorthEast", "-annotate", "+24+15", labels["provenance"],
+               "-fill", "#e8d6a5", "-font", BOLD, "-pointsize", "18",
+               "-gravity", "SouthWest", "-annotate", f"+24+{BAND_BOTTOM - 38}", heading,
+               "-fill", "#d6cdb9", "-font", REGULAR, "-pointsize", "12",
+               "-gravity", "SouthEast", "-annotate", f"+24+{BAND_BOTTOM - 34}", right_label,
+               "-fill", "#f6e3a7", "-font", BOLD,
+               "-pointsize", "20" if "." in percent_text else "24",
+               "-gravity", "SouthWest", "-annotate", f"+24+{BAND_BOTTOM - 83}",
+               percent_text + "%%",
+               "-gravity", "None",
+               "-fill", "#f3e5ba", "-draw", f"rectangle {bar_x0},{bar_y0} {bar_x1},{bar_y1}",
+               "-fill", "#304c3c",
+               "-draw", f"rectangle {bar_x0 + 4},{bar_y0 + 4} {bar_x1 - 4},{bar_y1 - 4}"]
         if filled:
-            ops += ["-fill", "#f4b63e", "-draw", f"rectangle 124,{bar_start+4} {123+filled},{bar_end-4}"]
-        ops += ["-fill", "#d6cdb9", "-font", regular, "-pointsize", "10", "-draw",
-                label(124, sh+98, "ESTIMATED FULL-PORT COMPLETION"), "-background", "#14251e",
-                "-alpha", "remove", "-alpha", "off", "-depth", "8", "-strip", "-interlace", "none", f"PNG24:{png}"]
+            ops += ["-fill", "#f4b63e", "-draw",
+                    f"rectangle {bar_x0 + 4},{bar_y0 + 4} {bar_x0 + 3 + filled},{bar_y1 - 4}"]
+        ops += ["-fill", "#d6cdb9", "-font", REGULAR, "-pointsize", "10",
+                "-gravity", "SouthWest", "-annotate", f"+{bar_x0 + 4}+5",
+                "ESTIMATED FULL-PORT COMPLETION",
+                "-alpha", "off", "-depth", "8", "-strip", "-interlace", "none",
+                f"PNG24:{png}"]
         self.run(ops)
         self.run([self.convert, png, "-alpha", "off", "-strip", "-interlace", "none",
                   "-sampling-factor", "4:4:4", "-quality", "95", jpg])
         return dict(construction_frame=stage, complete=stage is None,
-                    requested_workers=count, rendered_workers=len(workers), workers=workers,
-                    dimensions=[960, total_height], used_art=self.used_art,
-                    fonts={p: digest(p) for p in (regular, bold)})
+                    requested_workers=plan["requested_workers"],
+                    rendered_workers=len(workers), workers=workers,
+                    wonder=plan["wonder"], plan_objects=len(scene.objects),
+                    plan_sha256=digest(self.plan_path),
+                    engine_report=report.strip().splitlines(),
+                    dimensions=[width, total_height],
+                    fonts={f: digest(f) for f in (REGULAR, BOLD)})
 
 
-def archive_run(png, jpg, config, manifest, commands):
+def git_commit():
+    try:
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, check=True,
+                              text=True, capture_output=True).stdout.strip()
+        dirty = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, check=True,
+                               text=True, capture_output=True).stdout.strip() != ""
+        return head + ("-dirty" if dirty else "")
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+
+def archive_run(png, jpg, plan_path, config, manifest, commands):
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     folder = ROOT / "status/history" / f"{stamp}-p{config['progress_percent']}-{uuid.uuid4().hex[:8]}"
     folder.mkdir(parents=True, exist_ok=False)
     shutil.copy2(png, folder / "image.png")
     shutil.copy2(jpg, folder / "image.jpg")
-    # Preserve a standalone decoder's sources and binary, renderer and rule.
-    for rel in ("tools/render_status_art.py", "tools/render_status_art.sh", "tools/slp_tool.c",
-                "src/slp.c", "src/drs.c", "src/palette.c", "include/slp.h", "include/drs.h",
-                "include/palette.h", "status/evidence/construction-stages.md", "status/README.md"):
+    # The renderer, the plan module and the plan, the tool's source and
+    # binary, and the rule evidence; the engine sources are the commit.
+    for rel in ("tools/render_status_art.py", "tools/status_city_plan.py",
+                "tools/status_city_tool.c", "tools/render_status_art.sh",
+                "status/evidence/construction-stages.md", "status/README.md"):
         dest = folder / "recipe" / rel
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / rel, dest)
-    decoder = folder / "recipe/build/host/slp_tool"
-    decoder.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(ROOT / "build/host/slp_tool", decoder)
+    tool = folder / "recipe/build/host/status_city_tool"
+    tool.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(ROOT / "build/host/status_city_tool", tool)
+    shutil.copy2(plan_path, folder / "recipe/status/city.plan")
     effective = deepcopy(config)
     effective["output"] = "status/replayed.png"
     effective["assets"] = {k: str(resolve(v)) for k, v in effective["assets"].items()}
@@ -277,10 +267,10 @@ def main():
     parser.add_argument("--progress-note", help="evidence for a changed completion estimate")
     parser.add_argument("--effort-note", help="basis for the chosen activity level")
     parser.add_argument("--plan", action="store_true",
-                        help="print construction frame and worker placement; do not render")
+                        help="print construction frame and builder placement; do not render")
     args = parser.parse_args()
     config = json.loads(Path(args.config).read_text())
-    if config.get("schema_version") != 1:
+    if config.get("schema_version") != 2:
         raise ValueError("unsupported configuration schema")
     for key, val in (("progress_percent", args.percent or args.legacy_percent),
                      ("effort", args.effort), ("workers", args.workers),
@@ -291,7 +281,7 @@ def main():
             config[key] = val
     config["progress_percent"] = format(progress_value(config["progress_percent"]), "f")
     if args.plan:
-        print(json.dumps(render_plan(config), indent=2) + "")
+        print(json.dumps(render_plan(config), indent=2))
         return
     png = resolve(config["output"])
     if png.suffix.lower() != ".png":
@@ -300,13 +290,22 @@ def main():
     png.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="aoe-status-") as scratch:
         render = Render(config, scratch)
-        temp_png, temp_jpg = Path(scratch)/"image.png", Path(scratch)/"image.jpg"
+        temp_png, temp_jpg = Path(scratch) / "image.png", Path(scratch) / "image.jpg"
         result = render.make(temp_png, temp_jpg)
-        manifest = dict(schema_version=1, created_utc=datetime.now(timezone.utc).isoformat(),
+        inputs = {}
+        for key, p in render.assets.items():
+            if key == "color_dir":
+                shadow = p / "shadow.col"
+                inputs[key] = dict(path=str(p), shadow_col_sha256=digest(shadow) if shadow.is_file() else None)
+            else:
+                inputs[key] = dict(path=str(p), sha256=digest(p))
+        manifest = dict(schema_version=2, created_utc=datetime.now(timezone.utc).isoformat(),
                         effective_config=config, render=result,
                         source_rule="status/evidence/construction-stages.md",
-                        inputs={k: dict(path=str(p), sha256=digest(p)) for k, p in render.assets.items()},
-                        decoder_sha256=digest(render.decoder), renderer_sha256=digest(__file__),
+                        inputs=inputs,
+                        tool_sha256=digest(render.tool), renderer_sha256=digest(__file__),
+                        plan_module_sha256=digest(HERE / "status_city_plan.py"),
+                        source_commit=git_commit(),
                         python=platform.python_version(),
                         imagemagick=render.run([render.convert, "-version"]).splitlines()[0],
                         outputs={"png_sha256": digest(temp_png), "jpg_sha256": digest(temp_jpg)})
@@ -316,7 +315,8 @@ def main():
             if not prior.exists():
                 shutil.copy2(png, prior)
         if not args.no_history:
-            history = archive_run(temp_png, temp_jpg, config, manifest, render.commands)
+            history = archive_run(temp_png, temp_jpg, render.plan_path, config, manifest,
+                                  render.commands)
             manifest["history"] = str(history)
         shutil.copy2(temp_png, png)
         shutil.copy2(temp_jpg, jpg)

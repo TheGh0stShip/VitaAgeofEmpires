@@ -1,25 +1,24 @@
 {
-  "schema_version": 1,
-  "progress_percent": "20",
-  "progress_assessment": "Approximate full-port estimate, up from 15%, within an assessed 18-25% range. Translation: 2307/4510 game functions (51.2%) and 37.7% of game-code bytes are translated, now including the computer-player AI, research and effects, the player class, the UI panel and dialog framework, the draw system and surfaces, the sound and wave system, campaigns and the player information file. Still unfinished: the remaining 62% of code bytes (the in-game and menu screens, multiplayer/DirectPlay, the rest of the unit and world logic, the hand-written assembly sprite renderer); wiring the translated modules into one game loop (most are tested in isolation behind callback interfaces); Vita graphics, audio, input, file and network backends beyond the demo shell; and validation against original-game behaviour and on Vita hardware.",
+  "schema_version": 2,
+  "progress_percent": "30",
+  "progress_assessment": "Approximate full-port estimate, up from 20%, within an assessed 28-35% range. The function worklist is complete: all 4510 patched game-code functions are cited, 4491 of them with 8-digit translation citations (144 of those so far only as callees), and the port's own engine loads real scenarios, places and builds buildings, selects units, gathers, fights and draws authentic scenes (this image is one of them). Still unfinished: wiring the translated screens and the world into one game loop (the Game Screen drives only part of it), computer players driving the world, scenario victory and defeat, saving and loading games, the SceAudio sound backend and music, multiplayer, and validation against the original game and on Vita hardware, performance included.",
   "effort": "high",
   "workers": null,
-  "effort_assessment": "Eight builders represent the high effort setting for this reporting period (sustained simulation translation work), not eight people or a measured number of work hours.",
+  "effort_assessment": "Eight builders at the Wonder represent the high effort setting for this reporting period (the Game Screen, placement and selection work), not eight people or a measured number of work hours.",
   "output": "status/port-progress.png",
   "assets": {
+    "dat": "build/ror/disc/GAME/DATA2/EMPIRES.DAT",
+    "ror_graphics": "build/ror/disc/GAME/DATA2/GRAPHICS.DRS",
     "base_graphics": "build/original/base/data/graphics.drs",
     "terrain": "build/original/base/data/Terrain.drs",
-    "palette": "build/original/base/data/Interfac.drs",
-    "ror_graphics": "build/ror/disc/GAME/DATA2/GRAPHICS.DRS"
-  },
-  "scene": {
-    "scale": 2,
-    "width": 480,
-    "height": 268,
-    "vertical_shift": 50
+    "border": "build/original/base/data/Border.drs",
+    "ror_interface": "build/ror/disc/GAME/DATA2/INTERFAC.DRS",
+    "base_interface": "build/original/base/data/Interfac.drs",
+    "tileedge": "build/original/base/data/TILEEDGE.DAT",
+    "color_dir": "build/original/base/data"
   },
   "labels": {
     "title": "RISE OF ROME / VITA PORT",
-    "provenance": "ORIGINAL ASSETS / STATUS ART"
+    "provenance": "ORIGINAL ASSETS, DRAWN BY THE PORT'S ENGINE / STATUS ART"
   }
 }

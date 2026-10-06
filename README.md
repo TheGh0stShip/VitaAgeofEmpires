@@ -15,7 +15,7 @@
 
 The status illustration below is a reproducible estimate of the **full port**, not a screenshot of running code and not a decompilation-completion metric.
 
-![Reproducible Rise of Rome port-status illustration](status/port-progress.png)
+![Reproducible Rise of Rome port-status illustration: a Roman city drawn by the port's own engine](status/port-progress.png)
 
 ## Start here
 
@@ -55,7 +55,7 @@ Vita cross-compilation requires [VitaSDK](https://github.com/vitasdk/vita-toolch
 | docs/DECOMPILATION_EXPORTS.md | Contents and regeneration of checked-in Ghidra reference exports |
 | docs/PROVENANCE.md | Provenance audit: sources, evidence classes, third-party code and tools |
 | docs/RESUME.md, TODO.md | Handoff notes and project roadmap |
-| status/ | Configurable Wonder construction illustration and reproducible recipe |
+| status/ | Configurable port-status city illustration (drawn by the port's engine) and its reproducible recipe |
 | build/decompile/ | Checked-in pseudocode/reference exports; not original source code |
 
 ### Reverse-engineering status

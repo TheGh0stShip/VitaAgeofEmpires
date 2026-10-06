@@ -840,8 +840,8 @@ else()
     add_custom_target(status_art
       COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/render_status_art.py
       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-      DEPENDS slp_tool
-      COMMENT "Rendering and archiving the current Wonder port-status image")
+      DEPENDS status_city_tool
+      COMMENT "Rendering and archiving the current city port-status image")
   endif()
   add_executable(dat_tool tools/dat_tool.c)
   target_link_libraries(dat_tool PRIVATE aoe_dat aoe_terrain_art aoe_terrain aoe_player_templates)
@@ -850,6 +850,9 @@ else()
   add_executable(scenario_scene_tool tools/scenario_scene_tool.c)
   target_link_libraries(scenario_scene_tool PRIVATE aoe_scenario_scene
     aoe_live_unit_sprite_backend aoe_color_table aoe_palette aoe_dat)
+  add_executable(status_city_tool tools/status_city_tool.c)
+  target_link_libraries(status_city_tool PRIVATE aoe_scenario_scene aoe_world_combat
+    aoe_live_unit_sprite_backend aoe_color_table aoe_palette aoe_dat m)
   add_executable(ui_host_tool tools/ui_host_tool.c)
   target_link_libraries(ui_host_tool PRIVATE aoe_ui_director)
   # The translated Main Menu on the user's data (archives, language

@@ -26,10 +26,16 @@ def main():
     snapshot = args.snapshot.resolve()
     manifest = json.loads((snapshot / "manifest.json").read_text())
     recipe = snapshot / "recipe"
-    expected = [(item["path"], item["sha256"]) for item in manifest["inputs"].values()]
+    expected = [(item["path"], item["sha256"]) for item in manifest["inputs"].values()
+                if "sha256" in item]
     expected += list(manifest["render"]["fonts"].items())
-    expected += [(recipe / "build/host/slp_tool", manifest["decoder_sha256"]),
-                 (recipe / "tools/render_status_art.py", manifest["renderer_sha256"])]
+    if manifest.get("schema_version") == 2:
+        expected += [(recipe / "build/host/status_city_tool", manifest["tool_sha256"]),
+                     (recipe / "tools/render_status_art.py", manifest["renderer_sha256"]),
+                     (recipe / "tools/status_city_plan.py", manifest["plan_module_sha256"])]
+    else:
+        expected += [(recipe / "build/host/slp_tool", manifest["decoder_sha256"]),
+                     (recipe / "tools/render_status_art.py", manifest["renderer_sha256"])]
     for path, checksum in expected:
         if digest(path) != checksum:
             raise ValueError(f"recorded input has changed: {path}")
@@ -39,6 +45,7 @@ def main():
     version = subprocess.check_output([convert, "-version"], text=True).splitlines()[0]
     if version != manifest["imagemagick"]:
         raise ValueError("ImageMagick version differs from the archived run")
+    args.output.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run([sys.executable, str(recipe / "tools/render_status_art.py"),
                     "--no-history", "--output", str(args.output.resolve())], check=True)
     if digest(args.output) != manifest["outputs"]["png_sha256"]:

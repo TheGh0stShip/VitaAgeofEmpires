@@ -14,7 +14,7 @@
 | [Provenance](PROVENANCE.md) | Where each part of the code comes from, its evidence, third-party code and tools |
 | [Vita ABI and test lanes](VITA_ABI.md) | Verified VitaSDK data model (signed char, small enums, 64-bit long double) and the ARMv7/VitaSDK CI lanes |
 | [Random-map generation](RANDOM_MAP.md) | Generator classes and entry points, retained DAT records, and the disassembly blocker |
-| [Wonder status art](../status/README.md) | Reproducible configuration and rendering of the progress illustration |
+| [City status art](../status/README.md) | Reproducible configuration and engine rendering of the progress illustration |
 | [License](../LICENSE) and [scope notice](../LICENSE-NOTICE.md) | GPL-3.0-or-later terms for project-authored code and documentation, with explicit third-party exclusions |
 
 ## Evidence conventions

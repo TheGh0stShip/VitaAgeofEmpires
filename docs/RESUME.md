@@ -444,6 +444,24 @@ Always inspect full PNG/JPEG outputs, all footprint edges and inward worker
 facings. Preserve the original-asset status-art label; this is not a game
 screenshot. Construction/geometry tests are in `tests/status_art_test.py`.
 
+Status art, second generation (2026-10-06): the illustration is now a whole
+Roman city drawn by the port's own engine. `tools/status_city_plan.py`
+decides what stands where (harbour, forum, Wonder with its builders, walled
+military quarter, fields, woods, mines; footprints and the view are checked
+so nothing overlaps or leaves the frame) and writes a plan;
+`tools/status_city_tool.c` creates every object through the scenario
+runtime (type-80 units completed through add-build-work, the Wonder left at
+the configured percentage so 0x004ae880 selects its stage, villagers ordered
+to build, farm, forage, chop, mine and fish through the order step and the
+world ticked so they walk and work) and draws the frame with the viewport
+renderer; `tools/render_status_art.py` checks the engine's reported stage
+against the rule and composes the bands. Roads are the base game's unused
+cobblestone Road tile (graphics.drs SLP 530, graphic 488) placed on terrain
+slot 12 with the grass/desert border as a dirt shoulder; the shore is a
+two-tile beach band. Estimate raised to 30% with the worklist complete (see
+`status/current.json`). The old Wonder-only recipes stay replayable from
+their history folders (`tools/replay_status_art.py` handles both schemas).
+
 Latest building work: `aoe_building_update_ror` translates the field and
 call order of RoR 004ae880, including byte-narrowed construction angle,
 completion request, raw history shifts and post-parent state dispatch.

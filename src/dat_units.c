@@ -49,6 +49,11 @@ static uint16_t at16(const uint8_t *p) {
     return (uint16_t)p[0] | ((uint16_t)p[1] << 8);
 }
 
+static uint32_t at32(const uint8_t *p) {
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) |
+           ((uint32_t)p[3] << 24);
+}
+
 static float atfloat(const uint8_t *p) {
     uint32_t bits = (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
                     ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
@@ -66,7 +71,7 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
     name_len = u16(cursor);
     unit->id = (int16_t)u16(cursor);
     unit->language_name_id = u16(cursor); /* template +0x0c */
-    take(cursor, 2); /* creation language ID */
+    unit->language_creation_id = u16(cursor); /* template +0x0e */
     unit->unit_class = (int16_t)u16(cursor);
     unit->standing_graphic = (int16_t)u16(cursor);
     unit->dying_graphic = (int16_t)u16(cursor);
@@ -110,6 +115,9 @@ static int parse_unit(Cursor *cursor, DatUnit *unit) {
     unit->map_color = p[20]; /* +0x90, after the +0x84 float */
     p = take(cursor, 16); /* help/hotkey IDs and flags at +0xa4..+0xa7 */
     if (!p) return 0;
+    unit->language_help_id = (int32_t)at32(p);      /* +0x98 */
+    unit->language_tree_id = (int32_t)at32(p + 4);  /* +0x9c */
+    unit->hotkey_id = (int32_t)at32(p + 8);         /* +0xa0 */
     unit->negative_id_mode = p[12]; /* live constructor 0x004a8200 */
     unit->state_notify_mode = p[13]; /* pre-terminal 0x004abbf0 */
     unit->state_effect_mode = p[14]; /* state setter 0x004abdf0 */

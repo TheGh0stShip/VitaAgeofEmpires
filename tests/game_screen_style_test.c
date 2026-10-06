@@ -144,7 +144,7 @@ int main(void) {
     o.height = 600;
     o.player_style = 1;
     aoe_game_screen_style_ror(&o, shapes, &page);
-    assert(strstr(log_, "load gameb1.shp c632 ") != NULL && page == shapes[AOE_GSP_LARGE]);
+    assert(strstr(log_, "load gameb1.shp c632 ") != NULL && page == shapes[AOE_GSP_COMMANDS]);
     assert(strstr(log_, "bevel 72 73 74 74 b7 b8 ") != NULL);
     puts("game screen style ok");
     return 0;

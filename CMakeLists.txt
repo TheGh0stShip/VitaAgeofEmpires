@@ -640,6 +640,7 @@ target_include_directories(aoe_ui_director PUBLIC include)
 target_compile_options(aoe_ui_director PRIVATE -Wall -Wextra)
 target_link_libraries(aoe_ui_director PUBLIC aoe_ui_host aoe_game_ui aoe_scenario_info aoe_scn
   aoe_campaign_progress aoe_deflate_writer aoe_port_registry aoe_demo_app aoe_game_ror_flow
+  aoe_tribe_player_commands aoe_research_manager
   ZLIB::ZLIB)
 
 add_library(aoe_shell_app STATIC src/shell_app.c)
@@ -899,12 +900,13 @@ else()
     add_test(NAME ror_campaign_start_real COMMAND ui_host_tool
       "${CMAKE_SOURCE_DIR}/build/demo_root" "${CMAKE_BINARY_DIR}"
       c:320,198 c:320,188 t:Tester k:13 c:100,240 c:190,455 c:560,460 i:5 d:39 i:5 u:39
-      c:520,380 i:5 c:520,410 i:2 c:220,90 r:420,250 i:20)
+      c:520,380 i:5 c:520,410 i:2 c:220,90 r:420,250 i:20 c:476,404 i:5 c:300,140 i:5
+      c:162,388 i:20)
     set_tests_properties(ror_campaign_start_real PROPERTIES
       FIXTURES_REQUIRED ror_user
       ENVIRONMENT "AOE_USER_DIR=${CMAKE_BINARY_DIR}/userdata_test"
       PASS_REGULAR_EXPRESSION
-      "c:190,455 -> Mission Dialog\nc:560,460 -> Game Screen\ni:5 -> Game Screen\nd:39 -> Game Screen\ni:5 -> Game Screen\nu:39 -> Game Screen\nc:520,380 -> Game Screen(.|\n)*r:420,250 -> Game Screen\ni:20 -> Game Screen")
+      "c:190,455 -> Mission Dialog\nc:560,460 -> Game Screen\ni:5 -> Game Screen\nd:39 -> Game Screen\ni:5 -> Game Screen\nu:39 -> Game Screen\nc:520,380 -> Game Screen(.|\n)*r:420,250 -> Game Screen\ni:20 -> Game Screen(.|\n)*c:162,388 -> Game Screen")
     # In the game: Escape clears the selection, F10 opens the Menu Dialog,
     # Quit Game asks, and Yes leaves for the Main Menu.
     add_test(NAME ror_campaign_quit_real COMMAND ui_host_tool

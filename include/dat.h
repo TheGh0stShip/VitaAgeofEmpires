@@ -342,6 +342,10 @@ typedef struct {
     int16_t dead_unit_id;
     int16_t hit_points;
     uint16_t language_name_id; /* original template +0x0c (loader 0x004413b0) */
+    uint16_t language_creation_id; /* +0x0e: the "Create ..." text */
+    /* +0x98 / +0x9c / +0xa0: the help string, the tech-tree text and the
+       hotkey string IDs (0x0040c1a0 / 0x00407ae0 read the first two). */
+    int32_t language_help_id, language_tree_id, hotkey_id;
     uint8_t garrison_capacity;  /* original template +0x2c */
     int16_t icon;           /* template +0x4c: the object panel's picture */
     uint8_t hide_in_editor; /* template +0x4e */

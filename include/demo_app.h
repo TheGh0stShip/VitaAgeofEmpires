@@ -6,6 +6,8 @@
 
 #include "diamond_map.h"
 #include "info_panel.h"
+#include "player_templates.h"
+#include "research_action.h"
 
 /* Portable tech-demo application: loads user-supplied original Rise of Rome
    data from a root directory, builds the reconstructed scenario runtime,
@@ -129,6 +131,17 @@ int aoe_demo_info_object(AoeDemo *demo, const AoeLiveUnit *unit, AoeInfoObjectRo
 const void *aoe_demo_world_player(AoeDemo *demo, int player);
 /* A world player's civilisation (player +0x109), 0 for none. */
 uint8_t aoe_demo_player_civ(AoeDemo *demo, const void *player);
+/* The command buttons' world: a player's templates (its effects
+   applied), its research owner (manager, techs and resources) and
+   whether it owns an object of a template; the DAT's techs; a unit's ID;
+   a tribe production command (0x64 train / 0x65 research, encoded with
+   aoe_command_encode_production_ror) run in the world. */
+const AoePlayerTemplates *aoe_demo_player_templates(AoeDemo *demo, int player);
+int aoe_demo_research_owner(AoeDemo *demo, int player, AoeResearchOwnerRor *out);
+int aoe_demo_owns_template(AoeDemo *demo, int player, int16_t template_id);
+const DatTechs *aoe_demo_techs(const AoeDemo *demo);
+int32_t aoe_demo_unit_id(const AoeLiveUnit *unit);
+int aoe_demo_command_production(AoeDemo *demo, const uint8_t *command, size_t size);
 /* The camera (map tile coordinates). */
 void aoe_demo_camera(const AoeDemo *demo, float *x, float *y);
 /* The DAT's terrain count (scn_load_map's `terrain_count`). */

@@ -1043,6 +1043,33 @@ int aoe_demo_info_object(AoeDemo *demo, const AoeLiveUnit *u, AoeInfoObjectRor *
     return 1;
 }
 
+const AoePlayerTemplates *aoe_demo_player_templates(AoeDemo *demo, int player) {
+    if (!demo || !demo->loaded || player < 0 || player >= demo->runtime.player_count) return NULL;
+    return &demo->runtime.players[player].templates;
+}
+
+int aoe_demo_research_owner(AoeDemo *demo, int player, AoeResearchOwnerRor *out) {
+    if (!demo || !demo->loaded || player < 0 || player >= demo->runtime.player_count) return 0;
+    out->manager = &demo->runtime.players[player].research;
+    out->techs = &demo->techs;
+    out->resources = &demo->runtime.players[player].resources;
+    return 1;
+}
+
+int aoe_demo_owns_template(AoeDemo *demo, int player, int16_t template_id) {
+    FindTemplate f = {player, template_id};
+    return demo && demo->loaded && visit_units(demo, match_template, &f) != NULL;
+}
+
+const DatTechs *aoe_demo_techs(const AoeDemo *demo) { return demo ? &demo->techs : NULL; }
+
+int32_t aoe_demo_unit_id(const AoeLiveUnit *unit) { return unit ? unit->core.unit_id : -1; }
+
+int aoe_demo_command_production(AoeDemo *demo, const uint8_t *command, size_t size) {
+    if (!demo || !demo->loaded) return -1;
+    return aoe_world_combat_command_production_ror(&demo->combat, command, size);
+}
+
 void aoe_demo_camera(const AoeDemo *demo, float *x, float *y) {
     *x = demo ? demo->camera_x : 0.0f;
     *y = demo ? demo->camera_y : 0.0f;

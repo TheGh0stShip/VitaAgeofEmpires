@@ -6,6 +6,7 @@
 #include "demo_app.h"
 #include "game_screen.h"
 #include "game_ui.h"
+#include "command_button.h"
 #include "game_minimap.h"
 #include "info_panel.h"
 #include "resource_panel.h"
@@ -22,8 +23,10 @@
    interface (0x004816d0) loads its style's bar shape, which the
    translated draw (0x00484110) paints behind the view. The resource bar
    (0x004f7c00), the minimap (0x005085a0) and the object panel
-   (0x004f83d0) are the translated panels over the world; the command
-   buttons are not assembled yet. Keys: Escape (0x00484900) clears the selection, F10
+   (0x004f83d0) are the translated panels over the world, with the
+   seventeen command buttons (0x004f7420) rebuilt for the selection
+   (0x004822a0) and run through the dispatcher (0x00481410). The screen
+   is laid out by the translated layout (0x0047f000). Keys: Escape (0x00484900) clears the selection, F10
    (0x004850b0) opens the Menu Dialog; the dialogs' answers go through
    the screen's action (0x00480fe0). Leaving a game returns to the Main
    Menu (the original plays the end video and shows the Achievements
@@ -43,7 +46,16 @@ typedef struct {
     AoeGameMinimapRor *map;           /* +0x4bc */
     AoeInfoPanelRor *object_panel;    /* +0x4c4 */
     AoeInfoPanelOpsRor object_ops;
-    void *unit_icons;                 /* AOE_GSC_SHAPE 0: "btnunit.shp" */
+    void *unit_icons;                 /* AOE_GSC_SHAPE 0: "btnunit.shp" (+0x494) */
+    void *tech_icons;                 /* AOE_GSC_SHAPE 1: "btntech.shp" (+0x490) */
+    AoeCommandButtonRor *buttons[17]; /* +0x4c8.. */
+    AoeCommandButtonOpsRor button_ops;
+    int16_t button_count, button_page, button_shown; /* +0x5e0, +0x5e2, +0x5e4 */
+    int16_t frame_4b0, frame_4b2, frame_4b4;
+    void *train_list;                 /* +0x5d4 (AoeTribeTrainEntryRor) */
+    int16_t train_count;
+    void *research_list;              /* +0x5d0 (AoeResearchListEntryRor) */
+    int16_t research_count;
     void *building_icons[5];          /* AOE_GSC_SHAPE 3 + i: "btnbldg%d.shp" */
     uint32_t map_time;                /* +0x5c4 */
     AoeDiamondMapOpsRor map_ops;

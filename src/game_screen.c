@@ -1576,7 +1576,7 @@ void aoe_game_screen_style_ror(const AoeGameScreenStyleOpsRor *o, void *shapes[A
         for (i = 0; i < 17; ++i)
             o->button_border(o->context, i,
                              i < 12 ? shapes[AOE_GSP_BORDER_A] : shapes[AOE_GSP_BORDER_B]);
-        *page_picture = (o->width >= 800 && o->height >= 600) ? shapes[AOE_GSP_LARGE]
+        *page_picture = (o->width >= 800 && o->height >= 600) ? shapes[AOE_GSP_COMMANDS]
                                                               : shapes[AOE_GSP_OTHER];
         o->button_picture(o->context, 0x4dc, 0, *page_picture, o->frame_4b0);
         o->button_picture(o->context, 0x4f4, 0, *page_picture,

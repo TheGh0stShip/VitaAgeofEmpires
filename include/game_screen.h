@@ -879,7 +879,7 @@ enum {
     AOE_GSP_OTHER,            /* +0x480 "btnoth%d.shp" */
     AOE_GSP_BORDER_B,         /* +0x484 "btnbrdb%d.shp": buttons 12..16's border */
     AOE_GSP_BORDER_C,         /* +0x488 "btnbrdc%d.shp" */
-    AOE_GSP_LARGE,            /* +0x48c (made elsewhere) */
+    AOE_GSP_COMMANDS,         /* +0x48c "btncmd.shp" (the constructor's, AOE_GSC_SHAPE 2) */
     AOE_GSP_SHAPES
 };
 typedef struct {

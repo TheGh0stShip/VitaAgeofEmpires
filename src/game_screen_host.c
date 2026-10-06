@@ -5,8 +5,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "command_production.h"
 #include "draw_system.h"
 #include "game_ror_flow.h"
+#include "player_costs.h"
+#include "research_manager.h"
+#include "tribe_player_commands.h"
 #include "ui_ez_slots.h"
 
 #define GS(p) ((AoeGameScreenHostRor *)(p))
@@ -38,6 +42,22 @@ static void free_shape(AoeGameScreenHostRor *s, void *shape) {
     if (shape && ez && ez->free_shape) ez->free_shape(ez->context, shape);
 }
 
+/* A command button by its screen offset (+0x4c8 + 4 i, i 0..16). */
+static AoeCommandButtonRor *button_at(AoeGameScreenHostRor *s, uint32_t off) {
+    if (off < 0x4c8 || off > 0x508 || (off - 0x4c8) % 4) return NULL;
+    return s->buttons[(off - 0x4c8) / 4];
+}
+
+static char *op_load_string(void *c, int32_t id, char *buf, int32_t len) {
+    aoe_ui_string_ror(GS(c)->ez.panel.system, id, buf, len);
+    return buf;
+}
+static char *op_base_format(void *c, int32_t kind, int32_t index, int32_t sub, char *buf,
+                            int32_t len) {
+    (void)c; (void)kind; (void)index; (void)sub;
+    if (len > 0) buf[0] = '\0';
+    return buf;
+}
 static void gs_destroy(AoeUiPanelRor *p) {
     AoeGameScreenHostRor *s = GS(p);
     int i;
@@ -46,8 +66,20 @@ static void gs_destroy(AoeUiPanelRor *p) {
         free(s->object_panel);
         s->object_panel = NULL;
     }
+    for (i = 0; i < 17; ++i) {
+        if (!s->buttons[i]) continue;
+        s->buttons[i]->button.panel.vt->destroy(&s->buttons[i]->button.panel);
+        free(s->buttons[i]);
+        s->buttons[i] = NULL;
+    }
+    free(s->train_list);
+    s->train_list = NULL;
+    free(s->research_list);
+    s->research_list = NULL;
     free_shape(s, s->unit_icons);
     s->unit_icons = NULL;
+    free_shape(s, s->tech_icons);
+    s->tech_icons = NULL;
     for (i = 0; i < 5; ++i) {
         free_shape(s, s->building_icons[i]);
         s->building_icons[i] = NULL;
@@ -232,16 +264,24 @@ static void st_pictures(void *c, const char *name, int32_t id) {
 }
 static void st_bevel(void *c, const uint8_t k[6]) { aoe_ui_ez_set_bevel_colors_ror(&GS(c)->ez, k); }
 static void st_button_bevel(void *c, uint16_t off, int32_t type, const uint8_t k[6]) {
-    (void)c; (void)off; (void)type; (void)k;
+    AoeCommandButtonRor *b = button_at(GS(c), off);
+    if (b) aoe_ui_button_set_bevel_ror(&b->button, type, k);
 }
 static void st_button_picture(void *c, uint16_t off, int32_t state, void *pic, int16_t frame) {
-    (void)c; (void)off; (void)state; (void)pic; (void)frame;
+    AoeCommandButtonRor *b = button_at(GS(c), off);
+    if (b) aoe_ui_button_set_picture_ror(&b->button, (int16_t)state, pic, frame);
 }
-static int32_t st_button_id(void *c, uint16_t off) { (void)c; (void)off; return 0; }
+static int32_t st_button_id(void *c, uint16_t off) {
+    AoeCommandButtonRor *b = button_at(GS(c), off);
+    return b ? aoe_ui_button_id_ror(&b->button) : 0;
+}
 static void st_button_colors(void *c, uint16_t off, int32_t state, uint32_t a, uint32_t b) {
-    (void)c; (void)off; (void)state; (void)a; (void)b;
+    AoeCommandButtonRor *btn = button_at(GS(c), off);
+    if (btn) aoe_ui_button_set_text_color_ror(&btn->button, state, a, b);
 }
-static void st_border(void *c, int32_t i, void *shape) { (void)c; (void)i; (void)shape; }
+static void st_border(void *c, int32_t i, void *shape) {
+    if (i >= 0 && i < 17 && GS(c)->buttons[i]) GS(c)->buttons[i]->background = shape;
+}
 static void st_colors(void *c, uint16_t off, uint32_t a, uint32_t b) {
     if (off == 0x4c0 && GS(c)->resources) aoe_resource_panel_set_colors_ror(GS(c)->resources, a, b);
 }
@@ -251,6 +291,9 @@ static void *st_load(void *c, const char *name, int32_t id) {
 }
 static void st_free(void *c, void *shape) { free_shape(GS(c), shape); }
 static void st_redraw(void *c) { GS(c)->ez.panel.vt->set_redraw(&GS(c)->ez.panel, 1); }
+
+static void rebuild_buttons(AoeGameScreenHostRor *s);
+static void st_rebuild(void *c) { rebuild_buttons(GS(c)); }
 
 /* 0x004816d0 for the viewed player (the port plays as player 1). */
 static void restyle(AoeGameScreenHostRor *s) {
@@ -265,6 +308,9 @@ static void restyle(AoeGameScreenHostRor *s) {
     o.player_id = 1;
     if (!aoe_demo_player_icon_set(s->world, 1, &style)) style = 0;
     o.player_style = style;
+    o.frame_4b0 = s->frame_4b0;
+    o.frame_4b2 = s->frame_4b2;
+    o.frame_4b4 = s->frame_4b4;
     o.player_to_panels = st_panels;
     o.mode_changed = st_none;
     o.store_player = st_none;
@@ -281,7 +327,7 @@ static void restyle(AoeGameScreenHostRor *s) {
     o.text_colors = st_colors;
     o.load_shape = st_load;
     o.free_shape = st_free;
-    o.rebuild_buttons = st_none;
+    o.rebuild_buttons = st_rebuild;
     o.redraw = st_redraw;
     aoe_game_screen_style_ror(&o, s->shapes, &s->page_picture);
 }
@@ -409,6 +455,7 @@ static int make_minimap(AoeGameScreenHostRor *s) {
    the unit drawn there (or clears the selection) and the right button
    orders the selection there. The original's view panel does this
    through its mouse handlers (0x0050f420's game view; not assembled). */
+static void selection_changed(AoeGameScreenHostRor *s);
 static int32_t gs_mouse_down(AoeUiPanelRor *p, uint8_t button, int32_t x, int32_t y, int32_t c,
                              int32_t sh) {
     AoeGameScreenHostRor *s = GS(p);
@@ -416,8 +463,12 @@ static int32_t gs_mouse_down(AoeUiPanelRor *p, uint8_t button, int32_t x, int32_
     if (!s->world || vx < 0 || vy < 0 || vx >= s->view_w || vy >= s->view_h ||
         (button != 1 && button != 2) || aoe_ui_ez_help_press_ror(&s->ez, button, x, y))
         return aoe_ui_ez_mouse_down_slot_ror(p, button, x, y, c, sh);
-    if (button == 1) aoe_demo_select(s->world, aoe_demo_pick(s->world, vx, vy));
-    else aoe_demo_order(s->world, vx, vy);
+    if (button == 1) {
+        aoe_demo_select(s->world, aoe_demo_pick(s->world, vx, vy));
+        selection_changed(s);
+    } else {
+        aoe_demo_order(s->world, vx, vy);
+    }
     render_view(s);
     p->vt->set_redraw(p, 1);
     return 1;
@@ -436,7 +487,10 @@ static int32_t so_edit_mode(void *c, int32_t *sub) {
 }
 static void so_view_cancel(void *c, void *view) { (void)c; (void)view; }
 static void so_set_mode(void *c, int32_t mode, int32_t sub) { (void)c; (void)mode; (void)sub; }
-static void so_clear_selection(void *c) { aoe_demo_select(SO(c)->world, NULL); }
+static void so_clear_selection(void *c) {
+    aoe_demo_select(SO(c)->world, NULL);
+    selection_changed(SO(c));
+}
 static void so_redraw(void *c, void *panel, int all) {
     (void)panel;
     (void)all;
@@ -454,6 +508,570 @@ static void so_open_dialog(void *c, const char *name) {
             m->dialog.ez.panel.vt->destroy(&m->dialog.ez.panel);
             free(m);
         }
+    }
+}
+
+/* ---- the command buttons ---- */
+
+/* A shape frame clipped to `clip` (0x004f75b0's draws); `remap` >= 0 as
+   the object panel's; disabled pictures are drawn as they are (the grey
+   table 0x00540680 is not loaded). */
+static void cb_draw_shape(void *c, AoeUiAreaRor *area, void *shape, int32_t frame, int32_t x,
+                          int32_t y, const AoeUiRectRor *clip, int32_t remap, int disabled) {
+    AoeGameScreenHostRor *s = c;
+    const AoeUiEzOpsRor *ez = s->ui->ez_ops;
+    AoeDrawSurfaceRor *d = area ? area->surface : NULL;
+    AoeShapeSurfaceRor saved;
+    uint8_t table[256];
+    int i;
+    (void)disabled;
+    if (!shape || !d || !ez || !ez->shape_ops || !aoe_surface_lock_ror(d, 1)) return;
+    saved = d->view;
+    if (clip) {
+        if (clip->left > d->view.clip_left) d->view.clip_left = clip->left;
+        if (clip->top > d->view.clip_top) d->view.clip_top = clip->top;
+        if (clip->right < d->view.clip_right) d->view.clip_right = clip->right;
+        if (clip->bottom < d->view.clip_bottom) d->view.clip_bottom = clip->bottom;
+    }
+    for (i = 0; i < 256; ++i) table[i] = (uint8_t)i;
+    if (remap >= 0)
+        for (i = 0; i < 8; ++i) table[0x10 + i] = (uint8_t)(remap + i);
+    aoe_shape_draw_ror(shape, &d->view, x, y, frame, remap >= 0 ? 1 : 0, remap >= 0 ? table : NULL,
+                       ez->shape_ops);
+    d->view.clip_left = saved.clip_left;
+    d->view.clip_top = saved.clip_top;
+    d->view.clip_right = saved.clip_right;
+    d->view.clip_bottom = saved.clip_bottom;
+    aoe_surface_unlock_ror(d);
+}
+/* The viewed player's colour (its colour record +0x26): player 1's
+   colour 0. */
+static int32_t cb_player_color(void *c) {
+    (void)c;
+    return 0;
+}
+
+/* AOE_GSC_BUTTON / _FIXED / _TEXT: seventeen 0x004f7420 buttons (font
+   record 11, border +0x47c for 0..11 and +0x484 for the rest, text
+   colours (0, 0, 0xffffff), sound 1); 12..16 take the states 0xd, 0xe,
+   0xf, 0x15 and 0x18 with help 0x1d4cf, 0x1d4d1, 0x1d4cd, 0x1d4db and
+   0x1d4dc; 12..14 draw type 3, style 3, their state's name (kind 0x66)
+   and bevel 3; 15 and 16 draw type 3, bevel 4, style 3 and the texts
+   0xfa9 and 0x1023 (16's help line string 0x1024). */
+static int make_buttons(AoeGameScreenHostRor *s) {
+    static const int32_t ids[5] = {0xd, 0xe, 0xf, 0x15, 0x18};
+    static const int32_t helps[5] = {0x1d4cf, 0x1d4d1, 0x1d4cd, 0x1d4db, 0x1d4dc};
+    const AoeUiEzOpsRor *ez = s->ui->ez_ops;
+    uintptr_t font = 0;
+    int32_t fw = 0, fh = 0, i;
+    char text[0x200];
+    GameRorFlowStringOps fmt = {s, op_load_string, op_base_format};
+    s->button_ops.context = s;
+    s->button_ops.draw_shape = cb_draw_shape;
+    s->button_ops.player_color = cb_player_color;
+    if (ez && ez->font) ez->font(ez->context, 11, &font, &fw, &fh);
+    for (i = 0; i < 17; ++i) {
+        AoeCommandButtonRor *b = calloc(1, sizeof *b);
+        if (!b) return 0;
+        if (!aoe_command_button_init_ror(b, s->ez.panel.system, ez ? ez->button_ops : NULL,
+                                         &s->button_ops, s->ez.panel.area, &s->ez.panel, NULL,
+                                         font, fw, fh,
+                                         i < 12 ? s->shapes[AOE_GSP_BORDER_A]
+                                                : s->shapes[AOE_GSP_BORDER_B])) {
+            b->button.panel.vt->destroy(&b->button.panel);
+            free(b);
+            return 0;
+        }
+        s->buttons[i] = b;
+        aoe_ui_button_set_text_color_ror(&b->button, 0, 0, 0xffffff);
+        aoe_ui_button_set_sound_id_ror(&b->button, 1);
+        if (i < AOE_GAME_SCREEN_BUTTONS) s->screen.buttons[i] = b;
+        else s->screen.more_buttons[i - AOE_GAME_SCREEN_BUTTONS] = b;
+    }
+    for (i = 0; i < 5; ++i) {
+        aoe_ui_button_set_id_ror(&s->buttons[12 + i]->button, 0, ids[i], 0);
+        s->buttons[12 + i]->button.panel.help_id = helps[i];
+        s->buttons[12 + i]->button.panel.help_page = -1;
+    }
+    for (i = 12; i < 15; ++i) {
+        AoeUiButtonRor *b = &s->buttons[i]->button;
+        aoe_ui_button_set_draw_type_ror(b, 3);
+        s->buttons[i]->style = 3;
+        game_ror_flow_format_message(&fmt, 0x66, aoe_ui_button_id_ror(b), 0, text, sizeof text);
+        aoe_ui_button_set_text_ror(b, 0, text);
+        aoe_ui_button_set_bevel_ror(b, 3, s->ez.bevel);
+    }
+    for (i = 15; i < 17; ++i) {
+        AoeUiButtonRor *b = &s->buttons[i]->button;
+        aoe_ui_button_set_draw_type_ror(b, 3);
+        aoe_ui_button_set_bevel_ror(b, 4, s->ez.bevel);
+        s->buttons[i]->style = 3;
+        aoe_ui_button_set_text_id_ror(b, 0, i == 15 ? 0xfa9 : 0x1023);
+    }
+    aoe_ui_string_ror(s->ez.panel.system, 0x1024, text, sizeof text);
+    aoe_command_button_set_help_ror(s->buttons[16], text);
+    return 1;
+}
+
+/* The translated screen methods' calls on a button. */
+#define CB(b) ((AoeCommandButtonRor *)(b))
+static void so_set_active(void *c, void *panel, int on) {
+    (void)c;
+    if (panel) ((AoeUiPanelRor *)panel)->vt->set_active(panel, on);
+}
+static void so_help(void *c, void *panel, int32_t id1, int32_t id2) {
+    (void)c;
+    if (!panel) return;
+    ((AoeUiPanelRor *)panel)->help_id = id1;
+    ((AoeUiPanelRor *)panel)->help_page = id2;
+}
+static int32_t so_button_disabled(void *c, void *b) { (void)c; return CB(b)->button.disabled; }
+static void so_button_set_disabled(void *c, void *b, int32_t d) {
+    (void)c;
+    aoe_ui_button_set_disabled_ror(&CB(b)->button, d);
+}
+static int32_t so_button_id(void *c, void *b) { (void)c; return aoe_ui_button_id_ror(&CB(b)->button); }
+static int32_t so_button_value(void *c, void *b) {
+    (void)c;
+    return aoe_ui_button_value_ror(&CB(b)->button);
+}
+static void so_button_drop_press(void *c, void *b) { (void)c; aoe_ui_button_cancel_ror(&CB(b)->button); }
+static void so_button_reset(void *c, void *b) { (void)c; aoe_command_button_show_count_ror(CB(b), 0); }
+static void so_button_picture(void *c, void *b, void *picture, int32_t frame) {
+    (void)c;
+    aoe_ui_button_set_picture_ror(&CB(b)->button, 0, picture, (int16_t)frame);
+}
+static void so_button_state(void *c, void *b, int32_t id, int32_t value) {
+    (void)c;
+    aoe_ui_button_set_id_ror(&CB(b)->button, 0, id, value);
+}
+static void so_button_lines(void *c, void *b, const char *l1, const char *l2) {
+    (void)c;
+    aoe_ui_button_set_texts_ror(&CB(b)->button, 0, l1, l2);
+}
+static void so_button_help_line(void *c, void *b, const char *text) {
+    (void)c;
+    aoe_command_button_set_help_ror(CB(b), text);
+}
+static int32_t so_button_used(void *c, void *b) { (void)c; return CB(b)->field_3d0; }
+static void so_button_set_used(void *c, void *b, int32_t used) { (void)c; CB(b)->field_3d0 = used; }
+static void so_button_fields(void *c, void *b, int32_t f2c8, int32_t f2cc, int32_t hotkey) {
+    (void)c;
+    CB(b)->player_colors = f2c8;
+    CB(b)->background_frame = f2cc;
+    CB(b)->button.hotkey = hotkey;
+}
+/* The game's +0x28 formatter (0x004ff580). */
+static void so_format(void *c, int32_t kind, int32_t a, int32_t b, char *out, int32_t n) {
+    GameRorFlowStringOps fmt = {c, op_load_string, op_base_format};
+    game_ror_flow_format_message(&fmt, kind, a, b, out, n);
+}
+static const char *so_string(void *c, int32_t id) {
+    static char text[0x200];
+    aoe_ui_string_ror(SO(c)->ez.panel.system, id, text, sizeof text);
+    return text;
+}
+/* The message lines are not made yet: a message is dropped. */
+static void so_message(void *c, void *panel, int32_t style, const char *text, uint8_t color) {
+    (void)c; (void)panel; (void)style; (void)text; (void)color;
+}
+
+/* The current unit (the viewed player's +0x134): the first selected. */
+static AoeLiveUnit *current_unit(AoeGameScreenHostRor *s) {
+    AoeLiveUnit *u = NULL;
+    return aoe_demo_selection(s->world, &u, 1) ? u : NULL;
+}
+
+/* Training and research at the current building: the cost check
+   0x004f15f0 (multiplier 1.0, population flag 0) and the tribe commands
+   0x64 (0x004f1410 -> 0x004e9490) and 0x65 (0x004f1200 -> 0x004e9530)
+   with request -1. Research affordability is the tech's costs against
+   the player's resources (0x004f1850 is not translated). */
+static int so_instant(void *c) { (void)c; return 0; }
+static void so_instant_train(void *c, int16_t id, int32_t arg) { (void)c; (void)id; (void)arg; }
+static int so_can_afford(void *c, int16_t id, int16_t *failing) {
+    AoeGameScreenHostRor *s = SO(c);
+    const AoePlayerTemplates *t = aoe_demo_player_templates(s->world, 1);
+    AoeResearchOwnerRor owner;
+    int ok = 0;
+    if (!t || !aoe_demo_research_owner(s->world, 1, &owner)) return 0;
+    if (!aoe_player_cost_check_ror(owner.resources, aoe_player_templates_get(t, (uint16_t)id), 1.0f,
+                                   0, failing, &ok))
+        return 0;
+    return ok;
+}
+static void so_place_unit(void *c, int16_t id) { (void)c; (void)id; }
+static void production(AoeGameScreenHostRor *s, uint8_t opcode, int16_t item) {
+    uint8_t cmd[AOE_COMMAND_PRODUCTION_SIZE_ROR];
+    AoeLiveUnit *b = current_unit(s);
+    size_t n;
+    if (!b) return;
+    n = aoe_command_encode_production_ror(cmd, sizeof cmd, opcode, aoe_demo_unit_id(b), 1, item, -1);
+    if (n) aoe_demo_command_production(s->world, cmd, n);
+}
+static void so_train_at_current(void *c, int16_t id) { production(SO(c), AOE_COMMAND_TRAIN_ROR, id); }
+static void so_research_at_current(void *c, int16_t id) {
+    production(SO(c), AOE_COMMAND_RESEARCH_ROR, id);
+}
+static int so_can_research(void *c, int16_t id, int16_t *failing) {
+    const DatTechs *techs = aoe_demo_techs(SO(c)->world);
+    AoeResearchOwnerRor owner;
+    int k;
+    *failing = -1;
+    if (!techs || id < 0 || id >= techs->count || !aoe_demo_research_owner(SO(c)->world, 1, &owner))
+        return 0;
+    for (k = 0; k < 3; ++k) {
+        const DatTechCost *cost = &techs->techs[id].costs[k];
+        if (cost->resource_type < 0 || !cost->paid) continue;
+        if (cost->resource_type >= owner.resources->count ||
+            owner.resources->values[cost->resource_type] < (float)cost->amount) {
+            *failing = cost->resource_type;
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static void screen_button_ops(AoeGameScreenOpsRor *o) {
+    o->set_active = so_set_active;
+    o->help = so_help;
+    o->button_disabled = so_button_disabled;
+    o->button_set_disabled = so_button_set_disabled;
+    o->button_id = so_button_id;
+    o->button_value = so_button_value;
+    o->button_drop_press = so_button_drop_press;
+    o->button_reset = so_button_reset;
+    o->button_picture = so_button_picture;
+    o->button_state = so_button_state;
+    o->button_lines = so_button_lines;
+    o->button_help_line = so_button_help_line;
+    o->button_used = so_button_used;
+    o->button_set_used = so_button_set_used;
+    o->button_fields = so_button_fields;
+    o->format = so_format;
+    o->string = so_string;
+    o->message = so_message;
+    o->instant = so_instant;
+    o->instant_train = so_instant_train;
+    o->can_afford = so_can_afford;
+    o->set_place_unit = so_place_unit;
+    o->train_at_current = so_train_at_current;
+    o->research_at_current = so_research_at_current;
+    o->can_research = so_can_research;
+}
+
+/* ---- the layout (0x0047f000) ---- */
+
+/* The panel at a screen offset, NULL when it is not made. */
+static AoeUiPanelRor *panel_at(AoeGameScreenHostRor *s, uint16_t off) {
+    AoeCommandButtonRor *b = button_at(s, off);
+    if (b) return &b->button.panel;
+    switch (off) {
+    case 0x4bc: return s->map ? &s->map->map.panel : NULL;
+    case 0x4c0: return s->resources ? &s->resources->panel : NULL;
+    case 0x4c4: return s->object_panel ? &s->object_panel->panel : NULL;
+    default: return NULL;
+    }
+}
+static int32_t lo_score(void *c, int i) { (void)c; (void)i; return -1; }
+static void lo_none(void *c) { (void)c; }
+static void lo_active(void *c, uint16_t off, int32_t v) {
+    AoeUiPanelRor *p = panel_at(GS(c), off);
+    if (p) p->vt->set_active(p, v);
+}
+static void lo_mode(void *c, uint16_t off, const AoeGameScreenModeRor *m) { (void)c; (void)off; (void)m; }
+static void lo_rect(void *c, uint16_t off, int32_t x, int32_t y, int32_t w, int32_t h) {
+    AoeGameScreenHostRor *s = GS(c);
+    AoeUiPanelRor *p;
+    if (off == 0x4b8) {   /* the view */
+        s->view_x = x;
+        s->view_y = y;
+        s->view_w = w;
+        s->view_h = h;
+        return;
+    }
+    p = panel_at(s, off);
+    if (p) p->vt->set_fixed_position(p, x, y, w, h);
+}
+static void lo_style(void *c, uint16_t off, uint8_t style) {
+    AoeCommandButtonRor *b = button_at(GS(c), off);
+    if (b) b->style = style;
+}
+/* +0x4ac = +0x480 (small) or +0x48c, +0x4b0 = 0 / 0xb, +0x4b2 = +0x4b4 =
+   pages. */
+static void lo_pages(void *c, int small, int16_t base, int16_t pages) {
+    AoeGameScreenHostRor *s = GS(c);
+    s->page_picture = small ? s->shapes[AOE_GSP_OTHER] : s->shapes[AOE_GSP_COMMANDS];
+    s->frame_4b0 = base;
+    s->frame_4b2 = s->frame_4b4 = pages;
+}
+static void restyle(AoeGameScreenHostRor *s);
+static void lo_notify(void *c, int16_t player) {
+    (void)player;
+    restyle(GS(c));
+}
+
+static void layout(AoeGameScreenHostRor *s) {
+    AoeGameScreenLayoutOpsRor o;
+    memset(&o, 0, sizeof o);
+    o.context = s;
+    o.has_view = 1;
+    o.width = s->ez.panel.width;
+    o.height = s->ez.panel.height;
+    o.screen_width = s->ez.panel.width;
+    o.viewed_player = 1;
+    o.score_active = lo_score;
+    o.base_resize = lo_none;
+    o.set_active = lo_active;
+    o.position_mode = lo_mode;
+    o.set_rect = lo_rect;
+    o.button_style = lo_style;
+    o.button_pages = lo_pages;
+    o.notify = lo_notify;
+    aoe_game_screen_layout_ror(&o);
+}
+
+/* ---- the buttons rebuilt (0x004822a0) ---- */
+
+typedef struct {
+    AoeGameScreenHostRor *s;
+    const AoePlayerTemplates *templates;
+    AoeResearchOwnerRor owner;
+} ButtonsWorld;
+
+static int tl_info(void *c, int16_t slot, uint8_t *kind, uint8_t *enabled, int16_t *trained_at,
+                   int16_t *field_4c, const char **name) {
+    const DatUnit *t = aoe_player_templates_get(((ButtonsWorld *)c)->templates, (uint16_t)slot);
+    if (!t || !t->present) return 0;
+    *kind = t->type;
+    *enabled = t->enabled;
+    *trained_at = t->train_location_id;
+    *field_4c = t->icon;
+    *name = t->name;
+    return 1;
+}
+static void tl_costs(void *c, int16_t slot, int16_t types[3], int16_t amounts[3]) {
+    ButtonsWorld *w = c;
+    if (!aoe_player_cost_shown_ror(w->owner.resources,
+                                   aoe_player_templates_get(w->templates, (uint16_t)slot), 1.0f,
+                                   types, amounts))
+        types[0] = types[1] = types[2] = -1;
+}
+static int32_t tl_help(void *c, int16_t slot) {
+    const DatUnit *t = aoe_player_templates_get(((ButtonsWorld *)c)->templates, (uint16_t)slot);
+    return t ? t->language_help_id : 0;
+}
+static int32_t tl_tree(void *c, int16_t slot) {
+    const DatUnit *t = aoe_player_templates_get(((ButtonsWorld *)c)->templates, (uint16_t)slot);
+    return t ? t->language_tree_id : 0;
+}
+static float tl_attribute_48(void *c) {
+    const AoePlayerResources *r = ((ButtonsWorld *)c)->owner.resources;
+    return r && r->count > 48 ? r->values[48] : 0.0f;
+}
+static int tl_owns(void *c, int16_t id) {
+    return aoe_demo_owns_template(((ButtonsWorld *)c)->s->world, 1, id);
+}
+
+static int32_t bt_train_list(void *c, int which, int16_t building) {
+    ButtonsWorld *w = c;
+    AoeTribeTrainListOpsRor o = {w, (int16_t)w->templates->count, tl_info, tl_costs, tl_help,
+                                 tl_tree, tl_attribute_48, tl_owns};
+    AoeTribeTrainEntryRor *list = w->s->train_list;
+    (void)which;
+    aoe_tribe_player_train_list_ror(&o, building, &list, &w->s->train_count);
+    w->s->train_list = list;
+    return w->s->train_count;
+}
+static void help_string(void *c, int32_t id, char *out, int size) {
+    aoe_ui_string_ror(((ButtonsWorld *)c)->s->ez.panel.system, id, out, size);
+}
+static void resource_name(void *c, int32_t type, char *out, int size) {
+    GameRorFlowStringOps fmt = {((ButtonsWorld *)c)->s, op_load_string, op_base_format};
+    game_ror_flow_format_message(&fmt, 100, type, 0, out, size);
+}
+/* A train entry as a unit button: the name (+0x0c), the help text
+   (0x004834f0 with the creation text +0x0e), slot +0x15e, picture +0x4c,
+   help IDs +0x0e + 100000 and the entry's tree text, hotkey +0xa0 and the
+   player's colours. */
+static void bt_train_entry(void *c, int which, int32_t i, AoeButtonEntryRor *e) {
+    ButtonsWorld *w = c;
+    const AoeTribeTrainEntryRor *t = (const AoeTribeTrainEntryRor *)w->s->train_list + i;
+    const DatUnit *u = aoe_player_templates_get(w->templates, (uint16_t)t->id);
+    AoeGameScreenHelpTextOpsRor ho = {w, help_string, resource_name};
+    AoeGameScreenCostRor costs[3];
+    int k;
+    (void)which;
+    memset(e, 0, sizeof *e);
+    for (k = 0; k < 3; ++k) {
+        costs[k].type = t->cost_type[k];
+        costs[k].amount = t->cost_amount[k];
+    }
+    if (u) {
+        help_string(w, u->language_name_id, e->name, sizeof e->name);
+        aoe_game_screen_help_text_ror(&ho, u->language_creation_id, costs, 1, e->help_text,
+                                      sizeof e->help_text);
+    }
+    e->slot = u ? (uint8_t)u->button_id : 0;
+    e->frame = t->field_4c;
+    e->id = t->id;
+    e->help = u ? u->language_creation_id + 100000 : -1;
+    e->help2 = t->tree_text;
+    e->a = u ? u->hotkey_id : 0;
+    e->b = 1;
+}
+static int32_t bt_research_list(void *c, int16_t building) {
+    ButtonsWorld *w = c;
+    AoeResearchListEntryRor *list = w->s->research_list;
+    aoe_research_list_for_building_ror(&w->owner, building, &list, &w->s->research_count);
+    w->s->research_list = list;
+    return w->s->research_count;
+}
+/* A research entry as a tech button: the tech's name and help text
+   (0x004eb6f3 / 0x004eb730), slot (0x004eb76d), picture (the entry's
+   +0x06), help and tree text, hotkey (0x004eba87). */
+static void bt_research_entry(void *c, int32_t i, AoeButtonEntryRor *e) {
+    ButtonsWorld *w = c;
+    const AoeResearchListEntryRor *r = (const AoeResearchListEntryRor *)w->s->research_list + i;
+    const DatTechs *techs = w->owner.techs;
+    const DatTech *t = r->id >= 0 && r->id < techs->count ? &techs->techs[r->id] : NULL;
+    AoeGameScreenHelpTextOpsRor ho = {w, help_string, resource_name};
+    AoeGameScreenCostRor costs[3];
+    int k;
+    memset(e, 0, sizeof *e);
+    for (k = 0; k < 3; ++k) {
+        costs[k].type = k < 2 ? r->cost_type[k] : -1;
+        costs[k].amount = r->cost_amount[k];
+    }
+    if (t) {
+        help_string(w, t->language_name, e->name, sizeof e->name);
+        aoe_game_screen_help_text_ror(&ho, t->language_description, costs, 1, e->help_text,
+                                      sizeof e->help_text);
+    }
+    e->slot = t ? (uint8_t)t->button_id : 0;
+    e->frame = r->field_24;
+    e->id = r->id;
+    e->help = r->help;
+    e->help2 = r->tree_text;
+    e->a = aoe_tech_hotkey_ror(techs, r->id);
+    e->b = 1;
+}
+static int bt_age_research(void *c, int32_t tech, AoeButtonEntryRor *e) {
+    (void)c; (void)tech; (void)e;
+    return 0;
+}
+static int32_t bt_queued_of(void *c, int16_t id) { (void)c; (void)id; return 0; }
+/* 0x00483760 with the picture set: 0 +0x48c, 1 +0x490, 2 +0x494, 3 the
+   civilisation's building set, 4 +0x4ac. */
+static void bt_set(void *c, int set, int32_t index, int32_t frame, int32_t command, int32_t value,
+                   int32_t help, int32_t help2, int32_t a, int32_t b, int32_t disabled,
+                   const char *name, const char *help_text) {
+    AoeGameScreenHostRor *s = ((ButtonsWorld *)c)->s;
+    AoeGameScreenButtonRor btn;
+    uint8_t style = 0;
+    void *pictures[5];
+    aoe_demo_player_icon_set(s->world, 1, &style);
+    pictures[0] = s->shapes[AOE_GSP_COMMANDS];
+    pictures[1] = s->tech_icons;
+    pictures[2] = s->unit_icons;
+    pictures[3] = s->building_icons[style < 5 ? style : 0];
+    pictures[4] = s->page_picture;
+    if (index < 0 || index >= AOE_GAME_SCREEN_BUTTONS) return;
+    memset(&btn, 0, sizeof btn);
+    btn.picture = set >= 0 && set < 5 ? pictures[set] : NULL;
+    btn.index = (int16_t)index;
+    btn.frame = frame;
+    btn.command = command;
+    btn.value = value;
+    btn.help1 = help;
+    btn.help2 = help2;
+    btn.hotkey_id = a;
+    btn.field_2c8 = b;
+    btn.line2 = name;
+    btn.help = help_text && help_text[0] ? help_text : NULL;
+    btn.disabled = disabled;
+    aoe_game_screen_set_button_ror(&s->screen, &btn);
+}
+static void bt_queue_flag(void *c, int on, int32_t n) { (void)c; (void)on; (void)n; }
+static void bt_hide_unused(void *c) { aoe_game_screen_hide_unused_ror(&((ButtonsWorld *)c)->s->screen); }
+
+static void rebuild_buttons(AoeGameScreenHostRor *s) {
+    ButtonsWorld w;
+    AoeGameScreenButtonsOpsRor o;
+    AoeLiveUnit *sel[AOE_DEMO_SELECTION];
+    AoeInfoObjectRor info;
+    int n, i, all_3_9 = 1;
+    uint8_t style = 0;
+    int16_t count;
+    const float *v = NULL;
+    if (!s->buttons[0] || !s->world) return;
+    memset(&w, 0, sizeof w);
+    w.s = s;
+    w.templates = aoe_demo_player_templates(s->world, 1);
+    if (!w.templates || !aoe_demo_research_owner(s->world, 1, &w.owner)) return;
+    n = aoe_demo_selection(s->world, sel, AOE_DEMO_SELECTION);
+    memset(&info, 0, sizeof info);
+    if (n) aoe_demo_info_object(s->world, sel[0], &info);
+    for (i = 0; i < n; ++i) {
+        AoeInfoObjectRor o2;
+        if (!aoe_demo_info_object(s->world, sel[i], &o2) || o2.panel_kind < 3 || o2.panel_kind > 9)
+            all_3_9 = 0;
+    }
+    aoe_demo_player_icon_set(s->world, 1, &style);
+    for (i = 0; i < 17; ++i) s->buttons[i]->field_3d0 = 0;
+    memset(&o, 0, sizeof o);
+    o.context = &w;
+    o.has_current_unit = n > 0;
+    o.game_state = s->game_state;
+    o.civ = style < 6 ? style : 0;
+    o.count = &s->button_count;
+    o.shown = &s->button_shown;
+    o.page = s->button_page;
+    o.frame_4b0 = s->frame_4b0;
+    o.frame_4b2 = s->frame_4b2;
+    o.frame_4b4 = s->frame_4b4;
+    o.current_is_ours = n > 0 && info.owner_number == 1;
+    o.common_8f = n > 0 ? info.panel_kind : 0;
+    o.selection_count = (int16_t)n;
+    o.all_8f_3_to_9 = all_3_9;
+    o.is_building = n > 0 && info.type == 'P';
+    o.current_state = info.object_state;
+    o.current_template = info.object_class;
+    o.age = aoe_demo_player_attributes(s->world, 1, &count, &v) && count > 6 ? (int32_t)v[6] : 0;
+    o.age_research = bt_age_research;
+    o.train_list = bt_train_list;
+    o.train_entry = bt_train_entry;
+    o.research_list = bt_research_list;
+    o.research_entry = bt_research_entry;
+    o.queued_of = bt_queued_of;
+    o.set = bt_set;
+    o.queue_flag = bt_queue_flag;
+    o.hide_unused = bt_hide_unused;
+    aoe_game_screen_buttons_ror(&o);
+    s->ez.panel.vt->set_redraw(&s->ez.panel, 1);
+}
+
+/* A new current object: the first button page rebuilt (0x00482290, as
+   the player change 0x00481f70 ends). */
+static void selection_changed(AoeGameScreenHostRor *s) {
+    s->button_page = 0;
+    rebuild_buttons(s);
+}
+
+/* 0x00481410's handlers that are integrated: train (0x485520), research
+   (0x4852f0), the next page (0x485140) and the menu (0x4850b0). */
+static void command_run(void *c, uint32_t handler, int32_t arg, int32_t arg2) {
+    AoeGameScreenHostRor *s = c;
+    switch (handler) {
+    case 0x485520u: aoe_game_screen_train_button_ror(&s->screen, (int16_t)arg, arg2); break;
+    case 0x4852f0u: aoe_game_screen_research_button_ror(&s->screen, (int16_t)arg); break;
+    case 0x485140u:
+        s->button_page = (int16_t)(s->button_page + 1 >= 2 ? 0 : s->button_page + 1);
+        rebuild_buttons(s);
+        break;
+    case 0x4850b0u: aoe_game_screen_menu_ror(&s->screen); break;
+    case 0x484900u: aoe_game_screen_escape_ror(&s->screen); break;
+    default: break;
     }
 }
 
@@ -476,6 +1094,7 @@ static void screen_ops(AoeGameScreenHostRor *s) {
     o->paused = so_none_int;
     o->comm_pause = so_comm_pause;
     o->open_dialog = so_open_dialog;
+    screen_button_ops(o);
     s->screen.ops = o;
 }
 
@@ -508,7 +1127,6 @@ static void leave_game(AoeGameScreenHostRor *s) {
 static void act_step(void *c, int32_t id, int32_t a, int32_t b, int32_t arg) {
     AoeGameScreenHostRor *s = c;
     const AoeGameUiOpsRor *ops = s->ui->ops;
-    (void)a; (void)b; (void)arg;
     switch (id) {
     case AOE_GS_ACT_SHOW_GAME_SCREEN:
         aoe_ui_system_show_named_ror(s->ez.panel.system, NAME, 0);
@@ -518,6 +1136,13 @@ static void act_step(void *c, int32_t id, int32_t a, int32_t b, int32_t arg) {
         break;
     case AOE_GS_ACT_CLOSE:
         if (ops && ops->quit_program) ops->quit_program(ops->context);
+        break;
+    case AOE_GS_ACT_COMMAND:
+        aoe_game_screen_command_ror(1, a, b, arg, 0, command_run, s);
+        break;
+    case AOE_GS_ACT_PLAYER_CHANGED:   /* 0x00481f70 -> the first page, rebuilt */
+        s->button_page = 0;
+        rebuild_buttons(s);
         break;
     default:   /* restart, resign, load, resume, commands: not integrated */
         break;
@@ -538,6 +1163,8 @@ static int32_t gs_action(AoeUiPanelRor *p, AoeUiPanelRor *from, int32_t code, in
     AoeGameScreenActionOpsRor o;
     memset(&o, 0, sizeof o);
     o.context = s;
+    for (int i = 0; i < 17; ++i) o.buttons[i] = s->buttons[i];
+    o.panel_4c4 = s->object_panel;
     o.return_name = act_return_name;
     o.remove_screen = act_remove;
     o.global_7c0338 = &s->ui->quit_requested;
@@ -574,16 +1201,6 @@ static int op_nearest(void *c, const void *player, int16_t cls, float x, float y
     return 0;
 }
 static int op_zero(void *c) { (void)c; return 0; }
-static char *op_load_string(void *c, int32_t id, char *buf, int32_t len) {
-    aoe_ui_string_ror(GS(c)->ez.panel.system, id, buf, len);
-    return buf;
-}
-static char *op_base_format(void *c, int32_t kind, int32_t index, int32_t sub, char *buf,
-                            int32_t len) {
-    (void)c; (void)kind; (void)index; (void)sub;
-    if (len > 0) buf[0] = '\0';
-    return buf;
-}
 /* The game's +0x28 formatter (0x004ff580), kind 0x69: a civilisation. */
 static void op_civ_name(void *c, uint8_t civ, char *out, int size) {
     GameRorFlowStringOps ops = {c, op_load_string, op_base_format};
@@ -617,7 +1234,7 @@ static int32_t op_frames(void *c, void *shape) {
 static void *op_load_shape(void *c, const char *file, int32_t id) { return st_load(c, file, id); }
 static void op_free_shape(void *c, void *shape) { free_shape(GS(c), shape); }
 
-/* AOE_GSC_SHAPE (0, 3 + i) and AOE_GSC_OBJECT_PANEL: 0x004f83d0 with font
+/* AOE_GSC_SHAPE (0 units, 1 techs, 2 commands, 3 + i buildings) and AOE_GSC_OBJECT_PANEL: 0x004f83d0 with font
    record 7, the unit and building pictures and the viewed player, help
    0x19bb8 / 0x265ac, at the layout's place for +0x4c4 (5, 0x169, 0x7f,
    0x72). */
@@ -629,6 +1246,8 @@ static int make_object_panel(AoeGameScreenHostRor *s) {
     int32_t fw = 0, fh = 0, i;
     char name[32];
     s->unit_icons = st_load(s, "btnunit.shp", 0xc62a);
+    s->tech_icons = st_load(s, "btntech.shp", 0xc629);
+    s->shapes[AOE_GSP_COMMANDS] = st_load(s, "btncmd.shp", 0xc621);
     for (i = 0; i < 5; ++i) {
         snprintf(name, sizeof name, "btnbldg%d.shp", (int)i);
         s->building_icons[i] = st_load(s, name, i == 4 ? 0xcf0d : 0xc610 + i);
@@ -706,8 +1325,10 @@ int aoe_game_screen_host_init_ror(AoeGameScreenHostRor *s, AoeGameUiRor *ui, Aoe
     s->style = -1;
     s->game_state = 4;
     screen_ops(s);
-    if (!make_resources(s) || !make_minimap(s) || !make_object_panel(s)) return 0;
-    restyle(s);
+    if (!make_resources(s) || !make_minimap(s) || !make_object_panel(s) || !make_buttons(s))
+        return 0;
+    layout(s);   /* places the panels and restyles (0x004816d0) */
+    rebuild_buttons(s);
     render_view(s);
     return 1;
 }

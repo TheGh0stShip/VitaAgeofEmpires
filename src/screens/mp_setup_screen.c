@@ -931,3 +931,135 @@ void aoe_mp_setup_screen_info_ror(AoeMpSetupScreenRor *m, const AoeMpSetupInfoOp
         o->count_controls(o->context, !scenario_mode || (m->field_84c == 0 && m->max_list > 2));
     o->rows(o->context);
 }
+
+/* 0x0048abc0 */
+static void mpc_log(const AoeMpSetupCommandOpsRor *o, const char *name, int32_t code, int32_t arg) {
+    char text[128];
+    snprintf(text, sizeof text, "$$$ USER_COMMAND: %s (%d,%d)", name, (int)code, (int)arg);
+    o->log(o->context, text);
+}
+static void mpc_reduce(AoeMpSetupScreenRor *m, const AoeMpSetupCommandOpsRor *o, int32_t i, int ours,
+                       const char *civ_text, const char *team_text, const char *my_civ,
+                       const char *my_team, int *changed) {
+    const AoeGameSettingsRor *g = m->settings;
+    if (aoe_settings_byte_a94_ror(g, i) > 0x31) {
+        o->log(o->context, civ_text);
+        aoe_settings_set_byte_a94_ror(m->settings, i, (uint8_t)(aoe_settings_byte_a94_ror(g, i) - 0x32));
+        if (changed) *changed = 1;
+        if (ours && my_civ) { m->field_72c = 0; o->log(o->context, my_civ); }
+    }
+    if (aoe_settings_player_994_ror(g, i) > 0x31) {
+        o->log(o->context, team_text);
+        aoe_settings_set_player_994_ror(m->settings, i, (uint8_t)(aoe_settings_player_994_ror(g, i) - 0x32));
+        if (changed) *changed = 1;
+        if (ours && my_team) { m->field_738 = 0; o->log(o->context, my_team); }
+    }
+}
+int aoe_mp_setup_screen_command_ror(AoeMpSetupScreenRor *m, const AoeMpSetupCommandOpsRor *o,
+                                    int32_t code, int32_t arg) {
+    const AoeGameSettingsRor *g = m->settings;
+    char fmt[0x100], text[0x100];
+    int32_t i, count;
+    if (aoe_settings_flag_97d_ror(g)) return 1;
+    switch (code) {
+    case 0x17a4:
+        mpc_log(o, "COMM_UPDATE_PLAYERS", code, arg);
+        if (o->host && !m->field_854) {
+            m->field_854 = 1;
+            if (o->cd_ok) aoe_settings_set_player_flag_ror(m->settings, o->our_slot - 1, 1);
+        }
+        if (o->host) {
+            int changed = 0;
+            for (i = 0; i < 8; ++i) {
+                int32_t slot = i + 1, type = o->slot_type(o->context, slot);
+                if ((slot == o->our_slot && type == 2)) continue;
+                if (slot != o->our_slot && type == 2) {
+                    int32_t st[7];
+                    o->slot_stats(o->context, slot, st);
+                    if (st[0] && st[0] != aoe_settings_byte_a94_ror(g, i)) { aoe_settings_set_byte_a94_ror(m->settings, i, (uint8_t)st[0]); changed = 1; }
+                    if (st[1] && st[1] - 1 != aoe_settings_int_aa0_ror(g, i)) { aoe_settings_set_int_aa0_ror(m->settings, i, st[1] - 1); changed = 1; }
+                    if (st[2] == 1 && aoe_settings_player_flag_ror(g, i) == 1) { aoe_settings_set_player_flag_ror(m->settings, i, 0); changed = 1; }
+                    else if (st[2] == 2 && aoe_settings_player_flag_ror(g, i) == 0) { aoe_settings_set_player_flag_ror(m->settings, i, 1); changed = 1; }
+                    if (st[3] && st[3] != aoe_settings_byte_ac4_ror(g, i)) { aoe_settings_set_byte_ac4_ror(m->settings, i, (uint8_t)st[3]); changed = 1; }
+                    if (st[4] && st[4] != aoe_settings_player_994_ror(g, i)) { aoe_settings_set_player_994_ror(m->settings, i, (uint8_t)st[4]); changed = 1; }
+                    if (st[5]) m->field_868[i] = st[5];
+                    if (st[6]) aoe_settings_set_player_version_ror(m->settings, i, (uint8_t)st[6]);
+                } else if (type != 4) {
+                    int32_t civ = o->rand_(o->context) % 16 + 1;
+                    if (aoe_settings_byte_a94_ror(g, i) != civ) { aoe_settings_set_byte_a94_ror(m->settings, i, (uint8_t)civ); changed = 1; }
+                    if (aoe_settings_int_aa0_ror(g, i) != i) { aoe_settings_set_int_aa0_ror(m->settings, i, i); changed = 1; }
+                    if (aoe_settings_player_flag_ror(g, i)) { aoe_settings_set_player_flag_ror(m->settings, i, 0); changed = 1; }
+                    if (aoe_settings_byte_ac4_ror(g, i) != m->colors[i]) { aoe_settings_set_byte_ac4_ror(m->settings, i, m->colors[i]); changed = 1; }
+                    if (aoe_settings_player_994_ror(g, i) != 1) { aoe_settings_set_player_994_ror(m->settings, i, 1); changed = 1; }
+                    if (aoe_settings_player_version_ror(g, i)) { aoe_settings_set_player_version_ror(m->settings, i, 0); changed = 1; }
+                    m->field_868[i] = 0;
+                }
+            }
+            if (changed) { o->step(o->context, AOE_MPC_SHARE, 0); m->field_88c = 0; }
+        }
+        o->step(o->context, AOE_MPC_ROWS, 0);
+        o->step(o->context, AOE_MPC_REDRAW, 1);
+        return 1;
+    case 0x17a6:
+        mpc_log(o, "COMM_UPDATE_PARAMS", code, arg);
+        o->step(o->context, AOE_MPC_APPLY_PARAMS, 0);
+        count = aoe_settings_byte_988_ror(g);
+        for (i = 0; i < count; ++i)
+            mpc_reduce(m, o, i, i + 1 == o->our_slot, "$$$ CIV2>50", "$$$ TEAM2>50",
+                       "$$$ RESETTING MYCIV2", "$$$ RESETTING MYTEAM2", NULL);
+        if (m->field_730 != 0 && strcmp(m->stored_name ? m->stored_name : "", aoe_settings_scenario_name_ror(g)) != 0)
+            m->field_730 = -1;
+        o->step(o->context, AOE_MPC_INFO, 0);
+        if (!o->host) {
+            if (m->field_854 && m->field_73c == m->field_844 &&
+                o->slot_stat(o->context, o->our_slot) == m->field_85c)
+                return 1;
+            m->field_854 = 1;
+            m->field_844 = m->field_73c;
+            o->send_ready(o->context, m->field_85c, o->cd_ok + 1, m->field_73c);
+        }
+        return 1;
+    case 0x17a7:
+        mpc_log(o, "COMM_LAUNCH_GAME", code, arg);
+        o->step(o->context, AOE_MPC_LAUNCH, 0);
+        return 1;
+    case 0x17a8: mpc_log(o, "COMM_CANCEL_GAME", code, arg); o->step(o->context, AOE_MPC_READY, 0); return 1;
+    case 0x17a9: mpc_log(o, "COMM_HOST_EXITED", code, arg); o->step(o->context, AOE_MPC_READY, 0); return 1;
+    case 0x17aa: mpc_log(o, "COMM_PLAYER_KICKED", code, arg); o->step(o->context, AOE_MPC_READY, 1); return 1;
+    case 0x17b2: mpc_log(o, "COMM_PLAYER_DROPPED", code, arg); o->step(o->context, AOE_MPC_READY, 1); return 1;
+    case 0x17ae: mpc_log(o, "COMM_NO_LINK", code, arg); o->step(o->context, AOE_MPC_LEAVE, 0); return 1;
+    case 0x17b3: mpc_log(o, "COMM_OTHER_PLAYER_DROPPED", code, arg); o->step(o->context, AOE_MPC_ROWS, 0); return 1;
+    case 0x17b6: case 0x17b7:
+        mpc_log(o, code == 0x17b6 ? "COMM_BAD_VERSION" : "COMM_PLAYER_SERVICE_ERROR", code, arg);
+        fmt[0] = '\0';
+        o->string(o->context, code == 0x17b6 ? 0x25dd : 0x25de, fmt, sizeof fmt);
+        snprintf(text, sizeof text, fmt, o->comm_name(o->context, arg));
+        o->ok_dialog(o->context, text);
+        return 1;
+    case 0x17b9:
+        mpc_log(o, "COMM_HOST_BUSY", code, arg);
+        if (o->launched) o->step(o->context, AOE_MPC_LEAVE, 1);
+        else o->step(o->context, AOE_MPC_READY, 0);
+        return 1;
+    case 0x17bb:
+        mpc_log(o, "COMM_SHARED_DATA_SENT", code, arg);
+        if (o->host) {
+            int changed = 0;
+            count = aoe_settings_byte_988_ror(g);
+            for (i = 0; i < count; ++i)
+                mpc_reduce(m, o, i, 0, "$$$ HOST RESET CIV+50", "$$$ HOST RESET TEAM+50", NULL, NULL, &changed);
+            if (changed) m->field_88c = 1;
+        }
+        return 1;
+    case 0x17d5:
+        mpc_log(o, "CHAT_RECEIVED", code, arg);
+        if (!o->iconic) { o->step(o->context, AOE_MPC_CHAT, arg); return 1; }
+        m->chat_to = arg;
+        if (m->chat_from == 0) m->chat_from = arg;
+        return 1;
+    default:
+        snprintf(text, sizeof text, "$$$ USER_COMMAND: UNKNOWN (%d, %d)", (int)code, (int)arg);
+        o->log(o->context, text);
+        return 1;
+    }
+}

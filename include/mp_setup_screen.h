@@ -183,6 +183,7 @@ typedef struct {
     int32_t field_730;                       /* +0x730 */
     int32_t field_734, field_738, field_73c; /* +0x734.. */
     uint8_t field_740;                       /* +0x740 */
+    const char *stored_name;                 /* +0x740 as the stored scenario name (NULL = "") */
     int32_t settings_flag;                   /* +0x840 (0x0041b710) */
     int32_t field_844;                       /* +0x844 */
     int32_t scenario;                        /* +0x848 a scenario is loaded */
@@ -436,5 +437,65 @@ typedef struct {
    count controls show in random mode or with free positions and more
    than two players. Then the rows (0x0048b640). */
 void aoe_mp_setup_screen_info_ror(AoeMpSetupScreenRor *m, const AoeMpSetupInfoOpsRor *o);
+
+
+/* ---- 0x0048abc0: the comm user commands ---- */
+enum {
+    AOE_MPC_SHARE = 1,       /* game +0x48 */
+    AOE_MPC_APPLY_PARAMS,    /* game +0x4c */
+    AOE_MPC_REDRAW,          /* +0x20(1) */
+    AOE_MPC_ROWS,            /* 0x0048b640 */
+    AOE_MPC_INFO,            /* 0x0048c010 */
+    AOE_MPC_LAUNCH,          /* 0x00451cc0 and 0x004244f0 on the window, 0x00502910(0) */
+    AOE_MPC_READY,           /* 0x0048ce90(a) */
+    AOE_MPC_LEAVE,           /* 0x0048aa10(a) */
+    AOE_MPC_CHAT             /* 0x0048bf80(a) */
+};
+typedef struct {
+    void *context;
+    int host;                                           /* 0x00423c20 */
+    int32_t our_slot;                                   /* 0x00423c10 */
+    int cd_ok;                                          /* 0x00419530(0) */
+    int launched;                                       /* 0x004241e0 */
+    int iconic;                                         /* IsIconic(game +0x10) */
+    int32_t (*slot_type)(void *context, int32_t slot);  /* 0x00423d10 */
+    /* 0x00425330: civilisation, position + 1, flag (1 clear / 2 set),
+       colour, team, the +0x868 value and the version; 0 leaves a field. */
+    void (*slot_stats)(void *context, int32_t slot, int32_t out[7]);
+    int32_t (*slot_stat)(void *context, int32_t slot);  /* 0x004253b0 */
+    int32_t (*rand_)(void *context);
+    const char *(*comm_name)(void *context, int32_t slot); /* 0x004241a0 */
+    void (*string)(void *context, int32_t id, char *out, int size); /* 0x004542a0 */
+    void (*ok_dialog)(void *context, const char *text);  /* 0x00457920(text, 0, 0x1c2, 100) */
+    void (*send_ready)(void *context, int32_t stat, int32_t cd, int32_t info); /* 0x004251c0(stat, 0, 0, cd, 0, 0, info, 2) */
+    void (*log)(void *context, const char *text);        /* 0x0042c330 */
+    void (*step)(void *context, int32_t id, int32_t a);
+} AoeMpSetupCommandOpsRor;
+
+/* 0x0048abc0 (code, arg): 1 always; nothing with +0x97d. Each code logs
+   "$$$ USER_COMMAND: <name> (%d,%d)". 0x17a4 UPDATE_PLAYERS: a host's
+   first call (+0x854) also flags our player when the CD check passes
+   (0x0041bb50); a host then takes every slot: ours must be human, a
+   human slot's stats update the civilisation, position, flag, colour,
+   team, +0x868 and version where given, an empty slot gets a random
+   civilisation (rand % 16 + 1), position i, flag 0, colour +0x860[i],
+   team 1, version 0 and +0x868 0 (computer slots are left); any change
+   shares the settings and clears +0x88c; then the rows and a redraw.
+   0x17a6 UPDATE_PARAMS: the game's +0x4c, civilisations and teams above
+   49 reduced by 50 (ours also clearing +0x72c / +0x738, each logged),
+   +0x730 set to -1 when the stored name (+0x740) differs from the
+   scenario name, the settings text; a client whose +0x854 is set, whose
+   +0x73c equals +0x844 and whose slot stat equals +0x85c stops, else
+   +0x854 is set, +0x844 takes +0x73c and the readiness is sent
+   (0x004251c0 with the CD check + 1). 0x17a7 LAUNCH_GAME: the launch.
+   0x17a8 / 0x17a9: the ready message (0); 0x17aa / 0x17b2: (1). 0x17ae
+   NO_LINK: leave (0). 0x17b3: the rows. 0x17b6 / 0x17b7: string 0x25dd /
+   0x25de with the slot's name in an OK dialog. 0x17b9 HOST_BUSY: leave
+   (1) when launched, else ready (0). 0x17bb SHARED_DATA_SENT: a host
+   reduces civilisations and teams above 49 by 50 (logged) and sets
+   +0x88c. 0x17d5 CHAT_RECEIVED: the chat line unless minimised, which
+   queues it (+0x894, and +0x890 when empty). */
+int aoe_mp_setup_screen_command_ror(AoeMpSetupScreenRor *m, const AoeMpSetupCommandOpsRor *o,
+                                    int32_t code, int32_t arg);
 
 #endif

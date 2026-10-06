@@ -202,6 +202,45 @@ static void rows_tests(void) {
     aoe_mp_setup_screen_rows_ror(&m, &o);
     assert(strstr(rw_log, "a3.0=0 a4.0=0 t5.0[C1] col5.0=11,20 a7.0=0 a5.0=0 a5.0=1 team0=0 t6.0[tt] a8.0=0 a6.0=0 a6.0=1 t0.0[T9.0:2] ") == rw_log && strstr(rw_log, "a3.1=0 a4.1=0 t5.1[C2] col5.1=12,20 a7.1=0 a5.1=0 team1=1 t6.1[tt] a8.1=0 a6.1=0 a6.1=1 t0.1[T9.1:4] ") && strstr(rw_log, "a0.2=0 a1.2=0 a2.2=0 a3.2=0 "));
 }
+
+static char cm_log[2048]; static int cm_n, cm_host = 1, cm_types[9] = {0, 2, 2, 0, 4, 0, 0, 0, 0}; static int32_t cm_stats7[7] = {3, 2, 2, 5, 2, 9, 1}, cm_stat = 11;
+static void cm_add(const char *fmt, ...) { va_list ap; va_start(ap, fmt); cm_n += vsnprintf(cm_log + cm_n, sizeof cm_log - (size_t)cm_n, fmt, ap); va_end(ap); }
+static int32_t cm_type(void *c, int32_t s) { (void)c; return cm_types[s]; }
+static void cm_statsf(void *c, int32_t s, int32_t out[7]) { (void)c; (void)s; memcpy(out, cm_stats7, sizeof cm_stats7); }
+static int32_t cm_statf(void *c, int32_t s) { (void)c; (void)s; return cm_stat; }
+static int32_t cm_rand(void *c) { (void)c; return 37; }
+static const char *cm_cname(void *c, int32_t s) { (void)c; return s == 2 ? "Bob" : "X"; }
+static void cm_string(void *c, int32_t id, char *o, int n) { (void)c; snprintf(o, (size_t)n, "S%x:%%s", (unsigned)id); }
+static void cm_ok(void *c, const char *t) { (void)c; cm_add("ok[%s] ", t); }
+static void cm_ready(void *c, int32_t st, int32_t cd, int32_t info) { (void)c; cm_add("ready(%d,%d,%d) ", (int)st, (int)cd, (int)info); }
+static void cm_logf(void *c, const char *t) { (void)c; cm_add("log[%s] ", t); }
+static void cm_step(void *c, int32_t id, int32_t a) { (void)c; cm_add("%d(%d) ", (int)id, (int)a); }
+static void command_tests(void) {
+    static AoeGameSettingsRor g; static AoeMpSetupScreenRor m;
+    AoeMpSetupCommandOpsRor o = {NULL, 1, 1, 1, 0, 0, cm_type, cm_statsf, cm_statf, cm_rand, cm_cname, cm_string, cm_ok, cm_ready, cm_logf, cm_step};
+    memset(&g, 0, sizeof g); memset(&m, 0, sizeof m); m.settings = &g; m.ops = &ops; m.stored_name = "hill";
+    aoe_settings_set_byte_988_ror(&g, 3); aoe_settings_set_scenario_name_ror(&g, "hill");
+    for (int i = 0; i < 8; ++i) m.colors[i] = (uint8_t)(i + 1);
+    /* UPDATE_PLAYERS as host: our slot flagged (CD ok), slot 2's stats applied, slot 3 (empty) randomised, slot 4 (computer) kept. */
+    assert(aoe_mp_setup_screen_command_ror(&m, &o, 0x17a4, 0) == 1 && m.field_854 == 1 && aoe_settings_player_flag_ror(&g, 0) == 1);
+    assert(aoe_settings_byte_a94_ror(&g, 1) == 3 && aoe_settings_int_aa0_ror(&g, 1) == 1 && aoe_settings_player_flag_ror(&g, 1) == 1 && aoe_settings_byte_ac4_ror(&g, 1) == 5 && aoe_settings_player_994_ror(&g, 1) == 2 && m.field_868[1] == 9 && aoe_settings_player_version_ror(&g, 1) == 1);
+    assert(aoe_settings_byte_a94_ror(&g, 2) == 6 && aoe_settings_int_aa0_ror(&g, 2) == 2 && aoe_settings_byte_ac4_ror(&g, 2) == 3 && aoe_settings_player_994_ror(&g, 2) == 1 && aoe_settings_byte_a94_ror(&g, 3) == 0);
+    assert(strcmp(cm_log, "log[$$$ USER_COMMAND: COMM_UPDATE_PLAYERS (6052,0)] 1(0) 4(0) 3(1) ") == 0);
+    /* UPDATE_PARAMS as a client: civ 55 reduced (ours), the name differs -> +0x730 -1, readiness sent once. */
+    cm_n = 0; o.host = 0; aoe_settings_set_byte_a94_ror(&g, 0, 55); m.field_730 = 2; aoe_settings_set_scenario_name_ror(&g, "lake"); m.field_73c = 7; m.field_85c = 11;
+    assert(aoe_mp_setup_screen_command_ror(&m, &o, 0x17a6, 0) == 1 && aoe_settings_byte_a94_ror(&g, 0) == 5 && m.field_72c == 0 && m.field_730 == -1 && m.field_844 == 7);
+    assert(strcmp(cm_log, "log[$$$ USER_COMMAND: COMM_UPDATE_PARAMS (6054,0)] 2(0) log[$$$ CIV2>50] log[$$$ RESETTING MYCIV2] 5(0) ready(11,2,7) ") == 0);
+    cm_n = 0; assert(aoe_mp_setup_screen_command_ror(&m, &o, 0x17a6, 0) == 1 && strcmp(cm_log, "log[$$$ USER_COMMAND: COMM_UPDATE_PARAMS (6054,0)] 2(0) 5(0) ") == 0);
+    cm_n = 0; assert(aoe_mp_setup_screen_command_ror(&m, &o, 0x17b6, 2) == 1 && strcmp(cm_log, "log[$$$ USER_COMMAND: COMM_BAD_VERSION (6070,2)] ok[S25dd:Bob] ") == 0);
+    cm_n = 0; assert(aoe_mp_setup_screen_command_ror(&m, &o, 0x17b9, 0) == 1 && strstr(cm_log, "] 7(0) "));
+    cm_n = 0; o.launched = 1; assert(aoe_mp_setup_screen_command_ror(&m, &o, 0x17b9, 0) == 1 && strstr(cm_log, "] 8(1) "));
+    cm_n = 0; o.iconic = 1; assert(aoe_mp_setup_screen_command_ror(&m, &o, 0x17d5, 4) == 1 && m.chat_from == 4 && m.chat_to == 4 && !strstr(cm_log, "9("));
+    cm_n = 0; o.iconic = 0; assert(aoe_mp_setup_screen_command_ror(&m, &o, 0x17d5, 5) == 1 && strstr(cm_log, "] 9(5) "));
+    cm_n = 0; o.host = 1; aoe_settings_set_player_994_ror(&g, 1, 60);
+    assert(aoe_mp_setup_screen_command_ror(&m, &o, 0x17bb, 0) == 1 && aoe_settings_player_994_ror(&g, 1) == 10 && m.field_88c == 1 && strstr(cm_log, "log[$$$ HOST RESET TEAM+50] "));
+    cm_n = 0; assert(aoe_mp_setup_screen_command_ror(&m, &o, 0x1234, 1) == 1 && strcmp(cm_log, "log[$$$ USER_COMMAND: UNKNOWN (4660, 1)] ") == 0);
+    g.flag_97d = 1; cm_n = 0; assert(aoe_mp_setup_screen_command_ror(&m, &o, 0x17a7, 0) == 1 && cm_n == 0);
+}
 int main(void) {
     static AoeGameSettingsRor g;
     static AoeMpSetupScreenRor m;
@@ -397,5 +436,6 @@ int main(void) {
     puts("mp_setup_screen_test: ok");
     info_tests();
     rows_tests();
+    command_tests();
     return 0;
 }

@@ -1,6 +1,7 @@
 #include "game_frame.h"
 
 #include <assert.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -102,6 +103,32 @@ static void paint_font_tests(void) {
     assert(f.height == -12 && f.charset == 238 && f.strikeout == 1);
 }
 
+
+static uint32_t tk_time = 2000; static char tk_log[256]; static int tk_n, tk_busy_left; static int32_t tk_paint = 1; static char tk_samples[128]; static int tk_sn;
+static uint32_t tk_now(void *c) { (void)c; return tk_time += 10; }
+static void tk_sample(void *c, int32_t slot, uint32_t ms) { (void)c; tk_sn += snprintf(tk_samples + tk_sn, sizeof tk_samples - (size_t)tk_sn, "%d:%u ", (int)slot, (unsigned)ms); }
+static int32_t tk_step(void *c, int32_t id) {
+    (void)c; tk_n += snprintf(tk_log + tk_n, sizeof tk_log - (size_t)tk_n, "%d ", (int)id);
+    if (id == AOE_GAME_TICK_PAINT) return tk_paint;
+    if (id == AOE_GAME_TICK_SURFACE_BUSY) return tk_busy_left-- > 0 ? AOE_DDERR_WASSTILLDRAWING : 0;
+    return 0;
+}
+static void tick_tests(void) {
+    int32_t flip = 1, dirty = 1, redraw_all = 1, frames = 4, second = 1, redraw = 1; uint32_t second_time = 0;
+    AoeGameTickOpsRor o = {NULL, 4, 0, 1, 1, 1, 0, 1, &flip, &dirty, &redraw_all, &frames, 1, 1, &second, &second_time, &redraw, tk_now, tk_sample, tk_step};
+    tk_busy_left = 1;
+    assert(aoe_game_frame_tick_ror(&o) == 1);
+    assert(strcmp(tk_log, "1 2 2 3 6 7 8 9 10 11 12 14 9 15 ") == 0);
+    assert(flip == 1 && dirty == 1 && redraw_all == 0 && frames == 5 && second == 1 && second_time > 0 && redraw == 0);
+    assert(strcmp(tk_samples, "5:10 10:10 2:10 8:20 3:10 ") == 0);
+    /* The busy loop gives up after 100 ms and clears the pending flag; no screen clears the window;
+       a software cursor sets the class cursor. */
+    tk_n = 0; tk_sn = 0; tk_busy_left = 100; o.has_screen = 0; o.software_cursor = 1; second = 0; redraw = 1; redraw_all = 0;
+    assert(aoe_game_frame_tick_ror(&o) == 1 && flip == 0 && second == 0 && dirty == 0);
+    assert(strcmp(tk_log, "1 2 2 2 2 2 2 2 2 2 2 2 2 3 4 5 10 12 13 15 ") == 0);
+    tk_n = 0; tk_paint = 0;
+    assert(aoe_game_frame_tick_ror(&o) == 0 && strcmp(tk_log, "1 ") == 0);
+}
 int main(void) {
     paint_font_tests();
     AoeGameFrameOpsRor f;
@@ -171,5 +198,6 @@ int main(void) {
     assert(aoe_game_play_sound_ror(sounds, 1, playing, play, NULL) == 0);
     assert(aoe_game_play_sound_ror(NULL, 1, playing, play, NULL) == 0);
     puts("game_frame_test: ok");
+    tick_tests();
     return 0;
 }

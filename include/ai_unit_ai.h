@@ -587,4 +587,31 @@ typedef struct {
 int32_t aoe_ai_unit_ai_free_tile_ror(int32_t order, int filter, int32_t *out_x, int32_t *out_y,
                                      const AoeAiUnitAiFreeTileOpsRor *o);
 
+
+/* 0x004128b0 (a unit AI slot): move aside to (x, y, z). Refused (0)
+   while an order (+0x30) stands unless `force`. x / y below 0 become 0,
+   at or past the map size (unit -> owner -> world -> map +0x08 / +0x0c)
+   the size - 1.0. The tile (ftol) is tried with the unit's +0x198(tx,
+   ty, tz, 1.0, -1, 0, 0, -1, -1); when refused, a ring of steps of 2 is
+   walked: (-2, -2), then +2 in x twice, +2 in y twice, -2 in x twice,
+   -2 in y, each clamped to the map; unless `skip_distance`, a step whose
+   centre (+0.5) lies nearer the point (0x004aaf50) than the point's own
+   distance skips the next step too; the first accepted (== 1) wins,
+   none after the eighth gives 0. The unit's +0x154(tx + 0.5, ty + 0.5,
+   z, 0.5, force) == 1 then sets order 0x262 (0x0040f6d0) and the target
+   (0x00412f00(-1, x, y, z)) and returns 1. */
+typedef struct {
+    void *context;
+    int32_t order;                 /* AI +0x30 */
+    int32_t map_w, map_h;
+    float unit_z;                  /* unit +0x40 */
+    int32_t (*can_place)(void *context, int32_t tx, int32_t ty, int32_t tz); /* +0x198 */
+    float (*distance)(void *context, float x, float y, float z);           /* 0x004aaf50 */
+    int32_t (*move)(void *context, float x, float y, float z, float range, int32_t force); /* +0x154 */
+    void (*set_order)(void *context, int32_t code);                        /* 0x0040f6d0 */
+    void (*set_target)(void *context, int32_t id, float x, float y, float z); /* 0x00412f00 */
+} AoeAiUnitAiMoveAsideOpsRor;
+int aoe_ai_unit_ai_move_aside_ror(const AoeAiUnitAiMoveAsideOpsRor *o, float x, float y, float z,
+                                  int skip_distance, int32_t force);
+
 #endif

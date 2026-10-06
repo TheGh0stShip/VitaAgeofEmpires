@@ -1174,3 +1174,43 @@ int32_t aoe_ai_unit_ai_free_tile_ror(int32_t order, int filter, int32_t *out_x, 
     if (best == -1) return 0;
     return o->move(o->context, *out_x, *out_y, o->sight - 1.0f);
 }
+
+/* 0x004128b0 */
+int aoe_ai_unit_ai_move_aside_ror(const AoeAiUnitAiMoveAsideOpsRor *o, float x, float y, float z,
+                                  int skip_distance, int32_t force) {
+    int32_t tx, ty, tz, step;
+    float best;
+    if (!force && o->order != -1) return 0;
+    if (x < 0.0f) x = 0.0f; else if (!(x < (float)o->map_w)) x = (float)o->map_w - 1.0f;
+    if (y < 0.0f) y = 0.0f; else if (!(y < (float)o->map_h)) y = (float)o->map_h - 1.0f;
+    tx = aoe_ftol32(x);
+    ty = aoe_ftol32(y);
+    tz = aoe_ftol32(o->unit_z);
+    if (!o->can_place(o->context, tx, ty, tz)) {
+        best = o->distance(o->context, x, y, o->unit_z);
+        step = -1;
+        for (;;) {
+            ++step;
+            if (step > 7) return 0;
+            switch (step) {
+            case 0: tx -= 2; ty -= 2; break;
+            case 7: ty -= 2; break;
+            case 1: case 2: tx += 2; break;
+            case 3: case 4: ty += 2; break;
+            default: tx -= 2; break;
+            }
+            if (tx < 0) tx = 0; else if (tx >= o->map_w) tx = o->map_w - 1;
+            if (ty < 0) ty = 0; else if (ty >= o->map_h) ty = o->map_h - 1;
+            if (!skip_distance &&
+                o->distance(o->context, (float)tx + 0.5f, (float)ty + 0.5f, o->unit_z) < best) {
+                ++step;
+                continue;
+            }
+            if (o->can_place(o->context, tx, ty, tz) == 1) break;
+        }
+    }
+    if (o->move(o->context, (float)tx + 0.5f, (float)ty + 0.5f, z, 0.5f, force) != 1) return 0;
+    o->set_order(o->context, 0x262);
+    o->set_target(o->context, -1, x, y, z);
+    return 1;
+}

@@ -209,4 +209,64 @@ int aoe_game_play_sound_ror(void *const *sounds, int32_t i,
                             int (*playing)(void *context, void *sound),
                             int (*play)(void *context, void *sound), void *context);
 
+
+/* 0x0041a8d0 (+0xc8, the frame): the paint (0x004197b0; timed into
+   slot 5, 0 returned when it fails); in mode 4 / 6 / 7 with the draw
+   system not in palette mode 1 (+0x478), a mouse (+0x54) and +0x1c8
+   set, the primary's busy check (+0x1c vtable +0x34(1)) is repeated
+   while it answers DDERR_WASSTILLDRAWING for up to 100 ms, then +0x1c8
+   cleared; the sound (game +0x60: 0x004a2990, 0x004a29c0; slot 10);
+   +0x1c4 set: the cursor redrawn (0x0044a5a0) unless +0x3f8 or no mouse,
+   then cleared; the current screen (0x00451ab0): none clears the window
+   (0x00419880), else +0x3f8 asks its +0x20(2) and its +0x54 draws; the
+   once-a-second flag (0x00580e40) consumed: +0x138 in mode 4 / 5 with
+   +0x8e8; slot 2; with a mouse and no software cursor (+0x1d0) the
+   cursor shown (0x0044a2a0(1)) and +0x1c4 set; slot 8 both cursor
+   spans; the flip (0x00437ac0(0)), the window validated twice, +0x3f8
+   cleared, slot 3; the frame count (+0x504); a second after 0x00580e3c:
+   +0x130 and the flag raised; the redraw flag 0x00580e20: with +0x1c0 the
+   pointer refreshed (0x00449920(+0x4c)), with +0x1cc the class cursor
+   (+0x1d4) set when no mouse or a software cursor, else 0x0044a780 and
+   the cursor shown, the window invalidated; the flag cleared. 1. */
+enum {
+    AOE_GAME_TICK_PAINT = 1,     /* 0x004197b0 -> int */
+    AOE_GAME_TICK_SURFACE_BUSY,  /* +0x1c vtable +0x34(1) -> int32 */
+    AOE_GAME_TICK_SOUND,         /* 0x004a2990, 0x004a29c0 */
+    AOE_GAME_TICK_CURSOR_DRAW,   /* 0x0044a5a0 */
+    AOE_GAME_TICK_CLEAR_WINDOW,  /* 0x00419880 */
+    AOE_GAME_TICK_SCREEN_REDRAW, /* screen +0x20(2) */
+    AOE_GAME_TICK_SCREEN_DRAW,   /* screen +0x54 */
+    AOE_GAME_TICK_SECOND_138,    /* vtable +0x138 */
+    AOE_GAME_TICK_CURSOR_ON,     /* 0x0044a2a0(1) */
+    AOE_GAME_TICK_FLIP,          /* 0x00437ac0(0), ValidateRect x2 */
+    AOE_GAME_TICK_SECOND_130,    /* vtable +0x130 */
+    AOE_GAME_TICK_POINTER,       /* 0x00449920(+0x4c) */
+    AOE_GAME_TICK_CLASS_CURSOR,  /* SetCursor / SetClassLongA(+0x1d4) */
+    AOE_GAME_TICK_CURSOR_44A780, /* 0x0044a780 */
+    AOE_GAME_TICK_INVALIDATE     /* InvalidateRect(window, NULL, 0) */
+};
+#define AOE_DDERR_WASSTILLDRAWING ((int32_t)0x8876021c)
+typedef struct {
+    void *context;
+    int32_t mode;                /* +0x1b0 */
+    int draw_palette_mode1;      /* draw +0x478 == 1 */
+    int has_mouse;               /* +0x54 */
+    int has_sound;               /* 0x00580e38 +0x60 */
+    int has_screen;              /* 0x00451ab0 != 0 */
+    int software_cursor;         /* +0x1d0 */
+    int field_8e8;               /* +0x8e8 */
+    int32_t *flip_pending;       /* +0x1c8 */
+    int32_t *cursor_dirty;       /* +0x1c4 */
+    int32_t *redraw_all;         /* +0x3f8 */
+    int32_t *frames;             /* +0x504 */
+    int32_t flag_1c0, flag_1cc;  /* +0x1c0, +0x1cc */
+    int32_t *second_flag;        /* 0x00580e40 */
+    uint32_t *second_time;       /* 0x00580e3c */
+    int32_t *redraw_flag;        /* 0x00580e20 */
+    uint32_t (*now)(void *context);
+    void (*sample)(void *context, int32_t slot, uint32_t ms); /* 0x00417370 */
+    int32_t (*step)(void *context, int32_t id);
+} AoeGameTickOpsRor;
+int aoe_game_frame_tick_ror(const AoeGameTickOpsRor *o);
+
 #endif

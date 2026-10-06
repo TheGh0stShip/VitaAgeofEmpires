@@ -628,6 +628,33 @@ static void free_tile_tests(void) {
     assert(aoe_ai_unit_ai_free_tile_ror(0, 1, &x, &y, &o) == 7 && x == 6 && y == 4);
     assert(aoe_ai_unit_ai_free_tile_ror(0x2c1, 0, &x, &y, &o) == 0);
 }
+
+static int ma_free[64][64], ma_log_n; static char ma_log[512]; static int32_t ma_move_ok = 1, ma_order_set; static float ma_tx, ma_ty;
+static int32_t ma_place(void *c, int32_t x, int32_t y, int32_t z) { (void)c; assert(z == 3); ma_log_n += snprintf(ma_log + ma_log_n, sizeof ma_log - (size_t)ma_log_n, "p(%d,%d)", (int)x, (int)y); return ma_free[y][x]; }
+static float ma_dist(void *c, float x, float y, float z) { (void)c; (void)z; return (x - 10.0f) * (x - 10.0f) + (y - 10.0f) * (y - 10.0f); }
+static int32_t ma_move(void *c, float x, float y, float z, float r, int32_t f) { (void)c; assert(z == 3.5f && r == 0.5f && f == 1); ma_log_n += snprintf(ma_log + ma_log_n, sizeof ma_log - (size_t)ma_log_n, "m(%g,%g)", (double)x, (double)y); return ma_move_ok; }
+static void ma_order(void *c, int32_t code) { (void)c; ma_order_set = code; }
+static void ma_target(void *c, int32_t id, float x, float y, float z) { (void)c; assert(id == -1 && z == 3.5f); ma_tx = x; ma_ty = y; }
+static void move_aside_tests(void) {
+    AoeAiUnitAiMoveAsideOpsRor o = {NULL, 5, 64, 64, 3.2f, ma_place, ma_dist, ma_move, ma_order, ma_target};
+    assert(aoe_ai_unit_ai_move_aside_ror(&o, 20.5f, 20.5f, 3.5f, 0, 0) == 0 && ma_log_n == 0);
+    /* The point's tile is free: ordered straight there; -0.5 clamps to 0, 70 to the last tile. */
+    ma_free[20][20] = 1;
+    assert(aoe_ai_unit_ai_move_aside_ror(&o, 20.5f, 20.5f, 3.5f, 0, 1) == 1 && strcmp(ma_log, "p(20,20)m(20.5,20.5)") == 0 && ma_order_set == 0x262 && ma_tx == 20.5f);
+    ma_log_n = 0; ma_free[0][63] = 1;
+    assert(aoe_ai_unit_ai_move_aside_ror(&o, 70.0f, -0.5f, 3.5f, 0, 1) == 1 && strcmp(ma_log, "p(63,0)m(63.5,0.5)") == 0 && ma_tx == 63.0f && ma_ty == 0.0f);
+    /* Blocked: the ring from (18, 18); steps nearer (10, 10) than the point skip the next one. */
+    ma_log_n = 0; ma_free[20][20] = 0; ma_free[22][22] = 1;
+    assert(aoe_ai_unit_ai_move_aside_ror(&o, 20.5f, 20.5f, 3.5f, 1, 1) == 1 && strcmp(ma_log, "p(20,20)p(18,18)p(20,18)p(22,18)p(22,20)p(22,22)m(22.5,22.5)") == 0);
+    /* With the distance check every ring step but (20, 20) lies nearer (10, 10) and skips its
+       successor, so the blocked tile is the only one tried. */
+    ma_log_n = 0;
+    assert(aoe_ai_unit_ai_move_aside_ror(&o, 20.5f, 20.5f, 3.5f, 0, 1) == 0 && strcmp(ma_log, "p(20,20)p(20,20)") == 0);
+    ma_log_n = 0; ma_free[22][22] = 0;
+    assert(aoe_ai_unit_ai_move_aside_ror(&o, 20.5f, 20.5f, 3.5f, 1, 1) == 0 && strstr(ma_log, "p(20,22)p(18,22)p(18,20)") != NULL && strstr(ma_log, "m(") == NULL);
+    ma_log_n = 0; ma_free[20][20] = 1; ma_move_ok = 0; ma_order_set = 0;
+    assert(aoe_ai_unit_ai_move_aside_ror(&o, 20.5f, 20.5f, 3.5f, 0, 1) == 0 && ma_order_set == 0);
+}
 int main(void) {
     free_tile_tests();
     ai_kind_for_unit_tests();
@@ -787,5 +814,6 @@ int main(void) {
     puts("ai unit ai ok");
     scan_tests();
     rally_tests();
+    move_aside_tests();
     return 0;
 }

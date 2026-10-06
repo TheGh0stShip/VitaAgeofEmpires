@@ -232,3 +232,77 @@ int aoe_game_font_from_strings_ror(void *context,
                            charset_text, out);
     return 1;
 }
+
+/* 0x0041a8d0 */
+int aoe_game_frame_tick_ror(const AoeGameTickOpsRor *o) {
+    uint32_t t0, t1, t2, t3;
+    t0 = o->now(o->context);
+    {
+        int ok = o->step(o->context, AOE_GAME_TICK_PAINT) != 0;
+        o->sample(o->context, 5, o->now(o->context) - t0);
+        if (!ok) return 0;
+    }
+    if ((o->mode == 4 || o->mode == 6 || o->mode == 7) && !o->draw_palette_mode1 && o->has_mouse &&
+        *o->flip_pending) {
+        int32_t r = o->step(o->context, AOE_GAME_TICK_SURFACE_BUSY);
+        uint32_t start = o->now(o->context);
+        while (r == AOE_DDERR_WASSTILLDRAWING) {
+            r = o->step(o->context, AOE_GAME_TICK_SURFACE_BUSY);
+            if (o->now(o->context) > start + 100) { *o->flip_pending = 0; break; }
+        }
+    }
+    t0 = o->now(o->context);
+    if (o->has_sound) o->step(o->context, AOE_GAME_TICK_SOUND);
+    o->sample(o->context, 10, o->now(o->context) - t0);
+    t0 = o->now(o->context);
+    if (*o->cursor_dirty) {
+        if (!*o->redraw_all && o->has_mouse) o->step(o->context, AOE_GAME_TICK_CURSOR_DRAW);
+        *o->cursor_dirty = 0;
+    }
+    t1 = o->now(o->context);
+    t2 = o->now(o->context);
+    if (!o->has_screen) {
+        o->step(o->context, AOE_GAME_TICK_CLEAR_WINDOW);
+    } else {
+        if (*o->redraw_all) o->step(o->context, AOE_GAME_TICK_SCREEN_REDRAW);
+        o->step(o->context, AOE_GAME_TICK_SCREEN_DRAW);
+    }
+    if (*o->second_flag) {
+        *o->second_flag = 0;
+        if ((o->mode == 4 || o->mode == 5) && o->field_8e8) o->step(o->context, AOE_GAME_TICK_SECOND_138);
+    }
+    o->sample(o->context, 2, o->now(o->context) - t2);
+    t3 = o->now(o->context);
+    if (o->has_mouse && !o->software_cursor) {
+        o->step(o->context, AOE_GAME_TICK_CURSOR_ON);
+        *o->cursor_dirty = 1;
+    }
+    o->sample(o->context, 8, (o->now(o->context) - t3) + (t1 - t0));
+    t0 = o->now(o->context);
+    o->step(o->context, AOE_GAME_TICK_FLIP);
+    *o->redraw_all = 0;
+    o->sample(o->context, 3, o->now(o->context) - t0);
+    ++*o->frames;
+    t0 = o->now(o->context);
+    if (t0 - *o->second_time > 999) {
+        o->step(o->context, AOE_GAME_TICK_SECOND_130);
+        *o->second_flag = 1;
+        *o->second_time = t0;
+    }
+    if (*o->redraw_flag) {
+        if (o->flag_1c0) {
+            o->step(o->context, AOE_GAME_TICK_POINTER);
+            if (o->flag_1cc) {
+                if (!o->has_mouse || o->software_cursor) {
+                    o->step(o->context, AOE_GAME_TICK_CLASS_CURSOR);
+                } else {
+                    o->step(o->context, AOE_GAME_TICK_CURSOR_44A780);
+                    o->step(o->context, AOE_GAME_TICK_CURSOR_ON);
+                }
+            }
+            o->step(o->context, AOE_GAME_TICK_INVALIDATE);
+        }
+        *o->redraw_flag = 0;
+    }
+    return 1;
+}

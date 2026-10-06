@@ -491,4 +491,94 @@ typedef struct {
 int aoe_game_ror_play_video_ror(AoeGameRorVideoStateRor *s, const AoeGameRorVideoPlayOpsRor *o,
                                 int32_t after, const char *name);
 
+
+/* 0x00505670 (+0xc4): the tribe game's timer tick: the base tick
+   (0x0041a500; 0 when it fails) and, unless already inside (+0x1250),
+   by mode (+0x1b0): 1 with a video window (+0xbec), once a second
+   (+0xbfc): the window's mode text; empty or "stopped" ends the video
+   (0x00500740(1)); "paused" with +0xbf8 clear sends message 0x855; the
+   second noted. 3: before the comm's start (0x00425410) every 500 ms
+   (0x007c0658) the wait text: string 0x454, a newline, then for every
+   playing slot 1..8 (0x00423da0) other than ours (0x00423c10) a newline
+   and its name (0x0041dfa0), given to the "Multiplayer Wait Screen"
+   when it is up (0x00451ae0, 0x0049ebe0); past the start the game
+   begins (0x5046e0). 4 / 5 / 6 with 0x00580e28 clear and a game
+   screen (+0xc24): its idle (0x47fc60). */
+typedef struct {
+    void *context;
+    int32_t mode;                /* +0x1b0 */
+    void *video_window;          /* +0xbec */
+    int32_t video_field_bf8;     /* +0xbf8 */
+    uint32_t *video_time;        /* +0xbfc */
+    uint32_t *wait_time;         /* 0x007c0658 */
+    int32_t *busy;               /* +0x1250 */
+    int has_game_screen;         /* +0xc24 */
+    int global_580e28;           /* 0x00580e28 */
+    int (*base_tick)(void *context);                    /* 0x0041a500 */
+    uint32_t (*now)(void *context);
+    void (*window_mode)(void *context, void *window, char *out, int size);
+    void (*end_video)(void *context);                   /* 0x00500740(1) */
+    void (*window_message_855)(void *context, void *window);
+    int (*comm_started)(void *context);                 /* 0x00425410 */
+    void (*string)(void *context, int32_t id, char *out, int size); /* +0x20 */
+    int32_t (*own_slot)(void *context);                 /* 0x00423c10 */
+    int (*slot_playing)(void *context, int32_t slot);   /* 0x00423da0 */
+    const char *(*slot_name)(void *context, int32_t slot); /* 0x0041dfa0 */
+    int (*wait_screen_up)(void *context);               /* 0x00451ae0 */
+    void (*wait_screen_text)(void *context, const char *text); /* 0x0049ebe0 */
+    void (*start_game)(void *context);                  /* 0x5046e0 */
+    void (*screen_idle)(void *context);                 /* 0x47fc60 */
+} AoeGameRorIdleOpsRor;
+int aoe_game_ror_idle_ror(const AoeGameRorIdleOpsRor *o);
+
+/* 0x00502d60: start the saved game or scenario file `name`. +0x1250
+   cleared, the wait cursor (0x0041bd60); in mode 4 / 5 / 6 the mode
+   becomes 0, the world's +0xb8 runs, the game screen (+0xc24) is
+   forgotten and "Game Screen" removed. Status 0x44d; a world is ensured
+   (0x005011e0). Then status 0x452, the sound (+0x60) byte +1 held
+   while the world's +0xcc(name) loads, every player's wonder countdown
+   cleared (0x0041c0b0), 0x00558094 set. A loaded file: settings bytes
+   0x985 / 0x986 from the map's +0x8db8 / +0x8db9, 0x982 and int 0x9a4 to
+   1, 0x988 to the player count - 1; the path finding (0x0041b9c0) sets
+   0x00554738 to 5000 (1), 7500 (2) or 2500; slots 0..8: a world player
+   gets 0x0041c090(i, i), from 1 its name (0x004244a0 from +0x44) and
+   state 2 (slot 1) or 4 (0x00423d40), others 0x0041c090(i, 0) and
+   state 0; the name without its extension becomes the saved and
+   restart names (0x004ff4b0, 0x004ff4f0); the screens go (0x004fe490(0))
+   and the game starts (0x00503a70). Otherwise: a current screen
+   (0x00451ab0) with a return name (0x00454170) is shown again
+   (0x00451be0), "Status Screen" removed and the wait cursor released
+   (0x0041bdc0), else the status closes (0x005003e0) and the cursor is
+   released; 0. */
+typedef struct {
+    void *context;
+    int32_t *mode;               /* +0x1b0 */
+    int32_t *busy;               /* +0x1250 */
+    void **game_screen;          /* +0xc24 */
+    int has_sound;               /* +0x60 */
+    int32_t *global_558094, *global_554738;
+    int16_t player_count;        /* world +0x3c */
+    uint8_t map_8db8, map_8db9;  /* world +0x28 -> */
+    uint8_t path_finding;        /* 0x0041b9c0 */
+    int (*ensure_world)(void *context);             /* 0x005011e0 */
+    const char *(*return_name)(void *context);      /* current screen's 0x00454170; NULL */
+    void (*cursor)(void *context, int wait);        /* 0x0041bd60 / 0x0041bdc0 */
+    void (*world_stop)(void *context);              /* world +0xb8 */
+    void (*remove_screen)(void *context, const char *name); /* 0x00451df0 */
+    void (*show_screen)(void *context, const char *name);   /* 0x00451be0(name, 0) */
+    void (*status)(void *context, int32_t id);      /* 0x00500390(id, 0, -1) */
+    void (*status_close)(void *context);            /* 0x005003e0 */
+    void (*sound_hold)(void *context, int held);    /* +0x60 byte +1 */
+    int (*load)(void *context, const char *name);   /* world +0xcc */
+    void (*clear_wonder)(void *context, int32_t player); /* 0x0041c0b0 */
+    void (*settings_bytes)(void *context, uint8_t b985, uint8_t b986, uint8_t b982, int32_t i9a4, uint8_t b988);
+    void (*slot_player)(void *context, int32_t slot, int32_t player); /* 0x0041c090 */
+    void (*slot_name)(void *context, int32_t slot);                   /* 0x004244a0(slot, player +0x44) */
+    void (*slot_state)(void *context, int32_t slot, int32_t state);   /* 0x00423d40 */
+    void (*set_names)(void *context, const char *name);  /* 0x004ff4b0 + 0x004ff4f0 */
+    void (*delete_screens)(void *context);               /* 0x004fe490(0) */
+    int32_t (*start)(void *context);                     /* 0x00503a70 */
+} AoeGameRorStartFileOpsRor;
+int32_t aoe_game_ror_start_file_ror(const AoeGameRorStartFileOpsRor *o, const char *name);
+
 #endif

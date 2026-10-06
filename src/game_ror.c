@@ -772,3 +772,103 @@ fail:
     o->close_video(o->context);
     return 0;
 }
+
+/* 0x00505670 */
+int aoe_game_ror_idle_ror(const AoeGameRorIdleOpsRor *o) {
+    char text[0x900], mode[100];
+    if (!o->base_tick(o->context)) return 0;
+    if (*o->busy) return 0;
+    *o->busy = 1;
+    if (o->mode == 1 && o->video_window) {
+        if (o->now(o->context) - *o->video_time >= 1000) {
+            mode[0] = '\0';
+            o->window_mode(o->context, o->video_window, mode, sizeof mode);
+            if (!mode[0] || strcmp(mode, "stopped") == 0) {
+                o->end_video(o->context);
+            } else if (o->video_field_bf8 == 0 && strcmp(mode, "paused") == 0) {
+                o->window_message_855(o->context, o->video_window);
+            }
+            *o->video_time = o->now(o->context);
+        }
+    } else if (o->mode == 3) {
+        if (o->comm_started(o->context)) {
+            o->start_game(o->context);
+        } else if (o->now(o->context) - *o->wait_time > 499) {
+            int32_t own = o->own_slot(o->context), i;
+            size_t n;
+            text[0] = '\0';
+            o->string(o->context, 0x454, text, sizeof text);
+            n = strlen(text);
+            n += (size_t)snprintf(text + n, sizeof text - n, "\n");
+            for (i = 1; i < 9; ++i) {
+                if (i == own || !o->slot_playing(o->context, i)) continue;
+                n += (size_t)snprintf(text + n, sizeof text - n, "\n%s", o->slot_name(o->context, i));
+                if (n >= sizeof text) n = sizeof text - 1;
+            }
+            if (o->wait_screen_up(o->context)) o->wait_screen_text(o->context, text);
+            *o->wait_time = o->now(o->context);
+        }
+    } else if ((o->mode == 4 || o->mode == 5 || o->mode == 6) && !o->global_580e28 &&
+               o->has_game_screen) {
+        o->screen_idle(o->context);
+    }
+    *o->busy = 0;
+    return 1;
+}
+
+/* 0x00502d60 */
+int32_t aoe_game_ror_start_file_ror(const AoeGameRorStartFileOpsRor *o, const char *name) {
+    char base[260], *dot;
+    const char *back;
+    int32_t i, n;
+    *o->busy = 0;
+    o->cursor(o->context, 1);
+    if (*o->mode == 4 || *o->mode == 5 || *o->mode == 6) {
+        *o->mode = 0;
+        o->world_stop(o->context);
+        *o->game_screen = NULL;
+        o->remove_screen(o->context, "Game Screen");
+    }
+    o->status(o->context, 0x44d);
+    if (o->ensure_world(o->context)) {
+        int ok;
+        o->status(o->context, 0x452);
+        if (o->has_sound) o->sound_hold(o->context, 1);
+        ok = o->load(o->context, name);
+        n = o->player_count;
+        for (i = 0; i < n; ++i) o->clear_wonder(o->context, i);
+        *o->global_558094 = 1;
+        if (o->has_sound) o->sound_hold(o->context, 0);
+        if (ok) {
+            o->settings_bytes(o->context, o->map_8db8, o->map_8db9, 1, 1, (uint8_t)(n - 1));
+            *o->global_554738 = o->path_finding == 1 ? 5000 : o->path_finding == 2 ? 7500 : 2500;
+            for (i = 0; i < 9; ++i) {
+                if (i < n) {
+                    o->slot_player(o->context, i, i);
+                    if (i > 0) {
+                        o->slot_name(o->context, i);
+                        o->slot_state(o->context, i, i == 1 ? 2 : 4);
+                    }
+                } else {
+                    o->slot_player(o->context, i, 0);
+                    o->slot_state(o->context, i, 0);
+                }
+            }
+            snprintf(base, sizeof base, "%s", name);
+            dot = strchr(base, '.');
+            if (dot) *dot = '\0';
+            o->set_names(o->context, base);
+            o->delete_screens(o->context);
+            return o->start(o->context);
+        }
+    }
+    back = o->return_name(o->context);
+    if (back && *back) {
+        o->show_screen(o->context, back);
+        o->remove_screen(o->context, "Status Screen");
+    } else {
+        o->status_close(o->context);
+    }
+    o->cursor(o->context, 0);
+    return 0;
+}

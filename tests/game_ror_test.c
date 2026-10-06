@@ -1,6 +1,7 @@
 #include "game_ror.h"
 
 #include <assert.h>
+#include <stdarg.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -247,6 +248,76 @@ static void play_video_tests(void) {
     vp_n = 0; vp_exists = 1; vp_up = 0; vp_open_ok = 0;
     assert(aoe_game_ror_play_video_ror(&s, &o, 1, "x") == 0 && strcmp(vp_log, "exists(D:\\avi\\x.avi) open closevideo ") == 0);
 }
+
+static char id_log[1024]; static int id_n, id_started, id_tick = 1, id_up = 1; static uint32_t id_now = 5000; static const char *id_mode = "playing";
+static void id_add(const char *s) { id_n += snprintf(id_log + id_n, sizeof id_log - (size_t)id_n, "%s", s); }
+static int id_base(void *c) { (void)c; id_add("tick "); return id_tick; }
+static uint32_t id_nowf(void *c) { (void)c; return id_now; }
+static void id_wmode(void *c, void *w, char *o, int n) { (void)c; (void)w; snprintf(o, (size_t)n, "%s", id_mode); }
+static void id_end(void *c) { (void)c; id_add("end "); }
+static void id_855(void *c, void *w) { (void)c; (void)w; id_add("855 "); }
+static int id_comm(void *c) { (void)c; return id_started; }
+static void id_str(void *c, int32_t id, char *o, int n) { (void)c; snprintf(o, (size_t)n, "S%d", (int)id); }
+static int32_t id_own(void *c) { (void)c; return 2; }
+static int id_playing(void *c, int32_t s) { (void)c; return s == 1 || s == 2 || s == 5; }
+static const char *id_name(void *c, int32_t s) { (void)c; return s == 1 ? "Ann" : "Ed"; }
+static int id_upf(void *c) { (void)c; return id_up; }
+static void id_text(void *c, const char *t) { (void)c; id_add("text["); id_add(t); id_add("] "); }
+static void id_start(void *c) { (void)c; id_add("start "); }
+static void id_sidle(void *c) { (void)c; id_add("idle "); }
+static void idle_tests(void) {
+    uint32_t vtime = 0, wtime = 0; int32_t busy = 0;
+    AoeGameRorIdleOpsRor o = {NULL, 3, NULL, 0, &vtime, &wtime, &busy, 1, 0, id_base, id_nowf, id_wmode, id_end, id_855, id_comm, id_str, id_own, id_playing, id_name, id_upf, id_text, id_start, id_sidle};
+    assert(aoe_game_ror_idle_ror(&o) == 1 && strcmp(id_log, "tick text[S1108\n\nAnn\nEd] ") == 0 && wtime == 5000 && busy == 0);
+    id_n = 0; id_now = 5400;
+    assert(aoe_game_ror_idle_ror(&o) == 1 && strcmp(id_log, "tick ") == 0);
+    id_n = 0; id_started = 1;
+    assert(aoe_game_ror_idle_ror(&o) == 1 && strcmp(id_log, "tick start ") == 0);
+    id_n = 0; o.mode = 1; o.video_window = (void *)1;
+    assert(aoe_game_ror_idle_ror(&o) == 1 && strcmp(id_log, "tick ") == 0 && vtime == 5400);
+    id_n = 0; id_now = 6400; id_mode = "paused";
+    assert(aoe_game_ror_idle_ror(&o) == 1 && strcmp(id_log, "tick 855 ") == 0 && vtime == 6400);
+    id_n = 0; id_now = 7400; id_mode = "stopped";
+    assert(aoe_game_ror_idle_ror(&o) == 1 && strcmp(id_log, "tick end ") == 0);
+    id_n = 0; o.mode = 5;
+    assert(aoe_game_ror_idle_ror(&o) == 1 && strcmp(id_log, "tick idle ") == 0);
+    id_n = 0; o.global_580e28 = 1;
+    assert(aoe_game_ror_idle_ror(&o) == 1 && strcmp(id_log, "tick ") == 0);
+    id_n = 0; busy = 1;
+    assert(aoe_game_ror_idle_ror(&o) == 0 && busy == 1);
+    id_n = 0; busy = 0; id_tick = 0;
+    assert(aoe_game_ror_idle_ror(&o) == 0);
+}
+static char sf_log[1024]; static int sf_n, sf_world_ok = 1, sf_load_ok = 1; static const char *sf_back;
+static void sf_add(const char *fmt, ...) { va_list ap; va_start(ap, fmt); sf_n += vsnprintf(sf_log + sf_n, sizeof sf_log - (size_t)sf_n, fmt, ap); va_end(ap); }
+static int sf_ensure(void *c) { (void)c; sf_add("ensure "); return sf_world_ok; }
+static const char *sf_return(void *c) { (void)c; return sf_back; }
+static void sf_cursor(void *c, int w) { (void)c; sf_add("cur%d ", w); }
+static void sf_stop(void *c) { (void)c; sf_add("stop "); }
+static void sf_remove(void *c, const char *n) { (void)c; sf_add("rm(%s) ", n); }
+static void sf_show(void *c, const char *n) { (void)c; sf_add("show(%s) ", n); }
+static void sf_status(void *c, int32_t id) { (void)c; sf_add("st%x ", (unsigned)id); }
+static void sf_sclose(void *c) { (void)c; sf_add("stclose "); }
+static void sf_hold(void *c, int h) { (void)c; sf_add("hold%d ", h); }
+static int sf_load(void *c, const char *n) { (void)c; sf_add("load(%s) ", n); return sf_load_ok; }
+static void sf_wonder(void *c, int32_t p) { (void)c; sf_add("w%d ", (int)p); }
+static void sf_bytes(void *c, uint8_t a, uint8_t b, uint8_t d, int32_t e, uint8_t f) { (void)c; sf_add("set(%d,%d,%d,%d,%d) ", a, b, d, (int)e, f); }
+static void sf_splayer(void *c, int32_t s, int32_t p) { (void)c; sf_add("sp(%d,%d) ", (int)s, (int)p); }
+static void sf_sname(void *c, int32_t s) { (void)c; sf_add("sn%d ", (int)s); }
+static void sf_sstate(void *c, int32_t s, int32_t st) { (void)c; sf_add("ss(%d,%d) ", (int)s, (int)st); }
+static void sf_names(void *c, const char *n) { (void)c; sf_add("names(%s) ", n); }
+static void sf_del(void *c) { (void)c; sf_add("del "); }
+static int32_t sf_start(void *c) { (void)c; sf_add("start "); return 7; }
+static void start_file_tests(void) {
+    int32_t mode = 5, busy = 1, g1 = 0, g2 = 0; void *gs = (void *)1;
+    AoeGameRorStartFileOpsRor o = {NULL, &mode, &busy, &gs, 1, &g1, &g2, 3, 1, 1, 2, sf_ensure, sf_return, sf_cursor, sf_stop, sf_remove, sf_show, sf_status, sf_sclose, sf_hold, sf_load, sf_wonder, sf_bytes, sf_splayer, sf_sname, sf_sstate, sf_names, sf_del, sf_start};
+    assert(aoe_game_ror_start_file_ror(&o, "hill.gmx") == 7 && mode == 0 && busy == 0 && gs == NULL && g1 == 1 && g2 == 7500);
+    assert(strcmp(sf_log, "cur1 stop rm(Game Screen) st44d ensure st452 hold1 load(hill.gmx) w0 w1 w2 hold0 set(1,1,1,1,2) sp(0,0) sp(1,1) sn1 ss(1,2) sp(2,2) sn2 ss(2,4) sp(3,0) ss(3,0) sp(4,0) ss(4,0) sp(5,0) ss(5,0) sp(6,0) ss(6,0) sp(7,0) ss(7,0) sp(8,0) ss(8,0) names(hill) del start ") == 0);
+    sf_n = 0; sf_load_ok = 0; o.path_finding = 1; o.has_sound = 0;
+    assert(aoe_game_ror_start_file_ror(&o, "x.scn") == 0 && strcmp(sf_log, "cur1 st44d ensure st452 load(x.scn) w0 w1 w2 stclose cur0 ") == 0);
+    sf_n = 0; sf_world_ok = 0; sf_back = "Single Player Menu";
+    assert(aoe_game_ror_start_file_ror(&o, "x.scn") == 0 && strcmp(sf_log, "cur1 st44d ensure show(Single Player Menu) rm(Status Screen) cur0 ") == 0);
+}
 int main(void) {
     char coded[64];
     AoeGameRorCommandOpsRor cops = {NULL, ns, sp, bc};
@@ -446,5 +517,7 @@ int main(void) {
     stats_text_tests();
     ai_lines_tests();
     play_video_tests();
+    idle_tests();
+    start_file_tests();
     return 0;
 }

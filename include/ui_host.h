@@ -57,7 +57,9 @@ typedef struct AoeUiHostRor {
     uint8_t keys[256];          /* GetKeyState: held virtual keys */
     uint32_t buttons;           /* MK_LBUTTON 1, MK_RBUTTON 2 */
     int32_t mouse_x, mouse_y;
-    uint8_t help_mode;          /* 0x00583bc0: 0 none, 1 WinHelp, 2 a help dialog is up */
+    uint8_t help_mode;
+    int32_t pointer_id;         /* the screen's pointer shape (set_pointer), -1 none */
+    int32_t pointer_mode;       /* the pointer mode (ez cursor) */          /* 0x00583bc0: 0 none, 1 WinHelp, 2 a help dialog is up */
     int32_t shape_batching, shapes_drawn, shape_loads;
     AoeUiSystemRor system;
     AoeUiHostPaletteRor palettes[AOE_UI_HOST_PALETTES];

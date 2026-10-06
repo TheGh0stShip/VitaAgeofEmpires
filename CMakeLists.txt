@@ -636,6 +636,11 @@ target_include_directories(aoe_ui_director PUBLIC include)
 target_compile_options(aoe_ui_director PRIVATE -Wall -Wextra)
 target_link_libraries(aoe_ui_director PUBLIC aoe_ui_host aoe_game_ui)
 
+add_library(aoe_shell_app STATIC src/shell_app.c)
+target_include_directories(aoe_shell_app PUBLIC include)
+target_compile_options(aoe_shell_app PRIVATE -Wall -Wextra)
+target_link_libraries(aoe_shell_app PUBLIC aoe_ui_director)
+
 add_library(aoe_achievements_screen STATIC src/screens/achievements_screen.c)
 target_include_directories(aoe_achievements_screen PUBLIC include)
 target_link_libraries(aoe_achievements_screen PUBLIC aoe_game_ui aoe_player_outcome aoe_action_io)
@@ -860,11 +865,16 @@ else()
       c:320,248)
     set_tests_properties(ror_menu_navigation_real PROPERTIES PASS_REGULAR_EXPRESSION
       "c:320,198 -> Single Player Menu\nc:320,388 -> Main Menu\nc:320,348 -> Scenario Editor Menu\nk:27 -> Main Menu\nc:320,298 -> Main Menu modal OKDialog\nk:13 -> Main Menu\nd:0x11 -> Main Menu\nk:0x43 -> Credits Screen\nu:0x11 -> Credits Screen\nk:27 -> Main Menu\nc:320,248 -> MP Startup Screen")
+    add_test(NAME ror_shell_touch_and_buttons_real COMMAND shell_app_real
+      "${CMAKE_SOURCE_DIR}/build/demo_root" "${CMAKE_BINARY_DIR}/shell_frame.ppm")
     add_test(NAME ror_menu_exit_real COMMAND ui_host_tool
       "${CMAKE_SOURCE_DIR}/build/demo_root" "${CMAKE_BINARY_DIR}" c:320,398)
     set_tests_properties(ror_menu_exit_real PROPERTIES PASS_REGULAR_EXPRESSION
       "c:320,398 -> \\(quit\\)")
   endif()
+  add_executable(shell_app_real tests/shell_app_real.c)
+  target_link_libraries(shell_app_real PRIVATE aoe_shell_app)
+  target_compile_options(shell_app_real PRIVATE -UNDEBUG)
   add_executable(lang_tool tools/lang_tool.c)
   target_link_libraries(lang_tool PRIVATE aoe_pe_strings)
   add_executable(pe_strings_test tests/pe_strings_test.c)
@@ -2022,19 +2032,17 @@ endif()
 # packaged as an installable VPK. Game data is never packaged; the app reads
 # the user's own files from ux0:data/VitaAoE at run time.
 if(VITA)
-  set(VITA_APP_NAME "AoE RoR Tech Demo")
-  set(VITA_TITLEID "VAOE00001")
-  set(VITA_VERSION "00.10")
-  add_executable(aoe_vita_demo src/platform/vita_main.c)
-  target_link_libraries(aoe_vita_demo PRIVATE aoe_demo_app
-    SceDisplay_stub SceCtrl_stub ScePower_stub)
-  target_compile_options(aoe_vita_demo PRIVATE -Wall -Wextra)
-  target_link_options(aoe_vita_demo PRIVATE
+  # The port: the translated game's screens through the shell.
+  add_executable(aoe_vita src/platform/vita_shell_main.c)
+  target_link_libraries(aoe_vita PRIVATE aoe_shell_app aoe_demo_app
+    SceDisplay_stub SceCtrl_stub SceTouch_stub ScePower_stub)
+  target_compile_options(aoe_vita PRIVATE -Wall -Wextra)
+  target_link_options(aoe_vita PRIVATE
     "-Wl,-T,${CMAKE_SOURCE_DIR}/cmake/vita_sce_gap.ld")
-  vita_create_self(eboot.bin aoe_vita_demo)
-  vita_create_vpk(VitaAoE.vpk ${VITA_TITLEID} eboot.bin
-    VERSION ${VITA_VERSION}
-    NAME ${VITA_APP_NAME}
+  vita_create_self(eboot.bin aoe_vita)
+  vita_create_vpk(VitaAoE.vpk VAOE00001 eboot.bin
+    VERSION "00.20"
+    NAME "Age of Empires RoR"
     FILE ${CMAKE_SOURCE_DIR}/assets/vita/sce_sys/icon0.png sce_sys/icon0.png
     FILE ${CMAKE_SOURCE_DIR}/assets/vita/sce_sys/livearea/contents/bg.png
          sce_sys/livearea/contents/bg.png
@@ -2042,6 +2050,13 @@ if(VITA)
          sce_sys/livearea/contents/startup.png
     FILE ${CMAKE_SOURCE_DIR}/assets/vita/sce_sys/livearea/contents/template.xml
          sce_sys/livearea/contents/template.xml)
+  # The earlier tech demo (scene, world update and two commands), kept as
+  # its own title; its own directory, because vita_create_vpk is a macro
+  # whose arguments would otherwise carry over from the call above.
+  set(VITA_MKSFOEX_FLAGS "")
+  set(VITA_PACK_VPK_FLAGS "")
+  set(resources "")
+  add_subdirectory(cmake/vita_demo)
 endif()
 
 if(NOT VITA)

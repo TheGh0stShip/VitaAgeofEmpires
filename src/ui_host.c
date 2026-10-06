@@ -214,6 +214,18 @@ static void ez_set_area_palette(void *c, AoeUiAreaRor *area, uintptr_t palette) 
     aoe_draw_set_palette_ror(&h->draw, 0, 256, ((AoeUiHostPaletteRor *)palette)->entries);
 }
 
+/* ---- the mouse pointer (the game's software pointer object) ---- */
+
+static int ez_has_pointer(void *c) { (void)c; return 1; }
+static void ez_set_pointer(void *c, const char *name, int32_t id) {
+    (void)name;
+    HOST(c)->pointer_id = id;
+}
+static void ez_cursor(void *c, int help, int32_t mode) {
+    (void)help;
+    HOST(c)->pointer_mode = mode;
+}
+
 /* ---- fonts and text ---- */
 
 static int ez_font(void *c, int32_t index, uintptr_t *font, int32_t *w, int32_t *hgt) {
@@ -488,6 +500,10 @@ int aoe_ui_host_open_ror(AoeUiHostRor *h, const char *root, int32_t width, int32
     h->ez_ops.shape_ops = &h->shape_draw;
     h->ez_ops.caret_blink_ms = 500;
     h->ez_ops.help_mode = &h->help_mode;
+    h->ez_ops.has_pointer = ez_has_pointer;
+    h->ez_ops.set_pointer = ez_set_pointer;
+    h->ez_ops.cursor = ez_cursor;
+    h->pointer_id = -1;
 
     h->picture_ops.context = h;
     h->picture_ops.load_shape = pic_load_shape;

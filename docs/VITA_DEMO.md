@@ -1,6 +1,8 @@
 # PS Vita tech demo
 
-`VitaAoE.vpk` (title `VAOE00001`) runs the reconstructed Rise of Rome
+`VitaAoEDemo.vpk` (title `VAOE00002`; until 2026-10-06 it was `VitaAoE.vpk` /
+`VAOE00001`, which is now the port, see [VITA_PORT.md](VITA_PORT.md)) runs
+the reconstructed Rise of Rome
 runtime on the Vita. Everything runs on the Vita itself:
 
 - parsing the user's original DAT, DRS and campaign files;
@@ -26,7 +28,7 @@ The original game interface is not reconstructed yet.
 cmake --build build/vita
 ```
 
-This produces `build/vita/VitaAoE.vpk`. It contains only the eboot and the
+This produces `build/vita/cmake/vita_demo/VitaAoEDemo.vpk`. It contains only the eboot and the
 LiveArea images, which `tools/make_vita_livearea.py` draws from scratch. No
 game data is packaged.
 

@@ -1619,3 +1619,60 @@ int aoe_main_view_right_click(const AoeMainViewRightClickOps *o, int32_t x, int3
     }
     return 1;
 }
+
+int aoe_main_view_queue_scroll_ror(AoeMainViewRor *v, AoeMainViewBlitQueueRor *q,
+                                   const int32_t src[4], const int32_t clip[4], int32_t dx,
+                                   int32_t dy) {
+    int32_t n, disjoint = 0, ax = dx < 0 ? -dx : dx, ay = dy < 0 ? -dy : dy;
+    int32_t steps_x = 9999, steps_y = 9999, sx = 0, sy = 0;
+    int32_t l = src[0], t = src[1], r = src[2], b = src[3];
+    if (!v || !q || (dx == 0 && dy == 0)) return 0;
+    if (clip[3] < src[1] || clip[2] < src[0] || src[3] < clip[1] || src[2] < clip[0]) {
+        disjoint = 1;
+        n = 1;
+    } else {
+        if (dy) steps_y = (ay + (src[3] - src[1])) / ay;
+        if (dx) steps_x = ((src[2] - src[0]) + ax) / ax;
+        if (steps_y < steps_x) {
+            n = steps_y;
+            sy = dy;
+            if (dy < 0) t = src[3] + 1 + dy;
+        } else {
+            n = steps_x;
+            sx = dx;
+            if (dx < 0) l = src[2] + 1 + dx; else r = dx - 1 + src[0];
+        }
+    }
+    if (q->capacity < n) {
+        free(q->list);
+        q->list = NULL;
+    }
+    if (!q->list) {
+        q->list = calloc((size_t)n, sizeof *q->list);
+        if (!q->list) return 0;
+        q->capacity = n;
+    }
+    if (disjoint) {
+        q->list[0].left = src[0]; q->list[0].top = src[1]; q->list[0].right = src[2]; q->list[0].bottom = src[3];
+        q->list[0].dest_x = clip[0]; q->list[0].dest_y = clip[1];
+        q->list[0].dest_right = clip[2]; q->list[0].dest_bottom = clip[3];
+    } else {
+        int32_t i;
+        for (i = 0; i < n; ++i) {
+            AoeMainViewBlitRor *e = &q->list[i];
+            e->left = l; e->top = t; e->right = r; e->bottom = b;
+            e->dest_x = l - dx; e->dest_y = t - dy; e->dest_right = r - dx; e->dest_bottom = b - dy;
+            t += sy; l += sx; r += sx;
+            if (t < src[1]) t = src[1];
+            if (l < src[0]) l = src[0];
+            if (r > src[2]) r = src[2];
+        }
+    }
+    v->blits_active = 1;
+    v->blits = q->list;
+    v->blit_count = n;
+    v->blit_index = -1;
+    v->blit_off_x = v->left;
+    v->blit_off_y = v->top;
+    return n;
+}

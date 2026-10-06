@@ -264,4 +264,39 @@ typedef struct {
 } AoeScenarioEditorResizeOpsRor;
 int aoe_scenario_editor_resize_ror(int32_t w, int32_t h, const AoeScenarioEditorResizeOpsRor *ops);
 
+
+/* 0x00494b60: a new scenario in the editor. Without a world one is made
+   (status 0x44d first when `with_status`; a failure closes the status
+   and returns 0); the editor takes the game's world (+0x928); status
+   0x44e (`kind` 0) or 0x44f; the request: 8 players named by strings
+   0x2865..0x286c (0x00490210), civilisation 0, team numbers cycling 1..
+   (the world's +0x44 - 1), -1 in the +0x570 slots and slot indices
+   0..8, `kind`, the two sizes, flag 0; the game's +0x60 busy byte set
+   around the world's generate (+0xd4 with `arg`); fewer than 8 players
+   afterwards fails and clears the world (+0xb8). On success with the
+   editor's +0x5b8 list the first inactive scenario slot i (0x00476250)
+   in 1..7 selects count line i - 1 (0x00461d50) and 0x0049a350 runs. */
+typedef struct {
+    void *context;
+    int (*has_world)(void *context);
+    int (*ensure_world)(void *context);
+    void (*status)(void *context, int32_t text_id);
+    void (*status_close)(void *context);
+    void (*player_name)(void *context, int32_t string_id, char *out, int size); /* 0x00490210 */
+    int16_t (*max_team)(void *context);                   /* world +0x44 */
+    void (*set_busy)(void *context, int on);              /* game +0x60's byte +1 */
+    int (*generate)(void *context, int32_t kind, const char names[8][0x41], const uint8_t civs[8],
+                    const uint8_t teams[8], const int16_t slots_570[8], const int32_t order[9],
+                    int16_t size_a, int16_t size_b, int32_t arg);
+    int16_t (*world_player_count)(void *context);         /* world +0x3c */
+    void (*clear_world)(void *context);                   /* world +0xb8 */
+    int has_player_list;                                  /* +0x5b8 */
+    int (*slot_active)(void *context, int32_t slot);      /* 0x00476250 */
+    void (*select_count)(void *context, int32_t line);    /* 0x00461d50 */
+    void (*player_count_changed)(void *context);          /* 0x0049a350 */
+} AoeScenarioEditorNewOpsRor;
+int aoe_scenario_editor_new_scenario_ror(const AoeScenarioEditorNewOpsRor *o, int32_t kind,
+                                         int32_t arg, int16_t size_a, int16_t size_b,
+                                         int with_status);
+
 #endif

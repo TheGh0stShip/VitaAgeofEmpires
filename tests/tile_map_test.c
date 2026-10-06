@@ -178,6 +178,17 @@ static void terrain_objects_tests(void) {
     assert(to_removed[1] == 1 && to_removed[2] == 0 && to_removed[3] == 0);
     assert(to_created == 1 && to_cid[0] == 300 && to_cx[0] == 6.0f && to_cy[0] > 7.99f && to_cy[0] <= 8.0f);
 }
+
+static void terrain_entry_tests(void) {
+    AoeTerrainObjectsOpsRor o = {NULL, to_first, to_nxt, to_t, to_own, to_terrain, to_count, to_id, to_den, to_mode, to_has, to_can, to_create, to_remove, to_destroy, to_rand};
+    int before = to_created;
+    to_rand_i = 0;
+    aoe_tilemap_place_terrain_entry_ror(&o, 1, 6, 7, 1); /* one attempt, no sweep */
+    assert(to_created == before + 1 && to_removed[1] == 1);
+    to_rand_i = 0;
+    aoe_tilemap_place_terrain_entry_ror(&o, 1, 6, 7, 0); /* full density, same rands as the sweep test */
+    assert(to_created == before + 2);
+}
 int main(void) {
     clamp_footprint();
     AoeTileMapOpsRor ops = {NULL, t_resize, t_refresh, t_rect, t_cell, t_begin, t_end, t_border, t_used};
@@ -304,5 +315,6 @@ int main(void) {
     test_map_release_owned();
     sweep_tests();
     terrain_objects_tests();
+    terrain_entry_tests();
     return 0;
 }

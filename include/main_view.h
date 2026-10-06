@@ -85,6 +85,7 @@ typedef struct {
 typedef struct {
     int32_t left, top, right, bottom;
     int32_t dest_x, dest_y;
+    int32_t dest_right, dest_bottom; /* +0x18, +0x1c (0x00510190 fills them) */
 } AoeMainViewBlitRor;
 
 /* 0x00511430 result (five dwords, the third holding two 16-bit fields). */
@@ -1136,5 +1137,23 @@ typedef struct {
 } AoeMainViewRightClickOps;
 int aoe_main_view_right_click(const AoeMainViewRightClickOps *o, int32_t x, int32_t y,
                               int32_t unit);
+
+
+/* 0x00510190: the scroll blit queue for a shift of (dx, dy) of the view
+   rectangle `src` within the clip rectangle `clip` (nothing for 0, 0).
+   Disjoint rectangles queue one blit of the whole view to the clip.
+   Otherwise the strips: the axis with fewer steps ((extent + |d|) / |d|)
+   is chosen; each record covers a strip of the view (its first row /
+   column shifted for a negative d) whose destination is the strip less
+   (dx, dy), stepping by (dx, dy) and clamping to the view. The list
+   (+0x2dc, capacity +0x2e4) grows when short; the queue becomes active
+   (+0x2d8) with the count, index -1 and the offset (+0x8c, +0x90). */
+typedef struct {
+    AoeMainViewBlitRor *list;  /* +0x2dc */
+    int32_t capacity;          /* +0x2e4 */
+} AoeMainViewBlitQueueRor;
+int aoe_main_view_queue_scroll_ror(AoeMainViewRor *v, AoeMainViewBlitQueueRor *q,
+                                   const int32_t src[4], const int32_t clip[4], int32_t dx,
+                                   int32_t dy);
 
 #endif

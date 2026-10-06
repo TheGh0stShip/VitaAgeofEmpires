@@ -290,6 +290,35 @@ static void editor_release_tests(void) {
            att_mm_player == (void *)77);
 }
 
+
+static int ns_world = 0, ns_ensure_ok = 1, ns_gen_ok = 1, ns_players = 8; static int32_t ns_status[4], ns_nstatus, ns_closed, ns_busy[2], ns_nbusy, ns_cleared, ns_selected = -1, ns_changed;
+static int32_t ns_kind, ns_arg; static int16_t ns_sa, ns_sb; static char ns_name3[0x41]; static uint8_t ns_teams[8];
+static int ns_has(void *c) { (void)c; return ns_world; }
+static int ns_ensure(void *c) { (void)c; return ns_ensure_ok; }
+static void ns_st(void *c, int32_t id) { (void)c; if (ns_nstatus < 4) ns_status[ns_nstatus] = id; ++ns_nstatus; }
+static void ns_stclose(void *c) { (void)c; ++ns_closed; }
+static void ns_pname(void *c, int32_t id, char *o, int n) { (void)c; snprintf(o, (size_t)n, "P%d", (int)(id - 0x2865)); }
+static int16_t ns_maxteam(void *c) { (void)c; return 4; }
+static void ns_busy_f(void *c, int on) { (void)c; if (ns_nbusy < 2) ns_busy[ns_nbusy] = on; ++ns_nbusy; }
+static int ns_gen(void *c, int32_t kind, const char names[8][0x41], const uint8_t civs[8], const uint8_t teams[8], const int16_t s570[8], const int32_t order[9], int16_t a, int16_t b, int32_t arg) {
+    (void)c; (void)civs; ns_kind = kind; ns_arg = arg; ns_sa = a; ns_sb = b; snprintf(ns_name3, sizeof ns_name3, "%s", names[3]); memcpy(ns_teams, teams, 8); assert(s570[0] == -1 && order[8] == 8 && order[2] == 2); return ns_gen_ok;
+}
+static int16_t ns_count(void *c) { (void)c; return (int16_t)ns_players; }
+static void ns_clear(void *c) { (void)c; ++ns_cleared; }
+static int ns_active(void *c, int32_t slot) { (void)c; return slot < 3; }
+static void ns_select(void *c, int32_t line) { (void)c; ns_selected = line; }
+static void ns_changed_f(void *c) { (void)c; ++ns_changed; }
+static void new_scenario_tests(void) {
+    AoeScenarioEditorNewOpsRor o = {NULL, ns_has, ns_ensure, ns_st, ns_stclose, ns_pname, ns_maxteam, ns_busy_f, ns_gen, ns_count, ns_clear, 1, ns_active, ns_select, ns_changed_f};
+    assert(aoe_scenario_editor_new_scenario_ror(&o, 0, 77, 100, 120, 1) == 1);
+    assert(ns_status[0] == 0x44d && ns_status[1] == 0x44e && ns_kind == 0 && ns_arg == 77 && ns_sa == 100 && ns_sb == 120 &&
+           strcmp(ns_name3, "P3") == 0 && ns_teams[0] == 1 && ns_teams[2] == 3 && ns_teams[3] == 1 && ns_busy[0] == 1 && ns_busy[1] == 0 &&
+           ns_selected == 2 && ns_changed == 1);
+    ns_world = 1; ns_players = 5; ns_nstatus = 0;
+    assert(aoe_scenario_editor_new_scenario_ror(&o, 1, 0, 1, 1, 1) == 0 && ns_status[0] == 0x44f && ns_cleared == 1);
+    ns_world = 0; ns_ensure_ok = 0;
+    assert(aoe_scenario_editor_new_scenario_ror(&o, 1, 0, 1, 1, 1) == 0 && ns_closed == 1);
+}
 int main(void) {
     AoeUiPlatformRor pf = {0};
     static AoeUiSystemRor sys;
@@ -874,5 +903,6 @@ int main(void) {
     }
     editor_release_tests();
     editor_key_tests();
+    new_scenario_tests();
     return 0;
 }

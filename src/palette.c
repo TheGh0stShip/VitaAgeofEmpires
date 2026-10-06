@@ -1,5 +1,6 @@
 #include "palette.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 static int next_uint(const char **cursor, const char *end, unsigned *value) {
@@ -103,5 +104,55 @@ void palette_install_system_ror(const uint8_t system[256][4], const uint8_t game
             out[idx][2] = (uint8_t)((c >> 16) & 0xff);
             out[idx][3] = 0;
         }
+    }
+}
+
+static const char *next_token(const char *p, char *out, int size) {
+    int n = 0;
+    while (*p == ' ' || *p == '\n' || *p == '\r' || *p == '\t') ++p;
+    if (!*p) return NULL;
+    while (*p && *p != ' ' && *p != '\n' && *p != '\r' && *p != '\t') {
+        if (n + 1 < size) out[n++] = *p;
+        ++p;
+    }
+    out[n] = 0;
+    return p;
+}
+
+int palette_parse_text_ror(const char *text, Palette *out, int *count_out, int *complete) {
+    char tok[64];
+    const char *p = text;
+    int count, i, got = 0;
+    if (complete) *complete = 0;
+    if (count_out) *count_out = 0;
+    if (!text || !out) return 0;
+    if (!(p = next_token(p, tok, sizeof tok))) return 0; /* JASC-PAL */
+    if (!(p = next_token(p, tok, sizeof tok))) return 0; /* 0100 */
+    if (!(p = next_token(p, tok, sizeof tok))) return 0; /* count */
+    count = atoi(tok);
+    if (count < 0 || count > 256) return 0;
+    if (count_out) *count_out = count;
+    for (i = 0; i < count; ++i) {
+        if (!(p = next_token(p, tok, sizeof tok))) break;
+        out->colors[i].r = (uint8_t)atoi(tok);
+        if (!(p = next_token(p, tok, sizeof tok))) break;
+        out->colors[i].g = (uint8_t)atoi(tok);
+        if (!(p = next_token(p, tok, sizeof tok))) break;
+        out->colors[i].b = (uint8_t)atoi(tok);
+        if (i == count - 1) got = 1;
+    }
+    if (complete) *complete = got;
+    if (got && count == 256) palette_apply_static_colors_ror(out);
+    return got;
+}
+
+void palette_apply_static_colors_ror(Palette *p) {
+    int i;
+    if (!p) return;
+    for (i = 0; i < 20; ++i) {
+        uint32_t idx = static_colors[i][0], c = static_colors[i][1];
+        p->colors[idx].r = (uint8_t)(c & 0xff);
+        p->colors[idx].g = (uint8_t)((c >> 8) & 0xff);
+        p->colors[idx].b = (uint8_t)((c >> 16) & 0xff);
     }
 }

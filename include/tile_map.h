@@ -285,4 +285,12 @@ void aoe_tilemap_place_terrain_objects_ror(const AoeTerrainObjectsOpsRor *o, int
                                            int32_t x, int32_t y, int32_t filter,
                                            int32_t delete_them, int32_t lo, int32_t hi);
 
+
+/* 0x004477b0 (map method): the terrain objects of tile (x, y) for a
+   player without the sweep. `once` 0 places every table entry by density
+   as 0x00447390 does; `once` 1 makes one attempt per entry at a point by
+   its mode and returns after the first object made. */
+void aoe_tilemap_place_terrain_entry_ror(const AoeTerrainObjectsOpsRor *o, int32_t player,
+                                         int32_t x, int32_t y, int32_t once);
+
 #endif

@@ -519,3 +519,49 @@ void aoe_tilemap_place_terrain_objects_ror(const AoeTerrainObjectsOpsRor *o, int
         }
     }
 }
+
+void aoe_tilemap_place_terrain_entry_ror(const AoeTerrainObjectsOpsRor *o, int32_t player,
+                                         int32_t x, int32_t y, int32_t once) {
+    uint8_t terrain;
+    int16_t count, i;
+    if (!o) return;
+    terrain = o->terrain_at(o->context, x, y);
+    count = o->table_count(o->context, terrain);
+    for (i = 0; i < count; ++i) {
+        int16_t id = o->table_id(o->context, terrain, i);
+        int32_t density, left;
+        uint8_t mode;
+        if (id == -1) continue;
+        density = o->table_density(o->context, terrain, i);
+        mode = o->table_mode(o->context, terrain, i);
+        if (!o->player_has_template(o->context, player, id)) continue;
+        if (once == 0) {
+            for (left = density; left > 0; left -= 1000) {
+                float px = 0.0f, py = 0.0f;
+                if (mode == 0) {
+                    px = (float)o->rand(o->context) * 3.0518509447574615e-05f + (float)x;
+                    py = (float)o->rand(o->context) * 3.0518509447574615e-05f + (float)y;
+                } else {
+                    px = (float)x + 0.5f;
+                    py = (float)y + 0.5f;
+                }
+                if ((left > 999 || (o->rand(o->context) * 1000) / 0x7fff < left) &&
+                    !o->can_place(o->context, player, id, px, py))
+                    o->create(o->context, player, id, px, py);
+            }
+        } else if (once == 1) {
+            float px, py;
+            if (mode == 0) {
+                px = (float)o->rand(o->context) * 3.0518509447574615e-05f + (float)x;
+                py = (float)o->rand(o->context) * 3.0518509447574615e-05f + (float)y;
+            } else {
+                px = (float)x + 0.5f;
+                py = (float)y + 0.5f;
+            }
+            if (!o->can_place(o->context, player, id, px, py)) {
+                o->create(o->context, player, id, px, py);
+                return;
+            }
+        }
+    }
+}

@@ -628,4 +628,32 @@ void aoe_game_screen_help_text_ror(const AoeGameScreenHelpTextOpsRor *o, int32_t
                                    const AoeGameScreenCostRor costs[3], int has_costs,
                                    char *out, int size);
 
+
+/* 0x00484110 (+0x30 draw). While the demo recorder runs (0x00580e48):
+   the clip rectangle (+0x24..+0x30) is saved, the draw begun (0), the
+   view's rectangle filled with colour 0x74 under the "scr_game::draw"
+   lock (the clip bottom raised to the view's), then under "scr_game::
+   draw2" the logo shape (+0x478) frame 0 at (0, 0) and frame 1 at
+   (0, 354 / 474 / 642 by the screen being below 800 x 600 / below
+   1024 x 768 / larger), the draw ended and the clip restored. Otherwise
+   the draw begins with 1 when the redraw level is 2 or there is no
+   shape, the shape is drawn the same way under "scr_game::draw3" and
+   the draw ends. */
+typedef struct {
+    void *context;
+    int (*recording)(void *context);
+    int32_t (*redraw_level)(void *context);
+    void (*begin_draw)(void *context, int32_t clear);
+    void (*end_draw)(void *context);
+    void (*get_clip)(void *context, int32_t ltrb[4]);
+    void (*set_clip)(void *context, const int32_t ltrb[4]);
+    int (*lock)(void *context, const char *who);
+    void (*unlock)(void *context, const char *who);
+    int (*view_rect)(void *context, int32_t ltrb[4]);      /* 0 without a view */
+    void (*box)(void *context, int32_t l, int32_t t, int32_t r, int32_t b, uint8_t color);
+    int (*has_shape)(void *context);
+    void (*shape_draw)(void *context, int32_t frame, int32_t x, int32_t y);
+} AoeGameScreenDrawOpsRor;
+void aoe_game_screen_draw_ror(const AoeGameScreenRor *s, const AoeGameScreenDrawOpsRor *o);
+
 #endif

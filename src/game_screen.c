@@ -1004,3 +1004,39 @@ void aoe_game_screen_help_text_ror(const AoeGameScreenHelpTextOpsRor *o, int32_t
         snprintf(out, (size_t)size, "%s", name);
     }
 }
+
+static int32_t logo_y(const AoeGameScreenRor *s) {
+    if (s->width < 0x400 || s->height < 0x300) return (s->width < 800 || s->height < 600) ? 0x162 : 0x1da;
+    return 0x282;
+}
+
+static void draw_logo(const AoeGameScreenRor *s, const AoeGameScreenDrawOpsRor *o, const char *who) {
+    if (!o->has_shape(o->context) || !o->lock(o->context, who)) return;
+    o->shape_draw(o->context, 0, 0, 0);
+    o->shape_draw(o->context, 1, 0, logo_y(s));
+    o->unlock(o->context, who);
+}
+
+void aoe_game_screen_draw_ror(const AoeGameScreenRor *s, const AoeGameScreenDrawOpsRor *o) {
+    if (!s || !o) return;
+    if (o->recording(o->context)) {
+        int32_t clip[4], view[4];
+        o->get_clip(o->context, clip);
+        o->begin_draw(o->context, 0);
+        if (o->view_rect(o->context, view) && o->lock(o->context, "scr_game::draw")) {
+            int32_t work[4];
+            o->box(o->context, view[0], view[1], view[2], view[3], 0x74);
+            o->unlock(o->context, "scr_game::draw");
+            memcpy(work, clip, sizeof work);
+            if (work[1] < view[3]) work[1] = view[3];
+            o->set_clip(o->context, work);
+        }
+        draw_logo(s, o, "scr_game::draw2");
+        o->end_draw(o->context);
+        o->set_clip(o->context, clip);
+        return;
+    }
+    o->begin_draw(o->context, (o->redraw_level(o->context) == 2 || !o->has_shape(o->context)) ? 1 : 0);
+    draw_logo(s, o, "scr_game::draw3");
+    o->end_draw(o->context);
+}

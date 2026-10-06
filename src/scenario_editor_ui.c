@@ -429,3 +429,50 @@ int aoe_scenario_editor_resize_ror(int32_t w, int32_t h, const AoeScenarioEditor
     if (o->base_set_rect) o->base_set_rect(o->context, w, h);
     return 0;
 }
+
+int aoe_scenario_editor_new_scenario_ror(const AoeScenarioEditorNewOpsRor *o, int32_t kind,
+                                         int32_t arg, int16_t size_a, int16_t size_b,
+                                         int with_status) {
+    char names[8][0x41];
+    uint8_t civs[8], teams[8];
+    int16_t slots[8];
+    int32_t order[9];
+    int32_t i, team = 0, max;
+    int ok;
+    if (!o) return 0;
+    if (!o->has_world(o->context)) {
+        if (with_status) o->status(o->context, 0x44d);
+        if (!o->ensure_world(o->context)) {
+            if (with_status) o->status_close(o->context);
+            return 0;
+        }
+    }
+    if (with_status) o->status(o->context, kind == 0 ? 0x44e : 0x44f);
+    max = o->max_team(o->context);
+    for (i = 0; i < 8; ++i) {
+        if (++team >= max) team = 1;
+        o->player_name(o->context, 0x2865 + i, names[i], 0x41);
+        civs[i] = 0;
+        teams[i] = (uint8_t)team;
+        slots[i] = -1;
+        order[i] = i;
+    }
+    order[8] = 8;
+    o->set_busy(o->context, 1);
+    ok = o->generate(o->context, kind, names, civs, teams, slots, order, size_a, size_b, arg);
+    if (ok && o->world_player_count(o->context) < 8) {
+        ok = 0;
+        o->clear_world(o->context);
+    }
+    o->set_busy(o->context, 0);
+    if (ok && o->has_player_list) {
+        for (i = 0; i < 8; ++i) {
+            if (!o->slot_active(o->context, i)) {
+                if (i > 0 && i < 8) o->select_count(o->context, i - 1);
+                break;
+            }
+        }
+        o->player_count_changed(o->context);
+    }
+    return ok;
+}

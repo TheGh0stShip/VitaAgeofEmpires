@@ -46,4 +46,16 @@ int palette_water_cycle_next(int start);
 void palette_install_system_ror(const uint8_t system[256][4], const uint8_t game[256][4],
                                 int got_system, int got_game, uint8_t out[256][4]);
 
+
+/* 0x0042eb90: a JASC text palette from a file (the name, when the
+   0x007c0464 flag allows files) or the "bina" resource `id`, parsed with
+   strtok over " \n": the "JASC-PAL" and "0100" tokens, the count, then
+   count RGB triples (flags 0). Only a fully read table counts; a table of
+   256 entries takes the Windows static colours (palette_install_system_ror's
+   table) and, with `install` and the game window's +0x478 / +0x479 flags,
+   is installed over the system palette (0x0042f6a0: the caller's step).
+   Here the text is given; returns 1 with `out` filled, 0 otherwise. */
+int palette_parse_text_ror(const char *text, Palette *out, int *count_out, int *complete);
+void palette_apply_static_colors_ror(Palette *p);
+
 #endif

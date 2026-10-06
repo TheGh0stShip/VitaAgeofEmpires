@@ -493,6 +493,36 @@ static void help_text_tests(void) {
     aoe_game_screen_help_text_ror(&o, 6, costs, 1, out, sizeof out);
     assert(out[0] == 0);
 }
+
+static int dr_rec, dr_level = 1, dr_shape = 1, dr_has_view = 1; static int32_t dr_clip[4] = {0, 0, 639, 479}, dr_set_clip[8], dr_nset, dr_begin_arg = -1, dr_frames[4], dr_ys[4], dr_nframes, dr_box_color;
+static const char *dr_last_lock;
+static int dr_recording(void *c) { (void)c; return dr_rec; }
+static int32_t dr_lvl(void *c) { (void)c; return dr_level; }
+static void dr_begin(void *c, int32_t clear) { (void)c; dr_begin_arg = clear; }
+static void dr_end(void *c) { (void)c; }
+static void dr_getclip(void *c, int32_t r[4]) { (void)c; memcpy(r, dr_clip, sizeof dr_clip); }
+static void dr_setclip(void *c, const int32_t r[4]) { (void)c; if (dr_nset < 2) memcpy(dr_set_clip + dr_nset * 4, r, 16); ++dr_nset; }
+static int dr_lock(void *c, const char *w) { (void)c; dr_last_lock = w; return 1; }
+static void dr_unlock(void *c, const char *w) { (void)c; (void)w; }
+static int dr_view(void *c, int32_t r[4]) { (void)c; r[0] = 10; r[1] = 20; r[2] = 300; r[3] = 250; return dr_has_view; }
+static void dr_box(void *c, int32_t l, int32_t t, int32_t r, int32_t b, uint8_t col) { (void)c; (void)l; (void)t; (void)r; (void)b; dr_box_color = col; }
+static int dr_has_shape(void *c) { (void)c; return dr_shape; }
+static void dr_draw(void *c, int32_t f, int32_t x, int32_t y) { (void)c; (void)x; if (dr_nframes < 4) { dr_frames[dr_nframes] = f; dr_ys[dr_nframes] = y; } ++dr_nframes; }
+static void draw_tests(void) {
+    AoeGameScreenRor s;
+    AoeGameScreenDrawOpsRor o = {NULL, dr_recording, dr_lvl, dr_begin, dr_end, dr_getclip, dr_setclip, dr_lock, dr_unlock, dr_view, dr_box, dr_has_shape, dr_draw};
+    setup(&s);
+    s.width = 800; s.height = 600;
+    aoe_game_screen_draw_ror(&s, &o);
+    assert(dr_begin_arg == 0 && dr_nframes == 2 && dr_frames[1] == 1 && dr_ys[1] == 0x1da && strcmp(dr_last_lock, "scr_game::draw3") == 0);
+    dr_level = 2; dr_nframes = 0; s.width = 1024; s.height = 768;
+    aoe_game_screen_draw_ror(&s, &o);
+    assert(dr_begin_arg == 1 && dr_ys[1] == 0x282);
+    dr_rec = 1; dr_nframes = 0; dr_nset = 0; s.width = 640; s.height = 480;
+    aoe_game_screen_draw_ror(&s, &o);
+    assert(dr_box_color == 0x74 && dr_set_clip[1] == 250 && dr_set_clip[5] == 0 && dr_nset == 2 && dr_ys[1] == 0x162 &&
+           strcmp(dr_last_lock, "scr_game::draw2") == 0);
+}
 int main(void) {
     AoeGameScreenRor s;
     AoeGameScreenButtonRor b;
@@ -864,5 +894,6 @@ int main(void) {
     command_tests();
     player_changed_tests();
     help_text_tests();
+    draw_tests();
     return 0;
 }

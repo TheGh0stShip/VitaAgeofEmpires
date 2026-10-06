@@ -1147,6 +1147,23 @@ static void test_right_click(void)
     assert(aoe_main_view_right_click(&o, 5, 6, 0) == 0);
 }
 
+
+static void test_queue_scroll(void)
+{
+    AoeMainViewRor v; AoeMainViewBlitQueueRor q = {NULL, 0};
+    int32_t src[4] = {0, 0, 99, 49}, clip[4] = {0, 0, 199, 99}, far[4] = {500, 500, 600, 600};
+    memset(&v, 0, sizeof v); v.left = 7; v.top = 9;
+    assert(aoe_main_view_queue_scroll_ror(&v, &q, src, clip, 0, 0) == 0);
+    /* dy = 10: 5 strips (49 + 10) / 10, each moved up by 10. */
+    assert(aoe_main_view_queue_scroll_ror(&v, &q, src, clip, 0, 10) == 5 && q.capacity == 5);
+    assert(v.blits_active == 1 && v.blit_count == 5 && v.blit_index == -1 && v.blit_off_x == 7 && v.blit_off_y == 9);
+    assert(q.list[0].top == 0 && q.list[0].dest_y == -10 && q.list[0].bottom == 49 && q.list[1].top == 10 && q.list[4].top == 40);
+    /* dx = -20: 5 strips starting at the shifted first column 80. */
+    assert(aoe_main_view_queue_scroll_ror(&v, &q, src, clip, -20, 0) == 5 && q.list[0].left == 80 && q.list[0].dest_x == 100 && q.list[1].left == 60);
+    /* Disjoint rectangles: one blit of the whole view onto the clip. */
+    assert(aoe_main_view_queue_scroll_ror(&v, &q, src, far, 3, 0) == 1 && q.list[0].dest_x == 500 && q.list[0].dest_bottom == 600);
+    free(q.list);
+}
 int main(void)
 {
     AoeMainViewRor v;
@@ -1333,5 +1350,6 @@ int main(void)
     test_setup_and_preview();
     test_editor_preview();
     test_right_click();
+    test_queue_scroll();
     return 0;
 }

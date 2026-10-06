@@ -1171,3 +1171,92 @@ int aoe_comm_join_lobby_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp, int32_t ga
     c->lobby_joined = named ? 1 : 0;
     return named ? 1 : 0;
 }
+
+/* ---- 0x00424a90 ---- */
+int aoe_comm_join_session_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp,
+                              const AoeCommJoinOpsRor *join, const uint32_t guid[4]) {
+    int32_t hr;
+    char line[96];
+    if (!c || !dp || !join) return 0;
+    if (!OPS->dp_present(CTX)) {
+        OPS->log(CTX, "JMPG: Create w/no valid glpIDC");
+        return 0;
+    }
+    memcpy(c->guid_12fc, guid, sizeof c->guid_12fc);
+    c->is_host = 0;
+    snprintf(line, sizeof line, "Open session for JOIN. Session DPID = %lx", (unsigned long)guid[0]);
+    OPS->log(CTX, line);
+    hr = join->open_join(join->context, guid, c->session_guid);
+    if ((uint32_t)hr == 0x8877015eu) {
+        OPS->log(CTX, "DPERR_CONNECTING in JoinMultiplayerGame");
+        OPS->report(CTX, hr, "Join MP Game");
+        return 0;
+    }
+    if ((uint32_t)hr == 0x88770005u) {
+        OPS->log(CTX, "DPERR_ALREADYINITIALIZED in JoinMultiplayerGame");
+        OPS->report(CTX, hr, "Join MP Game");
+        return 0;
+    }
+    if ((uint32_t)hr == 0x8877014au) {
+        OPS->log(CTX, "DPERR_NONEWPLAYERS in JoinMultiplayerGame");
+        OPS->report(CTX, hr, "Join MP Game");
+        if (join->post_error) join->post_error(join->context, 0x17ab);
+        return 0;
+    }
+    if (hr != 0) {
+        OPS->log(CTX, "hr != DP_OK in JoinMultiplayerGame");
+        OPS->report(CTX, hr, "Join MP Game");
+        c->state = 1;
+        return 0;
+    }
+    if (aoe_comm_dp_add_self_ror(c, dp)) {
+        c->state = 3;
+        return 1;
+    }
+    OPS->log(CTX, "AddSelfPlayer failed in JoinMultiplayerGame");
+    return 0;
+}
+
+/* ---- 0x00425bb0 ---- */
+int32_t aoe_comm_lobby_connect_ror(AoeCommRor *c, const AoeCommLobbyOpsRor *l,
+                                   int *has_interface) {
+    int32_t hr;
+    uint32_t size = 0;
+    if (!c || !l || !has_interface) return 0;
+    *has_interface = 0;
+    l->free_settings(l->context);
+    hr = l->lobby_create(l->context);
+    OPS->report(CTX, hr, "Lobby Create");
+    if (hr < 0) return 0;
+    if (!l->lobby_interface(l->context)) return 0;
+    l->settings_size(l->context, &size);
+    hr = l->settings_read(l->context);
+    if (hr < 0) {
+        l->set_launched(l->context, 0);
+        return 0;
+    }
+    OPS->log(CTX, "LOBBY LAUNCHED GAME!");
+    l->settings_patch(l->context, 0x44, 9);
+    l->settings_write(l->context);
+    OPS->log(CTX, "Pre connect");
+    hr = l->connect(l->context);
+    OPS->log(CTX, "Post Connect");
+    if (hr < 0) {
+        if ((uint32_t)hr == 0x887700f0u) return 0xff;
+        OPS->log(CTX, "Failed to connect!");
+        OPS->report(CTX, hr, "Connect");
+        return 0xff;
+    }
+    OPS->log(CTX, "Pre QI");
+    hr = l->query_interface(l->context, has_interface);
+    OPS->report(CTX, hr, "Lobby QI");
+    if (hr < 0) {
+        OPS->log(CTX, "Queryinterface failed!");
+        return 0xff;
+    }
+    OPS->log(CTX, "Calling enumeration of players.");
+    l->enum_players(l->context);
+    OPS->log(CTX, "Post ENUMP");
+    l->set_launched(l->context, 1);
+    return 1;
+}

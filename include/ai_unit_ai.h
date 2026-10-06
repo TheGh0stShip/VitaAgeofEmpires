@@ -533,4 +533,33 @@ typedef struct {
 } AoeAiUnitAiMemoryOpsRor;
 int32_t aoe_ai_unit_ai_remembered_ror(const AoeAiUnitAiMemoryOpsRor *ops, uint32_t *cost);
 
+
+/* 0x004131c0 (a unit AI slot, after the nearby scan): the target
+   (0x00414f40) is told to our unit (+0x20); then every object of nearby
+   buckets 1 and 2 other than ours that has a unit AI, an owner, a state
+   below 3, a class not 1, 3, 4, 0x12, 0x14, 0x15 or 0x1b, our owner or
+   one allied to it (owner +0x1c), within 3.0 (0x004aaeb0), and whose AI
+   is idle (no path cursor 0x00458400, no action 0x0040f6b0, +0x10 at
+   most 0) gets order 700 for the target through its owner AI (+0x10:
+   its owner, 700, the target, our owner, the target's x and y twice
+   over, our unit's +0x10c(1, 0, 0x32) range). */
+typedef struct {
+    void *context;
+    int (*target)(void *context, int32_t id, float *x, float *y, int16_t *owner);
+    void (*tell_unit)(void *context);                     /* +0x20 */
+    int32_t (*bucket_count)(void *context, int bucket);
+    int32_t (*bucket_object)(void *context, int bucket, int32_t i);
+    int32_t own_id;
+    int16_t own_owner;
+    int (*object)(void *context, int32_t id, int *has_ai, int16_t *owner, uint8_t *state,
+                  int16_t *unit_class);
+    int (*allied)(void *context, int16_t owner, int16_t with);
+    float (*distance)(void *context, int32_t id);
+    int (*ai_idle)(void *context, int32_t id);
+    float (*own_range)(void *context);
+    void (*order)(void *context, int16_t owner, int32_t code, int32_t target, int16_t our_owner,
+                  float x, float y, float range);
+} AoeAiUnitAiRallyOpsRor;
+int32_t aoe_ai_unit_ai_rally_ror(int32_t target_id, const AoeAiUnitAiRallyOpsRor *o);
+
 #endif

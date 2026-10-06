@@ -586,6 +586,32 @@ static void scan_tests(void) {
     mem_fail_at = 1; reach_at = 5;
     assert(aoe_ai_unit_ai_remembered_ror(&m, NULL) == -1);
 }
+
+static int32_t ry_counts[3] = {0, 2, 1}; static int32_t ry_objs[3][2] = {{0, 0}, {1, 2}, {3, 0}};
+static int ry_has[4] = {1, 1, 1, 1}; static int16_t ry_owner[4] = {0, 2, 3, 2}; static uint8_t ry_state[4]; static int16_t ry_cls[4];
+static float ry_dist[4] = {0, 1.0f, 2.0f, 5.0f}; static int ry_idle[4] = {1, 1, 1, 1}; static int ry_orders; static int16_t ry_last_owner;
+static int ry_target(void *c, int32_t id, float *x, float *y, int16_t *o) { (void)c; (void)id; *x = 7.0f; *y = 8.0f; *o = 9; return 1; }
+static void ry_tell(void *c) { (void)c; }
+static int32_t ry_bcount(void *c, int b) { (void)c; return ry_counts[b]; }
+static int32_t ry_bobj(void *c, int b, int32_t i) { (void)c; return ry_objs[b][i]; }
+static int ry_object(void *c, int32_t id, int *h, int16_t *o, uint8_t *s, int16_t *cl) { (void)c; *h = ry_has[id]; *o = ry_owner[id]; *s = ry_state[id]; *cl = ry_cls[id]; return 1; }
+static int ry_allied(void *c, int16_t a, int16_t b) { (void)c; return a == 3 && b == 2; }
+static float ry_distance(void *c, int32_t id) { (void)c; return ry_dist[id]; }
+static int ry_is_idle(void *c, int32_t id) { (void)c; return ry_idle[id]; }
+static float ry_range(void *c) { (void)c; return 4.5f; }
+static void ry_order(void *c, int16_t owner, int32_t code, int32_t target, int16_t ours, float x, float y, float r) {
+    (void)c; assert(code == 700 && target == 55 && ours == 2 && x == 7.0f && y == 8.0f && r == 4.5f); ry_last_owner = owner; ++ry_orders;
+}
+static void rally_tests(void) {
+    AoeAiUnitAiRallyOpsRor o = {NULL, ry_target, ry_tell, ry_bcount, ry_bobj, 2, 2, ry_object, ry_allied, ry_distance, ry_is_idle, ry_range, ry_order};
+    /* Objects 1 (ours) and 3 (allied owner 3? no: object 3 is owner 2 but 5.0 away): only 1 rallies;
+       object 2 is ours by ID and skipped. */
+    assert(aoe_ai_unit_ai_rally_ror(55, &o) == 1 && ry_last_owner == 2);
+    ry_dist[3] = 2.5f; ry_owner[3] = 3; /* allied and near now */
+    assert(aoe_ai_unit_ai_rally_ror(55, &o) == 2 && ry_last_owner == 3);
+    ry_cls[1] = 0x12; ry_idle[3] = 0;
+    assert(aoe_ai_unit_ai_rally_ror(55, &o) == 0);
+}
 int main(void) {
     ai_kind_for_unit_tests();
     nearest_tests();
@@ -743,5 +769,6 @@ int main(void) {
     }
     puts("ai unit ai ok");
     scan_tests();
+    rally_tests();
     return 0;
 }

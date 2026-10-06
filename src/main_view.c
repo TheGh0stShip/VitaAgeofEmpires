@@ -1462,3 +1462,78 @@ int32_t aoe_view_collect_nearby_ror(const AoeViewClassListsRor *l, int32_t cx, i
     }
     return added;
 }
+
+/* ---- 0x0050fbd0 / 0x0050fa10 / 0x00508bb0 ---- */
+
+int aoe_main_view_rebuild_overlay_ror(AoeMainViewRor *v, AoeMainViewBuffersRor *b,
+                                      const AoeMainViewSetupOpsRor *o) {
+    int32_t h, rows, k;
+    if (!v || !b || !o) return 0;
+    if (b->width == 0 && b->height == 0) return 1;
+    if (!v->overlay) {
+        v->overlay = o->surface_create(o->context, "Terrain Buffer");
+        if (v->overlay) o->surface_init(o->context, v->overlay, v->surface, b->width, b->height);
+    }
+    h = b->height;
+    if (v->overlay && h > 0) {
+        o->surface_clear(o->context, v->overlay, b->width, h);
+        b->blit_origin_x = b->blit_origin_y = 0;
+        o->surface_set_origin(o->context, v->overlay, 0, 0);
+        rows = h + 0x1c2;
+        for (k = 0; k < 2; ++k) {
+            if (b->draw_rows[k]) o->draw_rows_free(o->context, b->draw_rows[k]);
+            b->draw_rows[k] = o->draw_rows_new(o->context, rows * 2, rows, 0x40, -200, h + 0xf9, 0x28);
+        }
+        for (k = 0; k < 2; ++k) o->dirty(o->context, b->draw_rows[k], 0, 0, b->width - 1, h - 1);
+    }
+    return v->overlay != NULL;
+}
+
+void aoe_main_view_setup_ror(AoeMainViewRor *v, AoeMainViewBuffersRor *b,
+                             const AoeMainViewSetupOpsRor *o, int32_t x, int32_t y, int32_t w,
+                             int32_t h) {
+    int k;
+    if (!v || !b || !o) return;
+    o->base_setup(o->context, x, y, w, h);
+    b->width = w;
+    b->height = h;
+    o->layout(o->context);
+    aoe_main_view_rebuild_overlay_ror(v, b, o);
+    v->point_x = v->point_y = AOE_MAIN_VIEW_NO_POINT_ROR;
+    for (k = 0; k < 3; ++k) {
+        if (b->regions[k]) o->region_free(o->context, b->regions[k]);
+        b->regions[k] = o->region_new(o->context, w, h);
+    }
+    if (o->game_region_enabled(o->context) && w > 0 && h > 0) {
+        o->game_region(o->context, x, y, x + w, y + h);
+        o->pointer_switch(o->context, 1);
+    }
+    o->redraw(o->context, 2);
+}
+
+int aoe_main_view_place_preview_ror(const AoeMainViewPreviewOpsRor *o, int32_t x, int32_t y,
+                                    int32_t *cursor_code, int32_t *preview_y) {
+    int32_t tx, ty;
+    int16_t c[8];
+    float fx, fy;
+    if (!o) return 0;
+    if (o->tile_at(o->context, x, y, &tx, &ty)) {
+        fx = (float)tx + 0.5f;
+        fy = (float)ty + 0.5f;
+        o->corners(o->context, fx, fy, c);
+        if (!o->can_place(o->context, fx, fy)) {
+            *cursor_code = 5;
+        } else {
+            uint32_t v = (o->template_flags(o->context) >> 7) & 7;
+            *cursor_code = (int32_t)(((v < 4 ? v + 0x24 : 0x2c - v) << 4) | 9);
+        }
+        if (o->template_has_graphic(o->context)) {
+            int32_t cx = 1 + (c[4] - c[0]) / 2 + c[0];
+            int32_t cy = 1 + (c[5] - c[1]) / 2 + c[1];
+            *preview_y = (int16_t)cy;
+            o->draw_preview(o->context, cx, cy);
+        }
+    }
+    *cursor_code = 0;
+    return 1;
+}

@@ -1027,6 +1027,65 @@ static void test_collect_nearby(void)
     assert(aoe_view_collect_nearby_ror(&l, 5, 5, 3, 2, classes, 2, kinds, &out) == 0);
     assert(aoe_view_collect_nearby_ror(&l, 5, 5, 3, 1, classes, 0, kinds, &out) == 0);
 }
+
+static int sv_surfaces, sv_inits, sv_clears, sv_rows_new, sv_rows_free, sv_dirty, sv_regions, sv_region_free, sv_game_region, sv_switch, sv_redraw, sv_base, sv_layout;
+static int32_t sv_rows_args[6], sv_dirty_rect[4], sv_gr[4];
+static void *sv_surface_create(void *c, const char *n) { (void)c; assert(strcmp(n, "Terrain Buffer") == 0); ++sv_surfaces; return (void *)0x51; }
+static int sv_surface_init(void *c, void *s, void *p, int32_t w, int32_t h) { (void)c; (void)s; (void)p; (void)w; (void)h; ++sv_inits; return 1; }
+static void sv_surface_clear(void *c, void *s, int32_t w, int32_t h) { (void)c; (void)s; (void)w; (void)h; ++sv_clears; }
+static void sv_origin(void *c, void *s, int32_t x, int32_t y) { (void)c; (void)s; assert(x == 0 && y == 0); }
+static void sv_rows_free_f(void *c, void *r) { (void)c; (void)r; ++sv_rows_free; }
+static void *sv_rows_new_f(void *c, int32_t a, int32_t b, int32_t d, int32_t e, int32_t f, int32_t g) {
+    (void)c; sv_rows_args[0] = a; sv_rows_args[1] = b; sv_rows_args[2] = d; sv_rows_args[3] = e; sv_rows_args[4] = f; sv_rows_args[5] = g; return (void *)(intptr_t)(0x60 + ++sv_rows_new);
+}
+static void sv_dirty_f(void *c, void *r, int32_t x0, int32_t y0, int32_t x1, int32_t y1) { (void)c; (void)r; ++sv_dirty; sv_dirty_rect[0] = x0; sv_dirty_rect[1] = y0; sv_dirty_rect[2] = x1; sv_dirty_rect[3] = y1; }
+static void sv_base_setup(void *c, int32_t x, int32_t y, int32_t w, int32_t h) { (void)c; (void)x; (void)y; (void)w; (void)h; ++sv_base; }
+static void sv_layout_f(void *c) { (void)c; ++sv_layout; }
+static void sv_region_free_f(void *c, void *r) { (void)c; (void)r; ++sv_region_free; }
+static void *sv_region_new_f(void *c, int32_t w, int32_t h) { (void)c; (void)w; (void)h; return (void *)(intptr_t)(0x70 + ++sv_regions); }
+static int sv_gr_enabled(void *c) { (void)c; return 1; }
+static void sv_game_region_f(void *c, int32_t a, int32_t b, int32_t d, int32_t e) { (void)c; ++sv_game_region; sv_gr[0] = a; sv_gr[1] = b; sv_gr[2] = d; sv_gr[3] = e; }
+static void sv_switch_f(void *c, int32_t on) { (void)c; sv_switch = on; }
+static void sv_redraw_f(void *c, int32_t l) { (void)c; sv_redraw = l; }
+static const AoeMainViewSetupOpsRor sv_ops = {NULL, sv_surface_create, sv_surface_init, sv_surface_clear, sv_origin,
+    sv_rows_free_f, sv_rows_new_f, sv_dirty_f, sv_base_setup, sv_layout_f, sv_region_free_f, sv_region_new_f,
+    sv_gr_enabled, sv_game_region_f, sv_switch_f, sv_redraw_f};
+static int pv_hit = 1, pv_place = 1, pv_graphic = 1, pv_drawn_x, pv_drawn_y; static uint32_t pv_flags;
+static int pv_tile(void *c, int32_t x, int32_t y, int32_t *tx, int32_t *ty) { (void)c; (void)x; (void)y; *tx = 4; *ty = 6; return pv_hit; }
+static void pv_corners(void *c, float fx, float fy, int16_t o[8]) { (void)c; assert(fx == 4.5f && fy == 6.5f); o[0] = 100; o[1] = 50; o[2] = 0; o[3] = 0; o[4] = 140; o[5] = 70; o[6] = 0; o[7] = 0; }
+static int pv_can(void *c, float fx, float fy) { (void)c; (void)fx; (void)fy; return pv_place; }
+static uint32_t pv_tflags(void *c) { (void)c; return pv_flags; }
+static int pv_has(void *c) { (void)c; return pv_graphic; }
+static void pv_draw(void *c, int32_t x, int32_t y) { (void)c; pv_drawn_x = x; pv_drawn_y = y; }
+static const AoeMainViewPreviewOpsRor pv_ops = {NULL, pv_tile, pv_corners, pv_can, pv_tflags, pv_has, pv_draw};
+
+static void test_setup_and_preview(void)
+{
+    AoeMainViewRor v; AoeMainViewBuffersRor b; int32_t code = -1, py = -1;
+    memset(&v, 0, sizeof v); memset(&b, 0, sizeof b);
+    b.draw_rows[0] = (void *)1;
+    aoe_main_view_setup_ror(&v, &b, &sv_ops, 10, 20, 300, 200);
+    assert(sv_base == 1 && sv_layout == 1 && b.width == 300 && b.height == 200);
+    assert(sv_surfaces == 1 && sv_inits == 1 && sv_clears == 1 && sv_rows_free == 1 && sv_rows_new == 2 &&
+           sv_rows_args[0] == (200 + 0x1c2) * 2 && sv_rows_args[1] == 200 + 0x1c2 && sv_rows_args[2] == 0x40 &&
+           sv_rows_args[3] == -200 && sv_rows_args[4] == 200 + 0xf9 && sv_rows_args[5] == 0x28 &&
+           sv_dirty == 2 && sv_dirty_rect[2] == 299 && sv_dirty_rect[3] == 199);
+    assert(v.point_x == AOE_MAIN_VIEW_NO_POINT_ROR && sv_regions == 3 && sv_region_free == 0 &&
+           sv_game_region == 1 && sv_gr[2] == 310 && sv_gr[3] == 220 && sv_switch == 1 && sv_redraw == 2);
+    /* A zero-size view keeps no overlay but reports success. */
+    memset(&v, 0, sizeof v); memset(&b, 0, sizeof b);
+    assert(aoe_main_view_rebuild_overlay_ror(&v, &b, &sv_ops) == 1 && v.overlay == NULL);
+    /* The placement preview: code 0x269 for v = 2 (0x26 << 4 | 9) during
+       the draw, 5 when refused, cleared after; the midpoint drawn. */
+    pv_flags = 2u << 7;
+    assert(aoe_main_view_place_preview_ror(&pv_ops, 1, 2, &code, &py) == 1 && code == 0 &&
+           pv_drawn_x == 121 && pv_drawn_y == 61 && py == 61);
+    pv_graphic = 0; pv_drawn_x = 0;
+    aoe_main_view_place_preview_ror(&pv_ops, 1, 2, &code, &py);
+    assert(pv_drawn_x == 0);
+    pv_hit = 0;
+    assert(aoe_main_view_place_preview_ror(&pv_ops, 1, 2, &code, &py) == 1 && code == 0);
+}
 int main(void)
 {
     AoeMainViewRor v;
@@ -1210,5 +1269,6 @@ int main(void)
     test_c3l_tile_object();
     puts("main_view_test: ok");
     test_collect_nearby();
+    test_setup_and_preview();
     return 0;
 }

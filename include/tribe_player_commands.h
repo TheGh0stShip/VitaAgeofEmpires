@@ -294,4 +294,31 @@ int aoe_tribe_player_repair_ror(const AoeTribePlayerOpsRor *ops,
                                 void (*ack)(void *context, const AoeTribeCommandUnitRor *unit,
                                             const AoeTribeCommandUnitRor *target));
 
+
+/* 0x004f04e0 (part of the tribe player load): the template count (+0x22,
+   int16) and the +0x24 table of flags (4 bytes each); every nonzero slot
+   reads a kind byte and makes the template through 0x004f06d0 (its
+   kind: 'F' 0x004eca90, 'P' 0x004ec180, 'Z' 0x004ed2c0, others the base
+   0x0045cb70); then the tile map (+0x38, 0x00517490), the object memory
+   (+0x114, 0x00516e50), the three object lists +0x28 / +0x2c / +0x30
+   (0x00450ef0) and two list loads (0x00451680; a third from version
+   7.09). */
+typedef enum {
+    AOE_TRIBE_TEMPLATE_BASE = 0, AOE_TRIBE_TEMPLATE_F, AOE_TRIBE_TEMPLATE_P, AOE_TRIBE_TEMPLATE_Z
+} AoeTribeTemplateKindRor;
+AoeTribeTemplateKindRor aoe_tribe_template_kind_ror(uint8_t kind);
+
+typedef struct {
+    void *context;
+    void (*load_template)(void *context, int16_t slot, uint8_t kind, AoeTribeTemplateKindRor which,
+                          AoeOutcomeStream *s);
+    void (*load_tile_map)(void *context, AoeOutcomeStream *s);
+    void (*load_object_memory)(void *context, AoeOutcomeStream *s);
+    void (*new_list)(void *context, int which);
+    void (*load_list)(void *context, int which, AoeOutcomeStream *s);
+} AoeTribePlayerLoadOpsRor;
+/* Returns the template count read (-1 on a short stream). */
+int32_t aoe_tribe_player_load_templates_ror(AoeOutcomeStream *s, float version,
+                                            const AoeTribePlayerLoadOpsRor *ops);
+
 #endif

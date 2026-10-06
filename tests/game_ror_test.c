@@ -174,6 +174,24 @@ static void test_open_video(void) {
     assert(!strcmp(vo_log, "prep|video_changed_res=0, double_size=1|st|ac|"));
 }
 
+
+static void stats_text_tests(void) {
+    static AoeGameBaseRor g;
+    char title[200], view[100];
+    memset(&g, 0, sizeof g);
+    aoe_game_ror_stats_text_ror(&g, 0, title, sizeof title, view, sizeof view);
+    assert(strcmp(title, "f?") == 0 && strcmp(view, "avg view time=???") == 0);
+    g.timing_504[1] = 2; g.timing_504[2] = 4; g.timing_504[7] = 30; g.timing_504[8] = 25;
+    g.timing[6].field_4 = 20; g.timing[7].field_4 = 4; g.timing[17].field_4 = 6; g.timing[3].field_4 = 8;
+    g.timing[1].field_4 = 10; g.timing[14].field_4 = 12; g.timing[12].field_4 = 14; g.timing[10].field_4 = 2;
+    g.timing[13].field_4 = 16; g.timing[4].field_4 = 18;
+    g.timing[6].field_1c = 99; g.timing[4].field_1c = 7;
+    aoe_game_ror_stats_text_ror(&g, 0, title, sizeof title, view, sizeof view);
+    assert(strcmp(title, "t30,f25,avg(r(v10,m2,o3),s4,u5,c6,l8,p8,o9)") == 0);
+    assert(strcmp(view, "avg view time=5, count=4") == 0);
+    aoe_game_ror_stats_text_ror(&g, 1, title, sizeof title, view, sizeof view);
+    assert(strncmp(title, "t30,f25,max(r(v99,", 18) == 0 && strstr(title, ",o7)") != NULL);
+}
 int main(void) {
     char coded[64];
     AoeGameRorCommandOpsRor cops = {NULL, ns, sp, bc};
@@ -370,5 +388,6 @@ int main(void) {
     test_run_log();
     test_destroy_editor_video();
     test_open_video();
+    stats_text_tests();
     return 0;
 }

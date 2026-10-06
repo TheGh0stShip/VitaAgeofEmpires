@@ -553,4 +553,36 @@ void aoe_game_screen_palette_cycle_ror(AoeGameScreenRor *s, uint32_t now);
 int32_t aoe_game_screen_message_ror(AoeGameScreenRor *s, uint32_t msg, uint32_t wparam,
                                     uint32_t lparam, int32_t *quit_requested, int iconic);
 
+
+/* 0x0047fa50 (+0x54 paint): nothing without an area, invisible, inactive,
+   with the application inactive (game +0x18) or the window iconic. A
+   pending redraw (+0x38) is "full" unless it is below 2, the view lacks
+   the focus (0x00453f30) and the current child is neither the "Send
+   Quick Message Dialog" nor the "Help Dialog"; a full redraw passes the
+   level to every child (+0x20), to the parent's overlap redraw (+0x24,
+   when its +0x7c is set) and draws the screen (+0x30); the level is
+   cleared and +0x84 set. Then every child (only the current one when
+   not full) paints (+0x54); the time taken goes to statistic 0x11
+   (0x00417370) and +0x84 clears. */
+typedef struct {
+    void *context;
+    int (*can_paint)(void *context);
+    uint32_t (*now)(void *context);
+    int32_t (*redraw_level)(void *context);
+    void (*set_redraw_level)(void *context, int32_t level);
+    int (*view_focus)(void *context);
+    const char *(*current_name)(void *context);
+    int32_t (*child_count)(void *context);
+    void *(*child)(void *context, int32_t i);
+    int (*is_current)(void *context, void *child);
+    void (*child_set_redraw)(void *context, void *child, int32_t level);
+    void (*child_paint)(void *context, void *child);
+    int (*parent_wants_overlaps)(void *context);
+    void (*parent_redraw_overlaps)(void *context, int32_t level);
+    void (*draw_self)(void *context);
+    void (*set_painting)(void *context, int on);
+    void (*statistic)(void *context, int32_t slot, uint32_t elapsed);
+} AoeGameScreenPaintOpsRor;
+int32_t aoe_game_screen_paint_ror(const AoeGameScreenPaintOpsRor *o);
+
 #endif

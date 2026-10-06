@@ -81,4 +81,24 @@ void aoe_research_action_readout_ror(const AoeResearchCompletionManagerRor *mana
                                      const DatTechs *techs, uint8_t action_state, int16_t tech,
                                      int16_t *id, int16_t *percent, char *name, int16_t size);
 
+
+/* 0x004f0bf0: the techs a building can research, for a list: every tech
+   whose state (+0x224 entries, state 1 = available) is 1 and whose
+   research location (record +0x28) is `building` becomes a 0x28-byte
+   entry: the record's first dword (its name), the tech ID, the record's
+   +0x24, the first two cost types and the three cost amounts (as
+   floats) from 0x004eabc1, the help and tree-text IDs (0x004eba15 /
+   0x004eba4e). The previous list is freed first; `*count` is the number
+   of entries (0: no list). */
+typedef struct {
+    const char *name;
+    int16_t id;
+    int16_t field_24;
+    int16_t cost_type[2];
+    float cost_amount[3];
+    int32_t help, tree_text;
+} AoeResearchListEntryRor;
+void aoe_research_list_for_building_ror(const AoeResearchOwnerRor *owner, int16_t building,
+                                        AoeResearchListEntryRor **list, int16_t *count);
+
 #endif

@@ -227,4 +227,27 @@ void aoe_map_release_owned_ror(AoeMapOwnedRor *m, const AoeMapOwnedOpsRor *ops);
 int aoe_map_clamp_footprint_ror(float half_w, float half_h, int32_t map_w,
                                 int32_t map_h, float *x, float *y, int snap);
 
+
+/* 0x00447670 (map method): the objects on tile (x, y) swept (the terrain
+   byte 0x00447de0 is read first, unused). Each object whose template ID
+   lies in lo..hi stays; otherwise it goes (vtable +0x68 when `delete` is
+   0, else deleted) when `player` is negative, when the player's class
+   table (+0x220 + player * 0x198 count, +0x18a + player * 0x198 entries)
+   lists the ID, or when its template's placement check (+0x20 at the
+   object's position with flags 0, 0, 1, 1, 1, 0, 0) answers nonzero.
+   Returns the last template ID considered (-1 for none). */
+typedef struct {
+    void *context;
+    int32_t (*first)(void *context, int32_t x, int32_t y);     /* an object or 0 */
+    int32_t (*next)(void *context, int32_t object);
+    int16_t (*template_id)(void *context, int32_t object);
+    int16_t (*player_class_count)(void *context, int32_t player);
+    int16_t (*player_class)(void *context, int32_t player, int16_t i);
+    int (*can_place)(void *context, int32_t object);
+    void (*remove)(void *context, int32_t object);             /* +0x68 */
+    void (*destroy)(void *context, int32_t object);            /* delete */
+} AoeTileSweepOpsRor;
+int32_t aoe_tilemap_sweep_tile_ror(const AoeTileSweepOpsRor *o, int32_t x, int32_t y,
+                                   int32_t player, int32_t delete_them, int32_t lo, int32_t hi);
+
 #endif

@@ -393,6 +393,53 @@ static void message_tests(void) {
     /* Middle button up steps the view back. */
     assert(aoe_game_screen_message_ror(&s, 0x208, 0, 0, &quit, 0) == 7 && backs == 1);
 }
+
+static int pt_can = 1, pt_focus = 1; static int32_t pt_level = 1; static const char *pt_name = "x";
+static int pt_children[3] = {71, 72, 73}; static int pt_current = 72; static int pt_wants = 1;
+static int pt_set_redraw[128], pt_painted[128], pt_overlap_level, pt_drawn, pt_painting_log[4], pt_npl;
+static uint32_t pt_now_v = 100; static int32_t pt_stat_slot; static uint32_t pt_stat_v;
+static int pt_can_f(void *c) { (void)c; return pt_can; }
+static uint32_t pt_now(void *c) { (void)c; pt_now_v += 5; return pt_now_v; }
+static int32_t pt_lvl(void *c) { (void)c; return pt_level; }
+static void pt_setlvl(void *c, int32_t l) { (void)c; pt_level = l; }
+static int pt_vf(void *c) { (void)c; return pt_focus; }
+static const char *pt_cur_name(void *c) { (void)c; return pt_name; }
+static int32_t pt_count(void *c) { (void)c; return 3; }
+static void *pt_child(void *c, int32_t i) { (void)c; return (void *)(intptr_t)pt_children[i]; }
+static int pt_is_cur(void *c, void *ch) { (void)c; return ix(ch) == pt_current; }
+static void pt_csr(void *c, void *ch, int32_t l) { (void)c; pt_set_redraw[ix(ch)] = l; }
+static void pt_cpaint(void *c, void *ch) { (void)c; pt_painted[ix(ch)]++; }
+static int pt_pwants(void *c) { (void)c; return pt_wants; }
+static void pt_pover(void *c, int32_t l) { (void)c; pt_overlap_level = l; }
+static void pt_draw(void *c) { (void)c; ++pt_drawn; }
+static void pt_setp(void *c, int on) { (void)c; if (pt_npl < 4) pt_painting_log[pt_npl++] = on; }
+static void pt_stat(void *c, int32_t slot, uint32_t v) { (void)c; pt_stat_slot = slot; pt_stat_v = v; }
+static const AoeGameScreenPaintOpsRor pt_ops = {NULL, pt_can_f, pt_now, pt_lvl, pt_setlvl, pt_vf, pt_cur_name,
+    pt_count, pt_child, pt_is_cur, pt_csr, pt_cpaint, pt_pwants, pt_pover, pt_draw, pt_setp, pt_stat};
+
+static void paint_tests(void) {
+    /* Level 1 with the view focused: full; every child gets the level and
+       paints, the parent overlap redraw runs, the level clears. */
+    aoe_game_screen_paint_ror(&pt_ops);
+    assert(pt_set_redraw[71] == 1 && pt_set_redraw[73] == 1 && pt_overlap_level == 1 &&
+           pt_drawn == 1 && pt_level == 0 && pt_painted[71] == 1 && pt_painted[73] == 1 &&
+           pt_painting_log[0] == 1 && pt_painting_log[1] == 0 && pt_stat_slot == 0x11 && pt_stat_v == 5);
+    /* Level 1, no focus, an ordinary current child: not full; only the
+       current child paints and nothing is redrawn. */
+    pt_level = 1; pt_focus = 0; pt_drawn = 0; memset(pt_painted, 0, sizeof pt_painted);
+    aoe_game_screen_paint_ror(&pt_ops);
+    assert(pt_drawn == 0 && pt_level == 0 && pt_painted[72] == 1 && pt_painted[71] == 0);
+    /* The help dialog current makes it full again; level 2 always is. */
+    pt_level = 1; pt_name = "Help Dialog"; memset(pt_painted, 0, sizeof pt_painted);
+    aoe_game_screen_paint_ror(&pt_ops);
+    assert(pt_drawn == 1 && pt_painted[71] == 1);
+    pt_level = 2; pt_name = "x";
+    aoe_game_screen_paint_ror(&pt_ops);
+    assert(pt_drawn == 2);
+    pt_can = 0; pt_drawn = 0; pt_level = 2;
+    aoe_game_screen_paint_ror(&pt_ops);
+    assert(pt_drawn == 0 && pt_level == 2);
+}
 int main(void) {
     AoeGameScreenRor s;
     AoeGameScreenButtonRor b;
@@ -760,5 +807,6 @@ int main(void) {
     is_net = 0;
     lifecycle_tests();
     message_tests();
+    paint_tests();
     return 0;
 }

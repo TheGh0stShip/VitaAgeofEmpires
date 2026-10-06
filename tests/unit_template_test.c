@@ -90,6 +90,25 @@ static void fill(AoeTemplateRor *t, uint8_t type) {
 static void *played;
 static void play_fn(void *c, void *s) { (void)c; played = s; }
 
+
+static int ol_frame, ol_flag, ol_lines; static int16_t ol_c[8];
+static void ol_plan(void *c, int32_t f, int32_t sx, int32_t sy, int32_t a5, int32_t a2, int32_t flag) { (void)c; (void)sx; (void)sy; (void)a5; (void)a2; ol_frame = f; ol_flag = flag; }
+static void ol_project(void *c, float dx, float dy, int32_t sx, int32_t sy, int16_t *ox, int16_t *oy) { (void)c; *ox = (int16_t)(sx + (int)dx); *oy = (int16_t)(sy + (int)dy); }
+static void ol_node(void *c, const int16_t k[8], uint8_t color) { (void)c; memcpy(ol_c, k, sizeof ol_c); ++ol_lines; assert(color == 7); }
+static void outline_tests(void) {
+    AoeTemplateOutlineOpsRor o = {NULL, ol_plan, ol_project, ol_node};
+    aoe_template_outline_draw_ror(&o, 1, 0, 0, 0, 0, 100, 50, 0, 0, 1, 2.0f, 3.0f, 7);
+    assert(ol_flag == 10 && ol_frame == 0 && ol_lines == 1 && ol_c[0] == 102 && ol_c[1] == 47 &&
+           ol_c[2] == 102 && ol_c[3] == 53 && ol_c[4] == 98 && ol_c[5] == 53 && ol_c[6] == 98 && ol_c[7] == 47);
+    aoe_template_outline_draw_ror(&o, 1, 1, 1, 9, 5, 100, 50, 0, 0, 0, 2.0f, 3.0f, 7);
+    assert(ol_flag == 0 && ol_frame == 9 && ol_lines == 1);
+    aoe_template_outline_draw_ror(&o, 1, 1, 0, 9, 0, 100, 50, 0, 0, 0, 2.0f, 3.0f, 7);
+    assert(ol_frame == 2);
+    aoe_template_outline_draw_ror(&o, 1, 1, 0, 9, 5, 100, 50, 0, 0, 0, 2.0f, 3.0f, 7);
+    assert(ol_frame == 4);
+    aoe_template_outline_draw_ror(&o, 0, 0, 0, 0, 0, 100, 50, 0, 0, 1, 2.0f, 3.0f, 7);
+    assert(ol_lines == 1);
+}
 int main(void) {
     static uint8_t buf[4096];
     static const uint8_t types[] = {10, 0x14, 0x19, 0x1e, 0x28, 0x32, 0x3c, 0x46, 0x50, 0x5a};
@@ -216,5 +235,6 @@ int main(void) {
         aoe_template_play_sound_ror(&st, 1, play_fn, NULL);
         assert(played == &snd);
     }
+    outline_tests();
     return 0;
 }

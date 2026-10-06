@@ -463,4 +463,51 @@ void aoe_comm_receive_ror(AoeCommRor *c);
 void aoe_comm_pump_ror(AoeCommRor *c);
 void aoe_comm_pump_flagged_ror(AoeCommRor *c);
 
+
+/* 0x00424a90 join a session by its GUID (stored at +0x12fc, hosting off):
+   nothing without DirectPlay ("JMPG: Create w/no valid glpIDC"); Open with
+   DPOPEN_JOIN (1) on a DPSESSIONDESC2 (size 0x50, the session GUID, the
+   application GUID +0x12ec): DPERR_CONNECTING (0x8877015e) and
+   DPERR_ALREADYINITIALIZED (0x88770005) are logged and reported;
+   DPERR_NONEWPLAYERS (0x8877014a) also posts 0x17ab; another error sets
+   state 1; then our player (0x004249a0; failing is logged) and state 3.
+   Returns 1 on success. */
+typedef struct {
+    void *context;
+    int32_t (*open_join)(void *context, const uint32_t session_guid[4],
+                         const uint32_t app_guid[4]);
+    void (*post_error)(void *context, uint32_t code);
+} AoeCommJoinOpsRor;
+int aoe_comm_join_session_ror(AoeCommRor *c, const AoeCommDpOpsRor *dp,
+                              const AoeCommJoinOpsRor *join, const uint32_t guid[4]);
+
+/* 0x00425bb0 connect through the DirectPlay lobby (the lobby object at
+   +0x04, its settings +0x08 / +0x10, the DirectPlay interface +0x0c,
+   the launched flag +0x14): the previous settings freed (0x00425ab0);
+   DirectPlayLobbyCreate ("Lobby Create"; a failure returns 0); the lobby
+   interface (none: 0); the connection settings read (size first, then
+   into a new buffer; a failure clears the flag and returns 0), "LOBBY
+   LAUNCHED GAME"; the session flags become 0x44 and the player limit 9
+   and the settings are written back; Connect ("Pre connect" / "Post
+   Connect"): DPERR_... 0x887700f0 returns 0xff quietly, another error is
+   logged and reported ("Connect") and returns 0xff; the DirectPlay
+   interface queried ("Lobby QI"; a failure returns 0xff); the players
+   enumerated; the flag set; returns 1. */
+typedef struct {
+    void *context;
+    void (*free_settings)(void *context);
+    int32_t (*lobby_create)(void *context);
+    int (*lobby_interface)(void *context);
+    int32_t (*settings_size)(void *context, uint32_t *size);
+    int32_t (*settings_read)(void *context);
+    void (*settings_patch)(void *context, uint32_t flags, uint32_t max_players);
+    void (*settings_write)(void *context);
+    int32_t (*connect)(void *context);
+    int32_t (*query_interface)(void *context, int *has_interface);
+    void (*enum_players)(void *context);
+    void (*set_launched)(void *context, int on);
+} AoeCommLobbyOpsRor;
+int32_t aoe_comm_lobby_connect_ror(AoeCommRor *c, const AoeCommLobbyOpsRor *l,
+                                   int *has_interface);
+
 #endif

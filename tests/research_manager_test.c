@@ -20,6 +20,34 @@ static void rebuild(void *c) {
     ++rebuilds;
 }
 
+
+static void list_tests(void) {
+    DatTech t[3];
+    DatTechs techs = {3, t, 0};
+    AoeResearchProgressEntry e[3];
+    AoeResearchCompletionManagerRor m;
+    float values[30] = {0};
+    AoePlayerResources res = {30, values};
+    AoeResearchOwnerRor owner = {&m, &techs, &res};
+    AoeResearchListEntryRor *list = NULL;
+    int16_t n = -1;
+    memset(t, 0, sizeof t);
+    memset(&m, 0, sizeof m);
+    m.count = 3; m.entries = e;
+    t[0].name = "A"; t[0].research_location = 109; t[0].research_time = 30; t[0].language_help = 11; t[0].language_tree = 12;
+    t[0].costs[0].resource_type = 0; t[0].costs[0].amount = 80; t[0].costs[0].paid = 1;
+    t[0].costs[1].resource_type = 3; t[0].costs[1].amount = 50; t[0].costs[1].paid = 1;
+    t[0].costs[2].resource_type = -1;
+    t[1] = t[0]; t[1].name = "B"; t[1].research_location = 12;
+    t[2] = t[0]; t[2].name = "C";
+    e[0].state = 1; e[1].state = 1; e[2].state = 3;
+    aoe_research_list_for_building_ror(&owner, 109, &list, &n);
+    CHECK(n == 1 && list && strcmp(list[0].name, "A") == 0 && list[0].id == 0 && list[0].field_24 == 30 &&
+          list[0].cost_type[0] == 0 && list[0].cost_type[1] == 3 && list[0].cost_amount[0] == 80.0f &&
+          list[0].cost_amount[1] == 50.0f && list[0].help == 11 && list[0].tree_text == 12);
+    aoe_research_list_for_building_ror(&owner, 5, &list, &n);
+    CHECK(n == 0 && list == NULL);
+}
 int main(void) {
     DatTech tech[2];
     DatTechs techs = {2, tech, 0};
@@ -141,5 +169,6 @@ int main(void) {
         return 1;
     }
     puts("research_manager_test: ok");
+    list_tests();
     return 0;
 }

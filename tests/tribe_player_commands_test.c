@@ -210,6 +210,31 @@ static void test_tribe_template_load(void) {
     assert(slots[3] == &ctx && ttl_last == 10);
 }
 
+
+static char tl_log[64]; static int tl_n;
+static void tl_tmpl(void *c, int16_t slot, uint8_t kind, AoeTribeTemplateKindRor which, AoeOutcomeStream *s) {
+    (void)c; (void)s; tl_n += snprintf(tl_log + tl_n, sizeof tl_log - (size_t)tl_n, "T%d%c%d", (int)slot, (char)kind, (int)which);
+}
+static void tl_map(void *c, AoeOutcomeStream *s) { (void)c; (void)s; tl_n += snprintf(tl_log + tl_n, sizeof tl_log - (size_t)tl_n, "M"); }
+static void tl_mem(void *c, AoeOutcomeStream *s) { (void)c; (void)s; tl_n += snprintf(tl_log + tl_n, sizeof tl_log - (size_t)tl_n, "O"); }
+static void tl_new(void *c, int w) { (void)c; tl_n += snprintf(tl_log + tl_n, sizeof tl_log - (size_t)tl_n, "n%d", w); }
+static void tl_load(void *c, int w, AoeOutcomeStream *s) { (void)c; (void)s; tl_n += snprintf(tl_log + tl_n, sizeof tl_log - (size_t)tl_n, "l%d", w); }
+static void load_templates_tests(void) {
+    AoeTribePlayerLoadOpsRor o = {NULL, tl_tmpl, tl_map, tl_mem, tl_new, tl_load};
+    uint8_t buf[64]; AoeOutcomeStream s = {0};
+    s.data = buf; s.size = sizeof buf;
+    aoe_stream_put(&s, "\x03\x00", 2);
+    aoe_stream_put_i32(&s, 1); aoe_stream_put_i32(&s, 0); aoe_stream_put_i32(&s, 1);
+    aoe_stream_put_u8(&s, 'F'); aoe_stream_put_u8(&s, 'Q');
+    s.size = s.pos; s.pos = 0;
+    assert(aoe_tribe_player_load_templates_ror(&s, 7.23f, &o) == 3);
+    assert(strcmp(tl_log, "T0F1T2Q0MOn0n1n2l0l1l2") == 0);
+    assert(aoe_tribe_template_kind_ror('P') == AOE_TRIBE_TEMPLATE_P && aoe_tribe_template_kind_ror('Z') == AOE_TRIBE_TEMPLATE_Z);
+    tl_n = 0; tl_log[0] = 0; s.pos = 0;
+    assert(aoe_tribe_player_load_templates_ror(&s, 7.0f, &o) == 3 && strstr(tl_log, "l1l2") == NULL);
+    s.pos = 0; s.size = 1;
+    assert(aoe_tribe_player_load_templates_ror(&s, 7.23f, &o) == -1);
+}
 int main(void) {
     AoeTribePlayerOpsRor ops = {0, 2, collect, template_state, ack_b, ack_u, selected, object_type, object_class, queue};
     /* Build: villagers (min 4, class 4), template 118 acknowledges, 0x66. */
@@ -342,5 +367,6 @@ int main(void) {
     test_tribe_load_object();
     test_tribe_template_load();
     test_tribe_repair();
+    load_templates_tests();
     return 0;
 }

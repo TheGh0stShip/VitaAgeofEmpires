@@ -808,3 +808,23 @@ void aoe_template_play_sound_ror(const AoeTemplateRor *t, int second,
     void *sound = second ? t->sound_f4 : t->sound_f0;
     if (sound) play(context, sound);
 }
+
+void aoe_template_outline_draw_ror(const AoeTemplateOutlineOpsRor *o, int has_graphic, int tribe,
+                                   int frame_16c_clear, int16_t frame_16e, int32_t frame,
+                                   int32_t sx, int32_t sy, int32_t arg5, int32_t arg2,
+                                   int outline, float size_x, float size_y, uint8_t color) {
+    int16_t c[8];
+    if (!o || !has_graphic) return;
+    if (tribe) {
+        int32_t f = frame_16c_clear ? frame_16e : (frame == 0 ? 2 : frame - 1);
+        o->plan(o->context, f, sx, sy, arg5, arg2, 0);
+    } else {
+        o->plan(o->context, 0, sx, sy, arg5, arg2, 10);
+    }
+    if (!outline) return;
+    o->project(o->context, size_x, -size_y, sx, sy, &c[0], &c[1]);
+    o->project(o->context, size_x, size_y, sx, sy, &c[2], &c[3]);
+    o->project(o->context, -size_x, size_y, sx, sy, &c[4], &c[5]);
+    o->project(o->context, -size_x, -size_y, sx, sy, &c[6], &c[7]);
+    o->line_node(o->context, c, color);
+}

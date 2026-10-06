@@ -1,6 +1,7 @@
 #ifndef VITA_AOE_GAME_ROR_H
 #define VITA_AOE_GAME_ROR_H
 
+#include "game_base.h"
 #include <stdint.h>
 
 #include "game_settings.h"
@@ -406,5 +407,19 @@ typedef struct {
     void (*after)(void *context);                                            /* vtable +0xac */
 } AoeGameRorVideoOpenOpsRor;
 int aoe_game_ror_open_video_ror(AoeGameRorVideoOpenOpsRor *ops);
+
+
+/* 0x00501470: the performance title (+0x106c) and view line (+0x404).
+   The first call notes the time (0x007c0530; bit 0 of 0x007c0528). With
+   no frames counted (+0x508) the title is "f?"; else with 0x007c0648
+   clear the per-frame averages "t%lu,f%lu,avg(r(v%lu,m%lu,o%lu),s%lu,
+   u%lu,c%lu,l%lu,p%lu,o%lu)" of rates +0x520 / +0x524 and timing slots
+   6, 7, 17, 3, 1, 14, 12 + 10, 13, 4 (their +4 over the frames), else
+   the maxima "t%lu,f%lu,max(r(v%lu,m%lu,o%lu),s%lu,u%lu,c%lu,ls%lu,
+   lg%lu,p%lu,o%lu)" from the slots' +0x1c (6, 7, 17, 3, 1, 14, 10, 12,
+   13, 4). The view line is "avg view time=%lu, count=%lu" (slot 6 over
+   the view count +0x50c) or "avg view time=???" without views. */
+void aoe_game_ror_stats_text_ror(const AoeGameBaseRor *g, int show_max, char *title, int title_size,
+                                 char *view, int view_size);
 
 #endif

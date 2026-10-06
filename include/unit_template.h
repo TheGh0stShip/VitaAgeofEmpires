@@ -225,4 +225,27 @@ const void *aoe_template_find_task_ror(const AoeTemplateRor *t, int32_t id,
                                                               int32_t i),
                                        const AoeTemplateOpsRor *ops);
 
+
+/* 0x00443520 (the map's template outline slot) and 0x004ec840 (the tribe
+   template's): with a standing graphic (+0x18) the sprite is planned
+   (0x004a5920 at the screen point (sx, sy) twice, `arg5`, `arg2`, flag
+   10; the tribe form picks the frame: +0x16c clear -> +0x16e, else
+   `frame` 0 -> 2, else frame - 1, and flag 0) and, when `outline` is
+   requested, the footprint of (size_x, size_y) (+0xac / +0xb0, the
+   tribe form +0x30 / +0x34) is projected at its four corners (0x00448cc0)
+   into a kind-1 line node (0x00516510: the eight corner coordinates,
+   10, the colour byte, 0x007c0444). */
+typedef struct {
+    void *context;
+    void (*plan)(void *context, int32_t frame, int32_t sx, int32_t sy, int32_t arg5, int32_t arg2,
+                 int32_t flag);
+    void (*project)(void *context, float dx, float dy, int32_t sx, int32_t sy, int16_t *ox,
+                    int16_t *oy);
+    void (*line_node)(void *context, const int16_t corners[8], uint8_t color);
+} AoeTemplateOutlineOpsRor;
+void aoe_template_outline_draw_ror(const AoeTemplateOutlineOpsRor *o, int has_graphic, int tribe,
+                                   int frame_16c_clear, int16_t frame_16e, int32_t frame,
+                                   int32_t sx, int32_t sy, int32_t arg5, int32_t arg2,
+                                   int outline, float size_x, float size_y, uint8_t color);
+
 #endif

@@ -674,3 +674,35 @@ int aoe_game_ror_open_video_ror(AoeGameRorVideoOpenOpsRor *ops) {
     ops->video_up = 1;
     return 1;
 }
+
+void aoe_game_ror_stats_text_ror(const AoeGameBaseRor *g, int show_max, char *title, int title_size,
+                                 char *view, int view_size) {
+    uint32_t frames, views;
+    if (!g || !title || !view) return;
+    frames = (uint32_t)g->timing_504[1];
+    views = (uint32_t)g->timing_504[2];
+#define F4(s) ((unsigned long)(g->timing[(s)].field_4 / frames))
+#define MX(s) ((unsigned long)g->timing[(s)].field_1c)
+    if (frames == 0) {
+        snprintf(title, (size_t)title_size, "f?");
+    } else if (!show_max) {
+        snprintf(title, (size_t)title_size,
+                 "t%lu,f%lu,avg(r(v%lu,m%lu,o%lu),s%lu,u%lu,c%lu,l%lu,p%lu,o%lu)",
+                 (unsigned long)g->timing_504[7], (unsigned long)g->timing_504[8], F4(6), F4(7),
+                 F4(17), F4(3), F4(1), F4(14),
+                 (unsigned long)((g->timing[12].field_4 + g->timing[10].field_4) / frames),
+                 F4(13), F4(4));
+    } else {
+        snprintf(title, (size_t)title_size,
+                 "t%lu,f%lu,max(r(v%lu,m%lu,o%lu),s%lu,u%lu,c%lu,ls%lu,lg%lu,p%lu,o%lu)",
+                 (unsigned long)g->timing_504[7], (unsigned long)g->timing_504[8], MX(6), MX(7),
+                 MX(17), MX(3), MX(1), MX(14), MX(10), MX(12), MX(13), MX(4));
+    }
+#undef F4
+#undef MX
+    if (views)
+        snprintf(view, (size_t)view_size, "avg view time=%lu, count=%lu",
+                 (unsigned long)(g->timing[6].field_4 / views), (unsigned long)views);
+    else
+        snprintf(view, (size_t)view_size, "avg view time=???");
+}

@@ -129,6 +129,27 @@ static void clamp_footprint(void) {
     assert(x == 5.5f && fabsf(y - 4.7f) < 1e-5f);
 }
 
+
+/* Tile objects 1..4 with template IDs 10, 20, 30, 40; player 1 lists 30. */
+static int32_t sw_next_of[5] = {0, 2, 3, 4, 0}; static int16_t sw_id[5] = {0, 10, 20, 30, 40};
+static int sw_removed[5], sw_destroyed[5], sw_place[5] = {0, 1, 1, 0, 0};
+static int32_t sw_first(void *c, int32_t x, int32_t y) { (void)c; (void)x; (void)y; return 1; }
+static int32_t sw_next(void *c, int32_t o) { (void)c; return sw_next_of[o]; }
+static int16_t sw_tid(void *c, int32_t o) { (void)c; return sw_id[o]; }
+static int16_t sw_pcount(void *c, int32_t p) { (void)c; (void)p; return 0; }
+static int16_t sw_pclass(void *c, int32_t p, int16_t i) { (void)c; (void)p; (void)i; return 30; }
+static int sw_can(void *c, int32_t o) { (void)c; return sw_place[o]; }
+static void sw_remove(void *c, int32_t o) { (void)c; sw_removed[o]++; }
+static void sw_destroy(void *c, int32_t o) { (void)c; sw_destroyed[o]++; }
+static void sweep_tests(void) {
+    AoeTileSweepOpsRor o = {NULL, sw_first, sw_next, sw_tid, sw_pcount, sw_pclass, sw_can, sw_remove, sw_destroy};
+    /* No player: everything outside 20..20 goes (removed). */
+    assert(aoe_tilemap_sweep_tile_ror(&o, 1, 1, -1, 0, 20, 20) == 40);
+    assert(sw_removed[1] == 1 && sw_removed[2] == 0 && sw_removed[3] == 1 && sw_removed[4] == 1);
+    /* Player 1: 10 (placeable) and 30 (listed) go, deleted; 40 stays. */
+    assert(aoe_tilemap_sweep_tile_ror(&o, 1, 1, 1, 1, 20, 20) == 40);
+    assert(sw_destroyed[1] == 1 && sw_destroyed[3] == 1 && sw_destroyed[4] == 0 && sw_destroyed[2] == 0);
+}
 int main(void) {
     clamp_footprint();
     AoeTileMapOpsRor ops = {NULL, t_resize, t_refresh, t_rect, t_cell, t_begin, t_end, t_border, t_used};
@@ -253,5 +274,6 @@ int main(void) {
     }
     free(m.tiles);
     test_map_release_owned();
+    sweep_tests();
     return 0;
 }

@@ -445,3 +445,25 @@ int aoe_map_clamp_footprint_ror(float half_w, float half_h, int32_t map_w,
     }
     return 1;
 }
+
+int32_t aoe_tilemap_sweep_tile_ror(const AoeTileSweepOpsRor *o, int32_t x, int32_t y,
+                                   int32_t player, int32_t delete_them, int32_t lo, int32_t hi) {
+    int32_t obj, next, last = -1;
+    if (!o) return -1;
+    for (obj = o->first(o->context, x, y); obj; obj = next) {
+        int16_t id, k, n;
+        int listed = 0;
+        next = o->next(o->context, obj);
+        id = o->template_id(o->context, obj);
+        if (lo <= id && id <= hi) continue;
+        last = id;
+        if (player >= 0) {
+            n = o->player_class_count(o->context, player);
+            for (k = n; k >= 0; --k)
+                if (o->player_class(o->context, player, k) == id) { listed = 1; break; }
+            if (!listed && !o->can_place(o->context, obj)) continue;
+        }
+        if (delete_them) o->destroy(o->context, obj); else o->remove(o->context, obj);
+    }
+    return last;
+}

@@ -873,3 +873,36 @@ int32_t aoe_game_screen_message_ror(AoeGameScreenRor *s, uint32_t msg, uint32_t 
     }
     return O(s)->base_message ? O(s)->base_message(C(s), msg, wparam, lparam) : 0;
 }
+
+int32_t aoe_game_screen_paint_ror(const AoeGameScreenPaintOpsRor *o) {
+    uint32_t t0;
+    int32_t level, n, i;
+    int full;
+    if (!o || !o->can_paint(o->context)) return 0;
+    t0 = o->now(o->context);
+    level = o->redraw_level(o->context);
+    full = 1;
+    if (level != 2 && !o->view_focus(o->context)) {
+        const char *name = o->current_name(o->context);
+        if (!name || (strcmp(name, "Send Quick Message Dialog") != 0 &&
+                      strcmp(name, "Help Dialog") != 0))
+            full = 0;
+    }
+    n = o->child_count(o->context);
+    if (level != 0) {
+        if (full) {
+            for (i = 0; i < n; ++i) o->child_set_redraw(o->context, o->child(o->context, i), level);
+            if (o->parent_wants_overlaps(o->context)) o->parent_redraw_overlaps(o->context, level);
+            o->draw_self(o->context);
+        }
+        o->set_redraw_level(o->context, 0);
+        o->set_painting(o->context, 1);
+    }
+    for (i = 0; i < n; ++i) {
+        void *c = o->child(o->context, i);
+        if (full || o->is_current(o->context, c)) o->child_paint(o->context, c);
+    }
+    o->statistic(o->context, 0x11, o->now(o->context) - t0);
+    o->set_painting(o->context, 0);
+    return 0;
+}

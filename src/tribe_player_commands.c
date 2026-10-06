@@ -382,3 +382,41 @@ int aoe_tribe_player_repair_ror(const AoeTribePlayerOpsRor *ops,
     send(ops, buf, aoe_tribe_build_repair_ror(buf, sizeof buf, units, n, target->unit));
     return 1;
 }
+
+AoeTribeTemplateKindRor aoe_tribe_template_kind_ror(uint8_t kind) {
+    switch (kind) {
+    case 'F': return AOE_TRIBE_TEMPLATE_F;
+    case 'P': return AOE_TRIBE_TEMPLATE_P;
+    case 'Z': return AOE_TRIBE_TEMPLATE_Z;
+    default: return AOE_TRIBE_TEMPLATE_BASE;
+    }
+}
+
+int32_t aoe_tribe_player_load_templates_ror(AoeOutcomeStream *s, float version,
+                                            const AoeTribePlayerLoadOpsRor *o) {
+    int16_t count, i;
+    const uint8_t *flags;
+    if (!s || !o) return -1;
+    flags = aoe_stream_take(s, 2);
+    if (!flags) return -1;
+    count = (int16_t)aoe_le_u16(flags);
+    if (count > 0) {
+        flags = aoe_stream_take(s, (size_t)count * 4);
+        if (!flags) return -1;
+        for (i = 0; i < count; ++i) {
+            if (aoe_le_u32(flags + i * 4) == 0) continue;
+            {
+                uint8_t kind = aoe_stream_u8(s);
+                if (s->failed) return -1;
+                o->load_template(o->context, i, kind, aoe_tribe_template_kind_ror(kind), s);
+            }
+        }
+    }
+    o->load_tile_map(o->context, s);
+    o->load_object_memory(o->context, s);
+    for (i = 0; i < 3; ++i) o->new_list(o->context, i);
+    o->load_list(o->context, 0, s);
+    o->load_list(o->context, 1, s);
+    if (version >= 7.09f) o->load_list(o->context, 2, s);
+    return count;
+}

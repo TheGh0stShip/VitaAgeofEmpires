@@ -209,3 +209,40 @@ void aoe_research_action_readout_ror(const AoeResearchCompletionManagerRor *mana
         name[size - 1] = '\0';
     }
 }
+
+void aoe_research_list_for_building_ror(const AoeResearchOwnerRor *owner, int16_t building,
+                                        AoeResearchListEntryRor **list, int16_t *count) {
+    const AoeResearchCompletionManagerRor *m = owner ? owner->manager : NULL;
+    const DatTechs *techs = owner ? owner->techs : NULL;
+    int16_t i, n = 0, k = 0;
+    if (!list || !count) return;
+    if (m && techs) {
+        for (i = 0; i < m->count && i < (int16_t)techs->count; ++i)
+            if (aoe_research_state_ror(m, i) == 1 && techs->techs[i].research_location == building)
+                ++n;
+    }
+    free(*list);
+    *list = NULL;
+    *count = n;
+    if (n == 0) return;
+    *list = calloc((size_t)n, sizeof **list);
+    if (!*list) { *count = 0; return; }
+    for (i = 0; i < m->count && i < (int16_t)techs->count && k < n; ++i) {
+        const DatTech *t = &techs->techs[i];
+        AoeResearchListEntryRor *e;
+        int16_t types[3], amounts[3];
+        if (aoe_research_state_ror(m, i) != 1 || t->research_location != building) continue;
+        e = &(*list)[k++];
+        e->name = t->name;
+        e->id = i;
+        e->field_24 = t->research_time;
+        aoe_research_costs_ror(owner, i, types, amounts);
+        e->cost_type[0] = types[0];
+        e->cost_type[1] = types[1];
+        e->cost_amount[0] = (float)amounts[0];
+        e->cost_amount[1] = (float)amounts[1];
+        e->cost_amount[2] = (float)amounts[2];
+        e->help = aoe_research_help_ror(m, techs, i);
+        e->tree_text = aoe_research_tree_text_ror(m, techs, i);
+    }
+}

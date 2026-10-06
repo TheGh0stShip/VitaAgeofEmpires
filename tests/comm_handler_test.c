@@ -146,6 +146,52 @@ static void session_tests(void) {
     lob_ok = 0;
     assert(aoe_comm_join_lobby_ror(&c, &d, 5) == 0);
 }
+
+static int32_t oj_hr; static int oj_posted; static int32_t lb_create_hr, lb_connect_hr, lb_qi_hr, lb_read_hr; static int lb_iface = 1, lb_launched = -1, lb_enum, lb_patched_flags, lb_patched_max;
+static int32_t d_open_join(void *c, const uint32_t sg[4], const uint32_t ag[4]) { (void)c; (void)sg; (void)ag; return oj_hr; }
+static void d_oj_post(void *c, uint32_t code) { (void)c; oj_posted = (int)code; }
+static void lb_free(void *c) { (void)c; }
+static int32_t lb_create(void *c) { (void)c; return lb_create_hr; }
+static int lb_interface(void *c) { (void)c; return lb_iface; }
+static int32_t lb_size(void *c, uint32_t *n) { (void)c; *n = 64; return 0; }
+static int32_t lb_read(void *c) { (void)c; return lb_read_hr; }
+static void lb_patch(void *c, uint32_t f, uint32_t m) { (void)c; lb_patched_flags = (int)f; lb_patched_max = (int)m; }
+static void lb_write(void *c) { (void)c; }
+static int32_t lb_connect(void *c) { (void)c; return lb_connect_hr; }
+static int32_t lb_qi(void *c, int *has) { (void)c; *has = 1; return lb_qi_hr; }
+static void lb_enum_f(void *c) { (void)c; ++lb_enum; }
+static void lb_set_launched(void *c, int on) { (void)c; lb_launched = on; }
+static void join_lobby_tests(void) {
+    static AoeCommRor c;
+    AoeCommJoinOpsRor j = {NULL, d_open_join, d_oj_post};
+    AoeCommLobbyOpsRor l = {NULL, lb_free, lb_create, lb_interface, lb_size, lb_read, lb_patch, lb_write, lb_connect, lb_qi, lb_enum_f, lb_set_launched};
+    uint32_t guid[4] = {1, 2, 3, 4};
+    int has = 0;
+    memset(&c, 0, sizeof c); c.ops = &ops;
+    dp = 1;
+    oj_hr = 0;
+    assert(aoe_comm_join_session_ror(&c, &dops, &j, guid) == 1 && c.state == 3 && c.is_host == 0 && c.guid_12fc[0] == 1);
+    oj_hr = (int32_t)0x8877014a;
+    assert(aoe_comm_join_session_ror(&c, &dops, &j, guid) == 0 && oj_posted == 0x17ab);
+    oj_hr = (int32_t)0x80004005; c.state = 0;
+    assert(aoe_comm_join_session_ror(&c, &dops, &j, guid) == 0 && c.state == 1);
+    oj_hr = (int32_t)0x8877015e; c.state = 0;
+    assert(aoe_comm_join_session_ror(&c, &dops, &j, guid) == 0 && c.state == 0);
+    /* The lobby connect: the whole path; a connect error 0x887700f0
+       quietly answers 0xff; no interface 0; a read error clears the flag. */
+    assert(aoe_comm_lobby_connect_ror(&c, &l, &has) == 1 && has == 1 && lb_enum == 1 &&
+           lb_launched == 1 && lb_patched_flags == 0x44 && lb_patched_max == 9);
+    lb_connect_hr = (int32_t)0x887700f0;
+    assert(aoe_comm_lobby_connect_ror(&c, &l, &has) == 0xff);
+    lb_connect_hr = -5;
+    assert(aoe_comm_lobby_connect_ror(&c, &l, &has) == 0xff);
+    lb_connect_hr = 0; lb_read_hr = -1;
+    assert(aoe_comm_lobby_connect_ror(&c, &l, &has) == 0 && lb_launched == 0);
+    lb_read_hr = 0; lb_iface = 0;
+    assert(aoe_comm_lobby_connect_ror(&c, &l, &has) == 0);
+    lb_iface = 1; lb_create_hr = -1;
+    assert(aoe_comm_lobby_connect_ror(&c, &l, &has) == 0);
+}
 int main(void) {
     enable_new_players_tests();
     static AoeCommRor c;
@@ -394,5 +440,6 @@ int main(void) {
     }
     puts("comm_handler_test: ok");
     session_tests();
+    join_lobby_tests();
     return 0;
 }

@@ -997,4 +997,73 @@ int32_t aoe_view_collect_nearby_ror(const AoeViewClassListsRor *lists, int32_t c
                                     int32_t class_count, const uint8_t kind_bucket[256],
                                     AoeViewNearbyRor *out);
 
+
+/* 0x0050fbd0: the terrain overlay rebuilt. True at once for a zero-size
+   view. Without an overlay a "Terrain Buffer" surface (0x004382a0) is
+   made and initialised (0x00438500) from the primary surface at the
+   view's size; with one and a positive height: cleared (0x00438890),
+   its blit origin (+0x2d0 / +0x2d4) and surface origin (0x00438f40)
+   zeroed, both draw-row tables (+0x334 / +0x338) replaced (0x005161c0
+   freed; 0x00516110 for 2 * (height + 450) rows, height + 450, 0x40,
+   -200, height + 249, 40) and marked dirty over the whole view
+   (0x00516360). Returns whether an overlay exists. */
+typedef struct {
+    void *context;
+    void *(*surface_create)(void *context, const char *name);
+    int (*surface_init)(void *context, void *surface, void *primary, int32_t w, int32_t h);
+    void (*surface_clear)(void *context, void *surface, int32_t w, int32_t h);
+    void (*surface_set_origin)(void *context, void *surface, int32_t x, int32_t y);
+    void (*draw_rows_free)(void *context, void *rows);
+    void *(*draw_rows_new)(void *context, int32_t rows2, int32_t rows, int32_t a, int32_t b,
+                           int32_t c, int32_t d);
+    void (*dirty)(void *context, void *rows, int32_t x0, int32_t y0, int32_t x1, int32_t y1);
+    /* 0x0050fa10 setup: the panel's 0x00452920, the layout 0x0050fde0,
+       the three span regions (0x004a37f0 freed, 0x004a3710(w, h) new),
+       the game region 0x00449b40 and 0x0044bed0(1) when 0x00582edc is
+       set, the redraw (+0x20(2)). */
+    void (*base_setup)(void *context, int32_t x, int32_t y, int32_t w, int32_t h);
+    void (*layout)(void *context);
+    void (*region_free)(void *context, void *region);
+    void *(*region_new)(void *context, int32_t w, int32_t h);
+    int (*game_region_enabled)(void *context);
+    void (*game_region)(void *context, int32_t x0, int32_t y0, int32_t x1, int32_t y1);
+    void (*pointer_switch)(void *context, int32_t on);
+    void (*redraw)(void *context, int32_t level);
+} AoeMainViewSetupOpsRor;
+
+typedef struct {
+    int32_t width, height;     /* +0x14, +0x18 */
+    int32_t blit_origin_x, blit_origin_y; /* +0x2d0, +0x2d4 */
+    void *draw_rows[2];        /* +0x334, +0x338 */
+    void *regions[3];          /* +0x178, +0x17c, +0x180 */
+} AoeMainViewBuffersRor;
+
+int aoe_main_view_rebuild_overlay_ror(AoeMainViewRor *v, AoeMainViewBuffersRor *b,
+                                      const AoeMainViewSetupOpsRor *o);
+void aoe_main_view_setup_ror(AoeMainViewRor *v, AoeMainViewBuffersRor *b,
+                             const AoeMainViewSetupOpsRor *o, int32_t x, int32_t y, int32_t w,
+                             int32_t h);
+
+/* 0x00508bb0 (game view): the placement preview at a click. With a tile
+   under (x, y) (0x00511790): the point is the tile plus 0.5; the
+   template's footprint corners (0x004433c0 with the map) are taken; the
+   placement check (template +0x20 with the player, the point, 0, 1, the
+   template's +0x64 byte, 0, 1, 1, 1) failing sets the cursor code
+   (0x007c0458) to 5, else to ((v < 4 ? v + 0x24 : 0x2c - v) << 4) | 9 for
+   v = bits 7..9 of the template's +0x04; with the template's +0x18 the
+   preview is drawn (+0x34: the area, the corner midpoint, the player's
+   colour) and 0x007c0448 takes the midpoint's y. The code is cleared
+   afterwards (the original leaves 0 in it); returns 1. */
+typedef struct {
+    void *context;
+    int (*tile_at)(void *context, int32_t x, int32_t y, int32_t *tx, int32_t *ty);
+    void (*corners)(void *context, float fx, float fy, int16_t out[8]); /* l, t, r, b pairs */
+    int (*can_place)(void *context, float fx, float fy);
+    uint32_t (*template_flags)(void *context);   /* template +0x04 */
+    int (*template_has_graphic)(void *context);   /* template +0x18 */
+    void (*draw_preview)(void *context, int32_t x, int32_t y);
+} AoeMainViewPreviewOpsRor;
+int aoe_main_view_place_preview_ror(const AoeMainViewPreviewOpsRor *o, int32_t x, int32_t y,
+                                    int32_t *cursor_code, int32_t *preview_y);
+
 #endif

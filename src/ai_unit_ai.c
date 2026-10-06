@@ -1114,3 +1114,34 @@ int32_t aoe_ai_unit_ai_remembered_ror(const AoeAiUnitAiMemoryOpsRor *o, uint32_t
     if (cost) *cost = c;
     return object;
 }
+
+/* ---- 0x004131c0 ---- */
+int32_t aoe_ai_unit_ai_rally_ror(int32_t target_id, const AoeAiUnitAiRallyOpsRor *o) {
+    float tx, ty;
+    int16_t towner;
+    int32_t sent = 0, b, i;
+    if (!o || !o->target(o->context, target_id, &tx, &ty, &towner)) return 0;
+    o->tell_unit(o->context);
+    for (b = 1; b <= 2; ++b) {
+        int32_t n = o->bucket_count(o->context, b);
+        for (i = 0; i < n; ++i) {
+            int32_t id = o->bucket_object(o->context, b, i);
+            int has_ai;
+            int16_t owner, cls;
+            uint8_t state;
+            if (id == o->own_id) continue;
+            if (!o->object(o->context, id, &has_ai, &owner, &state, &cls) || !has_ai) continue;
+            if (owner < 0 || state >= 3) continue;
+            if (cls == 1 || cls == 3 || cls == 4 || cls == 0x15 || cls == 0x12 || cls == 0x14 ||
+                cls == 0x1b)
+                continue;
+            if (owner != o->own_owner && !o->allied(o->context, owner, o->own_owner)) continue;
+            if (o->distance(o->context, id) > 3.0f) continue;
+            if (!o->ai_idle(o->context, id)) continue;
+            o->order(o->context, owner, 700, target_id, o->own_owner, tx, ty,
+                     o->own_range(o->context));
+            ++sent;
+        }
+    }
+    return sent;
+}

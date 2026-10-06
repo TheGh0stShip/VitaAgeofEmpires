@@ -111,6 +111,11 @@ int aoe_ui_list_dialog_setup_ror(
     int16_t count, int16_t selected, int32_t ok_x, int32_t cancel_x,
     int32_t button_y, int32_t button_w, int32_t button_h);
 int16_t aoe_ui_list_dialog_selected_ror(const AoeUiListDialogRor *d);
+/* The destructor body and the +0xb8 action slot, for subclasses. */
+void aoe_ui_list_dialog_destroy_slot_ror(AoeUiPanelRor *p);
+int32_t aoe_ui_list_dialog_action_slot_ror(AoeUiPanelRor *p, AoeUiPanelRor *from,
+                                           int32_t code, int32_t value,
+                                           int32_t extra);
 const char *aoe_ui_list_dialog_text_ror(const AoeUiListDialogRor *d);
 
 /* The help dialog "Help Dialog" (vtable 0x00543948,

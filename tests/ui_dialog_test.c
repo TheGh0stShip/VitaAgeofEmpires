@@ -1,6 +1,7 @@
 /* Patched RoR 1.0a dialogs: the dialog base 0x00460730..0x004609f0, the
    message dialog 0x00434550..0x00434990 and the list dialog
    0x00433890..0x00433c20. */
+#include "edit_object_list.h"
 #include "ui_dialog.h"
 
 #include <assert.h>
@@ -8,6 +9,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+static AoePlayerTemplates obj_templates;
+static const AoePlayerTemplates *obj_get(void *c) { (void)c; return &obj_templates; }
+static void obj_name(void *c, int16_t id, char *out, int size) {
+    (void)c;
+    snprintf(out, (size_t)size, "Lang%d", (int)id);
+}
+static int16_t obj_place(void *c) { (void)c; return 0; }
 static int32_t width(void *c, uintptr_t f, const char *t, int32_t n) { (void)c; (void)f; (void)t; return n * 8; }
 static void string(void *c, int32_t id, char *out, int size) {
     (void)c;
@@ -150,6 +158,44 @@ int main(void) {
         assert(!aoe_ui_system_find_ror(&sys, "Help Dialog"));
         assert(aoe_ui_system_close_ror(&sys, "Game Screen"));
     }
+    /* The object list dialog (0x0046a890..0x0046ad40): " <None> " plus
+       the shown templates (slot 1 empty, slot 2 hidden), sorted ignoring
+       case; the placed object (slot 0) is the default line. */
+    {
+        static DatUnit zebra, hidden, named;
+        static DatUnit *slots[4];
+        AoeEditObjectListOpsRor lo = {0};
+        AoeEditObjectListRor *d = calloc(1, sizeof(*d));
+        zebra.name = "zebra";
+        hidden.name = "Hidden";
+        hidden.hide_in_editor = 1;
+        named.name = "unused";
+        named.language_name_id = 5;
+        slots[0] = &zebra;
+        slots[2] = &hidden;
+        slots[3] = &named;
+        obj_templates.count = 4;
+        obj_templates.slots = slots;
+        lo.templates = obj_get;
+        lo.object_name = obj_name;
+        lo.place_object = obj_place;
+        assert(aoe_edit_object_list_init_ror(d, &sys, &ops, &lo, "Objects"));
+        d->mode = 2;
+        assert(aoe_edit_object_list_default_id_ror(d) == -1 &&
+               !aoe_edit_object_list_build_ror(d));
+        assert(aoe_edit_object_list_setup_ror(d, &screen, NULL, -1, 1, "T"));
+        assert(d->count == 3 && strcmp(d->lines[0], " <None> ") == 0 &&
+               strcmp(d->lines[1], "Lang5") == 0 && d->entries[1].id == 3 &&
+               strcmp(d->lines[2], "zebra") == 0 && d->entries[2].id == 0 &&
+               d->entries[0].id == -1 && d->default_index == 2 &&
+               d->list.list->text.selected == 2);
+        d->list.selected = -1;
+        assert(aoe_edit_object_list_choice_ror(d) == -1);
+        d->list.selected = 1;
+        assert(aoe_edit_object_list_choice_ror(d) == 3);
+        assert(aoe_ui_system_close_ror(&sys, "Objects"));
+    }
+
     aoe_ui_panel_release_ror(&other);
     aoe_ui_panel_release_ror(&screen);
     free(sys.panels);

@@ -281,7 +281,7 @@ int aoe_ui_list_dialog_init_ror(AoeUiListDialogRor *d, AoeUiSystemRor *system,
     return ok;
 }
 
-static void list_destroy(AoeUiPanelRor *p) {
+void aoe_ui_list_dialog_destroy_slot_ror(AoeUiPanelRor *p) {
     AoeUiListDialogRor *d = LST(p);
     free_child(d->title);
     free_child(d->list);
@@ -336,7 +336,7 @@ int aoe_ui_list_dialog_setup_ror(
     return 1;
 }
 
-static int32_t list_action(AoeUiPanelRor *p, AoeUiPanelRor *from,
+int32_t aoe_ui_list_dialog_action_slot_ror(AoeUiPanelRor *p, AoeUiPanelRor *from,
                            int32_t code, int32_t value, int32_t extra) {
     AoeUiListDialogRor *d = LST(p);
     if (from) {
@@ -370,9 +370,9 @@ const char *aoe_ui_list_dialog_text_ror(const AoeUiListDialogRor *d) {
 }
 
 const AoeUiEzVtblRor aoe_ui_list_dialog_vtable_ror = {
-    AOE_UI_EZ_SLOTS(list_destroy, aoe_ui_panel_handle_idle_ror,
+    AOE_UI_EZ_SLOTS(aoe_ui_list_dialog_destroy_slot_ror, aoe_ui_panel_handle_idle_ror,
                     aoe_ui_panel_handle_paint_ror, aoe_ui_ez_no_key_action_ror,
-                    aoe_ui_panel_zero_ror, list_action,
+                    aoe_ui_panel_zero_ror, aoe_ui_list_dialog_action_slot_ror,
                     aoe_ui_ez_set_focus_slot_ror),
     aoe_ui_ez_draw_background_slot_ror,
     aoe_ui_ez_set_reference_slot_ror,

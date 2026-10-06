@@ -1970,3 +1970,290 @@ void aoe_view_grid_build_lookup_ror(AoeViewGridRor *grid, const int32_t *const t
         }
     }
 }
+
+/* ---- 0x00518720 / 0x00518a30 ---- */
+float aoe_game_view_scroll_speed_ror(int32_t *active, uint32_t now, uint32_t last, int32_t period,
+                                     float max)
+{
+    float s;
+
+    if (*active == 0) {
+        *active = 1;
+        s = 1.0f;
+    } else {
+        double q = (double)(now - last) / (double)period;
+        int32_t t = (int32_t)q;
+        s = (float)t + ((q - (double)t) < 0.5 ? 0.0f : 0.5f);
+    }
+    if (max < s)
+        s = max;
+    return s;
+}
+
+static void gv_scroll_move(const AoeGameViewScrollOpsRor *o, int sx, int sy, float s)
+{
+    float x, y;
+
+    if (sx == -1) {
+        o->view_point(o->context, &x, &y);
+        o->set_view_point(o->context, x - s, y - s);
+    } else if (sx == 1) {
+        o->view_point(o->context, &x, &y);
+        o->set_view_point(o->context, x + s, y + s);
+    }
+    if (sy == -1) {
+        o->view_point(o->context, &x, &y);
+        o->set_view_point(o->context, x + 2 * s, y - 2 * s);
+    } else if (sy == 1) {
+        o->view_point(o->context, &x, &y);
+        o->set_view_point(o->context, x - 2 * s, y + 2 * s);
+    }
+}
+
+static int gv_state_ok(int32_t state)
+{
+    return state == 4 || state == 5 || state == 6 || state == 7;
+}
+
+int32_t aoe_game_view_edge_scroll_ror(AoeGameViewScrollRor *st, const AoeGameViewScrollOpsRor *o)
+{
+    int32_t r[4], cx, cy;
+    int sx = 0, sy = 0;
+
+    if (!gv_state_ok(o->game_state(o->context)) || o->comm_waiting(o->context) ||
+        !o->edge_enabled || !o->foreground(o->context) || o->modal(o->context) ||
+        o->focus_elsewhere(o->context) || st->key_active != 0) {
+        st->edge_active = 0;
+        return 0;
+    }
+    o->window_rect(o->context, r);
+    o->cursor(o->context, &cx, &cy);
+    if (!o->buttons_down(o->context)) {
+        if (cx < r[0] + o->margin) sx = -1;
+        else if (r[2] - o->margin < cx) sx = 1;
+        if (cy < r[1] + o->margin) sy = -1;
+        else if (r[3] - o->margin < cy) sy = 1;
+        if (sx != 0 || sy != 0) {
+            uint32_t now = o->time_ms(o->context);
+            float s = aoe_game_view_scroll_speed_ror(&st->edge_active, now, st->edge_time,
+                                                    o->period, o->edge_max);
+            if (s > 0.0f) {
+                gv_scroll_move(o, sx, sy, s);
+                o->redraw(o->context);
+                st->edge_time = now;
+            }
+            return st->edge_active;
+        }
+    }
+    st->edge_active = 0;
+    return 0;
+}
+
+int aoe_game_view_key_scroll_ror(AoeGameViewScrollRor *st, const AoeGameViewScrollOpsRor *o)
+{
+    int left, up, right, down, moved = 0;
+
+    if (o->comm_waiting(o->context) || !gv_state_ok(o->game_state(o->context)) ||
+        !o->foreground(o->context) || !o->has_area) {
+        st->key_active = 0;
+        return 0;
+    }
+    o->keys(o->context, &left, &up, &right, &down);
+    if (o->edit_mode(o->context) == 0x12 && o->has_player && o->has_held) {
+        if (up) o->held_move(o->context, 1, -1);
+        if (down) o->held_move(o->context, -1, 1);
+        if (left) o->held_move(o->context, -1, -1);
+        moved = left || down || up;
+        if (right) {
+            o->held_move(o->context, 1, 1);
+            moved = 1;
+        }
+        st->key_active = 0;
+    } else if (o->has_player) {
+        int sx = left ? -1 : right ? 1 : 0, sy = up ? -1 : down ? 1 : 0;
+        if (sx != 0 || sy != 0) {
+            uint32_t now = o->time_ms(o->context);
+            float s = aoe_game_view_scroll_speed_ror(&st->key_active, now, st->key_time, o->period,
+                                                    o->key_max);
+            if (s > 0.0f) {
+                gv_scroll_move(o, sx, sy, s);
+                st->key_time = now;
+                moved = 1;
+            }
+        } else {
+            st->key_active = 0;
+        }
+    } else {
+        st->key_active = 0;
+    }
+    if (moved)
+        o->redraw(o->context);
+    return moved;
+}
+
+/* ---- 0x0051a650 ---- */
+static void gv_pick_result(AoeMainViewPickRor *out, void *obj, int16_t sx, int16_t sy, float x,
+                           float y)
+{
+    out->object_value = (int32_t)(intptr_t)obj;
+    out->half0 = sx;
+    out->half1 = sy;
+    memcpy(&out->word0, &x, sizeof x);
+    memcpy(&out->word1, &y, sizeof y);
+}
+
+uint8_t aoe_game_view_pick_ror(const AoeGameViewPickOpsRor *o, uint8_t kind, uint8_t min_kind,
+                               int32_t x, int32_t y, AoeMainViewPickRor *out, void *current,
+                               int ignore_fog)
+{
+    AoeViewPickedRor recs[AOE_VIEW_PICKED_MAX_ROR];
+    int32_t n, i, best_pri = 0;
+    void *best = NULL, *first = NULL;
+    int16_t bsx = 0, bsy = 0, fsx = 0, fsy = 0;
+    float bx = 0.0f, by = 0.0f, fx = 0.0f, fy = 0.0f;
+    int found = 0;
+
+    if (kind != ')') {
+        if (kind == '*' &&
+            aoe_game_view_pick_ror(o, ')', min_kind, x, y, out, current, 1) == '4')
+            return '4';
+        return o->base_pick(o->context, '(', min_kind, x, y, out, current);
+    }
+    memset(out, 0, sizeof *out);
+    n = o->point_objects(o->context, x, y, min_kind == 0 ? 0 : 10, min_kind == 0 ? 0x28 : 0x14,
+                         recs);
+    if (n <= 0)
+        return '2';
+    for (i = 0; i < n; i++) {
+        uint8_t state, okind;
+        float ox, oy;
+        void *obj;
+        int32_t pri;
+
+        if (recs[i].id < 0)
+            continue;
+        obj = o->object(o->context, recs[i].id, &state, &okind, &ox, &oy);
+        if (!obj || state >= 7 || okind < min_kind)
+            continue;
+        if (current) {
+            if (o->priority(o->context, obj, recs[i].count) <= 0)
+                continue;
+        }
+        if (!ignore_fog && !o->reveal_all && !o->visible(o->context, obj) &&
+            o->fog(o->context, (int32_t)ox, (int32_t)oy) != 0x0f)
+            continue;
+        if (!current) {
+            pri = o->priority(o->context, obj, recs[i].count);
+            if (best_pri < pri) {
+                best = obj;
+                bsx = (int16_t)(recs[i].field_14 + o->left);
+                bsy = (int16_t)(recs[i].field_18 + o->top);
+                bx = ox;
+                by = oy;
+                best_pri = pri;
+            }
+            continue;
+        }
+        if (obj == current) {
+            found = 1;
+            fx = ox;
+            fy = oy;
+            if (!first) {
+                bsx = (int16_t)(recs[i].field_14 + o->left);
+                bsy = (int16_t)(recs[i].field_18 + o->top);
+            }
+        } else if (found) {
+            best = obj;
+            bsx = (int16_t)(recs[i].field_14 + o->left);
+            bsy = (int16_t)(recs[i].field_18 + o->top);
+            bx = ox;
+            by = oy;
+            break;
+        } else if (!first) {
+            first = obj;
+            fsx = (int16_t)(recs[i].field_14 + o->left);
+            fsy = (int16_t)(recs[i].field_18 + o->top);
+            bx = ox;
+            by = oy;
+        }
+    }
+    if (current && !best) {
+        if (first) {
+            best = first;
+            bsx = fsx;
+            bsy = fsy;
+        } else if (found) {
+            best = current;
+            bx = fx;
+            by = fy;
+        }
+    }
+    if (!best)
+        return '2';
+    gv_pick_result(out, best, bsx, bsy, bx, by);
+    return '4';
+}
+
+/* ---- 0x0051aa10 ---- */
+void *aoe_game_view_selection_target_ror(const AoeGameViewTargetOpsRor *o, int32_t x, int32_t y,
+                                         int32_t *flag, int16_t arg)
+{
+    AoeViewPickedRor recs[AOE_VIEW_PICKED_MAX_ROR];
+    int32_t scores[AOE_VIEW_PICKED_MAX_ROR], flags[AOE_VIEW_PICKED_MAX_ROR];
+    int32_t n, count, s, j, best_score = 0;
+    void *best = NULL;
+
+    if (flag)
+        *flag = 0;
+    n = o->point_objects(o->context, x, y, 10, 0x14, recs);
+    if (n <= 0)
+        return NULL;
+    count = o->selection(o->context);
+    if (count <= 0)
+        return NULL;
+    memset(scores, 0, sizeof scores);
+    memset(flags, 0, sizeof flags);
+    for (s = 0; s < count; s++) {
+        void *unit = o->selected(o->context, s);
+        for (j = 0; j < n; j++) {
+            uint8_t state;
+            int16_t akind = 0;
+            void *obj, *act;
+
+            if (recs[j].id < 0)
+                continue;
+            obj = o->object(o->context, recs[j].id, &state);
+            if (!obj || state >= 7)
+                continue;
+            act = o->ability(o->context, unit, obj, &akind);
+            if (act && (arg == -1 || akind == arg)) {
+                scores[j] += o->priority(o->context, obj, recs[j].count);
+                if (o->ability_flag(o->context, act))
+                    flags[j] = 1;
+            } else if (o->template_ec(o->context, unit)) {
+                int32_t t, tc = o->template_count(o->context);
+                for (t = 0; t < tc; t++) {
+                    if (!o->template_matches(o->context, t, unit))
+                        continue;
+                    act = o->template_ability(o->context, t, unit, obj, &akind);
+                    if (!act || !(arg == -1 || akind == arg))
+                        continue;
+                    scores[j] += o->priority(o->context, obj, recs[j].count);
+                    if (o->ability_flag(o->context, act))
+                        flags[j] = 1;
+                    break;
+                }
+            }
+        }
+    }
+    for (j = 0; j < n; j++) {
+        if (best_score < scores[j]) {
+            uint8_t state;
+            best = o->object(o->context, recs[j].id, &state);
+            best_score = scores[j];
+            if (flag)
+                *flag = flags[j];
+        }
+    }
+    return best;
+}

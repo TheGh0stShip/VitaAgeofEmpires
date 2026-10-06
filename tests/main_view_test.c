@@ -1300,6 +1300,105 @@ static void grid_lookup_tests(void) {
     assert(g.lookup[16] == 2 && g.lookup[17] == 1 && g.lookup[18] == 2 && g.lookup[31] == 2 && g.lookup[32] == -1);
     free(g.lookup);
 }
+
+/* 0x00518720 / 0x00518a30 recorder. */
+static int32_t gs_state = 4, gs_edit; static int gs_comm, gs_fore = 1, gs_modal, gs_focus, gs_buttons, gs_keys[4]; static int32_t gs_cur[2] = {5, 300}; static uint32_t gs_now = 1000;
+static float gs_vx = 100.0f, gs_vy = 100.0f; static char gs_log[256];
+static int32_t gs_game_state(void *c) { (void)c; return gs_state; }
+static int32_t gs_edit_mode(void *c) { (void)c; return gs_edit; }
+static int gs_comm_waiting(void *c) { (void)c; return gs_comm; }
+static int gs_foreground(void *c) { (void)c; return gs_fore; }
+static int gs_modal_q(void *c) { (void)c; return gs_modal; }
+static int gs_focus_q(void *c) { (void)c; return gs_focus; }
+static void gs_rect(void *c, int32_t r[4]) { (void)c; r[0] = 0; r[1] = 0; r[2] = 640; r[3] = 480; }
+static void gs_cursor(void *c, int32_t *x, int32_t *y) { (void)c; *x = gs_cur[0]; *y = gs_cur[1]; }
+static int gs_buttons_q(void *c) { (void)c; return gs_buttons; }
+static void gs_keys_q(void *c, int *l, int *u, int *r, int *d) { (void)c; *l = gs_keys[0]; *u = gs_keys[1]; *r = gs_keys[2]; *d = gs_keys[3]; }
+static uint32_t gs_time(void *c) { (void)c; return gs_now; }
+static void gs_view_point(void *c, float *x, float *y) { (void)c; *x = gs_vx; *y = gs_vy; }
+static void gs_set_view_point(void *c, float x, float y) { (void)c; gs_vx = x; gs_vy = y; }
+static void gs_held_move(void *c, int sx, int sy) { (void)c; size_t n = strlen(gs_log); snprintf(gs_log + n, sizeof gs_log - n, "held(%d,%d) ", sx, sy); }
+static void gs_redraw(void *c) { (void)c; strcat(gs_log, "redraw "); }
+static void scroll_tests(void) {
+    AoeGameViewScrollOpsRor o = {NULL, gs_game_state, gs_edit_mode, gs_comm_waiting, 1, 20, 100, 3.0f, 2.0f, 0.5f, gs_foreground, gs_modal_q, gs_focus_q, gs_rect, gs_cursor, gs_buttons_q, gs_keys_q, gs_time, 1, 1, 0, gs_view_point, gs_set_view_point, gs_held_move, gs_redraw};
+    AoeGameViewScrollRor st; memset(&st, 0, sizeof st);
+    int32_t a = 1;
+    /* The speed: first tick 1.0; then 250 ms / 100 = 2.5 -> 2.5; 2.4 -> 2.0; capped at 3. */
+    assert(aoe_game_view_scroll_speed_ror(&a, 1250, 1000, 100, 3.0f) == 2.5f && aoe_game_view_scroll_speed_ror(&a, 1240, 1000, 100, 3.0f) == 2.0f && aoe_game_view_scroll_speed_ror(&a, 1900, 1000, 100, 3.0f) == 3.0f);
+    a = 0; assert(aoe_game_view_scroll_speed_ror(&a, 9, 0, 100, 3.0f) == 1.0f && a == 1);
+    /* The cursor at the left edge: the first tick moves by (-1, -1) and stamps the time. */
+    gs_log[0] = '\0';
+    assert(aoe_game_view_edge_scroll_ror(&st, &o) == 1 && gs_vx == 99.0f && gs_vy == 99.0f && st.edge_time == 1000 && strcmp(gs_log, "redraw ") == 0);
+    /* 250 ms later, bottom-left corner: speed 2.5: x step (-2.5, -2.5), then y +1 step (-5, +5). */
+    gs_now = 1250; gs_cur[1] = 470;
+    assert(aoe_game_view_edge_scroll_ror(&st, &o) == 1 && gs_vx == 91.5f && gs_vy == 101.5f);
+    /* A mouse button, a modal screen, a key scroll in progress or the cursor inside clear the flag. */
+    gs_buttons = 1; assert(aoe_game_view_edge_scroll_ror(&st, &o) == 0 && st.edge_active == 0); gs_buttons = 0;
+    gs_cur[0] = 300; gs_cur[1] = 200; assert(aoe_game_view_edge_scroll_ror(&st, &o) == 0);
+    gs_cur[0] = 5; st.key_active = 1; assert(aoe_game_view_edge_scroll_ror(&st, &o) == 0); st.key_active = 0;
+    gs_modal = 1; assert(aoe_game_view_edge_scroll_ror(&st, &o) == 0); gs_modal = 0;
+    /* Keys: right + up: first tick speed 1: (+1, +1) then (+2, -2). */
+    gs_keys[2] = 1; gs_keys[1] = 1; gs_vx = gs_vy = 50.0f; gs_log[0] = '\0';
+    assert(aoe_game_view_key_scroll_ror(&st, &o) == 1 && gs_vx == 53.0f && gs_vy == 49.0f && st.key_active == 1 && st.key_time == 1250 && strcmp(gs_log, "redraw ") == 0);
+    /* Edit mode 0x12 with a held object moves it instead and clears the flag. */
+    gs_edit = 0x12; o.has_held = 1; gs_log[0] = '\0';
+    assert(aoe_game_view_key_scroll_ror(&st, &o) == 1 && strcmp(gs_log, "held(1,-1) held(1,1) redraw ") == 0 && st.key_active == 0);
+    gs_keys[2] = gs_keys[1] = 0; gs_edit = 0; o.has_held = 0;
+    assert(aoe_game_view_key_scroll_ror(&st, &o) == 0);
+    gs_comm = 1; st.key_active = 1; assert(aoe_game_view_key_scroll_ror(&st, &o) == 0 && st.key_active == 0); gs_comm = 0;
+}
+
+/* 0x0051a650 / 0x0051aa10 recorder: objects 1..4 with kinds 1, 2, 3, 3 at tiles (1, 1)..; records in order. */
+typedef struct { uint8_t state, kind; float x, y; int32_t pri; int visible; } gp_obj;
+static gp_obj gp_objs[5] = {{0}, {2, 1, 1.5f, 1.5f, 5, 1}, {2, 2, 2.5f, 2.5f, 9, 0}, {2, 3, 3.5f, 3.5f, 7, 1}, {8, 3, 4.5f, 4.5f, 7, 1}};
+static int32_t gp_ids[4] = {1, 2, 3, 4}; static int gp_n = 4; static uint8_t gp_fog = 0x0f;
+static int32_t gp_point_objects(void *c, int32_t x, int32_t y, int32_t lo, int32_t hi, AoeViewPickedRor out[64]) { int i; (void)c; (void)x; (void)y; (void)lo; (void)hi; for (i = 0; i < gp_n; ++i) { out[i].id = gp_ids[i]; out[i].count = 1; out[i].field_14 = (int16_t)(10 * i); out[i].field_18 = (int16_t)(20 * i); } return gp_n; }
+static void *gp_object(void *c, int32_t id, uint8_t *state, uint8_t *kind, float *x, float *y) { (void)c; if (id < 1 || id > 4) return NULL; *state = gp_objs[id].state; *kind = gp_objs[id].kind; *x = gp_objs[id].x; *y = gp_objs[id].y; return &gp_objs[id]; }
+static int gp_visible(void *c, void *obj) { (void)c; return ((gp_obj *)obj)->visible; }
+static uint8_t gp_fog_q(void *c, int32_t x, int32_t y) { (void)c; (void)x; (void)y; return gp_fog; }
+static int32_t gp_priority(void *c, void *obj, int32_t cls) { (void)c; (void)cls; return ((gp_obj *)obj)->pri; }
+static uint8_t gp_base(void *c, uint8_t kind, uint8_t mk, int32_t x, int32_t y, AoeMainViewPickRor *out, void *cur) { (void)c; (void)mk; (void)x; (void)y; (void)cur; out->other_value = kind; return '3'; }
+static void pick_tests(void) {
+    AoeGameViewPickOpsRor o = {NULL, 100, 50, 0, gp_base, gp_point_objects, gp_object, gp_visible, gp_fog_q, gp_priority};
+    AoeMainViewPickRor out; float f;
+    /* Object 2 has the highest priority but sits in fog and is not seen: object 3 wins (7 > 5). */
+    gp_fog = 0;
+    assert(aoe_game_view_pick_ror(&o, ')', 0, 7, 7, &out, NULL, 0) == '4' && out.object_value == (int32_t)(intptr_t)&gp_objs[3] && out.half0 == 120 && out.half1 == 90);
+    memcpy(&f, &out.word0, 4); assert(f == 3.5f);
+    /* Ignoring the fog (or a revealed map) lets object 2 win; the min kind 3 leaves object 3 only (4 is in state 8). */
+    assert(aoe_game_view_pick_ror(&o, ')', 0, 7, 7, &out, NULL, 1) == '4' && out.object_value == (int32_t)(intptr_t)&gp_objs[2]);
+    o.reveal_all = 1; assert(aoe_game_view_pick_ror(&o, ')', 3, 7, 7, &out, NULL, 0) == '4' && out.object_value == (int32_t)(intptr_t)&gp_objs[3]); o.reveal_all = 0;
+    /* Cycling: after object 1 comes 3 (2 is fogged); after 3 wraps to 1; a current that is alone is itself. */
+    gp_fog = 0;
+    assert(aoe_game_view_pick_ror(&o, ')', 0, 7, 7, &out, &gp_objs[1], 0) == '4' && out.object_value == (int32_t)(intptr_t)&gp_objs[3]);
+    assert(aoe_game_view_pick_ror(&o, ')', 0, 7, 7, &out, &gp_objs[3], 0) == '4' && out.object_value == (int32_t)(intptr_t)&gp_objs[1] && out.half0 == 100);
+    gp_n = 1; assert(aoe_game_view_pick_ror(&o, ')', 0, 7, 7, &out, &gp_objs[1], 0) == '4' && out.object_value == (int32_t)(intptr_t)&gp_objs[1]); gp_n = 4;
+    /* '*' falls back to the base '(' pick when no object is hit; other kinds go straight to it. */
+    gp_n = 0; assert(aoe_game_view_pick_ror(&o, '*', 0, 7, 7, &out, NULL, 0) == '3' && out.other_value == '(' && aoe_game_view_pick_ror(&o, ')', 0, 7, 7, &out, NULL, 0) == '2'); gp_n = 4;
+    assert(aoe_game_view_pick_ror(&o, '*', 0, 7, 7, &out, NULL, 0) == '4' && out.object_value == (int32_t)(intptr_t)&gp_objs[2]);
+    assert(aoe_game_view_pick_ror(&o, '<', 0, 7, 7, &out, NULL, 0) == '3' && out.other_value == '(');
+}
+static int gt_units[2] = {1, 2}; static int gt_acts[3][5]; /* [unit][object] action kind + 1 (0 none) */
+static int32_t gt_selection(void *c) { (void)c; return 2; }
+static void *gt_selected(void *c, int32_t i) { (void)c; return &gt_units[i]; }
+static void *gt_object(void *c, int32_t id, uint8_t *state) { (void)c; if (id < 1 || id > 4) return NULL; *state = gp_objs[id].state; return &gp_objs[id]; }
+static void *gt_ability(void *c, void *unit, void *obj, int16_t *kind) { int u = *(int *)unit, ob = (int)((gp_obj *)obj - gp_objs); (void)c; if (!gt_acts[u][ob]) return NULL; *kind = (int16_t)(gt_acts[u][ob] - 1); return &gt_acts[u][ob]; }
+static int gt_flag(void *c, void *act) { (void)c; return *(int *)act == 3; }
+static int gt_ec(void *c, void *unit) { (void)c; return *(int *)unit == 2; }
+static int32_t gt_tcount(void *c) { (void)c; return 3; }
+static int gt_tmatch(void *c, int32_t i, void *unit) { (void)c; (void)unit; return i == 1; }
+static void *gt_tability(void *c, int32_t i, void *unit, void *obj, int16_t *kind) { (void)c; (void)i; (void)unit; if ((gp_obj *)obj != &gp_objs[3]) return NULL; *kind = 4; return &gt_units[0]; }
+static void target_tests(void) {
+    AoeGameViewTargetOpsRor o = {NULL, gp_point_objects, gt_selection, gt_selected, gt_object, gt_ability, gt_flag, gt_ec, gt_tcount, gt_tmatch, gt_tability, gp_priority};
+    int32_t flag = 5;
+    /* Unit 1 can act on objects 1 (kind 0) and 2 (kind 2, flagged); unit 2 only through its matching template on 3 (kind 4). */
+    gt_acts[1][1] = 1; gt_acts[1][2] = 3;
+    assert(aoe_game_view_selection_target_ror(&o, 7, 7, &flag, -1) == &gp_objs[2] && flag == 1);
+    assert(aoe_game_view_selection_target_ror(&o, 7, 7, &flag, 0) == &gp_objs[1] && flag == 0);
+    assert(aoe_game_view_selection_target_ror(&o, 7, 7, &flag, 4) == &gp_objs[3] && flag == 0);
+    assert(aoe_game_view_selection_target_ror(&o, 7, 7, &flag, 9) == NULL && flag == 0);
+    gp_n = 0; flag = 5; assert(aoe_game_view_selection_target_ror(&o, 7, 7, &flag, -1) == NULL && flag == 0); gp_n = 4;
+}
 int main(void)
 {
     AoeMainViewRor v;
@@ -1492,5 +1591,8 @@ int main(void)
     mouse_move_tests();
     point_objects_tests();
     grid_lookup_tests();
+    scroll_tests();
+    pick_tests();
+    target_tests();
     return 0;
 }

@@ -1338,4 +1338,122 @@ int32_t aoe_main_view_point_objects_ror(const AoeMainViewRor *v, const AoeViewDr
    lookup is freed. */
 void aoe_view_grid_build_lookup_ror(AoeViewGridRor *grid, const int32_t *const tables[17]);
 
+
+/* ---- 0x00518720 / 0x00518a30: the game view's edge and key scrolling ---- */
+typedef struct {
+    int32_t edge_active;   /* +0x368 */
+    uint32_t edge_time;    /* +0x364 */
+    int32_t key_active;    /* +0x378 */
+    uint32_t key_time;     /* +0x374 */
+} AoeGameViewScrollRor;
+typedef struct {
+    void *context;
+    int32_t (*game_state)(void *context);     /* game +0x1b0 */
+    int32_t (*edit_mode)(void *context);      /* game +0x1b4 */
+    int (*comm_waiting)(void *context);       /* 0x004199c0 */
+    /* The game's +0x0c object: +0x8c0 edge scrolling on, +0x8c4 the edge margin, +0x8d0 the
+       speed period (ms), +0x8cc / +0x8d4 the edge / key speed caps, +0x8d8 the held object's step. */
+    int edge_enabled;
+    int32_t margin, period;
+    float edge_max, key_max, held_step;
+    int (*foreground)(void *context);         /* GetForegroundWindow() == the area's window (+0x78 +0x04) */
+    int (*modal)(void *context);              /* 0x00451ad0 != 0 */
+    int (*focus_elsewhere)(void *context);    /* 0x00451ac0 set and not this view */
+    void (*window_rect)(void *context, int32_t r[4]);               /* GetWindowRect */
+    void (*cursor)(void *context, int32_t *x, int32_t *y);          /* GetCursorPos */
+    int (*buttons_down)(void *context);       /* GetAsyncKeyState(1) or (2) negative */
+    void (*keys)(void *context, int *left, int *up, int *right, int *down); /* GetKeyboardState 0x25..0x28 bit 7 */
+    uint32_t (*time_ms)(void *context);
+    int has_player, has_area, has_held;       /* +0x100, +0x78, player +0x134 */
+    void (*view_point)(void *context, float *x, float *y);           /* player +0x118 / +0x11c */
+    void (*set_view_point)(void *context, float x, float y);         /* 0x0045d330 */
+    void (*held_move)(void *context, int sx, int sy);                /* held object's vtable +0x34(x + sx step, y + sy step, 0) */
+    void (*redraw)(void *context);            /* this view's vtable +0x20(1) and the +0x360 panel's */
+} AoeGameViewScrollOpsRor;
+/* The speed of a continued scroll: 1.0 on the first tick (the active
+   flag set), else the elapsed time over the period, truncated plus 0.5
+   when the fraction reached 0.5; capped at `max`. */
+float aoe_game_view_scroll_speed_ror(int32_t *active, uint32_t now, uint32_t last, int32_t period,
+                                     float max);
+/* 0x00518720: in game states 4..7, not while the comm waits, with edge
+   scrolling on, the window in front, no modal screen, the focus here
+   (or nowhere) and no key scroll active: the cursor against the window
+   edges (within the margin) picks a direction unless a mouse button is
+   down. A direction moves the view: x -1 / +1 by (-s, -s) / (+s, +s),
+   then y -1 / +1 by (+2s, -2s) / (-2s, +2s) from the moved point;
+   redraws and stamps the time. Returns the active flag (cleared when
+   nothing scrolls). */
+int32_t aoe_game_view_edge_scroll_ror(AoeGameViewScrollRor *st, const AoeGameViewScrollOpsRor *o);
+/* 0x00518a30: not while the comm waits, in states 4..7, the window in
+   front and with an area. In edit mode 0x12 with a held object the
+   arrows move it by the step (up (+, -), down (-, +), left (-, -),
+   right (+, +)); the active flag is cleared. Otherwise, with a player,
+   the arrows scroll as above with the key cap and time. Returns 1 when
+   anything moved (then redrawing). */
+int aoe_game_view_key_scroll_ror(AoeGameViewScrollRor *st, const AoeGameViewScrollOpsRor *o);
+
+/* ---- 0x0051a650: the game view's pick ---- */
+typedef struct {
+    void *context;
+    int32_t left, top;         /* +0x8c, +0x90 */
+    int reveal_all;            /* map +0x8db8 */
+    /* 0x00511430 for kinds other than ')' / '*'. */
+    uint8_t (*base_pick)(void *context, uint8_t kind, uint8_t min_kind, int32_t x, int32_t y,
+                         AoeMainViewPickRor *out, void *current);
+    /* 0x005145a0(x, y, lo, hi, 0xf, 4, 1) into `out`; the count. */
+    int32_t (*point_objects)(void *context, int32_t x, int32_t y, int32_t lo, int32_t hi,
+                             AoeViewPickedRor out[AOE_VIEW_PICKED_MAX_ROR]);
+    /* The world object of an ID (world +0x88 table; NULL none), its +0x48 state, template +0x8d
+       kind and +0x38 / +0x3c position. */
+    void *(*object)(void *context, int32_t id, uint8_t *state, uint8_t *kind, float *x, float *y);
+    int (*visible)(void *context, void *object);              /* this view's vtable +0xe4 */
+    uint8_t (*fog)(void *context, int32_t x, int32_t y);      /* 0x00517670 */
+    int32_t (*priority)(void *context, void *object, int32_t hit_class); /* vtable +0xe8 */
+} AoeGameViewPickOpsRor;
+/* 0x0051a650(kind, min_kind, x, y, out, current, ignore_fog). ')': the
+   objects under the point (rows 0..0x28, or 10..0x14 with a min kind)
+   in state below 7 and of at least the min kind, each in a seen tile
+   (0x0f) unless `ignore_fog`, the map is revealed or the view sees it;
+   without `current` the highest +0xe8 priority wins ('4' with the
+   object, its screen point from the record plus the panel origin, and
+   its position); with `current`, among those of positive priority, the
+   first one after it, else the first one before it, else itself (the
+   original reads the record past the last there; this port uses the
+   current's own). '*' tries ')' with the fog ignored and falls back to
+   the base pick of '('. Other kinds go to the base pick. '2' when
+   nothing was hit. */
+uint8_t aoe_game_view_pick_ror(const AoeGameViewPickOpsRor *o, uint8_t kind, uint8_t min_kind,
+                               int32_t x, int32_t y, AoeMainViewPickRor *out, void *current,
+                               int ignore_fog);
+
+/* ---- 0x0051aa10: the selection's target under a point ---- */
+typedef struct {
+    void *context;
+    int32_t (*point_objects)(void *context, int32_t x, int32_t y, int32_t lo, int32_t hi,
+                             AoeViewPickedRor out[AOE_VIEW_PICKED_MAX_ROR]); /* (10, 0x14, 0xf, 4, 1) */
+    int32_t (*selection)(void *context);                      /* 0x0045e0c0: the count (0 none) */
+    void *(*selected)(void *context, int32_t i);
+    void *(*object)(void *context, int32_t id, uint8_t *state);
+    /* The unit's template's ability (+0xd8 vtable +4(unit, object, 0, 0, 0)): the action record
+       (NULL none) and its +6 kind; +8 on it: the flag. */
+    void *(*ability)(void *context, void *unit, void *object, int16_t *kind);
+    int (*ability_flag)(void *context, void *action);
+    /* The unit's template +0xec; the owner's templates (+0x40 +0x24, count +0x22): one that
+       matches the unit's (+0x14, +0x04, +0xec equal) and its ability for the pair. */
+    int (*template_ec)(void *context, void *unit);
+    int32_t (*template_count)(void *context);
+    int (*template_matches)(void *context, int32_t index, void *unit);
+    void *(*template_ability)(void *context, int32_t index, void *unit, void *object, int16_t *kind);
+    int32_t (*priority)(void *context, void *object, int32_t hit_class); /* vtable +0xe8 */
+} AoeGameViewTargetOpsRor;
+/* 0x0051aa10(x, y, flag, arg): NULL (flag 0) without objects under the
+   point or a selection. Every selected unit scores every object in
+   state below 7: its ability for the object (of kind `arg`, or any
+   when -1) adds the object's priority (the ability flag noted); failing
+   that a unit with template +0xec set tries the owner's matching
+   templates in order, the first with such an ability counting. The
+   object with the highest positive total wins (its flag written). */
+void *aoe_game_view_selection_target_ror(const AoeGameViewTargetOpsRor *o, int32_t x, int32_t y,
+                                         int32_t *flag, int16_t arg);
+
 #endif

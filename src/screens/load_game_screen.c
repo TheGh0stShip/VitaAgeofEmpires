@@ -155,12 +155,95 @@ static void lg_destroy(AoeUiPanelRor *p) {
     aoe_ui_ez_release_ror(&l->ez);
 }
 
-/* +0xb8 0x00486200 through the caller's action ops, else the base slot. */
-static int32_t lg_action(AoeUiPanelRor *p, AoeUiPanelRor *from, int32_t code, int32_t value,
-                         int32_t extra) {
+static const char *const LG_CONFIRM = "Cancel Dialog";
+
+/* The screen's own panels as the senders the original compares (+0x480
+   list, +0x488 OK, +0x48c Cancel, +0x490 Delete); each starts with its
+   panel, and a panel that failed is NULL and matches nothing. */
+#define LG_PANEL(x) ((AoeUiPanelRor *)(void *)(x))
+
+/* The list's selected line (thunk of 0x0046a600), "" with none. */
+static const char *lg_selected(const AoeLoadGameUiRor *l) {
+    const char *t = l->list ? aoe_ui_text_selected_text_ror(&l->list->text) : NULL;
+    return t ? t : "";
+}
+
+static void lg_delete_file(AoeLoadGameUiRor *l, const char *ext) {
+    const AoeGameUiOpsRor *o = l->ui->ops;
+    char path[0x200];
+    snprintf(path, sizeof path, "%s%s.%s", lg_save_dir(l), lg_selected(l), ext);
+    if (o && o->delete_file) o->delete_file(o->context, path); /* 0x526258 */
+}
+
+/* 0x00486200 (+0xb8) */
+int32_t aoe_load_game_ui_action_ror(AoeUiPanelRor *p, AoeUiPanelRor *from, int32_t code,
+                                    int32_t value, int32_t extra) {
     AoeLoadGameUiRor *l = LG(p);
-    if (l->action_ops) return aoe_load_game_screen_action_ror(&l->state, l->action_ops, from, code);
-    return aoe_ui_ez_action_slot_ror(p, from, code, value, extra);
+    AoeUiSystemRor *sys = l->ui->system;
+    const AoeGameUiOpsRor *o = l->ui->ops;
+    if (!from) return aoe_ui_ez_action_slot_ror(p, from, code, value, extra);
+    /* The sender's name (0x00454170). */
+    if (from->name && strcmp(from->name, LG_CONFIRM) == 0) {
+        aoe_ui_system_close_ror(sys, LG_CONFIRM); /* 0x00451df0 */
+        if (code == 0) {
+            lg_delete_file(l, "gam");
+            lg_delete_file(l, "gmx");
+            /* 0x0046a550 the selected line, removed by 0x0046a480. */
+            if (l->list)
+                aoe_ui_text_remove_ror(&l->list->text,
+                                       aoe_ui_text_selection_ror(&l->list->text));
+            if (*lg_selected(l) == '\0') {
+                if (l->ok) aoe_ui_button_set_disabled_ror(l->ok, 1);       /* 0x0045f3a0 */
+                if (l->remove) aoe_ui_button_set_disabled_ror(l->remove, 1);
+            }
+        }
+        return 1;
+    }
+    if (from == LG_PANEL(l->remove) && code == 1 && *lg_selected(l)) {
+        char fmt[0x100], text[0x22c];
+        aoe_ui_string_ror(sys, 0x24ca, fmt, (int)sizeof fmt); /* 0x00454270 */
+        snprintf(text, sizeof text, fmt, lg_selected(l));
+        aoe_ui_ez_yes_no_dialog_ror(&l->ez, text, LG_CONFIRM, 0x1c2, 100); /* 0x00457a80 */
+    }
+    if (from == LG_PANEL(l->list)) {
+        /* A double click acts as OK, through the action slot. */
+        if (code == 3) {
+            p->vt->action(p, LG_PANEL(l->ok), 1, 0, 0);
+            return 1;
+        }
+    } else if (from == LG_PANEL(l->ok)) {
+        if (code == 1) {
+            if (l->list && aoe_ui_text_count_ror(&l->list->text) > 0) { /* 0x0046a0b0 */
+                char name[0x104], path[0x200], file[0x200];
+                const AoeLoadGameActionOpsRor *a = l->action_ops;
+                snprintf(name, sizeof name, "%s", lg_selected(l));
+                snprintf(path, sizeof path, "%s%s.gmx", lg_save_dir(l), name);
+                /* 0x52694c: the .gam when there is no .gmx. */
+                if (o && o->file_exists && o->file_exists(o->context, path))
+                    snprintf(file, sizeof file, "%s.gmx", name);
+                else
+                    snprintf(file, sizeof file, "%s.gam", name);
+                /* 0x00502d60; a started game may have closed this screen. */
+                if (!a || !a->load_game || !a->load_game(a->context, file))
+                    aoe_ui_ez_ok_dialog_id_ror(&l->ez, 0x2501, NULL, 0x1c2, 100); /* 0x004578d0 */
+            }
+            return 1;
+        }
+    } else if (from == LG_PANEL(l->cancel) && code == 1) {
+        if (aoe_ui_system_find_ror(sys, "Game Screen")) { /* 0x00451ae0 */
+            /* 0x41b750 == 1 with game +0xa00 clear: 0x419a60(0, 0). */
+            if (o && o->resume_game) o->resume_game(o->context);
+            aoe_ui_system_show_named_ror(sys, "Game Screen", 0); /* 0x00451be0 */
+        } else {
+            if (o && o->wait_cursor) o->wait_cursor(o->context); /* 0x41bd60 */
+            /* 0x49e040, made and registered. */
+            if (o && o->open_single_player_menu) o->open_single_player_menu(o->context);
+            aoe_ui_system_show_named_ror(sys, "Single Player Menu", 0);
+        }
+        aoe_ui_system_close_ror(sys, UI_NAME);
+        return 1;
+    }
+    return aoe_ui_ez_action_slot_ror(p, from, code, value, extra); /* 0x00457e50 */
 }
 
 int aoe_load_game_ui_init_ror(AoeLoadGameUiRor *l, AoeGameUiRor *ui, AoeUiAreaRor *area) {
@@ -237,7 +320,8 @@ int aoe_load_game_ui_init_ror(AoeLoadGameUiRor *l, AoeGameUiRor *ui, AoeUiAreaRo
 const AoeUiEzVtblRor aoe_load_game_ui_vtable_ror = {
     AOE_UI_EZ_SLOTS_MDU(lg_destroy, aoe_ui_ez_draw_slot_ror, aoe_ui_game_idle_slot_ror,
                         aoe_ui_panel_handle_paint_ror, aoe_ui_ez_no_key_action_ror,
-                        aoe_ui_panel_zero_ror, lg_action, aoe_ui_screen_focus_slot_ror,
+                        aoe_ui_panel_zero_ror, aoe_load_game_ui_action_ror,
+                        aoe_ui_screen_focus_slot_ror,
                         aoe_ui_ez_mouse_down_slot_ror, aoe_ui_panel_ignore_ror),
     aoe_ui_ez_draw_background_slot_ror,
     aoe_ui_ez_set_reference_slot_ror,

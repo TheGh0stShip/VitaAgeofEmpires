@@ -241,6 +241,67 @@ static void command_tests(void) {
     cm_n = 0; assert(aoe_mp_setup_screen_command_ror(&m, &o, 0x1234, 1) == 1 && strcmp(cm_log, "log[$$$ USER_COMMAND: UNKNOWN (4660, 1)] ") == 0);
     g.flag_97d = 1; cm_n = 0; assert(aoe_mp_setup_screen_command_ror(&m, &o, 0x17a7, 0) == 1 && cm_n == 0);
 }
+/* 0x00424c80: the comm's session launch. */
+static char ln_log[1024]; static int ln_n;
+static void ln_add(const char *fmt, ...) { va_list ap; va_start(ap, fmt); ln_n += vsnprintf(ln_log + ln_n, sizeof ln_log - (size_t)ln_n, fmt, ap); va_end(ap); }
+static void ln_enable(void *c, int32_t e) { (void)c; ln_add("enable(%d) ", (int)e); }
+static void ln_range(void *c) { AoeCommRor *k = c; ln_add("range(state%d) ", (int)k->state); }
+static void ln_gtd(void *c) { AoeCommRor *k = c; ln_add("gtd(%u) ", (unsigned)k->field_1718); }
+static void ln_compact(void *c) { (void)c; ln_add("compact "); }
+static void ln_share(void *c, int f) { AoeCommRor *k = c; ln_add("share(%d,turn%u) ", f, (unsigned)k->turn); }
+static void ln_pings(void *c) { (void)c; ln_add("pings "); }
+static void ln_logf(void *c, const char *t) { (void)c; ln_add("log[%s] ", t); }
+static void ln_post(void *c, uint32_t w, uint32_t l) { (void)c; ln_add("post(%x,%u) ", (unsigned)w, (unsigned)l); }
+static void launch_tests(void) {
+    static AoeCommRor c;
+    AoeCommOpsRor co;
+    AoeMpSetupLaunchOpsRor lo;
+    uint32_t i;
+    memset(&co, 0, sizeof co);
+    co.log = ln_logf;
+    co.post = ln_post;
+    lo.context = &c;
+    lo.enable_new_players = ln_enable;
+    lo.active_range = ln_range;
+    lo.gtd_reset = ln_gtd;
+    lo.compact_players = ln_compact;
+    lo.share_data = ln_share;
+    lo.reset_ping_times = ln_pings;
+    memset(&c, 0, sizeof c);
+    c.ops = &co;
+    c.count = 4;
+    c.dpid[1] = 11; c.dpid[3] = 33; /* slots 2 and 4 have no DirectPlay ID */
+    for (i = 0; i < AOE_COMM_SLOTS; ++i) { c.rx_serial[i] = -1; c.last_turn[i] = 50 + i; }
+    c.self = 3;
+    c.lead = 2;
+    c.turn = 99;
+    c.multiplayer = 1;
+    c.low = 2; c.high = 4;
+    aoe_mp_setup_comm_launch_ror(&c, &lo);
+    assert(strcmp(ln_log, "enable(0) range(state5) gtd(1) compact "
+                          "log[Set expected ser# for player 1 to 2001] "
+                          "log[Set expected ser# for player 3 to 6001] "
+                          "log[HOST Set own serial to =6001] share(1,turn99) "
+                          "log[Clear player acknowledgements] pings post(17a6,0) ") == 0);
+    assert(c.state == 5 && c.field_1718 == 1);
+    assert(c.rx_serial[1] == 2000 && c.rx_serial[2] == -1 && c.rx_serial[3] == 6000 &&
+           c.rx_serial[4] == -1 && c.rx_serial[0] == -1);
+    assert(c.field_14e4 == 6001 && c.turn == 3);
+    /* Slots low..high but ours lose their last turn; others keep it. */
+    assert(c.last_turn[1] == 51 && c.last_turn[2] == 0 && c.last_turn[3] == 53 &&
+           c.last_turn[4] == 0 && c.last_turn[5] == 55);
+
+    /* Alone: no acknowledgements cleared; no players, no expected serials. */
+    ln_n = 0; ln_log[0] = 0;
+    memset(&c, 0, sizeof c);
+    c.ops = &co;
+    c.dpid[1] = 5; c.last_turn[1] = 7; c.low = 1; c.high = 1;
+    c.self = 1; c.lead = 4;
+    aoe_mp_setup_comm_launch_ror(&c, &lo);
+    assert(strcmp(ln_log, "enable(0) range(state5) gtd(1) compact "
+                          "log[HOST Set own serial to =2001] share(1,turn0) pings post(17a6,0) ") == 0);
+    assert(c.rx_serial[1] == 0 && c.last_turn[1] == 7 && c.turn == 5 && c.field_14e4 == 2001);
+}
 int main(void) {
     static AoeGameSettingsRor g;
     static AoeMpSetupScreenRor m;
@@ -437,5 +498,6 @@ int main(void) {
     info_tests();
     rows_tests();
     command_tests();
+    launch_tests();
     return 0;
 }

@@ -169,6 +169,12 @@ int aoe_demo_map_to_screen(const AoeDemo *demo, float mx, float my, int32_t *sx,
    indexed frame of this view's size with the palette index `colour`. */
 void aoe_demo_draw_footprint(const AoeDemo *demo, uint8_t *dst, size_t stride, int32_t sx,
                              int32_t sy, const int16_t corners[8], uint8_t colour);
+/* A graphic as a template's +0x34 draws it (the graphic's draw 0x4a5920:
+   frame 0 of facet `angle`, its parts anchored at view pixel (sx, sy)) in
+   `player`'s colour, drawn at once into an indexed frame of this view's
+   size; parts without art are skipped. 0 when the draw failed. */
+int aoe_demo_draw_graphic(AoeDemo *demo, uint8_t *dst, size_t stride, int16_t graphic_id,
+                          uint16_t angle, int32_t sx, int32_t sy, int player);
 /* 0x004433c0 with this map's tile geometry: a template's footprint corners
    about the tile holding (fx, fy). */
 int aoe_demo_footprint_corners(const AoeDemo *demo, const DatUnit *unit_template, float fx,

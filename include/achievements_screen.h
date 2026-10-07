@@ -28,8 +28,9 @@ typedef struct {
     const float *(*attributes)(void *context, int32_t player);
     uint32_t (*game_time_ms)(void *context);
     /* The scenario's message (0x00476c70; NULL or "" for none); a
-       networked game (0x0041b760); the game paused by the settings
-       (0x0041b750 == 1) and game +0xa00; the resume (0x00419a60(0, 0)),
+       networked game (0x0041b760); the settings pause byte (game +0x97d
+       via 0x0041b750; Close resumes only when it is exactly 1) and game
+       +0xa00 (a NULL op reads 0); the resume (0x00419a60(0, 0)),
        the return to the menus (0x00500d80), the restart (0x00500fb0) and
        the window close (0x00419930); the game state (+0x1b0); the window
        iconic (IsIconic). */

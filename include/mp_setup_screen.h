@@ -110,8 +110,9 @@ typedef struct {
     /* Starting: every playing human ready (0x00425440), our comm slot
        (0x00423c10), the +0x5f0 position list's item ID (0x00461ef0) and
        count (its +0xfc's 0x0046a0b0), the CD check (0x00419530, 0 asks
-       for the flag bit), the session launch (comm 0x00424c80, then
-       0x00451cc0 and 0x004244f0 on 0x00580d7c) and the scenario game
+       for the flag bit), the session launch (comm 0x00424c80, see
+       aoe_mp_setup_comm_launch_ror below; then 0x00451cc0 and 0x004244f0
+       on 0x00580d7c) and the scenario game
        started (0x00502910(0), nonzero on success). */
     int (*all_ready)(void *context);
     int32_t (*self_slot)(void *context);
@@ -501,5 +502,36 @@ typedef struct {
    queues it (+0x894, and +0x890 when empty). */
 int aoe_mp_setup_screen_command_ror(AoeMpSetupScreenRor *m, const AoeMpSetupCommandOpsRor *o,
                                     int32_t code, int32_t arg);
+
+
+/* ---- 0x00424c80: the comm's session launch (the start button's) ---- */
+#include "comm_handler.h"
+
+/* Its comm callees, translated in comm_handler.c (aoe_comm_*_ror) and
+   reached through ops since the screens do not link the comm. */
+typedef struct {
+    void *context;
+    /* 0x004258d0(DirectPlay 0x00580eac, enable): new players allowed. */
+    void (*enable_new_players)(void *context, int32_t enable);
+    void (*active_range)(void *context);          /* 0x0041e130 */
+    void (*gtd_reset)(void *context);             /* 0x00421a20 */
+    void (*compact_players)(void *context);       /* 0x00424760 */
+    void (*share_data)(void *context, int force); /* 0x00420640 */
+    void (*reset_ping_times)(void *context);      /* 0x00423970 */
+} AoeMpSetupLaunchOpsRor;
+
+/* 0x00424c80 (the launch_session op's comm part): no new players (0),
+   state 5 (running), the active slot range, +0x1718 1, both
+   guaranteed-delivery stores emptied, the slots compacted; every slot
+   1..count with a DirectPlay ID expects serial 2000 * slot next
+   ("Set expected ser# for player %d to %d" with 2000 * slot + 1); our
+   own serial +0x14e4 is 2000 * our slot + 1 ("HOST Set own serial to
+   =%d"); the data shared (forced); the turn becomes lead + 1; with
+   multiplayer ("Clear player acknowledgements") every slot in the
+   active range but ours has its last turn cleared; the ping times
+   reset and 0x17a6 posted (0x004200d0). The logs go to the comm's log
+   op (the original's 0x0042c330 is empty); slots past the arrays are
+   skipped (the original writes on). */
+void aoe_mp_setup_comm_launch_ror(AoeCommRor *c, const AoeMpSetupLaunchOpsRor *o);
 
 #endif

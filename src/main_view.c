@@ -2260,6 +2260,67 @@ void *aoe_game_view_selection_target_ror(const AoeGameViewTargetOpsRor *o, int32
     return best;
 }
 
+/* ---- 0x005114d0 ---- */
+int aoe_main_view_area_select_ror(const AoeMainViewAreaSelectOpsRor *o, int32_t min_kind,
+                                  int32_t left, int32_t top, int32_t right, int32_t bottom)
+{
+    AoeViewPickedRor recs[AOE_VIEW_PICKED_MAX_ROR];
+    AoeMainViewAreaObjectRor info;
+    int32_t n, i, w, h, slack, score, best_score = 0;
+    void *obj, *best = NULL;
+    int added = 0;
+
+    /* 0x00514b60(left, top, right, bottom, 10, 0x14, player +0x4a,
+       min_kind, 1) */
+    n = o->box_objects(o->context, left, top, right, bottom, 10, 0x14, o->player,
+                       (uint8_t)min_kind, recs);
+    if (n > 0) {
+        for (i = 0; i < n; i++) {
+            if (recs[i].id == -1)
+                continue;
+            obj = o->object(o->context, recs[i].id, &info);
+            if (obj == NULL || info.state >= 7)
+                continue;
+            if (!o->select_add(o->context, obj))   /* 0x0045dc10(obj, 0) */
+                break;
+            added = 1;
+        }
+        if (added)
+            return 1;
+    }
+
+    /* Nothing boxed: score the objects under the box centre. */
+    w = right - left;
+    h = bottom - top;
+    slack = w < h ? w : h;
+    if (slack >= 0x32)
+        slack = 0x32;
+    /* 0x005145a0(centre x, centre y, 10, 0x14, slack, 4, 1) */
+    n = o->point_objects(o->context, left + w / 2, top + h / 2, 10, 0x14, slack, 4, 1, recs);
+    if (n <= 0)
+        return 0;
+    for (i = 0; i < n; i++) {
+        if (recs[i].id < 0)
+            continue;
+        obj = o->object(o->context, recs[i].id, &info);
+        if (obj == NULL || info.state >= 7 || info.kind < 2)
+            continue;
+        if (!o->reveal_all && !o->visible(o->context, obj) &&
+            o->fog(o->context, aoe_ftol32(info.x), aoe_ftol32(info.y)) != 0x0f)
+            continue;
+        score = o->priority(o->context, obj, recs[i].count);
+        if (info.owned)
+            score += 5;
+        if (best_score < score) {
+            best_score = score;
+            best = obj;
+        }
+    }
+    if (best != NULL && o->select_add(o->context, best))   /* 0x0045dc10(best, 0) */
+        return 1;
+    return 0;
+}
+
 /* ---- 0x00510580 ---- */
 #define VR(id, a, b) o->step(o->context, (id), (int32_t)(a), (int32_t)(b))
 void aoe_main_view_render_ror(AoeViewRenderRor *v, const AoeViewRenderOpsRor *o)

@@ -2674,26 +2674,47 @@ static void place_order(void *ctx, AoeLiveUnit *u, AoeLiveUnit *target, float x,
     (void)aoe_world_combat_order_ror(((CommandContext *)ctx)->c, u, target, x, y, 0.0f, &code);
 }
 
+static void place_ops(AoeWorldCombatRor *c, CommandContext *k, AoeCommandPlaceOps *ops) {
+    memset(ops, 0, sizeof *ops);
+    ops->world.context = c;
+    ops->world.resolve = command_resolve;
+    ops->context = k;
+    ops->player_present = place_player_present;
+    ops->player_template = place_template;
+    ops->resources = place_resources;
+    ops->placement_check = place_check;
+    ops->find_object = place_find;
+    ops->placement_failed = place_failed;
+    ops->create = place_create;
+    ops->owner_kind = place_owner_kind;
+    ops->order = place_order;
+}
+
 int aoe_world_combat_command_place_ror(AoeWorldCombatRor *c, const uint8_t *command,
                                        size_t size) {
     CommandContext k = {c, 0};
     AoeCommandPlaceOps ops;
     if (!c || !c->motion || !c->motion->runtime) return -1;
     refresh_registry(c);
-    memset(&ops, 0, sizeof ops);
-    ops.world.context = c;
-    ops.world.resolve = command_resolve;
-    ops.context = &k;
-    ops.player_present = place_player_present;
-    ops.player_template = place_template;
-    ops.resources = place_resources;
-    ops.placement_check = place_check;
-    ops.find_object = place_find;
-    ops.placement_failed = place_failed;
-    ops.create = place_create;
-    ops.owner_kind = place_owner_kind;
-    ops.order = place_order;
+    place_ops(c, &k, &ops);
     return aoe_command_execute_place_ror(command, size, &ops);
+}
+
+/* ---- 0x69, wall line placement (0x004e8b00, runs 0x004e8d00) ----
+   The same player, template, payment, creation and order bindings as
+   0x66: each cell is checked with +0x20(player, x, y, 0, 1, template
+   +0x64, 0, 1, 1, 1) at its centre, paid (0x004f1750), and its foundation
+   made through +0x3c; the builders go to the first piece. The handler
+   does not refresh wall adjacency itself: that happens at completion
+   (template +0x16c, 0x004ad550). */
+int aoe_world_combat_command_wall_ror(AoeWorldCombatRor *c, const uint8_t *command,
+                                      size_t size) {
+    CommandContext k = {c, 0};
+    AoeCommandPlaceOps ops;
+    if (!c || !c->motion || !c->motion->runtime) return -1;
+    refresh_registry(c);
+    place_ops(c, &k, &ops);
+    return aoe_command_execute_wall_ror(command, size, &ops);
 }
 
 /* One unit through the whole chain, outside the player list. */

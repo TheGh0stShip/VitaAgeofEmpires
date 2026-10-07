@@ -289,6 +289,10 @@ typedef struct {
     void (*ask_close)(void *context);
     void (*view_back)(void *context);
     int32_t (*base_message)(void *context, uint32_t msg, uint32_t wparam, uint32_t lparam);
+    /* The edit toolbar (+0x57c, made by 0x00473d70) told the edit mode
+       change: 0x004748f0(old mode, new mode) on it (aoe_edit_toolbar_sync_ror
+       when the handle is an AoeEditToolbarRor). */
+    void (*toolbar_sync)(void *context, void *toolbar, int32_t old_mode, int32_t mode);
 } AoeGameScreenOpsRor;
 
 typedef struct {
@@ -438,6 +442,12 @@ void aoe_game_screen_pause_ror(AoeGameScreenRor *s);
    nothing while the comm waits. */
 void aoe_game_screen_first_page_ror(AoeGameScreenRor *s);
 void aoe_game_screen_build_menu_ror(AoeGameScreenRor *s);
+/* 0x00481690 (`ret 8`; the game's edit mode setter 0x004ff420 calls it
+   with the old and the new edit mode, game +0x1b4): the edit toolbar
+   (+0x57c), when there is one, follows the change (0x004748f0(old,
+   mode)); then, when the first command button (+0x4c8) exists, back to
+   the first button page and rebuild (0x00482290). */
+void aoe_game_screen_mode_changed_ror(AoeGameScreenRor *s, int32_t old_mode, int32_t mode);
 /* 0x00485140: the next button page (wrapping to 0); in edit mode 6 / 1
    it flips between 0 and 10. Nothing while the comm waits. */
 void aoe_game_screen_next_page_ror(AoeGameScreenRor *s);

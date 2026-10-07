@@ -384,6 +384,12 @@ void aoe_game_screen_build_menu_ror(AoeGameScreenRor *s) {
     aoe_game_screen_first_page_ror(s);
 }
 
+/* 0x00481690 */
+void aoe_game_screen_mode_changed_ror(AoeGameScreenRor *s, int32_t old_mode, int32_t mode) {
+    if (s->panel_57c != NULL) OPS->toolbar_sync(CTX, s->panel_57c, old_mode, mode);
+    if (s->buttons[0] != NULL) aoe_game_screen_first_page_ror(s);
+}
+
 void aoe_game_screen_next_page_ror(AoeGameScreenRor *s) {
     int32_t sub = 0;
     if (OPS->comm_waiting(CTX)) return;

@@ -204,6 +204,8 @@ static int32_t ach_mouse_down(AoeUiPanelRor *p, uint8_t button, int32_t x, int32
     return r;
 }
 
+/* The timeline / scenario buttons' page (0x00478200) shown with only Back
+   among the page buttons: Restart, Close, Scenario and Timeline hidden. */
 static void show_page_buttons(AoeAchievementsScreenRor *s, int32_t page) {
     aoe_achievements_screen_set_page_ror(s, page);
     show(s->restart_btn, 0);
@@ -213,23 +215,26 @@ static void show_page_buttons(AoeAchievementsScreenRor *s, int32_t page) {
     show(s->back, 1);
 }
 
-/* 0x00479050 action (code 1 presses): Close leaves to the game screen
-   (resuming a game the settings paused) when in a game, else to the
-   menus (0x00500d80), and closes this screen; Restart 0x00500fb0; the
-   timeline / scenario buttons show page 6 / 5 with only Back; Back and
-   Back2 return to page 0; the hidden close button closes the window. A
-   yes/no dialog answer closes it: yes (code 0) closes the window, no
-   clears the quit request. Others go to the easy panel's 0x00457e50. */
+/* 0x00479050 action (+0xb8): code 1 presses of the screen's buttons,
+   then a yes/no dialog's answer, else the easy panel's slot. */
 static int32_t ach_action(AoeUiPanelRor *p, AoeUiPanelRor *from, int32_t code, int32_t value,
                           int32_t extra) {
     AoeAchievementsScreenRor *s = ACH(p);
     const AoeAchievementsScreenOpsRor *o = s->ops;
     AoeUiSystemRor *sys = s->ui->system;
+    const char *name;
+    /* A sender is matched by pointer against the button fields; a NULL
+       sender (the original reads its name below) never matches. */
 #define IS(btn) ((btn) && from == &(btn)->panel)
     if (IS(s->close_btn) && code == 1) {
+        /* Close (+0x5d4): from the menus (+0x478 == 0) a game the
+           settings paused (0x41b750 == 1) with game +0xa00 clear resumes
+           (0x419a60(0, 0)) and "Game Screen" shows (0x00451be0); in a
+           game the menus come back (0x500d80). Either way this screen
+           closes (0x00451df0). */
         if (s->mode == 0) {
-            if (o && o->paused_by_settings && o->paused_by_settings(o->context) &&
-                o->game_flag_a00 && !o->game_flag_a00(o->context) && o->resume_game)
+            if (o && o->paused_by_settings && o->paused_by_settings(o->context) == 1 &&
+                !(o->game_flag_a00 && o->game_flag_a00(o->context)) && o->resume_game)
                 o->resume_game(o->context);
             aoe_ui_system_show_named_ror(sys, GAME_SCREEN, 0);
         } else if (o && o->back_to_menu) {
@@ -239,33 +244,44 @@ static int32_t ach_action(AoeUiPanelRor *p, AoeUiPanelRor *from, int32_t code, i
         return 1;
     }
     if (IS(s->restart_btn) && code == 1) {
+        /* Restart (+0x5e8): 0x500fb0. */
         if (o && o->restart) o->restart(o->context);
         return 1;
     }
     if (IS(s->timeline_btn) && code == 1) {
+        /* Timeline (+0x5e0): page 6. */
         show_page_buttons(s, 6);
         return 1;
     }
     if (IS(s->scenario_btn) && code == 1) {
+        /* Scenario (+0x5e4): page 5, the message. */
         show_page_buttons(s, 5);
         return 1;
     }
     if ((IS(s->back) || IS(s->back2)) && code == 1) {
+        /* Back (+0x5d8) and Back2 (+0x5dc): page 0. */
         aoe_achievements_screen_set_page_ror(s, 0);
         return 1;
     }
     if (IS(s->hidden_close) && code == 1) {
+        /* The hidden close button (+0x5ec): the window closes
+           (0x419930). */
         if (o && o->quit) o->quit(o->context);
         return 1;
     }
 #undef IS
-    if (from && from->name && strcmp(from->name, YES_NO) == 0) {
+    /* The sender's name (0x00454170, panel +0x1c) "YesNoDialog": the
+       dialog closes (0x00451df0); yes (code 0) closes the window
+       (0x419930), any other answer clears the quit request (global
+       0x7c0338). Everything else goes to the easy panel's 0x00457e50. */
+    name = from ? aoe_ui_panel_name_ror(from) : NULL;
+    if (name && strcmp(name, YES_NO) == 0) {
         aoe_ui_system_close_ror(sys, YES_NO);
         if (code == 0) {
             if (o && o->quit) o->quit(o->context);
-        } else {
-            s->ui->quit_requested = 0;
+            return 1;
         }
+        s->ui->quit_requested = 0;
         return 1;
     }
     return aoe_ui_ez_action_slot_ror(p, from, code, value, extra);

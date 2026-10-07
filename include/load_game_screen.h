@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#include "ui_panel.h"
+
 /* Patched Rise of Rome 1.0a "Load Saved Game Screen" (vtable 0x005468cc,
    constructor 0x00485c90): the saved-game list and the teardown. The
    panels, the file search and the list are reached through ops. */
@@ -68,7 +70,9 @@ typedef struct {
     void (*ask)(void *context, const char *text);              /* yes/no "Cancel Dialog" */
     void (*string)(void *context, int32_t id, char *out, int size);
     int (*file_exists)(void *context, const char *path);
-    int (*load_game)(void *context, const char *path);         /* 0x00502d60 */
+    /* 0x00502d60, nonzero when the game started; also the panel
+       handler's load (aoe_load_game_ui_action_ror). */
+    int (*load_game)(void *context, const char *path);
     void (*ok_dialog)(void *context, int32_t text_id);
     int (*game_screen_exists)(void *context);
     int (*paused_by_settings)(void *context);
@@ -82,5 +86,18 @@ typedef struct {
 } AoeLoadGameActionOpsRor;
 int32_t aoe_load_game_screen_action_ror(AoeLoadGameScreenRor *l, const AoeLoadGameActionOpsRor *o,
                                         void *from, int32_t code);
+
+/* 0x00486200 as the action slot (+0xb8) of the "Load Saved Game Screen"
+   panels (AoeLoadGameUiRor, game_ui.h; `p` is its panel): as above on
+   the screen's own list and buttons, the dialogs over it ("Cancel
+   Dialog" 450 x 100, the OK dialog 0x2501) and the system's screens.
+   The saved-game directory (game_dir), the file check and deletes, the
+   game resume, the wait cursor and the "Single Player Menu" come from
+   the game UI's ops; the load 0x00502d60 is the screen's
+   `action_ops->load_game` (without one the load fails). OK and Delete
+   are disabled only when a delete leaves nothing selected; a selection
+   change (list code 1) goes to the base slot. */
+int32_t aoe_load_game_ui_action_ror(AoeUiPanelRor *p, AoeUiPanelRor *from, int32_t code,
+                                    int32_t value, int32_t extra);
 
 #endif

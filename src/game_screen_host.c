@@ -519,23 +519,98 @@ static int pv_can_place(void *c, float fx, float fy) {
     p->ok = aoe_demo_can_place(p->s->world, 1, p->s->place_unit, fx, fy);
     return p->ok;
 }
-static uint32_t pv_flags(void *c) { return ((PlaceCtx *)c)->t->type; }          /* +0x04 */
+/* 0x00511080 reads the +0x04 of the view's +0xfc object here (edi + 0xfc
+   at 0x5111f7), not the template's; the port passes the template's
+   type, so the picture's draw-mode colour stays 0x24 (v 0). */
+static uint32_t pv_flags(void *c) { return ((PlaceCtx *)c)->t->type; }
 static int pv_has_graphic(void *c) { return ((PlaceCtx *)c)->t->standing_graphic >= 0; }
 static uint8_t pv_facing(void *c) { return ((PlaceCtx *)c)->t->selection_flags; } /* +0xa8 */
 static uint8_t pv_shape(void *c) { return ((PlaceCtx *)c)->t->selection_color; }  /* +0xa9 */
 static int pv_relocating(void *c) { (void)c; return 0; }
-/* The view's +0x34 preview as the port draws it: the footprint outline
-   about the tile, the selection box's healthy colour (0x4a) when the
-   building may be placed and its lost colour (0x97) when not. The
-   building's picture at the midpoint is not drawn yet. */
+/* The shape draw mode 0x00511080 leaves in 0x007c0458 for the picture:
+   5 where the building may not be placed, else ((v < 4 ? v + 0x24 : 0x2c
+   - v) << 4) | 9 for v = bits 7..9 of the value the preview reads (the
+   port passes the template's +0x04, see pv_flags). */
+static uint32_t ghost_mode(PlaceCtx *p) {
+    uint32_t v = (pv_flags(p) >> 7) & 7;
+    return p->ok ? ((v < 4 ? v + 0x24 : 0x2c - v) << 4) | 9 : 5;
+}
+
+/* One picture pixel under the sprite node's draw mode (the node's +0x1c,
+   set by the sprite add 0x516390): the view pass 0x512400 sets the row
+   patterns (0x540680) for mode & 0xffc (bit 2: masks 0xffffff /
+   0xffff00ff, nothing or'd; bit 3: masks 0xff00ff00 / 0x00ff00ff with
+   the colour (mode >> 4) & 0xff or'd into the masked bytes) and draws
+   with mode & 3, whose bit 0 makes the rasterizer 0x5409a0 apply them,
+   rows 0 and 2 taking the first pattern and rows 1 and 3 the second,
+   byte k of a pattern for the pixel at x & 3 == k. A masked byte with
+   nothing or'd keeps what was under the picture. 0 keeps it. */
+static int ghost_pixel(uint32_t mode, int32_t x, int32_t y, uint8_t art, uint8_t *out) {
+    uint32_t mask = 0xffffffffu, add = 0, c = (mode >> 4) & 0xff, shift = 8u * ((uint32_t)x & 3);
+    int odd = (y & 1) != 0;
+    if (mode & 1) {
+        if (mode & 8) {
+            mask = odd ? 0x00ff00ffu : 0xff00ff00u;
+            add = odd ? (c << 8 | c << 24) : (c | c << 16);
+        } else if (mode & 4) {
+            mask = odd ? 0xffff00ffu : 0x00ffffffu;
+        }
+    }
+    if ((mask >> shift) & 0xff) {
+        *out = art;
+        return 1;
+    }
+    if ((add >> shift) & 0xff) {
+        *out = (uint8_t)(add >> shift);
+        return 1;
+    }
+    return 0;
+}
+
+/* The template's picture (its +0x34: 0x004ec840 for type 80, else
+   0x00443520): the standing graphic (+0x18) through the graphic's draw
+   (0x4a5920: frame 0, both anchors at the point) in the viewed player's
+   colours (0x419b70's +0x10c), facet: a type 80 with adjacent mode
+   (+0x16c) clear its +0x16e, else `relocated` 0 -> 2, else less 1; the
+   other types `relocated`. The picture is drawn into a copy of the view
+   and the pixels it changed merged through the draw mode. */
+static void ghost_draw(PlaceCtx *p, int32_t x, int32_t y, int32_t relocated) {
+    AoeGameScreenHostRor *s = p->s;
+    size_t n = (size_t)s->view_w * (size_t)s->view_h, i;
+    uint32_t mode = ghost_mode(p);
+    uint16_t facet;
+    uint8_t *art;
+    if (p->t->type == 80)
+        facet = (uint16_t)(!p->t->building_adjacent_mode ? p->t->building_frame
+                           : relocated == 0              ? 2
+                                                         : relocated - 1);
+    else
+        facet = (uint16_t)relocated;
+    if (!n || !(art = malloc(n))) return;
+    memcpy(art, s->pixels, n);
+    if (aoe_demo_draw_graphic(s->world, art, (size_t)s->view_w, p->t->standing_graphic, facet, x,
+                              y, 1))
+        for (i = 0; i < n; ++i)
+            if (art[i] != s->pixels[i])
+                ghost_pixel(mode, (int32_t)(i % (size_t)s->view_w),
+                            (int32_t)(i / (size_t)s->view_w), art[i], &s->pixels[i]);
+    free(art);
+}
+
+/* The view's +0x34 preview (0x00511080's draw): the picture at the
+   corner midpoint (the corners are offsets about the tile's view point),
+   then, with `facing` (+0xa8 bit 0), the footprint outline (0x448cc0's
+   four corners as a kind-1 line node, 0x516510) in `shape`: 0x97 where
+   the building may be placed, else the template's +0xa9. */
 static void pv_draw(void *c, int32_t cx, int32_t cy, int relocated, uint32_t facing,
                     uint32_t shape) {
     PlaceCtx *p = c;
     int32_t sx, sy;
-    (void)cx; (void)cy; (void)relocated; (void)facing; (void)shape;
     if (!p->s->pixels || !aoe_demo_map_to_screen(p->s->world, p->fx, p->fy, &sx, &sy)) return;
-    aoe_demo_draw_footprint(p->s->world, p->s->pixels, (size_t)p->s->view_w, sx, sy, p->corners,
-                            p->ok ? 0x4a : 0x97);
+    ghost_draw(p, sx + cx, sy + cy, relocated);
+    if (facing)
+        aoe_demo_draw_footprint(p->s->world, p->s->pixels, (size_t)p->s->view_w, sx, sy,
+                                p->corners, (uint8_t)shape);
 }
 static void draw_place_preview(AoeGameScreenHostRor *s) {
     PlaceCtx p = {s, place_template(s), 0.0f, 0.0f, 0, {0}};

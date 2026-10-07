@@ -1155,6 +1155,36 @@ void aoe_demo_draw_footprint(const AoeDemo *demo, uint8_t *dst, size_t stride, i
     }
 }
 
+int aoe_demo_draw_graphic(AoeDemo *demo, uint8_t *dst, size_t stride, int16_t graphic_id,
+                          uint16_t angle, int32_t sx, int32_t sy, int player) {
+    AoeSpriteInstance instance;
+    AoeSpriteIndexSurface surface;
+    uint8_t colour = 0;
+    int status;
+    if (!demo || !dst || !demo->loaded || graphic_id < 0 ||
+        (uint16_t)graphic_id >= demo->graphics.count ||
+        !demo->graphics.graphics[graphic_id].present)
+        return 0;
+    if (player >= 0 && player < AOE_SCENARIO_RUNTIME_PLAYERS)
+        colour = demo->resolver.colors[player];
+    memset(&instance, 0, sizeof instance);
+    instance.graphic = &demo->graphics.graphics[graphic_id];
+    instance.kind = 1; /* static: frame 0 */
+    memset(&surface, 0, sizeof surface);
+    surface.indices = dst;
+    surface.width = demo->width;
+    surface.height = demo->height;
+    surface.stride = stride;
+    surface.size = stride * demo->height;
+    /* A part without art (the house's smoke, say) is skipped and the rest
+       drawn, as the original draw continues after it. */
+    status = aoe_sprite_draw_instance_bounds_cached_indexed_ror(
+        &instance, angle, (int16_t)sx, (int16_t)sy, (int16_t)sx, (int16_t)sy,
+        demo->graphic_archives, 6, &demo->graphic_cache, &surface, colour, demo->shadow,
+        aoe_color_table_set_resolve, &demo->color_tables);
+    return status == AOE_GRAPHIC_ART_OK || status == AOE_GRAPHIC_ART_MISSING;
+}
+
 void aoe_demo_camera(const AoeDemo *demo, float *x, float *y) {
     *x = demo ? demo->camera_x : 0.0f;
     *y = demo ? demo->camera_y : 0.0f;

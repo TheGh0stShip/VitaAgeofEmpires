@@ -278,6 +278,17 @@ int aoe_world_combat_placement_ror(AoeWorldCombatRor *combat, int16_t owner,
 int aoe_world_combat_command_place_ror(AoeWorldCombatRor *combat, const uint8_t *command,
                                        size_t size);
 
+/* Tribe command 0x69 (wall line placement, 0x004e8b00 with its run
+   0x004e8d00) bound to this world with the 0x66 bindings: every cell of
+   the straight, diagonal or L-shaped line from (x1, y1) to (x2, y2) that
+   passes the +0x20 check (shape mode = template +0x64) is paid and gets a
+   foundation (counted in `placements`); a failed payment ends that run.
+   Each builder is ordered (+0x98) onto the first piece made, at its
+   position. Returns aoe_command_execute_wall_ror's result, or -1 when the
+   world is unusable. */
+int aoe_world_combat_command_wall_ror(AoeWorldCombatRor *combat, const uint8_t *command,
+                                      size_t size);
+
 /* Unit +0xd0 bound to the runtime (aoe_unit_enter_ror): 1 entered, 0 no
    room, -1 bad input. */
 int aoe_world_combat_enter_ror(AoeWorldCombatRor *combat, AoeLiveUnit *unit,

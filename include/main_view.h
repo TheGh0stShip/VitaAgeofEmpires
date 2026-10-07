@@ -1456,6 +1456,58 @@ typedef struct {
 void *aoe_game_view_selection_target_ror(const AoeGameViewTargetOpsRor *o, int32_t x, int32_t y,
                                          int32_t *flag, int16_t arg);
 
+/* ---- 0x005114d0: the view's area (drag-box) selection ---- */
+/* What 0x005114d0 reads of a world object (the map's +0x88 table). */
+typedef struct {
+    uint8_t state;   /* +0x48 */
+    uint8_t kind;    /* template (+0x08) +0x8d */
+    float x, y;      /* +0x38, +0x3c */
+    int owned;       /* +0x0c is the viewed player (+0x100) */
+} AoeMainViewAreaObjectRor;
+typedef struct {
+    void *context;
+    int16_t player;            /* the viewed player's (+0x100) +0x4a number */
+    int reveal_all;            /* world (+0x104) +0x8db8 */
+    /* 0x00514b60(x0, y0, x1, y1, lo, hi, player, min_kind, 1) into `out`
+       (aoe_main_view_box_objects_ror; the ninth argument is unused); the
+       count. */
+    int32_t (*box_objects)(void *context, int32_t x0, int32_t y0, int32_t x1, int32_t y1,
+                           int32_t lo, int32_t hi, int32_t player, uint8_t min_kind,
+                           AoeViewPickedRor out[AOE_VIEW_PICKED_MAX_ROR]);
+    /* 0x005145a0(x, y, lo, hi, slack, max_class, positive_only) into `out`
+       (aoe_main_view_point_objects_ror); the count. */
+    int32_t (*point_objects)(void *context, int32_t x, int32_t y, int32_t lo, int32_t hi,
+                             int32_t slack, int32_t max_class, int positive_only,
+                             AoeViewPickedRor out[AOE_VIEW_PICKED_MAX_ROR]);
+    /* The world object of an ID (NULL none); `*info` filled when found. */
+    void *(*object)(void *context, int32_t id, AoeMainViewAreaObjectRor *info);
+    int (*visible)(void *context, void *object);              /* this view's vtable +0xe4 */
+    /* 0x00517670 on the viewed player's +0x38 (0x0f: seen). */
+    uint8_t (*fog)(void *context, int32_t x, int32_t y);
+    int32_t (*priority)(void *context, void *object, int32_t hit_class); /* vtable +0xe8 */
+    /* 0x0045dc10(object, 0) on the viewed player: 0 when the selection
+       (25 slots) is full. */
+    int (*select_add)(void *context, void *object);
+} AoeMainViewAreaSelectOpsRor;
+/* 0x005114d0(min_kind, left, top, right, bottom); 0x00515d30 passes kind
+   4 and the normalised drag box. The box pick (rows 10..0x14, the viewed
+   player's objects in state 2 of at least `min_kind`, low byte) lists
+   the objects; in list order each one (ID not -1) found in a state below
+   7 is added to the selection, stopping at the first refusal (full); 1
+   when any was added. Otherwise the objects under the box centre (left
+   + w / 2, top + h / 2, truncated) within min(w, h, 50) pixels (rows
+   10..0x14, classes up to 4, non-negative IDs) are scored: those with a
+   non-negative ID, in a state below 7 and of template kind 2 or more,
+   seen (the map revealed, the view's +0xe4, or the fog 0x0f at the
+   truncated position) score their +0xe8 priority for the listed hit
+   class, plus 5 when the viewed player owns them; the first strictly
+   highest positive score is added and 1 returned when it fits. 0
+   otherwise. The selection is never cleared here: the kind-2 drag start
+   0x005154e0 clears it unless a keep flag is set, so a kept selection
+   is added to. */
+int aoe_main_view_area_select_ror(const AoeMainViewAreaSelectOpsRor *o, int32_t min_kind,
+                                  int32_t left, int32_t top, int32_t right, int32_t bottom);
+
 
 /* ---- 0x00510580: the view's render (scroll copy and redraw) ---- */
 typedef struct {

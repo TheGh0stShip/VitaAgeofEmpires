@@ -21,4 +21,16 @@
    list_select; input_text / input_set. Every other field is untouched. */
 void aoe_mp_setup_panels_bind_ror(AoeMpSetupScreenOpsRor *ops, AoeMpSetupUiRor *u);
 
+/* The screen's vtable (0x00546d7c) handlers over an AoeMpSetupUiRor
+   (defined in mp_setup_screen.c, bound in aoe_mp_setup_ui_vtable_ror).
+   +0x4c 0x004894e0: the state's idle (aoe_mp_setup_screen_idle_ror), the
+   base being the panel's idle 0x00453360 rather than the base_idle op.
+   +0xb8 0x004895b0: the state's action handler
+   (aoe_mp_setup_screen_action_ror) on the panel that fired; what it does
+   not handle goes to the easy panel's 0x00457e50 rather than the
+   base_action op. */
+int32_t aoe_mp_setup_ui_idle_ror(AoeUiPanelRor *p);
+int32_t aoe_mp_setup_ui_action_ror(AoeUiPanelRor *p, AoeUiPanelRor *from, int32_t code,
+                                   int32_t value, int32_t extra);
+
 #endif

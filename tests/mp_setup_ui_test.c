@@ -1,8 +1,11 @@
-/* Patched RoR 1.0a "MP Setup Screen" constructor 0x00487f40 as panels. */
+/* Patched RoR 1.0a "MP Setup Screen" constructor 0x00487f40 as panels,
+   with its vtable's action (0x004895b0) and idle (0x004894e0) handlers. */
 #include "game_ui.h"
 #include "mp_setup_panels.h"
 #include "mp_setup_screen.h"
+#include "ui_button.h"
 #include "ui_dropdown.h"
+#include "ui_edit.h"
 #include "ui_text.h"
 
 #include <assert.h>
@@ -65,6 +68,29 @@ static void free_scenario(void *c) { (void)c; }
 static void close_named(void *c, const char *name) { (void)c; (void)name; }
 static void release_panels(void *c) { (void)c; }
 
+/* The action (0x004895b0) and idle (0x004894e0) handlers' ops. */
+static int refreshes, helps, shares, releases, quits;
+static int32_t count_set = -1, color_player = -1, color_value = -1;
+static uint32_t clock_ms;
+static char chat_line_text[16];
+static void set_player_count(void *c, int32_t n) { (void)c; count_set = n; }
+static void settings_refresh(void *c) { (void)c; ++refreshes; }
+static void set_color(void *c, int32_t player, int32_t color) { (void)c; color_player = player; color_value = color; }
+static void help_op(void *c) { (void)c; ++helps; }
+static void quit_op(void *c) { (void)c; ++quits; }
+static const char *panel_name(void *c, void *panel) { (void)c; (void)panel; return NULL; }
+static int32_t player_count(void *c) { (void)c; return 2; }
+static int minimised(void *c) { (void)c; return 0; }
+static int capture_released(void *c) { (void)c; return 0; }
+static void release_capture(void *c) { (void)c; ++releases; }
+static uint32_t now(void *c) { (void)c; return clock_ms; }
+static void share_player_data(void *c) { (void)c; ++shares; }
+static const char *chat_line(void *c, int32_t i) {
+    (void)c;
+    snprintf(chat_line_text, sizeof chat_line_text, "line %d", (int)i);
+    return chat_line_text;
+}
+
 static void reset_counts(void) {
     seeds = chat_drops = readies = chats = comm_slots = 0;
     recipients = 0;
@@ -116,6 +142,19 @@ int main(void) {
     mp.free_scenario = free_scenario;
     mp.close_named = close_named;
     mp.release_panels = release_panels;
+    mp.set_player_count = set_player_count;
+    mp.settings_refresh = settings_refresh;
+    mp.set_color = set_color;
+    mp.help = help_op;
+    mp.quit = quit_op;
+    mp.panel_name = panel_name;
+    mp.player_count = player_count;
+    mp.minimised = minimised;
+    mp.capture_released = capture_released;
+    mp.release_capture = release_capture;
+    mp.now = now;
+    mp.share_player_data = share_player_data;
+    mp.chat_line = chat_line;
 
     /* 1. Single player: +0x97d set, not multiplayer, not hosting. */
     reset_counts();
@@ -156,6 +195,31 @@ int main(void) {
     assert(aoe_ui_dropdown_id_ror(u->count, 0) == 2 &&
            aoe_ui_dropdown_selected_id_ror(u->count) == (int32_t)aoe_settings_byte_988_ror(&settings)); /* the players refresh 0x0048cfb0 */
     assert(seeds == 0);
+    /* The vtable's +0x4c and +0xb8 are the screen's handlers. */
+    assert(u->ez.panel.vt->handle_idle == aoe_mp_setup_ui_idle_ror);
+    assert(u->ez.panel.vt->action == aoe_mp_setup_ui_action_ror);
+    /* 0x004895b0, the count list (+0x6e0, action 0): the selected ID
+       becomes the player count, then the settings refresh. */
+    aoe_ui_dropdown_select_ror(u->count, 2);
+    assert(u->ez.panel.vt->action(&u->ez.panel, &u->count->panel, 0, 0, 0) == 1);
+    assert(count_set == 4 && refreshes == 1);
+    /* A colour button (+0x570 + 4 i, action 1): player i's colour from
+       the button's value; single player remembers nothing (+0x734). */
+    assert(u->ez.panel.vt->action(&u->ez.panel, &u->color_buttons[1]->panel, 1, 0, 0) == 1);
+    assert(color_player == 1 && color_value == aoe_ui_button_value_ror(u->color_buttons[1]));
+    assert(u->state.field_734 == 0);
+    /* Help (+0x710) and the hidden quit button (+0x718). */
+    assert(u->ez.panel.vt->action(&u->ez.panel, &u->help->panel, 1, 0, 0) == 1 && helps == 1);
+    assert(u->ez.panel.vt->action(&u->ez.panel, &u->hidden->panel, 1, 0, 0) == 1 && quits == 1);
+    /* Anything else goes to the easy panel's 0x00457e50 (no parent: 0). */
+    assert(u->ez.panel.vt->action(&u->ez.panel, &u->title->panel, 1, 0, 0) == 0);
+    assert(u->ez.panel.vt->action(&u->ez.panel, NULL, 1, 0, 0) == 0);
+    assert(count_set == 4 && refreshes == 1 && helps == 1 && quits == 1);
+    /* 0x004894e0 single player: the capture released, no data shared. */
+    releases = shares = 0;
+    clock_ms = 100;
+    (void)u->ez.panel.vt->handle_idle(&u->ez.panel);
+    assert(releases == 1 && shares == 0 && u->state.share_time == 0);
     u->ez.panel.vt->destroy(&u->ez.panel);
     free(u);
 
@@ -165,6 +229,7 @@ int main(void) {
     settings.flag_97e = 1;
     host_ret = 1;
     u = calloc(1, sizeof(*u));
+    aoe_mp_setup_panels_bind_ror(&mp, u);
     assert(aoe_mp_setup_ui_init_ror(u, &ui, &area, &mp) == 1);
     assert(strcmp(aoe_ui_text_line_ror(u->title, 0), "S9678") == 0);
     assert(seeds == 1); /* the multiplayer settings reset */
@@ -182,6 +247,35 @@ int main(void) {
     assert(u->ez.panel.current == &u->chat_input->panel);
     assert(u->hidden->panel.active == 1);
     assert(u->cancel->hotkey == 0x1b);
+    /* 0x004895b0, the chat input (+0x610, action 0): its text sent and
+       cleared; an empty input falls through to the base (0). */
+    chats = 0;
+    snprintf(edit_text, sizeof edit_text, "%s", "hello");
+    assert(u->ez.panel.vt->action(&u->ez.panel, &u->chat_input->panel, 0, 0, 0) == 1);
+    assert(chats == 1 && strcmp(chat_text, "hello") == 0 && edit_text[0] == 0);
+    assert(u->ez.panel.vt->action(&u->ez.panel, &u->chat_input->panel, 0, 0, 0) == 0);
+    assert(chats == 1);
+    /* Help (+0x710). */
+    helps = 0;
+    assert(u->ez.panel.vt->action(&u->ez.panel, &u->help->panel, 1, 0, 0) == 1 && helps == 1);
+    /* 0x004894e0: the queued chat lines 1..2 go into the chat text (the
+       queue emptied), the capture is released, and in multiplayer the
+       first call stamps the time; the data is shared once it moves. */
+    releases = shares = 0;
+    u->state.chat_from = 1;
+    u->state.chat_to = 2;
+    clock_ms = 500;
+    (void)u->ez.panel.vt->handle_idle(&u->ez.panel);
+    assert(aoe_ui_text_count_ror(u->chat) == 2);
+    assert(strcmp(aoe_ui_text_line_ror(u->chat, 0), "line 1") == 0);
+    assert(strcmp(aoe_ui_text_line_ror(u->chat, 1), "line 2") == 0);
+    assert(u->state.chat_from == 0 && u->state.chat_to == 0);
+    assert(releases == 1 && shares == 0 && u->state.share_time == 500);
+    (void)u->ez.panel.vt->handle_idle(&u->ez.panel);
+    assert(shares == 0 && aoe_ui_text_count_ror(u->chat) == 2);
+    clock_ms = 750;
+    (void)u->ez.panel.vt->handle_idle(&u->ez.panel);
+    assert(shares == 1 && u->state.share_time == 750 && releases == 3);
     u->ez.panel.vt->destroy(&u->ez.panel);
     free(u);
 
@@ -191,6 +285,7 @@ int main(void) {
     settings.flag_97e = 1;
     host_ret = 0;
     u = calloc(1, sizeof(*u));
+    aoe_mp_setup_panels_bind_ror(&mp, u);
     assert(aoe_mp_setup_ui_init_ror(u, &ui, &area, &mp) == 1);
     assert(u->settings == NULL);
     assert(u->settings_label != NULL);

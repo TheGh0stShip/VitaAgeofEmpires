@@ -1,4 +1,5 @@
 #include "game_ui.h"
+#include "mp_setup_panels.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -132,7 +133,9 @@ void aoe_mp_setup_screen_chat_ror(AoeMpSetupScreenRor *m, int32_t i) {
     if (follow) OPS->chat_scroll_bottom(CTX);
 }
 
-void aoe_mp_setup_screen_idle_ror(AoeMpSetupScreenRor *m) {
+/* 0x004894e0 up to its base idle (0x00453360), which the caller runs:
+   the state's op, or the panel slot when bound to the screen's vtable. */
+static void mp_setup_idle(AoeMpSetupScreenRor *m) {
     if (m->chat_from != 0 && !OPS->minimised(CTX)) {
         int32_t i;
         for (i = m->chat_from; i <= m->chat_to; ++i) aoe_mp_setup_screen_chat_ror(m, i);
@@ -148,6 +151,11 @@ void aoe_mp_setup_screen_idle_ror(AoeMpSetupScreenRor *m) {
             m->share_time = OPS->now(CTX);
         }
     }
+}
+
+/* 0x004894e0 */
+void aoe_mp_setup_screen_idle_ror(AoeMpSetupScreenRor *m) {
+    mp_setup_idle(m);
     OPS->base_idle(CTX);
 }
 
@@ -548,12 +556,13 @@ static void mp_setup_ready(AoeMpSetupScreenRor *m) {
     }
 }
 
-/* 0x004895b0 */
-int aoe_mp_setup_screen_action_ror(AoeMpSetupScreenRor *m, void *panel, int32_t action,
-                                   int32_t a, int32_t b) {
+/* 0x004895b0 up to its base handler (0x00457e50): 1 when handled, 0 for
+   the caller's base (the state's op, or the easy panel's slot when bound
+   to the screen's vtable). */
+static int mp_setup_action(AoeMpSetupScreenRor *m, void *panel, int32_t action) {
     const char *name;
     int32_t i;
-    if (!panel) return OPS->base_action(CTX, panel, action, a, b);
+    if (!panel) return 0;
     if (action == 1) {
         if (panel == m->panel_700) { mp_setup_defocus_chat(m); aoe_mp_setup_screen_start_ror(m); return 1; }
         if (panel == m->panel_714) { mp_setup_ready(m); return 1; }
@@ -664,6 +673,13 @@ int aoe_mp_setup_screen_action_ror(AoeMpSetupScreenRor *m, void *panel, int32_t 
             }
         }
     }
+    return 0;
+}
+
+/* 0x004895b0 */
+int aoe_mp_setup_screen_action_ror(AoeMpSetupScreenRor *m, void *panel, int32_t action,
+                                   int32_t a, int32_t b) {
+    if (mp_setup_action(m, panel, action)) return 1;
     return OPS->base_action(CTX, panel, action, a, b);
 }
 
@@ -1068,6 +1084,45 @@ int aoe_mp_setup_screen_command_ror(AoeMpSetupScreenRor *m, const AoeMpSetupComm
 }
 
 
+/* ---- 0x00424c80: the comm's session launch ---- */
+
+static void launch_log(const AoeCommRor *c, const char *text) {
+    if (c->ops && c->ops->log) c->ops->log(c->ops->context, text);
+}
+
+/* 0x00424c80 */
+void aoe_mp_setup_comm_launch_ror(AoeCommRor *c, const AoeMpSetupLaunchOpsRor *o) {
+    char line[64];
+    uint32_t slot;
+    int32_t serial;
+    o->enable_new_players(o->context, 0); /* 0x004258d0(0x00580eac, 0) */
+    c->state = 5;
+    o->active_range(o->context);          /* 0x0041e130 */
+    c->field_1718 = 1;
+    o->gtd_reset(o->context);             /* 0x00421a20 */
+    o->compact_players(o->context);       /* 0x00424760 */
+    for (slot = 1, serial = 2000; slot <= c->count && slot < AOE_COMM_SLOTS;
+         ++slot, serial += 2000) {
+        if (c->dpid[slot] == 0) continue;
+        c->rx_serial[slot] = serial;
+        snprintf(line, sizeof line, "Set expected ser# for player %d to %d", (int)slot,
+                 (int)(serial + 1));
+        launch_log(c, line);
+    }
+    c->field_14e4 = (int32_t)(c->self * 2000u + 1u);
+    snprintf(line, sizeof line, "HOST Set own serial to =%d", (int)c->field_14e4);
+    launch_log(c, line);
+    o->share_data(o->context, 1);         /* 0x00420640(1) */
+    c->turn = (uint32_t)c->lead + 1u;
+    if (c->multiplayer) {
+        launch_log(c, "Clear player acknowledgements");
+        for (slot = c->low; slot <= c->high && slot < AOE_COMM_SLOTS; ++slot)
+            if (slot != c->self) c->last_turn[slot] = 0;
+    }
+    o->reset_ping_times(o->context);      /* 0x00423970 */
+    c->ops->post(c->ops->context, 0x17a6, 0); /* 0x004200d0(0x17a6) */
+}
+
 /* ---- 0x00487f40: the screen as panels (game_ui.h) ---- */
 
 #define MU(p) ((AoeMpSetupUiRor *)(p))
@@ -1343,10 +1398,33 @@ int aoe_mp_setup_ui_init_ror(AoeMpSetupUiRor *u, AoeGameUiRor *ui, AoeUiAreaRor 
     return 1;
 }
 
+/* +0x4c 0x004894e0 on the panels: the state's idle (pending chat lines
+   into the chat text, the capture, the multiplayer data share), then the
+   panel's base idle 0x00453360 instead of the state's base_idle op. */
+int32_t aoe_mp_setup_ui_idle_ror(AoeUiPanelRor *p) {
+    mp_setup_idle(&MU(p)->state);
+    return aoe_ui_panel_handle_idle_ror(p);
+}
+
+/* +0xb8 0x004895b0 on the panels: the panel that fired (start, ready,
+   settings, help, quit, cancel, addresses, colour / team buttons, chat
+   input, player count, kind / civilisation / position lists, the closing
+   "Game Settings Screen" and "Kick Dialog") handled by the state through
+   its ops; anything else goes to the easy panel's 0x00457e50 instead of
+   the state's base_action op. */
+int32_t aoe_mp_setup_ui_action_ror(AoeUiPanelRor *p, AoeUiPanelRor *from, int32_t code,
+                                   int32_t value, int32_t extra) {
+    if (mp_setup_action(&MU(p)->state, from, code)) return 1;
+    return aoe_ui_ez_action_slot_ror(p, from, code, value, extra);
+}
+
+/* 0x00546d7c: +0x00 0x00488c20, +0x4c 0x004894e0, +0xb8 0x004895b0;
+   +0x64 (0x0048abc0, the comm user commands) needs its command ops and
+   stays the base slot here, as does +0x68 (0x0048b630). */
 const AoeUiEzVtblRor aoe_mp_setup_ui_vtable_ror = {
-    AOE_UI_EZ_SLOTS_MDU(mu_destroy, aoe_ui_ez_draw_slot_ror, aoe_ui_panel_handle_idle_ror,
+    AOE_UI_EZ_SLOTS_MDU(mu_destroy, aoe_ui_ez_draw_slot_ror, aoe_mp_setup_ui_idle_ror,
                         aoe_ui_panel_handle_paint_ror, aoe_ui_ez_no_key_action_ror,
-                        aoe_ui_panel_zero_ror, aoe_ui_ez_action_slot_ror,
+                        aoe_ui_panel_zero_ror, aoe_mp_setup_ui_action_ror,
                         aoe_ui_screen_focus_slot_ror, aoe_ui_ez_mouse_down_slot_ror,
                         aoe_ui_panel_ignore_ror),
     aoe_ui_ez_draw_background_slot_ror,

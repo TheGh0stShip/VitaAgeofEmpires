@@ -28,7 +28,7 @@ project is used.
 ## Classes of code
 
 Run `python3 tools/provenance_audit.py --table` for the per-file list. On
-2026-10-06: 261 C files under `src/` are **translations** (they, or the
+2026-10-06: 274 C files under `src/` are **translations** (they, or the
 header documentation of the functions they define, cite executable
 functions) and 9 are **port code** written for this project without an
 original counterpart:

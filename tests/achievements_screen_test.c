@@ -1,4 +1,5 @@
-/* Patched RoR 1.0a "Achievements Screen" 0x00477340..0x004792c0. */
+/* Patched RoR 1.0a "Achievements Screen" 0x00477340..0x004792c0, with
+   the action 0x00479050 branch by branch. */
 #include "achievements_screen.h"
 #include "player_history.h"
 
@@ -35,8 +36,9 @@ static const float *attributes(void *c, int32_t p) { (void)c; return attrs[p]; }
 static uint32_t game_time_ms(void *c) { (void)c; return 3723000; } /* 01:02:03 */
 static const char *scenario_message(void *c) { (void)c; return message; }
 static int networked(void *c) { (void)c; return networked_flag; }
-static int paused(void *c) { (void)c; return 1; }
-static int flag_a00(void *c) { (void)c; return 0; }
+static int paused_value = 1, flag_value = 0;
+static int paused(void *c) { (void)c; return paused_value; }
+static int flag_a00(void *c) { (void)c; return flag_value; }
 static void resume(void *c) { (void)c; ++resumed; }
 static void back_to_menu(void *c) { (void)c; ++backed; }
 static void restart(void *c) { (void)c; ++restarted; }
@@ -96,6 +98,144 @@ static AoeAchievementsScreenRor *make(AoeGameUiRor *ui, AoeUiAreaRor *area, int3
     AoeAchievementsScreenRor *s = calloc(1, sizeof *s);
     assert(aoe_achievements_screen_init_ror(s, ui, area, mode, ops));
     return s;
+}
+
+/* 0x00479050 from the menus (mode 0): Close never returns to the menus,
+   closes the screen, and reports whether the game was resumed. */
+static int close_from_menus(AoeGameUiRor *ui, AoeUiAreaRor *area,
+                            const AoeAchievementsScreenOpsRor *ops) {
+    AoeAchievementsScreenRor *s = make(ui, area, 0, ops);
+    AoeUiPanelRor *p = &s->ez.panel;
+    int resumed_before = resumed, backed_before = backed;
+    assert(!s->restart_btn && !s->scenario_btn && s->close_btn && s->timeline_btn);
+    assert(p->vt->action(p, &s->close_btn->panel, 1, 0, 0) == 1);
+    assert(backed == backed_before && !aoe_ui_system_find_ror(ui->system, "Achievements Screen"));
+    return resumed - resumed_before;
+}
+
+/* 0x00479050 action, branch by branch. */
+static void action_branches(AoeGameUiRor *ui, AoeUiAreaRor *area,
+                            AoeAchievementsScreenOpsRor *ops) {
+    static char yes_no_name[] = "YesNoDialog", ok_name[] = "OKDialog", other_name[] = "Other";
+    AoeUiPanelRor yes_no, ok, other;
+    AoeAchievementsScreenRor *s;
+    AoeUiPanelRor *p;
+    int before, resumed_before;
+
+    memset(&yes_no, 0, sizeof yes_no);
+    yes_no.name = yes_no_name;
+    ok = yes_no;
+    ok.name = ok_name;
+    other = yes_no;
+    other.name = other_name;
+
+    /* In a networked game with a scenario message: the four buttons,
+       the message page first. */
+    message = "Story";
+    networked_flag = 1;
+    s = make(ui, area, 1, ops);
+    p = &s->ez.panel;
+    assert(s->scenario_btn && s->timeline_btn && s->restart_btn && s->close_btn && s->page == 5);
+
+    /* Only code 1 presses count; other codes reach the easy panel's slot
+       and the parentless screen's panel action (0). */
+    before = restarted;
+    assert(p->vt->action(p, &s->restart_btn->panel, 0, 0, 0) == 0 && restarted == before);
+    assert(p->vt->action(p, &s->timeline_btn->panel, 2, 0, 0) == 0 && s->page == 5);
+    assert(p->vt->action(p, &s->scenario_btn->panel, 0, 0, 0) == 0 && s->page == 5);
+    assert(p->vt->action(p, &s->back2->panel, 0, 0, 0) == 0 && s->page == 5);
+    before = quit_calls;
+    assert(p->vt->action(p, &s->hidden_close->panel, 0, 0, 0) == 0 && quit_calls == before);
+    before = backed;
+    assert(p->vt->action(p, &s->close_btn->panel, 0, 0, 0) == 0 && backed == before &&
+           aoe_ui_system_find_ror(ui->system, "Achievements Screen") == p);
+
+    /* Timeline: page 6 with only Back among the page buttons. */
+    assert(p->vt->action(p, &s->timeline_btn->panel, 1, 0, 0) == 1);
+    assert(s->page == 6 && s->timeline_shown && s->back->panel.active &&
+           !s->restart_btn->panel.active && !s->close_btn->panel.active &&
+           !s->scenario_btn->panel.active && !s->timeline_btn->panel.active);
+    /* Back: page 0, the page buttons back and Back hidden. */
+    assert(p->vt->action(p, &s->back->panel, 1, 0, 0) == 1);
+    assert(s->page == 0 && !s->back->panel.active && s->restart_btn->panel.active &&
+           s->close_btn->panel.active && s->scenario_btn->panel.active &&
+           s->timeline_btn->panel.active);
+    /* Scenario: page 5 (the message) with Back and Back2. */
+    assert(p->vt->action(p, &s->scenario_btn->panel, 1, 0, 0) == 1);
+    assert(s->page == 5 && s->message->panel.active && s->back->panel.active &&
+           s->back2->panel.active && !s->restart_btn->panel.active &&
+           !s->close_btn->panel.active && !s->scenario_btn->panel.active &&
+           !s->timeline_btn->panel.active);
+    /* Back2: page 0 too. */
+    assert(p->vt->action(p, &s->back2->panel, 1, 0, 0) == 1);
+    assert(s->page == 0 && !s->back2->panel.active && s->close_btn->panel.active);
+
+    /* Restart and the hidden close button. */
+    before = restarted;
+    assert(p->vt->action(p, &s->restart_btn->panel, 1, 0, 0) == 1 && restarted == before + 1);
+    before = quit_calls;
+    assert(p->vt->action(p, &s->hidden_close->panel, 1, 0, 0) == 1 && quit_calls == before + 1);
+
+    /* A "YesNoDialog" sender: any answer but 0 clears the quit request;
+       0 closes the window and leaves the request set. */
+    before = quit_calls;
+    ui->quit_requested = 1;
+    assert(p->vt->action(p, &yes_no, 2, 0, 0) == 1 && ui->quit_requested == 0 &&
+           quit_calls == before);
+    ui->quit_requested = 1;
+    assert(p->vt->action(p, &yes_no, 1, 0, 0) == 1 && ui->quit_requested == 0 &&
+           quit_calls == before);
+    ui->quit_requested = 1;
+    assert(p->vt->action(p, &yes_no, 0, 0, 0) == 1 && ui->quit_requested == 1 &&
+           quit_calls == before + 1);
+
+    /* Other senders go to the easy panel's slot: an "OKDialog" answer is
+       taken there (1); an unknown name or a NULL sender reaches the
+       parentless screen's panel action (0). Neither touches the quit. */
+    assert(p->vt->action(p, &ok, 0, 0, 0) == 1 && ui->quit_requested == 1 &&
+           quit_calls == before + 1);
+    assert(p->vt->action(p, &other, 0, 0, 0) == 0 && ui->quit_requested == 1 &&
+           quit_calls == before + 1);
+    assert(p->vt->action(p, NULL, 1, 0, 0) == 0 && s->page == 0);
+    ui->quit_requested = 0;
+
+    /* Close in a game: the menus come back, never a resume, even with a
+       settings pause pending; the screen closes. */
+    paused_value = 1;
+    flag_value = 0;
+    before = backed;
+    resumed_before = resumed;
+    assert(p->vt->action(p, &s->close_btn->panel, 1, 0, 0) == 1);
+    assert(backed == before + 1 && resumed == resumed_before &&
+           !aoe_ui_system_find_ror(ui->system, "Achievements Screen"));
+
+    /* Close from the menus resumes only for a settings pause byte of
+       exactly 1 with game +0xa00 clear (a missing +0xa00 op reads 0). */
+    message = NULL;
+    assert(close_from_menus(ui, area, ops) == 1);
+    flag_value = 1;
+    assert(close_from_menus(ui, area, ops) == 0);
+    flag_value = 0;
+    paused_value = 2;
+    assert(close_from_menus(ui, area, ops) == 0);
+    paused_value = 0;
+    assert(close_from_menus(ui, area, ops) == 0);
+    paused_value = 1;
+    ops->game_flag_a00 = NULL;
+    assert(close_from_menus(ui, area, ops) == 1);
+    ops->game_flag_a00 = flag_a00;
+    ops->paused_by_settings = NULL;
+    assert(close_from_menus(ui, area, ops) == 0);
+    ops->paused_by_settings = paused;
+
+    /* From the menus Restart is never created: a NULL sender with code 1
+       does not restart. */
+    s = make(ui, area, 0, ops);
+    p = &s->ez.panel;
+    before = restarted;
+    assert(!s->restart_btn && p->vt->action(p, NULL, 1, 0, 0) == 0 && restarted == before);
+    aoe_ui_system_close_ror(ui->system, "Achievements Screen");
+    assert(!aoe_ui_system_find_ror(ui->system, "Achievements Screen"));
 }
 
 int main(void) {
@@ -272,6 +412,8 @@ int main(void) {
     assert(strcmp(s->ez.info_name, "scr7") == 0 && !s->scenario_btn && s->message &&
            s->timeline_btn->panel.x == 100 && s->page == 5);
     aoe_ui_system_close_ror(&sys, "Achievements Screen");
+
+    action_branches(&ui, &area, &ops);
     free(sys.panels);
     return 0;
 }
